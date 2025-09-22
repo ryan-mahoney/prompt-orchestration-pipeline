@@ -10,11 +10,13 @@ This repository provides a reference implementation of a Prompt-orchestration pi
 ## Why It Matters
 
 Single-prompt strategies are fragile:
+
 - Inputs must fit within a single context window.
 - Instructions and examples compete for limited space.
 - Quality control is all-or-nothing.
 
 A prompt-orchestration pipeline changes the game:
+
 - **Chained reasoning**: break down complex problems into sequential tasks.
 - **Context compression & stacking**: condense outputs into artifacts that feed the next stage.
 - **Multi-model strategies**: route subtasks to the most appropriate model (fast vs. large, cheap vs. accurate).
@@ -33,6 +35,7 @@ A prompt-orchestration pipeline has **two layers**:
 
 The outer pipeline manages runs, state, and isolation.  
 It is responsible for:
+
 - Assigning a pipeline ID for each new run.
 - Creating predictable directories for seeds, tasks, artifacts, and status.
 - Spawning isolated processes for each task (so one failure doesn’t crash others).
@@ -49,7 +52,7 @@ Directory structure:
 /pipeline-complete/<id>/         # archived completed run
 /pipeline-tasks/index.js         # registry of available tasks
 
-````
+```
 
 #### High-level diagram
 
@@ -69,7 +72,7 @@ flowchart TD
   K -->|no| L[Promote to complete]
   L --> M["/pipeline-complete/&lt;id&gt;/**"]
   L --> N["append /pipeline-complete/runs.jsonl"]
-````
+```
 
 ---
 
@@ -101,9 +104,8 @@ flowchart TD
   VS -->|ok| VQ[Validate quality]
   VS -->|fail| ERR[Fail task and log]
   VQ -->|ok| FIN[Finalize and persist artifacts]
-  VQ -->|needs work| CRIT[Critique and hints]
-  CRIT --> REF[Refine and re-prompt]
-  REF --> PAR
+  VQ -->|fail| HINTS[Critique and hints]
+  HINTS --> T1
   FIN --> DONE[Done]
   ERR --> DONE
 ```
@@ -116,9 +118,10 @@ flowchart TD
 2. The orchestrator creates `/pipeline-current/<id>` with `seed.json` and initializes task directories.
 3. Each task runs in sequence:
 
-   * Writes a `letter.json` trigger into its folder.
-   * Runs the inner task pipeline.
-   * Saves outputs, logs, and updates `tasks-status.json`.
+   - Writes a `letter.json` trigger into its folder.
+   - Runs the inner task pipeline.
+   - Saves outputs, logs, and updates `tasks-status.json`.
+
 4. On success, the run is moved to `/pipeline-complete/<id>` and appended to `runs.jsonl`.
 5. On failure, the run remains in `/pipeline-current` with full artifacts for debugging.
 
@@ -126,10 +129,10 @@ flowchart TD
 
 ## Use Cases
 
-* Multi-model research: prototype workflows that combine GPT-4, Claude, LLaMA, and smaller local models.
-* Complex transformations: stack summarization, clustering, re-generation, and scoring to produce publish-quality results.
-* Structured data generation: build validated JSON/CSV/Graph outputs reliably with retries and guardrails.
-* Experimentation: quickly remix pipelines by editing `pipeline.json` or swapping task modules.
+- Multi-model research: prototype workflows that combine GPT-4, Claude, LLaMA, and smaller local models.
+- Complex transformations: stack summarization, clustering, re-generation, and scoring to produce publish-quality results.
+- Structured data generation: build validated JSON/CSV/Graph outputs reliably with retries and guardrails.
+- Experimentation: quickly remix pipelines by editing `pipeline.json` or swapping task modules.
 
 ---
 
