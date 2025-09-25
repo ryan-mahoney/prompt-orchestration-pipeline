@@ -1,6 +1,7 @@
 # Prompt-Orchestration Pipeline
 
-A **Prompt-orchestration pipeline (POP)** is a framework for building, running, and experimenting with complex chains of LLM tasks.  
+A **Prompt-orchestration pipeline (POP)** is a framework for building, running, and experimenting with complex chains of LLM tasks.
+
 Instead of relying on a single mega-prompt, a pipeline decomposes work into stages, applies targeted transformations, validates outputs, and composes multiple model calls into a repeatable workflow.
 
 This repository provides a reference implementation of a Prompt-orchestration pipeline, designed for researchers, engineers, and builders who want to explore **creative, multi-stage strategies that push far beyond what a single prompt can achieve.**
