@@ -1,0 +1,50 @@
+{
+  "pipeline.json": {
+    "tasks": [
+      "data-extraction",
+      "summarization",
+      "analysis",
+      "report-generation"
+    ],
+    "config": {
+      "retryPolicy": {
+        "maxRetries": 3,
+        "retryableStages": ["validateStructure", "validateQuality"]
+      },
+      "models": {
+        "fast": "gpt-3.5-turbo",
+        "accurate": "gpt-4",
+        "creative": "claude-3-opus"
+      }
+    }
+  },
+
+  "pipeline-tasks/index.js": {
+    "default": {
+      "data-extraction": "./tasks/data-extraction.js",
+      "summarization": "./tasks/summarization.js",
+      "analysis": "./tasks/analysis.js",
+      "report-generation": "./tasks/report-generation.js"
+    }
+  },
+
+  "example-seed.json": {
+    "id": "research-project-001",
+    "type": "market-analysis",
+    "input": {
+      "industry": "renewable-energy",
+      "region": "north-america",
+      "timeframe": "2024-2025"
+    },
+    "requirements": {
+      "outputFormat": "executive-summary",
+      "sections": ["market-size", "trends", "competitors", "opportunities"],
+      "maxLength": 5000
+    },
+    "metadata": {
+      "requestedBy": "strategy-team",
+      "priority": "high",
+      "deadline": "2024-12-15"
+    }
+  }
+}
