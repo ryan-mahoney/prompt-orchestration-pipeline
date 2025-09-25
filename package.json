@@ -4,12 +4,15 @@
   "description": "A Prompt-orchestration pipeline (POP) is a framework for building, running, and experimenting with complex chains of LLM tasks.",
   "type": "module",
   "main": "index.js",
-  "scripts": {},
+  "scripts": {
+    "test": "vitest"
+  },
   "dependencies": {
     "chokidar": "^3.5.3"
   },
   "devDependencies": {
-    "prettier": "^3.0.0"
+    "prettier": "^3.0.0",
+    "vitest": "^3.2.4"
   },
   "engines": {
     "node": ">=18.0.0"
