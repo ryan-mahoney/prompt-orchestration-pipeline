@@ -13,6 +13,7 @@ const { watchMock, makeChild, children, spawnMock, getAddHandler } = vi.hoisted(
         if (evt === "add") addHandler = cb;
         return watcher;
       },
+      close: vi.fn(() => Promise.resolve()),
     };
 
     const makeChild = () => {
@@ -61,6 +62,7 @@ const removeAllSigHandlers = () => {
 describe("orchestrator", () => {
   let tmpDir;
   let exitSpy;
+  let orchestrator;
 
   beforeEach(async () => {
     // clean process signal handlers from previous test imports
@@ -78,12 +80,26 @@ describe("orchestrator", () => {
     // prevent real exit
     exitSpy = vi.spyOn(process, "exit").mockImplementation(() => {});
 
-    // re-import SUT so top-level bootstrap runs with our mocks
+    // Import and create orchestrator instance
     vi.resetModules();
-    await import("../src/orchestrator.js");
+    const { Orchestrator } = await import("../src/core/orchestrator.js");
+
+    orchestrator = new Orchestrator({
+      paths: {
+        pending: path.join(tmpDir, "pipeline-pending"),
+        current: path.join(tmpDir, "pipeline-current"),
+        complete: path.join(tmpDir, "pipeline-complete"),
+      },
+      pipelineDefinition: {},
+    });
+
+    await orchestrator.start();
   });
 
-  afterEach(() => {
+  afterEach(async () => {
+    if (orchestrator) {
+      await orchestrator.stop();
+    }
     exitSpy.mockRestore();
   });
 
@@ -112,7 +128,8 @@ describe("orchestrator", () => {
     expect(spawnMock).toHaveBeenCalledTimes(1);
     const [execPath, args] = spawnMock.mock.calls[0];
     expect(execPath).toBe(process.execPath);
-    expect(args).toEqual(["./pipeline-runner.js", "demo"]);
+    expect(args[1]).toBe("demo");
+    expect(args[0]).toMatch(/pipeline-runner\.js$/);
   });
 
   it("is idempotent if the same seed is added twice", async () => {
@@ -127,7 +144,7 @@ describe("orchestrator", () => {
     expect(spawnMock).toHaveBeenCalledTimes(1);
   });
 
-  it("kills children on shutdown (at least SIGTERM)", async () => {
+  it("kills children on shutdown (SIGTERM and SIGKILL)", async () => {
     // create one running child in this test only
     const seedPath = path.join(tmpDir, "pipeline-pending", "killme-seed.json");
     await fs.mkdir(path.dirname(seedPath), { recursive: true });
@@ -139,19 +156,15 @@ describe("orchestrator", () => {
     // grab the child created in this test
     const ch = children[children.length - 1];
 
-    vi.useFakeTimers();
-    process.emit("SIGTERM");
+    // Call stop directly to test shutdown behavior
+    await orchestrator.stop();
 
-    // immediate graceful attempt
+    // Check that SIGTERM was sent
     expect(ch.kill).toHaveBeenCalledWith("SIGTERM");
 
-    // advance timers in case orchestrator schedules a fallback
-    await vi.advanceTimersByTimeAsync(2000);
-
-    // NOTE: current orchestrator sends SIGTERM only; if you later add SIGKILL, you can assert it here.
-    // const calls = ch.kill.mock.calls.map(c => c[0]);
-    // expect(calls).toContain('SIGKILL');
-
-    vi.useRealTimers();
+    // Check that SIGKILL was sent if process wasn't killed
+    if (!ch.killed) {
+      expect(ch.kill).toHaveBeenCalledWith("SIGKILL");
+    }
   });
 });
