@@ -25,8 +25,6 @@ export function validateEnvironment() {
     "OPENAI_API_KEY",
     "ANTHROPIC_API_KEY",
     "DEEPSEEK_API_KEY",
-    "COHERE_API_KEY",
-    "HUGGINGFACE_API_TOKEN",
     "GEMINI_API_KEY",
   ];
   const foundKeys = commonKeys.filter((key) => process.env[key]);
@@ -50,10 +48,9 @@ export function getEnvironmentConfig() {
     deepseek: {
       apiKey: process.env.DEEPSEEK_API_KEY,
     },
-    azure: {
-      apiKey: process.env.AZURE_OPENAI_API_KEY,
-      endpoint: process.env.AZURE_OPENAI_ENDPOINT,
-      deployment: process.env.AZURE_OPENAI_DEPLOYMENT,
+    gemini: {
+      apiKey: process.env.GEMINI_API_KEY,
+      baseURL: process.env.GEMINI_BASE_URL,
     },
   };
 }
