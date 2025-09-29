@@ -1,130 +1,101 @@
-# LLM Module Test Plan
+# CLI Module Test Plan
+
+## Overview
+
+Create comprehensive unit tests for `src/cli/index.js` following project testing rules.
 
 ## Files to Test
 
-- `src/llm/index.js`
+- **Target**: `src/cli/index.js`
+- **Test File**: `tests/cli.test.js`
 
-## Functions to Test
+## Test Cases to Add
 
-### Core Functions
+### Command Line Interface Tests
 
-1. `getAvailableProviders()` - Provider availability checking
-2. `estimateTokens(text)` - Token estimation logic
-3. `calculateCost(provider, model, usage)` - Cost calculation
-4. `chat(options)` - Main chat function with event emission
-5. `complete(prompt, options)` - Convenience completion function
-6. `createChain()` - Conversation chain creation
-7. `withRetry(fn, args, maxRetries, backoffMs)` - Retry wrapper
-8. `parallel(fn, items, maxConcurrency)` - Parallel execution
-9. `createLLM(options)` - LLM interface factory
+#### Program Setup
 
-### Event System
+- `should create CLI program with correct name and version`
+- `should register all expected commands`
 
-10. `getLLMEvents()` - Event bus access
+#### Init Command
 
-## Test Cases by Function
+- `should create pipeline configuration files`
+- `should create example task files`
+- `should handle directory creation errors`
+- `should handle file write errors`
 
-### getAvailableProviders()
+#### Start Command
 
-- ✅ `should return available providers based on environment variables`
-- ✅ `should detect OpenAI when OPENAI_API_KEY is set`
-- ✅ `should detect DeepSeek when DEEPSEEK_API_KEY is set`
-- ✅ `should detect Anthropic when ANTHROPIC_API_KEY is set`
-- ✅ `should return false for providers without API keys`
+- `should initialize orchestrator with UI options`
+- `should initialize orchestrator without UI options`
+- `should handle orchestrator initialization errors`
+- `should set up SIGINT handler for graceful shutdown`
 
-### estimateTokens()
+#### Submit Command
 
-- ✅ `should estimate tokens for text input`
-- ✅ `should handle empty string`
-- ✅ `should handle null/undefined input`
-- ✅ `should round up fractional tokens`
+- `should submit job from seed file`
+- `should handle file read errors`
+- `should handle JSON parsing errors`
+- `should handle orchestrator submission errors`
 
-### calculateCost()
+#### Status Command
 
-- ✅ `should calculate cost for OpenAI models`
-- ✅ `should calculate cost for DeepSeek models`
-- ✅ `should calculate cost for Anthropic models`
-- ✅ `should return 0 for unknown provider/model`
-- ✅ `should return 0 when no usage provided`
-- ✅ `should handle partial usage data`
+- `should display specific job status`
+- `should list all jobs when no job name provided`
+- `should handle orchestrator status errors`
+- `should handle orchestrator list errors`
 
-### chat() - Main Function
+### Technical Approach
 
-- ✅ `should call OpenAI provider with correct parameters`
-- ✅ `should call DeepSeek provider with correct parameters`
-- ✅ `should throw error for unavailable provider`
-- ✅ `should emit request start event`
-- ✅ `should emit request complete event on success`
-- ✅ `should emit request error event on failure`
-- ✅ `should handle system and user messages`
-- ✅ `should estimate tokens when usage not provided`
-- ✅ `should return clean response without metrics`
-- ✅ `should handle custom model parameter`
-- ✅ `should handle temperature and maxTokens parameters`
+#### Mock Strategy
 
-### complete()
+- Mock `commander` module to test command registration
+- Mock `fs/promises` for file system operations
+- Mock `../api/index.js` for orchestrator functionality
+- Mock `process` for signal handling and exit testing
 
-- ✅ `should call chat with user message`
-- ✅ `should pass through options to chat`
+#### Test Utilities
 
-### createChain()
+- Use `mockProcessArgv` from test-utils for CLI argument testing
+- Use `mockEnvVars` for environment-dependent tests
+- Use `setupMockPipeline` for file system setup
 
-- ✅ `should create chain with empty messages`
-- ✅ `should add system message`
-- ✅ `should add user message`
-- ✅ `should add assistant message`
-- ✅ `should execute chain and add response`
-- ✅ `should return copy of messages`
-- ✅ `should clear messages`
+#### Testing Patterns
 
-### withRetry()
+- **AAA Style**: Arrange-Act-Assert for all tests
+- **One Behavior Per Test**: Each test verifies one specific behavior
+- **Minimal Mocking**: Only mock module boundaries
+- **No Snapshots**: Avoid snapshot testing for CLI output
 
-- ✅ `should return successful result on first attempt`
-- ✅ `should retry on failure and succeed`
-- ✅ `should throw error after max retries`
-- ✅ `should not retry on auth errors`
-- ✅ `should apply exponential backoff`
+#### Edge Cases
 
-### parallel()
+- File system errors (permission denied, file not found)
+- JSON parsing errors (malformed seed files)
+- Orchestrator initialization failures
+- Signal handling during shutdown
 
-- ✅ `should execute functions in parallel with concurrency limit`
-- ✅ `should handle empty items array`
-- ✅ `should preserve order of results`
+## Implementation Notes
 
-### createLLM()
-
-- ✅ `should create LLM interface with default provider`
-- ✅ `should pass options to chat method`
-- ✅ `should create chain`
-- ✅ `should wrap with retry`
-- ✅ `should execute parallel requests`
-- ✅ `should expose available providers`
-
-### Event System
-
-- ✅ `should return event emitter instance`
-- ✅ `should emit events with correct data structure`
-
-## Mock Strategy
-
-- Mock provider modules (`openaiChat`, `deepseekChat`) using `vi.hoisted()`
-- Mock environment variables using `mockEnvVars` utility
-- Mock Date.now() for timing tests
-- Mock EventEmitter for event testing
-
-## Test File Structure
-
-- File: `tests/llm.test.js`
-- Follow AAA pattern (Arrange-Act-Assert)
-- One behavior per test
-- Use descriptive test names
-- Reset mocks between tests
-- No snapshots, minimal mocking
+1. **ESM Compatibility**: Use `vi.hoisted()` for proper mock hoisting
+2. **Module Boundaries**: Mock only external dependencies, not internal logic
+3. **Error Handling**: Test both success and error paths
+4. **CLI Output**: Test console.log calls for expected output
+5. **Process Management**: Test signal handlers and graceful shutdown
 
 ## Expected Coverage
 
-- All exported functions from `src/llm/index.js`
-- Critical paths and error handling
-- Event emission verification
-- Provider integration points
-- Utility function edge cases
+- **Total Tests**: ~15-20
+- **Commands Covered**: init, start, submit, status
+- **Functions Covered**: CLI command handlers
+- **Edge Cases**: File operations, JSON parsing, orchestrator errors
+
+## Quality Criteria
+
+- ✅ Follows project testing rules
+- ✅ Uses Vitest framework
+- ✅ ESM compatible
+- ✅ No snapshots used
+- ✅ Minimal mocking (only module boundaries)
+- ✅ Fast and deterministic
+- ✅ Comprehensive error handling coverage
