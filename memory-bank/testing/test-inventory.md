@@ -105,3 +105,112 @@
 - ✅ Minimal mocking (only module boundaries)
 - ✅ Fast and deterministic
 - ✅ Comprehensive error handling coverage
+
+## LLM Module Tests
+
+**File:** `tests/llm.test.js`
+
+### Test Cases Added
+
+#### getAvailableProviders Function
+
+- ✅ `should return available providers based on environment variables`
+- ✅ `should detect providers based on environment variables`
+
+#### estimateTokens Function
+
+- ✅ `should estimate tokens for text input`
+- ✅ `should handle empty string`
+- ✅ `should handle null/undefined input`
+- ✅ `should round up fractional tokens`
+
+#### calculateCost Function
+
+- ✅ `should calculate cost for OpenAI models`
+- ✅ `should calculate cost for DeepSeek models`
+- ✅ `should calculate cost for Anthropic models`
+- ✅ `should return 0 for unknown provider/model`
+- ✅ `should return 0 when no usage provided`
+- ✅ `should handle partial usage data`
+
+#### chat Function
+
+- ✅ `should call OpenAI provider with correct parameters`
+- ✅ `should call DeepSeek provider with correct parameters`
+- ✅ `should throw error for unavailable provider`
+- ✅ `should emit request start event`
+- ✅ `should emit request complete event on success`
+- ✅ `should emit request error event on failure`
+- ✅ `should handle system and user messages`
+- ✅ `should estimate tokens when usage not provided`
+- ✅ `should return clean response without metrics`
+- ✅ `should handle custom model parameter`
+- ✅ `should handle temperature and maxTokens parameters`
+
+#### complete Function
+
+- ✅ `should call chat with user message`
+- ✅ `should pass through options to chat`
+
+#### createChain Function
+
+- ✅ `should create chain with empty messages`
+- ✅ `should add system message`
+- ✅ `should add user message`
+- ✅ `should add assistant message`
+- ✅ `should execute chain and add response`
+- ✅ `should return copy of messages`
+- ✅ `should clear messages`
+
+#### withRetry Function
+
+- ✅ `should return successful result on first attempt`
+- ✅ `should not retry on auth errors`
+- ✅ `should apply exponential backoff`
+
+#### parallel Function
+
+- ✅ `should execute functions in parallel with concurrency limit`
+- ✅ `should handle empty items array`
+- ✅ `should preserve order of results`
+
+#### createLLM Function
+
+- ✅ `should create LLM interface with default provider`
+- ✅ `should pass options to chat method`
+- ✅ `should create chain`
+- ✅ `should wrap with retry`
+- ✅ `should execute parallel requests`
+- ✅ `should expose available providers`
+
+#### Event System
+
+- ✅ `should return event emitter instance`
+- ✅ `should emit events with correct data structure`
+
+### Technical Decisions
+
+1. **Mock Strategy**: Used `vi.hoisted()` for proper hoisting of mocks to handle ESM imports
+2. **Module Mocking**: Mocked provider modules (OpenAI, DeepSeek) to isolate LLM module testing
+3. **Environment Management**: Used `mockEnvVars` for API key testing with proper cleanup
+4. **Event Testing**: Tested event emission for request lifecycle (start, complete, error)
+5. **Retry Logic**: Simplified retry tests to avoid infinite loops while maintaining coverage
+6. **Token Estimation**: Tested edge cases for token calculation including empty strings and null values
+7. **Cost Calculation**: Comprehensive testing of cost calculation for all supported providers
+
+### Coverage Summary
+
+- **Total Tests**: 46
+- **Functions Covered**: 8 (getAvailableProviders, estimateTokens, calculateCost, chat, complete, createChain, withRetry, parallel, createLLM, getLLMEvents)
+- **Edge Cases**: Missing API keys, empty inputs, partial data, event emission, retry logic
+- **Mock Verification**: Provider calls, event emissions, retry behavior
+
+### Test Quality
+
+- ✅ Follows project testing rules
+- ✅ Uses Vitest framework
+- ✅ ESM compatible
+- ✅ No snapshots used
+- ✅ Minimal mocking (only module boundaries)
+- ✅ Fast and deterministic (15ms total runtime)
+- ✅ Comprehensive coverage of LLM module functionality
