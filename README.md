@@ -109,7 +109,7 @@ flowchart TD
 ### Repository layout
 
 ```
-@ryan-fw/pipeline-orchestrator/
+@ryan-fw/prompt-orchestration-pipeline/
 ├── src/
 │   ├── core/
 │   │   ├── task-runner.js         # Core pipeline execution
@@ -131,7 +131,7 @@ flowchart TD
 
 ```json
 {
-  "name": "@ryan-fw/pipeline-orchestrator",
+  "name": "@ryan-fw/prompt-orchestration-pipeline",
   "version": "1.0.0",
   "type": "module",
   "exports": {
@@ -151,8 +151,8 @@ flowchart TD
 ```
 
 - **CLI name:** `pipeline-orchestrator`
-- **Programmatic API:** import from `@ryan-fw/pipeline-orchestrator` (see `src/api/index.js`).
-- **Task runner (advanced):** `@ryan-fw/pipeline-orchestrator/runner`.
+- **Programmatic API:** import from `@ryan-fw/prompt-orchestration-pipeline` (see `src/api/index.js`).
+- **Task runner (advanced):** `@ryan-fw/prompt-orchestration-pipeline/runner`.
 
 ---
 
@@ -211,7 +211,7 @@ Add the package and scripts to your consumer project:
     "pipeline:submit": "pipeline-orchestrator submit"
   },
   "dependencies": {
-    "@ryan-fw/pipeline-orchestrator": "^1.0.0"
+    "@ryan-fw/prompt-orchestration-pipeline": "^1.0.0"
   }
 }
 ```
@@ -269,7 +269,7 @@ _(Keys and defaults may vary by version; prefer `--help` for authoritative optio
 
 ```bash
 # 1) Install
-npm i -S @ryan-fw/pipeline-orchestrator
+npm i -S @ryan-fw/prompt-orchestration-pipeline
 
 # 2) Initialize scaffold
 npm run pipeline:init
