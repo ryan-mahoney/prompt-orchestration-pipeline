@@ -53,3 +53,55 @@
 - ✅ No snapshots used
 - ✅ Minimal mocking (only module boundaries)
 - ✅ Fast and deterministic
+
+## DeepSeek Provider Tests
+
+**File:** `tests/deepseek.test.js`
+
+### Test Cases Added
+
+#### deepseekChat Function
+
+- ✅ `should make successful API call with default parameters`
+- ✅ `should parse JSON content when responseFormat is json_object`
+- ✅ `should return text content when responseFormat is not JSON`
+- ✅ `should handle custom model parameter`
+- ✅ `should throw error when DEEPSEEK_API_KEY is not configured`
+- ✅ `should retry on retryable errors`
+- ✅ `should throw immediately on 401 errors`
+- ✅ `should throw error after max retries`
+- ✅ `should retry on JSON parsing failures`
+- ✅ `should handle fetch errors gracefully`
+- ✅ `should handle system-only messages`
+
+#### queryDeepSeek Function
+
+- ✅ `should call deepseekChat with correct parameters`
+- ✅ `should use default model when not specified`
+- ✅ `should propagate errors from deepseekChat`
+
+### Technical Decisions
+
+1. **Mock Strategy**: Used `vi.hoisted()` for proper hoisting of mocks to handle ESM imports
+2. **Module Mocking**: Mocked `../src/providers/base.js` with all required functions
+3. **Global Mocking**: Mocked global `fetch` for API calls
+4. **Environment Management**: Used `mockEnvVars` for API key testing with proper cleanup
+5. **Error Testing**: Comprehensive error scenarios including retry logic, 401 errors, and max retries
+6. **JSON Handling**: Tested both successful and failed JSON parsing scenarios
+
+### Coverage Summary
+
+- **Total Tests**: 14
+- **Functions Covered**: 2 (deepseekChat, queryDeepSeek)
+- **Edge Cases**: Missing API key, retryable errors, 401 errors, JSON parsing failures, fetch errors
+- **Mock Verification**: API calls, retry logic, error handling
+
+### Test Quality
+
+- ✅ Follows project testing rules
+- ✅ Uses Vitest framework
+- ✅ ESM compatible
+- ✅ No snapshots used
+- ✅ Minimal mocking (only module boundaries)
+- ✅ Fast and deterministic
+- ✅ Comprehensive error handling coverage
