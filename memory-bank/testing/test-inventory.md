@@ -259,3 +259,76 @@
 - ✅ Minimal mocking (only module boundaries)
 - ✅ Fast and deterministic (27ms total runtime)
 - ✅ Comprehensive coverage of CLI command logic
+
+## API Module Tests
+
+**File:** `tests/api.test.js`
+
+### Test Cases Added
+
+#### createPipelineOrchestrator Function
+
+- ✅ `should create orchestrator with default config`
+- ✅ `should create orchestrator with custom config`
+- ✅ `should start UI server when configured`
+- ✅ `should not start UI server when disabled`
+
+#### submitJob Function
+
+- ✅ `should submit job with custom name`
+- ✅ `should submit job with generated name`
+
+#### getStatus Function
+
+- ✅ `should get status from current directory`
+- ✅ `should get status from complete directory`
+- ✅ `should return null for non-existent job`
+
+#### listJobs Function
+
+- ✅ `should list pending jobs`
+- ✅ `should list current jobs`
+- ✅ `should list complete jobs`
+- ✅ `should list all jobs`
+- ✅ `should handle empty directories gracefully`
+
+#### start Function
+
+- ✅ `should start orchestrator`
+
+#### stop Function
+
+- ✅ `should stop orchestrator and UI server`
+- ✅ `should handle stop without UI server`
+
+#### Backward Compatibility (PipelineOrchestrator.create)
+
+- ✅ `should create PipelineOrchestrator instance`
+- ✅ `should maintain state across method calls`
+
+### Technical Decisions
+
+1. **Mock Strategy**: Used `vi.mock()` at module level for orchestrator and UI server dependencies
+2. **Module Mocking**: Mocked `../src/core/orchestrator.js` and `../src/ui/server.js` to isolate API module testing
+3. **File System Mocking**: Used `vi.spyOn(fs, ...)` for targeted file operations mocking
+4. **State Management**: Tested backward compatibility class maintains state across method calls
+5. **Error Handling**: Comprehensive testing of file system errors and edge cases
+6. **UI Server Testing**: Verified UI server starts/stops correctly based on configuration
+
+### Coverage Summary
+
+- **Total Tests**: 19
+- **Functions Covered**: 7 (createPipelineOrchestrator, submitJob, getStatus, listJobs, start, stop, PipelineOrchestrator.create)
+- **Edge Cases**: Missing files, empty directories, UI server configuration, backward compatibility
+- **Mock Verification**: File operations, orchestrator calls, UI server lifecycle
+
+### Test Quality
+
+- ✅ Follows project testing rules
+- ✅ Uses Vitest framework
+- ✅ ESM compatible
+- ✅ No snapshots used
+- ✅ Minimal mocking (only module boundaries)
+- ✅ Fast and deterministic (135ms total runtime)
+- ✅ Comprehensive coverage of API module functionality
+- ✅ Backward compatibility testing for legacy interface
