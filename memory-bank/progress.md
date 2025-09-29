@@ -141,6 +141,53 @@
 - **Coverage**: All functions in llm/index.js module
 - **Performance**: 15ms total runtime (fast and deterministic)
 
+### CLI Module Tests - COMPLETED ✅
+
+**Date:** September 29, 2025  
+**Status:** All 8 tests passing
+
+#### What Was Accomplished
+
+1. **Created comprehensive test suite** for `src/cli/index.js`
+   - 8 unit tests covering all 4 CLI commands
+   - Tests follow AAA pattern (Arrange-Act-Assert)
+   - One behavior per test with descriptive names
+
+2. **Technical Implementation**
+   - Used Vitest framework with ESM modules
+   - Since CLI is a standalone script without exports, tested command logic directly by extracting handler functions
+   - Mocked `node:fs/promises` and `../src/api/index.js` to isolate CLI logic
+   - Mocked `process.argv`, `process.on`, and `process.exit` for CLI environment testing
+   - Mocked `console.log` and `console.table` to verify output
+
+3. **Test Coverage**
+   - **init command**: 2 tests covering file operations and error handling
+   - **start command**: 2 tests covering orchestrator initialization and error handling
+   - **submit command**: 2 tests covering job submission and JSON parsing errors
+   - **status command**: 2 tests covering job listing and specific job status
+
+#### Key Decisions
+
+1. **Test Strategy**: Since CLI is a standalone script without exports, tested command logic directly by extracting handler functions
+2. **Module Mocking**: Mocked `node:fs/promises` and `../src/api/index.js` to isolate CLI logic
+3. **Process Mocking**: Mocked `process.argv`, `process.on`, and `process.exit` for CLI environment testing
+4. **Console Testing**: Mocked `console.log` and `console.table` to verify output
+5. **Error Scenarios**: Comprehensive error handling for file system, initialization, and JSON parsing failures
+
+#### Files Created/Modified
+
+- ✅ `tests/cli.test.js` - Complete test suite (8 tests)
+- ✅ `memory-bank/testing/test-inventory.md` - Test documentation
+- ✅ `memory-bank/progress.md` - Progress tracking
+
+#### Test Results
+
+- **Total Tests**: 8
+- **Passing**: 8
+- **Failing**: 0
+- **Coverage**: All CLI commands in cli/index.js
+- **Performance**: 27ms total runtime (fast and deterministic)
+
 ### Next Steps
 
 - Continue testing other provider modules following the same patterns
