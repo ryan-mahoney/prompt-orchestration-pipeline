@@ -1,111 +1,102 @@
-# Prompt-Orchestration Pipeline
+# Pipeline Orchestrator (Prompt‑Orchestration Pipeline)
 
-A **Prompt-orchestration pipeline (POP)** is a framework for building, running, and experimenting with complex chains of LLM tasks.
+A **Prompt‑orchestration pipeline (POP)** is a framework for building, running, and experimenting with complex chains of LLM tasks.
 
-Instead of relying on a single mega-prompt, a pipeline decomposes work into stages, applies targeted transformations, validates outputs, and composes multiple model calls into a repeatable workflow.
+Instead of relying on a single mega‑prompt, a pipeline decomposes work into stages, applies targeted transformations, validates outputs, and composes multiple model calls into a repeatable workflow.
 
-This repository provides a reference implementation of a Prompt-orchestration pipeline, designed for researchers, engineers, and builders who want to explore **creative, multi-stage strategies that push far beyond what a single prompt can achieve.**
+This repository provides a reference implementation of a prompt‑orchestration pipeline that can be consumed as an npm package by other Node.js projects. It is intentionally lightweight: just enough orchestration to run complex pipelines, inspect intermediate artifacts, and evolve new strategies.
 
 ---
 
-## Why It Matters
+## Why it matters
 
-Single-prompt strategies are fragile:
+Single‑prompt strategies are fragile:
 
 - Inputs must fit within a single context window.
 - Instructions and examples compete for limited space.
-- Quality control is all-or-nothing.
+- Quality control is all‑or‑nothing.
 
-A prompt-orchestration pipeline changes the game:
+A prompt‑orchestration pipeline changes the game:
 
-- **Chained reasoning**: break down complex problems into sequential tasks.
-- **Context compression & stacking**: condense outputs into artifacts that feed the next stage.
-- **Multi-model strategies**: route subtasks to the most appropriate model (fast vs. large, cheap vs. accurate).
-- **Validation loops**: enforce structure, apply quality checks, and retry when needed.
-- **Experimentation**: swap tasks in and out to try new ideas without rewriting the whole system.
+- **Chained reasoning** – break down complex problems into sequential tasks.
+- **Context compression & stacking** – condense outputs into artifacts that feed the next stage.
+- **Multi‑model strategies** – route subtasks to the most appropriate model (fast vs. large, cheap vs. accurate).
+- **Validation loops** – enforce structure, apply quality checks, and retry when needed.
+- **Experimentation** – swap tasks in and out to try new ideas without rewriting the whole system.
 
 The result: workflows that are **more robust, interpretable, and capable** than any single prompt.
 
 ---
 
-## Architecture
+## Architecture (conceptual)
 
-A prompt-orchestration pipeline has **two layers**:
+A prompt‑orchestration pipeline has **two layers**:
 
-### 1. Pipeline Orchestration (the outer layer)
+### 1) Pipeline orchestration (outer layer)
 
-The outer pipeline manages runs, state, and isolation.  
-It is responsible for:
+The outer pipeline manages runs, state, and isolation. It is responsible for:
 
-- Assigning a pipeline ID for each new run.
-- Creating predictable directories for seeds, tasks, artifacts, and status.
+- Assigning a pipeline run ID for each new submission.
+- Creating predictable directories for pending seeds, active runs, and completed runs.
 - Spawning isolated processes for each task (so one failure doesn’t crash others).
-- Tracking progress in `tasks-status.json`.
-- Promoting completed runs into `/pipeline-complete` with audit metadata.
+- Tracking progress in a run‑scoped status file.
+- Promoting completed runs into a repository of results with audit metadata.
 
-Directory structure:
-
-```
-
-/pipeline.json                  # defines the ordered list of tasks
-/pipeline-pending/\*.json        # queued seed inputs
-/pipeline-current/<id>/          # active run state
-/pipeline-complete/<id>/         # archived completed run
-/pipeline-tasks/index.js         # registry of available tasks
+**Runtime directories (in the consuming project):**
 
 ```
+my-project/
+└── pipeline-data/
+    ├── pending/           # queue seeds here (e.g., *.json)
+    ├── current/           # active run state (auto‑managed)
+    └── complete/          # archived runs (auto‑managed)
+```
 
-#### High-level diagram
+**High‑level flow**
 
 ```mermaid
 flowchart TD
-  A["/pipeline-pending/*-seed.json"] --> B[Orchestrator]
-  B --> C["create /pipeline-current/&lt;id&gt;/seed.json"]
-  B --> D["create /pipeline-current/&lt;id&gt;/tasks-status.json"]
-  B --> E[Read pipeline.json]
+  A["pipeline-data/pending/*-seed.json"] --> B[Orchestrator]
+  B --> C["create pipeline-data/current/<id>/seed.json"]
+  B --> D["init pipeline-data/current/<id>/tasks-status.json"]
+  B --> E[Read pipeline-config/pipeline.json]
   E --> F[Spawn task runner]
-  F --> G["write tasks/&lt;task&gt;/letter.json"]
+  F --> G["write tasks/<task>/letter.json"]
   G --> H[Run task inner pipeline]
-  H --> I["write tasks/&lt;task&gt;/output.json"]
+  H --> I["write tasks/<task>/output.json"]
   I --> J[Update tasks-status.json]
-  J --> K{More tasks}
+  J --> K{More tasks?}
   K -->|yes| F
   K -->|no| L[Promote to complete]
-  L --> M["/pipeline-complete/&lt;id&gt;/**"]
-  L --> N["append /pipeline-complete/runs.jsonl"]
+  L --> M["pipeline-data/complete/<id>/**"]
+  L --> N["append pipeline-data/complete/runs.jsonl"]
 ```
 
----
+### 2) Task orchestration (inner layer)
 
-### 2. Task Orchestration (the inner layer)
-
-Each pipeline step runs through a **task runner** that executes canonical sub-tasks:
+Each pipeline step runs through a **task runner** that executes canonical sub‑steps:
 
 1. **Ingestion** – retrieve existing data or context.
-2. **Pre-processing** – compress or transform input to fit model constraints.
+2. **Pre‑processing** – compress or transform input to fit model constraints.
 3. **Prompt templating** – assemble the instruction.
 4. **Inference** – run the model call(s).
 5. **Parsing** – normalize outputs into structured form.
 6. **Validation** – check schema, quality, and semantic correctness.
-7. **Critique & refinement** – generate hints, re-prompt, and retry if needed.
+7. **Critique & refinement** – generate hints, re‑prompt, and retry if needed.
 8. **Finalization** – confirm valid output and persist artifacts.
-
-This inner orchestration ensures each task is **deterministic, inspectable, and re-runnable**.
-
-#### Inner pipeline diagram
 
 ```mermaid
 flowchart TD
-  S[Start task] --> I1[Ingestion retrieve data]
-  I1 --> P1[Pre-processing compress transform]
+  S[Start task] --> I1[Ingestion]
+  I1 --> P1[Pre‑processing]
   P1 --> T1[Prompt templating]
-  T1 --> INF[Inference one to many model calls]
-  INF --> PAR[Parsing normalize structure]
+  T1 --> INF[Inference]
+  INF --> PAR[Parsing]
   PAR --> VS[Validate structure]
   VS -->|ok| VQ[Validate quality]
   VS -->|fail| ERR[Fail task and log]
-  VQ -->|ok| FIN[Finalize and persist artifacts]
-  VQ -->|fail| HINTS[Critique and hints]
+  VQ -->|ok| FIN[Finalize & persist]
+  VQ -->|fail| HINTS[Critique & hints]
   HINTS --> T1
   FIN --> DONE[Done]
   ERR --> DONE
@@ -113,52 +104,187 @@ flowchart TD
 
 ---
 
-## Example Flow
+## Section A — Library (this package)
 
-1. A seed file is placed into `/pipeline-pending`.
-2. The orchestrator creates `/pipeline-current/<id>` with `seed.json` and initializes task directories.
-3. Each task runs in sequence:
+### Repository layout
 
-   - Writes a `letter.json` trigger into its folder.
-   - Runs the inner task pipeline.
-   - Saves outputs, logs, and updates `tasks-status.json`.
+```
+@ryan-fw/pipeline-orchestrator/
+├── src/
+│   ├── core/
+│   │   ├── task-runner.js         # Core pipeline execution
+│   │   ├── pipeline-runner.js     # Pipeline management
+│   │   └── orchestrator.js        # Workflow orchestration
+│   ├── cli/
+│   │   └── index.js               # CLI entry point
+│   ├── api/
+│   │   └── index.js               # Programmatic API
+│   └── ui/
+│       └── server.js              # Optional UI server
+├── bin/
+│   └── pipeline-orchestrator      # CLI executable
+├── package.json
+└── README.md
+```
 
-4. On success, the run is moved to `/pipeline-complete/<id>` and appended to `runs.jsonl`.
-5. On failure, the run remains in `/pipeline-current` with full artifacts for debugging.
+### Package exports & CLI
+
+```json
+{
+  "name": "@ryan-fw/pipeline-orchestrator",
+  "version": "1.0.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/api/index.js",
+    "./cli": "./src/cli/index.js",
+    "./runner": "./src/core/task-runner.js"
+  },
+  "bin": {
+    "pipeline-orchestrator": "./bin/pipeline-orchestrator"
+  },
+  "dependencies": {
+    "chokidar": "^3.5.3",
+    "commander": "^11.0.0",
+    "express": "^4.18.0"
+  }
+}
+```
+
+- **CLI name:** `pipeline-orchestrator`
+- **Programmatic API:** import from `@ryan-fw/pipeline-orchestrator` (see `src/api/index.js`).
+- **Task runner (advanced):** `@ryan-fw/pipeline-orchestrator/runner`.
 
 ---
 
-## Use Cases
+## Section B — Consuming project usage
 
-- Multi-model research: prototype workflows that combine GPT-4, Claude, LLaMA, and smaller local models.
-- Complex transformations: stack summarization, clustering, re-generation, and scoring to produce publish-quality results.
-- Structured data generation: build validated JSON/CSV/Graph outputs reliably with retries and guardrails.
-- Experimentation: quickly remix pipelines by editing `pipeline.json` or swapping task modules.
+### Expected layout in a consumer project
+
+```
+my-project/
+├── pipeline-config/
+│   ├── pipeline.json              # Pipeline definition (ordered list of task IDs)
+│   └── tasks/                     # Task implementations
+│       ├── index.js               # Task registry (maps task IDs → modules)
+│       ├── task-a/
+│       │   └── index.js
+│       └── task-b/
+│           └── index.js
+├── pipeline-data/                 # Runtime directories (auto‑created/managed)
+│   ├── pending/
+│   ├── current/
+│   └── complete/
+├── package.json
+└── .pipelinerc.json              # Optional CLI config
+```
+
+**`pipeline.json` (example)**
+
+```json
+{
+  "tasks": ["task-a", "task-b"]
+}
+```
+
+**`pipeline-config/tasks/index.js` (example registry)**
+
+```js
+// ESM registry mapping task IDs to loader functions or modules
+export default {
+  "task-a": () => import("./task-a/index.js"),
+  "task-b": () => import("./task-b/index.js"),
+};
+```
+
+> The orchestrator resolves task IDs from `pipeline.json` using this registry.
+
+### Install & scripts
+
+Add the package and scripts to your consumer project:
+
+```json
+{
+  "scripts": {
+    "pipeline": "pipeline-orchestrator start",
+    "pipeline:ui": "pipeline-orchestrator start --ui",
+    "pipeline:init": "pipeline-orchestrator init",
+    "pipeline:submit": "pipeline-orchestrator submit"
+  },
+  "dependencies": {
+    "@ryan-fw/pipeline-orchestrator": "^1.0.0"
+  }
+}
+```
+
+### CLI overview
+
+- **`pipeline-orchestrator init`** – scaffolds `pipeline-config/` and `pipeline-data/` if missing.
+- **`pipeline-orchestrator start`** – starts the orchestrator; watches `pipeline-data/pending/` for new seeds and processes them according to `pipeline-config/pipeline.json`.
+- **`pipeline-orchestrator start --ui`** – starts the orchestrator and the optional UI server.
+- **`pipeline-orchestrator submit [path]`** – submits a seed into `pipeline-data/pending/` (path can point to a JSON file).
+
+> Run `pipeline-orchestrator --help` in your project for the most current flags.
+
+### Optional configuration: `.pipelinerc.json`
+
+If present in the project root, this file can provide defaults for the CLI (e.g., custom locations). A minimal example:
+
+```json
+{
+  "configDir": "./pipeline-config",
+  "dataDir": "./pipeline-data"
+}
+```
+
+_(Keys and defaults may vary by version; prefer `--help` for authoritative options.)_
+
+### Example flow in a consumer project
+
+1. **Initialize**: `npm run pipeline:init` to ensure folders exist.
+2. **Define**: Edit `pipeline-config/pipeline.json` and implement tasks under `pipeline-config/tasks/`.
+3. **Run**: `npm run pipeline` (or `npm run pipeline:ui` for the UI).
+4. **Submit**: Add a seed JSON to `pipeline-data/pending/` or run `npm run pipeline:submit -- ./path/to/seed.json`.
+5. **Inspect**: Watch `pipeline-data/current/<runId>` for in‑progress artifacts and `pipeline-data/complete/<runId>` for results.
 
 ---
 
-## Why This Repository
+## Concepts & conventions (carry‑overs)
 
-This repo is meant as a **reference system** for anyone experimenting with advanced prompt engineering.
-It is intentionally lightweight: just enough orchestration to run complex pipelines, inspect intermediate artifacts, and evolve new strategies.
-
-By naming and defining the **Prompt-orchestration pipeline**, this project aims to give builders a shared vocabulary and a practical foundation to move past the limitations of single-prompt solutions.
+- **Determinism** – each task persists its inputs/outputs; you can re‑run or debug any stage.
+- **Isolation** – tasks run in separate processes when appropriate.
+- **Artifacts** – tasks write structured artifacts (e.g., `letter.json`, `output.json`) to their run directory.
+- **Status** – a `tasks-status.json` file tracks progress and outcomes across the pipeline.
 
 ---
 
-## Getting Started
+## Quick troubleshooting
 
-1. Clone the repo.
-2. Define your pipeline steps in `pipeline.json`.
-3. Add task implementations in `/pipeline-tasks/`.
-4. Drop a seed input into `/pipeline-pending/`.
-5. Start the orchestrator (`node orchestrator/manager.js`) and watch your pipeline run.
+- **Nothing happens when I submit a seed** → Ensure the orchestrator is running and watching `pipeline-data/pending/`.
+- **Task not found** → Confirm the task ID exists in `pipeline-config/tasks/index.js` and matches `pipeline.json`.
+- **UI doesn’t load** → Try `pipeline-orchestrator start --ui` and check for port conflicts.
+
+---
+
+## Getting started (TL;DR)
+
+```bash
+# 1) Install
+npm i -S @ryan-fw/pipeline-orchestrator
+
+# 2) Initialize scaffold
+npm run pipeline:init
+
+# 3) Start orchestrator (optionally with UI)
+npm run pipeline
+# or
+npm run pipeline:ui
+
+# 4) Submit a seed (JSON file)
+npm run pipeline:submit -- ./seeds/example-seed.json
+```
 
 ---
 
 ## Status
 
-This is an **experimental framework**.
-The goal is to explore and evolve best practices for orchestrating prompts, models, and validations into reliable workflows.
-
-Feedback, issues, and contributions are welcome.
+This is an **experimental framework**. The goal is to explore and evolve best practices for orchestrating prompts, models, and validations into reliable workflows. Feedback, issues, and contributions are welcome.
