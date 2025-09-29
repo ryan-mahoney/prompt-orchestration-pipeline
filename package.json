@@ -8,7 +8,9 @@
     "test": "vitest"
   },
   "dependencies": {
-    "chokidar": "^3.5.3"
+    "chokidar": "^3.5.3",
+    "dotenv": "^17.2.2",
+    "openai": "^5.23.1"
   },
   "devDependencies": {
     "prettier": "^3.0.0",

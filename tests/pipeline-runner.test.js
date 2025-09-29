@@ -55,7 +55,7 @@ test("runs one task and writes artifacts", async () => {
   process.argv = [prevArgv[0], prevArgv[1], name];
 
   // ✅ Avoid file:// URL; keep a literal specifier to silence the Vite warning
-  await import("../lib/pipeline-runner.js");
+  await import("../src/pipeline-runner.js");
 
   const dest = path.join(ROOT, "pipeline-complete", name);
   const output = JSON.parse(

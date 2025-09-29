@@ -1,0 +1,19 @@
+{
+  "tasks": [
+    "data-extraction",
+    "summarization",
+    "analysis",
+    "report-generation"
+  ],
+  "config": {
+    "retryPolicy": {
+      "maxRetries": 3,
+      "retryableStages": ["validateStructure", "validateQuality"]
+    },
+    "models": {
+      "fast": "gpt-3.5-turbo",
+      "accurate": "gpt-4",
+      "creative": "claude-3-opus"
+    }
+  }
+}

@@ -80,7 +80,7 @@ describe("orchestrator", () => {
 
     // re-import SUT so top-level bootstrap runs with our mocks
     vi.resetModules();
-    await import("../lib/orchestrator.js");
+    await import("../src/orchestrator.js");
   });
 
   afterEach(() => {
