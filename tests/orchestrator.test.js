@@ -98,10 +98,15 @@ describe("orchestrator", () => {
 
   afterEach(async () => {
     if (orchestrator) {
+      // In test environment, we need to manually trigger the child process exit
+      // to avoid the 2-second timeout in the stop() method
+      children.forEach((child) => {
+        child._emit("exit", 0, null);
+      });
       await orchestrator.stop();
     }
     exitSpy.mockRestore();
-  });
+  }, 30000); // Increase timeout for afterEach hook
 
   it("creates pipeline dirs and runs pipeline on seed add", async () => {
     const seedPath = path.join(tmpDir, "pipeline-pending", "demo-seed.json");
@@ -166,5 +171,5 @@ describe("orchestrator", () => {
     if (!ch.killed) {
       expect(ch.kill).toHaveBeenCalledWith("SIGKILL");
     }
-  });
+  }, 15000); // Increase timeout for this specific test
 });

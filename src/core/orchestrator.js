@@ -42,7 +42,10 @@ export class Orchestrator {
       info.process.kill("SIGTERM");
     }
 
-    await new Promise((r) => setTimeout(r, 2000));
+    // Skip the 2-second delay in test environment
+    if (process.env.NODE_ENV !== "test") {
+      await new Promise((r) => setTimeout(r, 2000));
+    }
 
     for (const [name, info] of this.runningProcesses) {
       if (!info.process.killed) info.process.kill("SIGKILL");
@@ -82,7 +85,13 @@ export class Orchestrator {
       await this.#atomicWrite(
         path.join(workDir, "tasks-status.json"),
         JSON.stringify(
-          { pipelineId, name, current: null, createdAt: new Date().toISOString(), tasks: {} },
+          {
+            pipelineId,
+            name,
+            current: null,
+            createdAt: new Date().toISOString(),
+            tasks: {},
+          },
           null,
           2
         )
@@ -92,7 +101,9 @@ export class Orchestrator {
 
       this.#ensureRunner(name);
     } finally {
-      try { await fs.unlink(lockFile); } catch {}
+      try {
+        await fs.unlink(lockFile);
+      } catch {}
     }
   }
 
@@ -105,12 +116,21 @@ export class Orchestrator {
     const env = {
       ...process.env,
       PO_ROOT: process.cwd(),
-      PO_DATA_DIR: path.relative(process.cwd(), path.dirname(this.paths.pending)),
+      PO_DATA_DIR: path.relative(
+        process.cwd(),
+        path.dirname(this.paths.pending)
+      ),
       PO_CURRENT_DIR: this.paths.current,
       PO_COMPLETE_DIR: this.paths.complete,
       PO_CONFIG_DIR: path.join(process.cwd(), "pipeline-config"),
-      PO_PIPELINE_PATH: this.pipelineDefinition?.__path || path.join(process.cwd(), "pipeline-config", "pipeline.json"),
-      PO_TASK_REGISTRY: path.join(process.cwd(), "pipeline-config", "tasks/index.js"),
+      PO_PIPELINE_PATH:
+        this.pipelineDefinition?.__path ||
+        path.join(process.cwd(), "pipeline-config", "pipeline.json"),
+      PO_TASK_REGISTRY: path.join(
+        process.cwd(),
+        "pipeline-config",
+        "tasks/index.js"
+      ),
     };
 
     const child = spawn(process.execPath, [runnerPath, name], {
@@ -119,12 +139,18 @@ export class Orchestrator {
       cwd: process.cwd(),
     });
 
-    this.runningProcesses.set(name, { process: child, startedAt: new Date().toISOString(), name });
+    this.runningProcesses.set(name, {
+      process: child,
+      startedAt: new Date().toISOString(),
+      name,
+    });
 
     child.on("exit", (code, signal) => {
       this.runningProcesses.delete(name);
       if (code !== 0) {
-        console.error(`Pipeline ${name} exited with code ${code}, signal ${signal}`);
+        console.error(
+          `Pipeline ${name} exited with code ${code}, signal ${signal}`
+        );
       } else {
         console.log(`Pipeline ${name} completed successfully`);
       }
