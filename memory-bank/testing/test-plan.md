@@ -1,111 +1,95 @@
-# API Module Test Plan
+# Test Plan: Providers Index Module
 
-## Overview
+## File to Test
 
-Create comprehensive unit tests for `src/api/index.js` following project testing rules (Vitest, ESM, AAA style, no snapshots).
+- `src/providers/index.js`
 
-## Files to Test
+## Test File Location
 
-- **Test File**: `tests/api.test.js`
-- **Source File**: `src/api/index.js`
+- `tests/providers.test.js`
 
 ## Functions to Test
 
-### Pure Functional Utilities
+### 1. `getLLMEvents()`
 
-1. `createPaths(config)` - Path creation logic
-2. `validateConfig(options)` - Configuration validation
-3. `ensureDirectories(paths)` - Directory creation
-4. `loadPipelineDefinition(pipelinePath)` - Pipeline loading with error handling
-5. `createOrchestrator(paths, pipelineDefinition)` - Orchestrator creation
+- ✅ Should return EventEmitter instance
+- ✅ Should return same instance on multiple calls
 
-### Main API Functions
+### 2. `getAvailableProviders()`
 
-6. `createPipelineOrchestrator(options)` - Main orchestrator creation with auto-start and UI
-7. `submitJob(state, seed)` - Job submission with file creation
-8. `getStatus(state, jobName)` - Job status retrieval from current/complete directories
-9. `listJobs(state, status)` - Job listing with status filtering
-10. `start(state)` - Orchestrator start
-11. `stop(state)` - Orchestrator and UI server stop
+- ✅ Should return providers based on environment variables
+- ✅ Should detect OpenAI when OPENAI_API_KEY exists
+- ✅ Should detect DeepSeek when DEEPSEEK_API_KEY exists
+- ✅ Should detect Anthropic when ANTHROPIC_API_KEY exists
+- ✅ Should return false for providers without API keys
 
-### Backward Compatibility
+### 3. `calculateCost()`
 
-12. `PipelineOrchestrator.create(options)` - Class-like API wrapper
+- ✅ Should calculate cost for OpenAI models
+- ✅ Should calculate cost for DeepSeek models
+- ✅ Should calculate cost for Anthropic models
+- ✅ Should return 0 for unknown provider
+- ✅ Should return 0 for unknown model (fallback to first model)
+- ✅ Should return 0 when no usage provided
+- ✅ Should handle both usage formats (prompt_tokens/completion_tokens vs promptTokens/completionTokens)
+- ✅ Should calculate correct cost with token counts
 
-## Test Cases
+### 4. `chat()`
 
-### Configuration & Paths
+- ✅ Should call provider function with correct parameters
+- ✅ Should throw error for unavailable provider
+- ✅ Should throw error for unimplemented provider
+- ✅ Should emit request start event
+- ✅ Should emit request complete event on success
+- ✅ Should emit request error event on failure
+- ✅ Should calculate and include cost in complete event
+- ✅ Should handle default provider (openai)
+- ✅ Should handle custom provider parameter
+- ✅ Should pass through messages and model parameters
+- ✅ Should handle metadata parameter
 
-- ✅ `should create correct paths from config`
-- ✅ `should validate config with defaults`
-- ✅ `should validate config with custom options`
-- ✅ `should ensure directories exist`
-- ✅ `should load pipeline definition successfully`
-- ✅ `should throw error when pipeline definition not found`
-- ✅ `should create orchestrator instance`
+### 5. `complete()`
 
-### Main Orchestrator
+- ✅ Should call chat with user message
+- ✅ Should pass through options to chat
 
-- ✅ `should create orchestrator with default config`
-- ✅ `should create orchestrator with custom config`
-- ✅ `should auto-start orchestrator when configured`
-- ✅ `should not auto-start orchestrator when disabled`
-- ✅ `should start UI server when configured`
-- ✅ `should not start UI server when disabled`
+### 6. `createLLM()`
 
-### Job Management
+- ✅ Should create LLM interface with default provider
+- ✅ Should create LLM interface with custom default provider
+- ✅ Should create LLM interface with default model
+- ✅ Should pass options to chat method
+- ✅ Should expose getAvailableProviders
+- ✅ Should expose queryChatGPT and queryDeepSeek for backward compatibility
 
-- ✅ `should submit job with custom name`
-- ✅ `should submit job with generated name`
-- ✅ `should get status from current directory`
-- ✅ `should get status from complete directory`
-- ✅ `should return null for non-existent job`
-- ✅ `should list pending jobs`
-- ✅ `should list current jobs`
-- ✅ `should list complete jobs`
-- ✅ `should list all jobs`
-- ✅ `should handle empty directories gracefully`
+### 7. Re-exports
 
-### Control Functions
-
-- ✅ `should start orchestrator`
-- ✅ `should stop orchestrator and UI server`
-- ✅ `should handle stop without UI server`
-
-### Backward Compatibility
-
-- ✅ `should create PipelineOrchestrator instance`
-- ✅ `should provide class-like API methods`
-- ✅ `should maintain state across method calls`
+- ✅ Should re-export queryChatGPT from openai
+- ✅ Should re-export queryDeepSeek from deepseek
 
 ## Mock Strategy
 
-- Mock `node:fs/promises` for file system operations
-- Mock `../core/orchestrator.js` for orchestrator functionality
-- Mock `../ui/server.js` for UI server functionality
-- Use `vi.hoisted()` for proper ESM mocking
-- Mock only module boundaries as per project rules
+- Mock provider modules (openai, deepseek, anthropic) using vi.hoisted()
+- Mock environment variables using mockEnvVars from test-utils
+- Mock EventEmitter for event testing
+- Mock provider functions to isolate index module testing
 
-## Test Utilities
-
-- Leverage existing `test-utils.js` helpers
-- Use `setupMockPipeline` for test environment setup
-- Use `mockEnvVars` for environment variable testing
-- Ensure proper cleanup after each test
-
-## Expected Coverage
-
-- **Total Tests**: ~25-30
-- **Functions Covered**: 12
-- **Edge Cases**: Missing files, empty directories, error conditions
-- **Mock Verification**: File operations, orchestrator calls, UI server management
-
-## Quality Standards
+## Test Structure
 
 - Follow AAA pattern (Arrange-Act-Assert)
 - One behavior per test
-- Descriptive test names
-- No snapshots
-- Fast and deterministic
-- ESM compatible
-- Minimal mocking (only module boundaries)
+- Use descriptive test names
+- Mock only module boundaries
+- Reset mocks between tests
+- Clean up environment variables
+
+## Edge Cases
+
+- Missing API keys
+- Unknown providers
+- Unknown models
+- Missing usage data
+- Different usage formats
+- Event emission timing
+- Error propagation
+- Backward compatibility
