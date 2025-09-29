@@ -5,7 +5,7 @@ import os from "node:os";
 import { vi, test, expect } from "vitest";
 
 // ✅ Hoisted-safe: use a STRING LITERAL here
-vi.mock("../lib/task-runner.js", () => ({
+vi.mock("../src/task-runner.js", () => ({
   runPipeline: vi.fn().mockResolvedValue({
     ok: true,
     context: { output: { x: 1 } },
