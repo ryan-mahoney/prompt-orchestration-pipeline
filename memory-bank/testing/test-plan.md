@@ -1,95 +1,90 @@
-# Test Plan: Providers Index Module
+# OpenAI Provider Test Plan
 
-## File to Test
+## Files to Test
 
-- `src/providers/index.js`
+- **Test File**: `tests/openai.test.js`
+- **Source File**: `src/providers/openai.js`
 
-## Test File Location
+## Test Cases to Implement
 
-- `tests/providers.test.js`
+### `openaiChat` Function Tests
 
-## Functions to Test
+#### Basic Functionality
 
-### 1. `getLLMEvents()`
+- ✅ `should create OpenAI client with API key`
+- ✅ `should throw error when OPENAI_API_KEY is not configured`
+- ✅ `should make successful API call with default parameters`
+- ✅ `should handle custom model parameter`
+- ✅ `should pass through temperature, maxTokens, and other parameters`
 
-- ✅ Should return EventEmitter instance
-- ✅ Should return same instance on multiple calls
+#### API Selection Logic
 
-### 2. `getAvailableProviders()`
+- ✅ `should use Responses API for GPT-5 models`
+- ✅ `should use Chat Completions API for non-GPT-5 models`
+- ✅ `should fallback to classic API when Responses API not supported`
 
-- ✅ Should return providers based on environment variables
-- ✅ Should detect OpenAI when OPENAI_API_KEY exists
-- ✅ Should detect DeepSeek when DEEPSEEK_API_KEY exists
-- ✅ Should detect Anthropic when ANTHROPIC_API_KEY exists
-- ✅ Should return false for providers without API keys
+#### Response Format Handling
 
-### 3. `calculateCost()`
+- ✅ `should parse JSON content when responseFormat is json_object`
+- ✅ `should handle JSON schema response format`
+- ✅ `should return text content when responseFormat is not JSON`
+- ✅ `should include raw text in response even when JSON parsed`
 
-- ✅ Should calculate cost for OpenAI models
-- ✅ Should calculate cost for DeepSeek models
-- ✅ Should calculate cost for Anthropic models
-- ✅ Should return 0 for unknown provider
-- ✅ Should return 0 for unknown model (fallback to first model)
-- ✅ Should return 0 when no usage provided
-- ✅ Should handle both usage formats (prompt_tokens/completion_tokens vs promptTokens/completionTokens)
-- ✅ Should calculate correct cost with token counts
+#### Error Handling & Retry Logic
 
-### 4. `chat()`
+- ✅ `should retry on retryable errors with exponential backoff`
+- ✅ `should throw immediately on 401 authentication errors`
+- ✅ `should throw error after max retries exceeded`
+- ✅ `should handle JSON parsing failures with retry`
+- ✅ `should handle tool calls in classic API responses`
 
-- ✅ Should call provider function with correct parameters
-- ✅ Should throw error for unavailable provider
-- ✅ Should throw error for unimplemented provider
-- ✅ Should emit request start event
-- ✅ Should emit request complete event on success
-- ✅ Should emit request error event on failure
-- ✅ Should calculate and include cost in complete event
-- ✅ Should handle default provider (openai)
-- ✅ Should handle custom provider parameter
-- ✅ Should pass through messages and model parameters
-- ✅ Should handle metadata parameter
+#### Tool Calls Support
 
-### 5. `complete()`
+- ✅ `should return tool calls when present in classic API response`
 
-- ✅ Should call chat with user message
-- ✅ Should pass through options to chat
+#### Usage Estimation
 
-### 6. `createLLM()`
+- ✅ `should estimate usage for Responses API when not provided`
 
-- ✅ Should create LLM interface with default provider
-- ✅ Should create LLM interface with custom default provider
-- ✅ Should create LLM interface with default model
-- ✅ Should pass options to chat method
-- ✅ Should expose getAvailableProviders
-- ✅ Should expose queryChatGPT and queryDeepSeek for backward compatibility
+### `queryChatGPT` Function Tests
 
-### 7. Re-exports
+#### Basic Functionality
 
-- ✅ Should re-export queryChatGPT from openai
-- ✅ Should re-export queryDeepSeek from deepseek
+- ✅ `should call openaiChat with correct parameters`
+- ✅ `should handle schema parameter for JSON response format`
+- ✅ `should maintain backward compatibility with existing function`
+
+#### Parameter Mapping
+
+- ✅ `should map system and prompt to messages array`
+- ✅ `should pass through options to openaiChat`
+- ✅ `should handle response_format parameter`
 
 ## Mock Strategy
 
-- Mock provider modules (openai, deepseek, anthropic) using vi.hoisted()
-- Mock environment variables using mockEnvVars from test-utils
-- Mock EventEmitter for event testing
-- Mock provider functions to isolate index module testing
+- Mock `openai` module using `vi.mock()` with hoisted mocks
+- Mock `../src/providers/base.js` functions (`extractMessages`, `isRetryableError`, `sleep`, `tryParseJSON`)
+- Use `mockEnvVars` for environment variable management
+- Mock OpenAI client methods (`responses.create`, `chat.completions.create`)
 
 ## Test Structure
 
 - Follow AAA pattern (Arrange-Act-Assert)
-- One behavior per test
-- Use descriptive test names
-- Mock only module boundaries
-- Reset mocks between tests
-- Clean up environment variables
+- One behavior per test with descriptive names
+- Use existing test utilities from `test-utils.js`
+- Reset mocks between tests with proper cleanup
 
-## Edge Cases
+## Expected Coverage
 
-- Missing API keys
-- Unknown providers
-- Unknown models
-- Missing usage data
-- Different usage formats
-- Event emission timing
-- Error propagation
-- Backward compatibility
+- **Total Tests**: ~20-25 tests
+- **Functions Covered**: 2 (`openaiChat`, `queryChatGPT`)
+- **Edge Cases**: API selection, error handling, retry logic, JSON parsing, tool calls
+- **Mock Verification**: API calls, retry behavior, error handling
+
+## Technical Decisions
+
+1. Use `vi.hoisted()` for proper ESM mocking
+2. Mock OpenAI client at module level to avoid network calls
+3. Test both API paths (Responses API vs Chat Completions API)
+4. Verify retry logic with exponential backoff
+5. Test JSON parsing and error handling scenarios
