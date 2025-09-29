@@ -1,10 +1,10 @@
 // task-runner.test.js
 import { describe, it, beforeEach, afterEach, expect, vi } from "vitest";
-import * as taskRunner from "../src/task-runner.js";
+import * as taskRunner from "../src/core/task-runner.js";
 
 // We'll use module mocking to intercept the actual module
-vi.mock("../lib/task-runner.js", async () => {
-  const actual = await vi.importActual("../lib/task-runner.js");
+vi.mock("../src/core/task-runner.js", async () => {
+  const actual = await vi.importActual("../src/core/task-runner.js");
 
   // Create a wrapper around runPipeline that intercepts the import
   const runPipeline = async (modulePath, initialContext = {}) => {
