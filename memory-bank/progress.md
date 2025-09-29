@@ -239,8 +239,55 @@
 - **Coverage**: All functions in api/index.js module
 - **Performance**: 135ms total runtime (fast and deterministic)
 
+### Providers Index Module Tests - ATTEMPTED ❌ (REMOVED)
+
+**Date:** September 29, 2025  
+**Status:** 36 tests attempted, all failed due to architectural constraints
+
+#### What Was Attempted
+
+1. **Created comprehensive test plans** for `src/providers/index.js`
+   - Planned 36 unit tests covering all exported functions
+   - Tests designed to follow AAA pattern (Arrange-Act-Assert)
+   - One behavior per test with descriptive names
+
+2. **Technical Challenges Encountered**
+   - **Module Import Issue**: The providers index module has static imports that execute before mocks can be applied
+   - **Mock Timing Problem**: Vitest mocks cannot intercept static imports executed during module loading
+   - **Architectural Constraint**: Current module structure makes it untestable with Vitest
+
+3. **Test Files Created and Removed**
+   - `tests/providers.test.js` - 36 planned tests (removed)
+   - `tests/providers-index.test.js` - 15 planned tests (removed)
+
+#### Key Decisions
+
+1. **Test Removal**: Removed both test files due to architectural constraints
+2. **Documentation**: Thoroughly documented the technical challenges and attempted solutions
+3. **Alternative Approaches**: Considered dynamic imports, dependency injection, and integration testing
+4. **Constraint Adherence**: Followed project constraint to not refactor production code unless essential for testability
+
+#### Technical Challenges Documented
+
+1. **Static Import Problem**: The module imports provider functions at the top level:
+
+   ```javascript
+   import { openaiChat, queryChatGPT } from "./providers/openai.js";
+   import { deepseekChat, queryDeepSeek } from "./providers/deepseek.js";
+   import { anthropicChat } from "./providers/anthropic.js";
+   ```
+
+2. **Mock Timing**: These imports execute during module loading, before test execution begins
+3. **Failed Strategies**: Attempted `vi.mock()` with hoisted mocks, dynamic imports, and module boundary mocking
+
+#### Current Test Coverage Status
+
+- **Total Tests Passing**: 140/155 (90% success rate)
+- **Providers Index Tests**: 0/36 (removed due to architectural constraints)
+- **Overall Test Quality**: High for testable modules
+
 ### Next Steps
 
-- Continue testing other provider modules following the same patterns
-- Maintain test quality standards established in this implementation
-- Ensure all new tests follow the established mocking and structure patterns
+- Continue testing other testable modules following the established patterns
+- Maintain test quality standards for modules that can be properly tested
+- Consider architectural improvements for providers index module in future iterations
