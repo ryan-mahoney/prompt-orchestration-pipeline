@@ -1,6 +1,6 @@
 // task-runner.test.js
 import { describe, it, beforeEach, afterEach, expect, vi } from "vitest";
-import * as taskRunner from "../lib/task-runner.js";
+import * as taskRunner from "../src/task-runner.js";
 
 // We'll use module mocking to intercept the actual module
 vi.mock("../lib/task-runner.js", async () => {
