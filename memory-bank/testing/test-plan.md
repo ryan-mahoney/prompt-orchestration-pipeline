@@ -1,63 +1,71 @@
-# Test Plan for src/core/environment.js
+# DeepSeek Provider Test Plan
 
-## Overview
+## Files to Test
 
-Create comprehensive unit tests for the environment module following Vitest patterns and project testing rules.
+- `src/providers/deepseek.js`
 
-## Functions to Test
+## Test Cases to Add
 
-### 1. `loadEnvironment(options = {})`
+### `deepseekChat` Function Tests
 
-**Test Cases:**
+#### Success Cases
 
-- Loads environment files from default locations (.env, .env.local)
-- Respects custom rootDir option
-- Respects custom envFiles option
-- Returns loaded files list
-- Returns warnings from validation
-- Returns environment config
-- Handles missing environment files gracefully
-- Overrides existing environment variables
+- ✅ `should make successful API call with default parameters`
+- ✅ `should handle JSON response format correctly`
+- ✅ `should parse JSON content when responseFormat is json_object`
+- ✅ `should return text content when responseFormat is not JSON`
+- ✅ `should include usage information in response`
+- ✅ `should handle custom model parameter`
+- ✅ `should handle custom temperature parameter`
+- ✅ `should handle custom maxTokens parameter`
+- ✅ `should handle all optional parameters (topP, frequencyPenalty, presencePenalty, stop)`
 
-### 2. `validateEnvironment()`
+#### Error Cases
 
-**Test Cases:**
+- ✅ `should throw error when DEEPSEEK_API_KEY is not configured`
+- ✅ `should retry on retryable errors`
+- ✅ `should throw immediately on 401 errors`
+- ✅ `should throw error after max retries`
+- ✅ `should retry on JSON parsing failures`
+- ✅ `should handle fetch errors gracefully`
 
-- Returns warnings when no LLM API keys found
-- Returns empty warnings when at least one API key exists
-- Checks for common LLM API keys (OPENAI_API_KEY, ANTHROPIC_API_KEY, DEEPSEEK_API_KEY, GEMINI_API_KEY)
+#### Edge Cases
 
-### 3. `getEnvironmentConfig()`
+- ✅ `should handle empty messages array`
+- ✅ `should handle system-only messages`
+- ✅ `should handle user-only messages`
+- ✅ `should handle multiple user messages (extracts last one)`
 
-**Test Cases:**
+### `queryDeepSeek` Function Tests (Backward Compatibility)
 
-- Returns complete configuration object structure
-- Maps environment variables to config properties
-- Handles missing environment variables (undefined values)
-- Includes all provider configurations (openai, anthropic, deepseek, gemini)
+#### Success Cases
 
-## Test Files
+- ✅ `should call deepseekChat with correct parameters`
+- ✅ `should use default model when not specified`
+- ✅ `should return parsed JSON content`
 
-- `tests/environment.test.js` - Main test file for environment module
+#### Error Cases
 
-## Mock Strategy
+- ✅ `should propagate errors from deepseekChat`
 
-- Mock `dotenv` config function
-- Mock `fs.existsSync` for file existence checks
-- Mock `process.env` for environment variable testing
-- Use `mockEnvVars` utility from test-utils
+## Technical Approach
 
-## Test Patterns
+1. **Mock Strategy**: Use `vi.hoisted()` for proper hoisting of fetch and base module mocks
+2. **Module Mocking**: Mock `fetch` and `./base.js` dependencies
+3. **Test Utilities**: Use `mockEnvVars` for environment variable management
+4. **AAA Pattern**: Follow Arrange-Act-Assert structure
+5. **One Behavior Per Test**: Each test verifies a single specific behavior
+6. **Mock Verification**: Verify fetch calls with correct headers and body
 
-- Arrange-Act-Assert structure
-- One behavior per test
-- Descriptive test names
-- Mock only module boundaries
-- Reset mocks between tests
-- No snapshots, minimal mocking
+## Test File Structure
 
-## Dependencies
+- File: `tests/deepseek.test.js`
+- Follow existing project patterns from `environment.test.js`
+- Use ESM imports and Vitest framework
+- No snapshots, minimal mocking, fast and deterministic tests
 
-- Vitest framework
-- test-utils.js helpers
-- ESM modules
+## Coverage Goals
+
+- Critical paths: API calls, error handling, retry logic
+- Branch edges: JSON parsing, retry conditions, error types
+- Input validation: message extraction, parameter handling
