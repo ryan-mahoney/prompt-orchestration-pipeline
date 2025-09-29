@@ -22,4 +22,5 @@ feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert
 ## Footer (as needed)
 
 - Issue refs: `Closes #123`, `Related to #456`
-- Breaking changes:
+- Breaking changes: Use a `BREAKING CHANGE:` footer to describe the impact and migration steps.
+  Example:
