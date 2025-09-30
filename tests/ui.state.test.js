@@ -1,65 +1,18 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-
-// Mock the module to avoid issues with CommonJS in tests
-const createStateManager = () => {
-  const MAX_RECENT_CHANGES = 10;
-
-  let state = {
-    updatedAt: new Date().toISOString(),
-    changeCount: 0,
-    recentChanges: [],
-    watchedPaths: [],
-  };
-
-  return {
-    getState: () => ({ ...state }),
-
-    recordChange: (path, type) => {
-      const timestamp = new Date().toISOString();
-      const recentChanges = [
-        { path, type, timestamp },
-        ...state.recentChanges,
-      ].slice(0, MAX_RECENT_CHANGES);
-
-      state = {
-        ...state,
-        updatedAt: timestamp,
-        changeCount: state.changeCount + 1,
-        recentChanges,
-      };
-
-      return { ...state };
-    },
-
-    reset: () => {
-      state = {
-        updatedAt: new Date().toISOString(),
-        changeCount: 0,
-        recentChanges: [],
-        watchedPaths: state.watchedPaths,
-      };
-    },
-
-    setWatchedPaths: (paths) => {
-      state.watchedPaths = [...paths];
-    },
-  };
-};
+import * as state from "../src/ui/state.js";
 
 describe("State Manager", () => {
-  let stateManager;
-
   beforeEach(() => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2024-01-10T10:00:00Z"));
-    stateManager = createStateManager();
+    state.reset();
   });
 
   describe("getState", () => {
     it("should return initial state", () => {
-      const state = stateManager.getState();
+      const currentState = state.getState();
 
-      expect(state).toEqual({
+      expect(currentState).toEqual({
         updatedAt: "2024-01-10T10:00:00.000Z",
         changeCount: 0,
         recentChanges: [],
@@ -68,8 +21,8 @@ describe("State Manager", () => {
     });
 
     it("should return a copy of state, not a reference", () => {
-      const state1 = stateManager.getState();
-      const state2 = stateManager.getState();
+      const state1 = state.getState();
+      const state2 = state.getState();
 
       expect(state1).not.toBe(state2);
       expect(state1).toEqual(state2);
@@ -78,10 +31,7 @@ describe("State Manager", () => {
 
   describe("recordChange", () => {
     it("should record a file creation", () => {
-      const result = stateManager.recordChange(
-        "pipeline-config/test.yaml",
-        "created"
-      );
+      const result = state.recordChange("pipeline-config/test.yaml", "created");
 
       expect(result.changeCount).toBe(1);
       expect(result.updatedAt).toBe("2024-01-10T10:00:00.000Z");
@@ -95,13 +45,13 @@ describe("State Manager", () => {
 
     it("should record multiple changes", () => {
       vi.setSystemTime(new Date("2024-01-10T10:00:00Z"));
-      stateManager.recordChange("file1.txt", "created");
+      state.recordChange("file1.txt", "created");
 
       vi.setSystemTime(new Date("2024-01-10T10:00:01Z"));
-      stateManager.recordChange("file2.txt", "modified");
+      state.recordChange("file2.txt", "modified");
 
       vi.setSystemTime(new Date("2024-01-10T10:00:02Z"));
-      const result = stateManager.recordChange("file3.txt", "deleted");
+      const result = state.recordChange("file3.txt", "deleted");
 
       expect(result.changeCount).toBe(3);
       expect(result.recentChanges).toHaveLength(3);
@@ -115,33 +65,33 @@ describe("State Manager", () => {
         vi.setSystemTime(
           new Date(`2024-01-10T10:00:${i.toString().padStart(2, "0")}Z`)
         );
-        stateManager.recordChange(`file${i}.txt`, "modified");
+        state.recordChange(`file${i}.txt`, "modified");
       }
 
-      const state = stateManager.getState();
-      expect(state.changeCount).toBe(12);
-      expect(state.recentChanges).toHaveLength(10);
-      expect(state.recentChanges[0].path).toBe("file12.txt");
-      expect(state.recentChanges[9].path).toBe("file3.txt");
+      const currentState = state.getState();
+      expect(currentState.changeCount).toBe(12);
+      expect(currentState.recentChanges).toHaveLength(10);
+      expect(currentState.recentChanges[0].path).toBe("file12.txt");
+      expect(currentState.recentChanges[9].path).toBe("file3.txt");
     });
 
     it("should handle different change types", () => {
-      stateManager.recordChange("test1.txt", "created");
-      stateManager.recordChange("test2.txt", "modified");
-      stateManager.recordChange("test3.txt", "deleted");
+      state.recordChange("test1.txt", "created");
+      state.recordChange("test2.txt", "modified");
+      state.recordChange("test3.txt", "deleted");
 
-      const state = stateManager.getState();
-      expect(state.recentChanges[2].type).toBe("created");
-      expect(state.recentChanges[1].type).toBe("modified");
-      expect(state.recentChanges[0].type).toBe("deleted");
+      const currentState = state.getState();
+      expect(currentState.recentChanges[2].type).toBe("created");
+      expect(currentState.recentChanges[1].type).toBe("modified");
+      expect(currentState.recentChanges[0].type).toBe("deleted");
     });
 
     it("should update timestamp on each change", () => {
       vi.setSystemTime(new Date("2024-01-10T10:00:00Z"));
-      stateManager.recordChange("file1.txt", "created");
+      state.recordChange("file1.txt", "created");
 
       vi.setSystemTime(new Date("2024-01-10T10:05:00Z"));
-      const result = stateManager.recordChange("file2.txt", "modified");
+      const result = state.recordChange("file2.txt", "modified");
 
       expect(result.updatedAt).toBe("2024-01-10T10:05:00.000Z");
     });
@@ -149,83 +99,83 @@ describe("State Manager", () => {
 
   describe("reset", () => {
     it("should reset state to initial values", () => {
-      stateManager.recordChange("file1.txt", "created");
-      stateManager.recordChange("file2.txt", "modified");
+      state.recordChange("file1.txt", "created");
+      state.recordChange("file2.txt", "modified");
 
       vi.setSystemTime(new Date("2024-01-10T11:00:00Z"));
-      stateManager.reset();
+      state.reset();
 
-      const state = stateManager.getState();
-      expect(state.changeCount).toBe(0);
-      expect(state.recentChanges).toEqual([]);
-      expect(state.updatedAt).toBe("2024-01-10T11:00:00.000Z");
+      const currentState = state.getState();
+      expect(currentState.changeCount).toBe(0);
+      expect(currentState.recentChanges).toEqual([]);
+      expect(currentState.updatedAt).toBe("2024-01-10T11:00:00.000Z");
     });
 
     it("should preserve watched paths after reset", () => {
-      stateManager.setWatchedPaths(["pipeline-config", "runs"]);
-      stateManager.recordChange("file1.txt", "created");
+      state.setWatchedPaths(["pipeline-config", "runs"]);
+      state.recordChange("file1.txt", "created");
 
-      stateManager.reset();
+      state.reset();
 
-      const state = stateManager.getState();
-      expect(state.watchedPaths).toEqual(["pipeline-config", "runs"]);
-      expect(state.changeCount).toBe(0);
+      const currentState = state.getState();
+      expect(currentState.watchedPaths).toEqual(["pipeline-config", "runs"]);
+      expect(currentState.changeCount).toBe(0);
     });
   });
 
   describe("setWatchedPaths", () => {
     it("should set watched paths", () => {
       const paths = ["pipeline-config", "runs", "tasks"];
-      stateManager.setWatchedPaths(paths);
+      state.setWatchedPaths(paths);
 
-      const state = stateManager.getState();
-      expect(state.watchedPaths).toEqual(paths);
+      const currentState = state.getState();
+      expect(currentState.watchedPaths).toEqual(paths);
     });
 
     it("should create a copy of the paths array", () => {
       const paths = ["pipeline-config"];
-      stateManager.setWatchedPaths(paths);
+      state.setWatchedPaths(paths);
 
       paths.push("runs");
 
-      const state = stateManager.getState();
-      expect(state.watchedPaths).toEqual(["pipeline-config"]);
+      const currentState = state.getState();
+      expect(currentState.watchedPaths).toEqual(["pipeline-config"]);
     });
 
     it("should overwrite existing watched paths", () => {
-      stateManager.setWatchedPaths(["old-path"]);
-      stateManager.setWatchedPaths(["new-path-1", "new-path-2"]);
+      state.setWatchedPaths(["old-path"]);
+      state.setWatchedPaths(["new-path-1", "new-path-2"]);
 
-      const state = stateManager.getState();
-      expect(state.watchedPaths).toEqual(["new-path-1", "new-path-2"]);
+      const currentState = state.getState();
+      expect(currentState.watchedPaths).toEqual(["new-path-1", "new-path-2"]);
     });
   });
 
   describe("Integration scenarios", () => {
     it("should handle a typical usage flow", () => {
       // Set watched paths
-      stateManager.setWatchedPaths(["pipeline-config", "runs"]);
+      state.setWatchedPaths(["pipeline-config", "runs"]);
 
       // Record some changes
       vi.setSystemTime(new Date("2024-01-10T10:00:00Z"));
-      stateManager.recordChange("pipeline-config/demo/config.yaml", "created");
+      state.recordChange("pipeline-config/demo/config.yaml", "created");
 
       vi.setSystemTime(new Date("2024-01-10T10:00:05Z"));
-      stateManager.recordChange("pipeline-config/demo/config.yaml", "modified");
+      state.recordChange("pipeline-config/demo/config.yaml", "modified");
 
       vi.setSystemTime(new Date("2024-01-10T10:00:10Z"));
-      stateManager.recordChange("runs/run-001/output.json", "created");
+      state.recordChange("runs/run-001/output.json", "created");
 
-      const state = stateManager.getState();
-      expect(state.changeCount).toBe(3);
-      expect(state.watchedPaths).toEqual(["pipeline-config", "runs"]);
-      expect(state.recentChanges).toHaveLength(3);
-      expect(state.updatedAt).toBe("2024-01-10T10:00:10.000Z");
+      const currentState = state.getState();
+      expect(currentState.changeCount).toBe(3);
+      expect(currentState.watchedPaths).toEqual(["pipeline-config", "runs"]);
+      expect(currentState.recentChanges).toHaveLength(3);
+      expect(currentState.updatedAt).toBe("2024-01-10T10:00:10.000Z");
 
       // Reset and verify
       vi.setSystemTime(new Date("2024-01-10T11:00:00Z"));
-      stateManager.reset();
-      const resetState = stateManager.getState();
+      state.reset();
+      const resetState = state.getState();
 
       expect(resetState.changeCount).toBe(0);
       expect(resetState.recentChanges).toEqual([]);
@@ -238,17 +188,17 @@ describe("State Manager", () => {
 
       for (let i = 0; i < 20; i++) {
         vi.setSystemTime(new Date(startTime.getTime() + i * 100));
-        stateManager.recordChange(
+        state.recordChange(
           `file${i}.txt`,
           i % 2 === 0 ? "created" : "modified"
         );
       }
 
-      const state = stateManager.getState();
-      expect(state.changeCount).toBe(20);
-      expect(state.recentChanges).toHaveLength(10);
-      expect(state.recentChanges[0].path).toBe("file19.txt");
-      expect(state.recentChanges[9].path).toBe("file10.txt");
+      const currentState = state.getState();
+      expect(currentState.changeCount).toBe(20);
+      expect(currentState.recentChanges).toHaveLength(10);
+      expect(currentState.recentChanges[0].path).toBe("file19.txt");
+      expect(currentState.recentChanges[9].path).toBe("file10.txt");
     });
   });
 });
