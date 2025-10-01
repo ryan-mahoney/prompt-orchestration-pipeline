@@ -280,9 +280,30 @@ export class Orchestrator {
     } catch (err) {
       // If rename fails, try to copy
       console.warn(`Could not move ${name} to dead letter, attempting copy`);
+      // If rename fails, try to copy
+      console.warn(`Could not move ${name} to dead letter, attempting copy`);
+      try {
+        await this.#copyDirRecursive(workDir, deadLetterWorkDir);
+        await fs.rm(workDir, { recursive: true, force: true });
+      } catch (copyErr) {
+        console.error(`Failed to copy ${name} to dead letter:`, copyErr);
+      }
     }
   }
 
+  async #copyDirRecursive(src, dest) {
+    await fs.mkdir(dest, { recursive: true });
+    const entries = await fs.readdir(src, { withFileTypes: true });
+    for (const entry of entries) {
+      const srcPath = path.join(src, entry.name);
+      const destPath = path.join(dest, entry.name);
+      if (entry.isDirectory()) {
+        await this.#copyDirRecursive(srcPath, destPath);
+      } else if (entry.isFile()) {
+        await fs.copyFile(srcPath, destPath);
+      }
+    }
+  }
   async #listDirs(dir) {
     try {
       const entries = await fs.readdir(dir, { withFileTypes: true });
