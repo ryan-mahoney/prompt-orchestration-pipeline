@@ -206,32 +206,36 @@ OPENAI_MODEL=gpt-4-turbo
 ANTHROPIC_API_KEY=demo-key-not-real
 ```
 
-### 7. Incomplete Pipeline Definition ⚠️ MEDIUM PRIORITY
+### 7. Incomplete Pipeline Definition ✅ COMPLETED (PR #25)
 
 **Problem**: Pipeline definition missing required metadata.
+
+**Status**: ✅ Resolved in PR #25 (refactor/demo-config-cleanup)
+
+**Architecture Requirement**: Should include name and version per docs.
 
 **Current** (`demo/pipeline-config/pipeline.json`):
 
 ```json
 {
-  "tasks": ["data-extraction", "summarization", "analysis", "report-generation"],
-  "config": { ... }
-}
-```
-
-**Architecture Requirement**: Should include name and version per docs.
-
-**Expected**:
-
-```json
-{
   "name": "demo-market-analysis",
   "version": "1.0.0",
-  "tasks": ["data-extraction", "analysis", "report-generation"]
+  "tasks": ["data-extraction", "analysis", "report-generation"],
+  "config": {
+    "retryPolicy": {
+      "maxRetries": 3,
+      "retryableStages": ["validateStructure", "validateQuality"]
+    },
+    "models": {
+      "fast": "gpt-3.5-turbo",
+      "accurate": "gpt-4",
+      "creative": "claude-3-opus"
+    }
+  }
 }
 ```
 
-**Note**: "summarization" task is listed but doesn't exist in pipeline-tasks.
+**Note**: The non-existent "summarization" task was also removed from the tasks list.
 
 ### 8. Mock Provider Implementation 🔧 ENHANCEMENT
 
