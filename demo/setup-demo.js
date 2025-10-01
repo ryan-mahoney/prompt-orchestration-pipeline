@@ -173,7 +173,7 @@ async function verifySetup() {
     "pipeline.json",
     "pipeline-config/tasks/index.js",
     "pipeline-pending/renewable-energy-seed.json",
-    "integrated-demo-runner.js",
+    "integrated-demo.js",
     "mock-chatgpt.js",
   ];
 
