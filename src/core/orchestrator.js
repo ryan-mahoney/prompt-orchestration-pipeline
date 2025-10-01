@@ -152,13 +152,21 @@ export class Orchestrator {
       },
       shouldRetry: (error) => {
         // Don't retry if the error is due to missing files or invalid config
-        const nonRetryableErrors = [
+        const nonRetryableCodes = [
           "ENOENT",
           "EACCES",
           "MODULE_NOT_FOUND",
+        ];
+        const nonRetryableMessages = [
           "Invalid pipeline",
         ];
-        return !nonRetryableErrors.some((msg) => error.message?.includes(msg));
+        if (error.code && nonRetryableCodes.includes(error.code)) {
+          return false;
+        }
+        if (error.message && nonRetryableMessages.includes(error.message)) {
+          return false;
+        }
+        return true;
       },
     }).catch((error) => {
       console.error(
