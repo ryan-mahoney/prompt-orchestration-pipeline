@@ -65,10 +65,6 @@ The Prompt Orchestration Pipeline is a sophisticated system for managing and exe
 - Handle user interactions
 - Manage process lifecycle
 
-**Potential Issues**:
-
-- ⚠️ Limited error handling for malformed commands
-
 ### 2. API Layer (`src/api/index.js`)
 
 **Purpose**: Functional API for programmatic access
@@ -96,11 +92,6 @@ state = {
 ```
 
 **Backward Compatibility**: Provides `PipelineOrchestrator` class-like API wrapper
-
-**Potential Issues**:
-
-- ⚠️ State object is mutable and passed around
-- ⚠️ No validation of pipeline definition structure
 
 ### 3. Orchestrator (`src/core/orchestrator.js`)
 
@@ -165,11 +156,6 @@ pipeline-data/
 - `letter.json` - Task metadata
 - `execution-logs.json` - Execution logs
 - `runs.jsonl` - Append-only completion log
-
-**Potential Issues**:
-
-- ⚠️ Single point of failure - if runner crashes, job is lost
-- ⚠️ No mechanism to resume interrupted pipelines
 
 ### 5. Task Runner (`src/core/task-runner.js`)
 
@@ -241,11 +227,6 @@ context = {
 - `validateEnvironment()` - Check for API keys
 - `getEnvironmentConfig()` - Get provider configs
 
-**Potential Issues**:
-
-- ⚠️ Only warns about missing API keys, doesn't enforce
-- ⚠️ Loads .env.local after .env (override behavior not documented)
-
 ### 7. LLM Integration Layer (`src/llm/index.js`)
 
 **Purpose**: Unified interface for multiple LLM providers
@@ -276,10 +257,6 @@ Events:
 - `withRetry(fn, args, maxRetries)` - Retry wrapper
 - `parallel(fn, items, maxConcurrency)` - Parallel execution
 - `createLLM(options)` - Bound LLM interface
-
-**Potential Issues**:
-
-- ⚠️ Parallel execution doesn't handle partial failures well
 
 ### 8. Provider Implementations
 
@@ -317,12 +294,6 @@ Events:
 
 - `openaiChat(options)` - Main unified interface
 - `queryChatGPT(system, prompt, options)` - Legacy helper
-
-**Potential Issues**:
-
-- ⚠️ Responses API fallback logic may cause confusion
-- ⚠️ Token usage estimation for GPT-5 (not returned by API)
-- ⚠️ Default temperature differs between APIs (0.7 for classic)
 
 #### DeepSeek Provider (`src/providers/deepseek.js`)
 
@@ -386,12 +357,6 @@ Events:
   watchedPaths: [paths]
 }
 ```
-
-**Potential Issues**:
-
-- ⚠️ State is global and mutable
-- ⚠️ No persistence - lost on restart
-- ⚠️ Limited to 10 recent changes
 
 #### UI Watcher (`src/ui/watcher.js`)
 
