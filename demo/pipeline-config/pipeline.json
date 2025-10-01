@@ -1,10 +1,7 @@
 {
-  "tasks": [
-    "data-extraction",
-    "summarization",
-    "analysis",
-    "report-generation"
-  ],
+  "name": "demo-market-analysis",
+  "version": "1.0.0",
+  "tasks": ["data-extraction", "analysis", "report-generation"],
   "config": {
     "retryPolicy": {
       "maxRetries": 3,
