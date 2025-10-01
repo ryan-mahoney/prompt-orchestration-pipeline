@@ -1,4 +1,5 @@
-import { callChatGPT, MockChatGPT } from "../../mock-chatgpt.js";
+// Task 2: Analysis
+// Updated to use context.llm interface and implement all 11 pipeline stages
 
 const analysis = {
   async ingestion(context) {
@@ -15,11 +16,22 @@ const analysis = {
     };
   },
 
+  async preProcessing(context) {
+    console.log("⚙️ [Analysis] Pre-processing...");
+    const { inputData } = context;
+
+    // Prepare data for analysis
+    return {
+      processedData: inputData,
+      dataReady: true,
+    };
+  },
+
   async promptTemplating(context) {
     console.log("📝 [Analysis] Creating analysis prompt...");
-    const { inputData, seed } = context;
+    const { inputData, seed, refined, critique } = context;
 
-    const prompt = `Analyze the following market data for ${seed.input.industry} in ${seed.input.region}:
+    let prompt = `Analyze the following market data for ${seed.input.industry} in ${seed.input.region}:
 
 DATA:
 ${inputData}
@@ -33,6 +45,11 @@ Provide a comprehensive analysis including:
 
 Focus on actionable insights and quantify impacts where possible.`;
 
+    // Apply refinement if available
+    if (refined && critique) {
+      prompt += `\n\nPrevious attempt had issues. Improvement guidance:\n${critique}`;
+    }
+
     return { prompt };
   },
 
@@ -40,15 +57,27 @@ Focus on actionable insights and quantify impacts where possible.`;
     console.log("🤖 [Analysis] Generating analysis...");
     const { prompt } = context;
 
-    const model = MockChatGPT.selectBestModel("analysis", "high");
-    const response = await callChatGPT(prompt, model);
+    // Use context.llm interface provided by task-runner
+    const response = await context.llm.chat({
+      messages: [
+        {
+          role: "system",
+          content:
+            "You are a market analysis expert. Provide comprehensive, actionable insights based on the data provided.",
+        },
+        { role: "user", content: prompt },
+      ],
+      model: "gpt-3.5-turbo",
+      temperature: 0.7,
+    });
 
     return {
-      rawOutput: response.choices[0].message.content,
+      rawOutput: response.content,
       modelMetadata: {
-        model: response.model,
-        tokens: response.usage.total_tokens,
-        confidence: response.metadata.confidence,
+        model: response.model || "gpt-3.5-turbo",
+        tokens: response.usage?.totalTokens || 0,
+        cost: response.cost || 0,
+        confidence: 0.85, // Mock confidence for demo
       },
     };
   },
@@ -125,98 +154,62 @@ Focus on actionable insights and quantify impacts where possible.`;
 
   async critique(context) {
     console.log("🔍 [Analysis] Generating critique...");
-    const { lastValidationError, parsedOutput } = context;
 
-    if (!lastValidationError) {
-      return { critiqueFeedback: null };
+    // Only run if validation failed
+    if (!context.validationFailed) {
+      return { critique: null };
     }
 
-    // Generate feedback based on what failed
-    const feedback = {
-      error: lastValidationError.message,
-      suggestions: [],
-      refinementStrategy: "enhance",
-    };
+    const response = await context.llm.chat({
+      messages: [
+        {
+          role: "system",
+          content:
+            "You are a quality assurance expert. Analyze why the analysis failed and suggest specific improvements.",
+        },
+        {
+          role: "user",
+          content: `The analysis failed with error: ${context.lastValidationError}\n\nOriginal output: ${context.parsedOutput?.analysisContent?.substring(0, 200) || "N/A"}...\n\nProvide specific guidance on how to improve the analysis.`,
+        },
+      ],
+      model: "gpt-3.5-turbo",
+      temperature: 0.3,
+    });
 
-    if (lastValidationError.message.includes("missing key sections")) {
-      feedback.suggestions.push("Ensure all required sections are covered");
-      feedback.suggestions.push(
-        "Add more detail to competitive and opportunity analysis"
-      );
-      feedback.refinementStrategy = "expand";
-    }
-
-    if (lastValidationError.message.includes("too brief")) {
-      feedback.suggestions.push("Provide more detailed analysis");
-      feedback.suggestions.push(
-        "Include quantitative data and specific examples"
-      );
-      feedback.refinementStrategy = "elaborate";
-    }
-
-    if (lastValidationError.message.includes("confidence too low")) {
-      feedback.suggestions.push("Use more authoritative sources");
-      feedback.suggestions.push("Provide clearer conclusions");
-      feedback.refinementStrategy = "strengthen";
-    }
-
-    return { critiqueFeedback: feedback };
+    return { critique: response.content };
   },
 
   async refine(context) {
-    console.log("🔄 [Analysis] Refining analysis based on feedback...");
-    const { critiqueFeedback, prompt, parsedOutput } = context;
+    console.log("✨ [Analysis] Applying refinements...");
 
-    if (!critiqueFeedback) {
-      return {};
+    // Only run if we have critique
+    if (!context.critique) {
+      return { refined: false };
     }
 
-    // Enhance the prompt based on critique feedback
-    let refinedPrompt = prompt;
-
-    if (critiqueFeedback.refinementStrategy === "expand") {
-      refinedPrompt = `${prompt}\n\nIMPORTANT: Ensure you cover ALL sections comprehensively:
-- Market trends and drivers (with specific data points)
-- Competitive landscape (name key competitors)
-- Growth opportunities (quantify where possible)
-- Challenges and risks (be specific)
-- Strategic recommendations (actionable steps)`;
-    } else if (critiqueFeedback.refinementStrategy === "elaborate") {
-      refinedPrompt = `${prompt}\n\nProvide a DETAILED analysis of at least 500 words with specific examples, data points, and actionable insights for each section.`;
-    } else if (critiqueFeedback.refinementStrategy === "strengthen") {
-      refinedPrompt = `${prompt}\n\nBe authoritative and specific in your analysis. Use concrete data, cite industry standards, and provide clear, confident recommendations.`;
-    }
-
-    // Add feedback as context
-    if (critiqueFeedback.suggestions.length > 0) {
-      refinedPrompt += `\n\nAddress these points: ${critiqueFeedback.suggestions.join(", ")}`;
-    }
-
-    return {
-      prompt: refinedPrompt,
-      isRefinement: true,
-      refinementFeedback: critiqueFeedback,
-    };
+    // Mark that refinement has been applied
+    // The promptTemplating stage will use this to enhance the prompt
+    return { refined: true };
   },
 
   async finalValidation(context) {
-    console.log("✨ [Analysis] Final validation after refinement...");
-    const { parsedOutput, isRefinement, modelMetadata } = context;
+    console.log("🎯 [Analysis] Final validation...");
+    const { parsedOutput, modelMetadata } = context;
 
-    // If this is after refinement, be slightly more lenient
-    const minLength = isRefinement ? 180 : 200;
-    const minConfidence = isRefinement ? 0.7 : 0.75;
+    // Comprehensive final check
+    const checks = {
+      hasContent:
+        parsedOutput.analysisContent &&
+        parsedOutput.analysisContent.length >= 200,
+      hasMetadata: !!modelMetadata,
+      hasTimestamp: !!parsedOutput.generatedAt,
+      confidenceOk: modelMetadata.confidence >= 0.75,
+    };
 
-    if (parsedOutput.analysisContent.length < minLength) {
-      throw new Error(
-        `Final validation failed: Analysis still too brief (${parsedOutput.analysisContent.length} chars)`
-      );
-    }
+    const allPassed = Object.values(checks).every((v) => v);
 
-    if (modelMetadata.confidence < minConfidence) {
-      throw new Error(
-        `Final validation failed: Confidence still too low (${modelMetadata.confidence})`
-      );
+    if (!allPassed) {
+      throw new Error(`Final validation failed: ${JSON.stringify(checks)}`);
     }
 
     return { finalValidationPassed: true };
