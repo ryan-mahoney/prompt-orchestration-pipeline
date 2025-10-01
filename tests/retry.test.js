@@ -42,10 +42,12 @@ describe("retry utilities", () => {
       const error = new Error("persistent failure");
       const fn = vi.fn().mockRejectedValue(error);
 
-      const promise = withRetry(fn, { maxAttempts: 3 });
+      const promise = withRetry(fn, { maxAttempts: 3 }).catch((e) => e);
       await vi.runAllTimersAsync();
 
-      await expect(promise).rejects.toThrow("persistent failure");
+      const result = await promise;
+      expect(result).toBeInstanceOf(Error);
+      expect(result.message).toBe("persistent failure");
       expect(fn).toHaveBeenCalledTimes(3);
     });
 
@@ -143,11 +145,13 @@ describe("retry utilities", () => {
       const promise = withRetry(fn, {
         maxAttempts: 3,
         shouldRetry,
-      });
+      }).catch((e) => e);
 
       await vi.runAllTimersAsync();
 
-      await expect(promise).rejects.toThrow("Unauthorized");
+      const result = await promise;
+      expect(result).toBeInstanceOf(Error);
+      expect(result.message).toBe("Unauthorized");
       expect(fn).toHaveBeenCalledTimes(1);
       expect(shouldRetry).toHaveBeenCalledWith(authError);
     });
@@ -163,11 +167,13 @@ describe("retry utilities", () => {
       const promise = withRetry(fn, {
         maxAttempts: 3,
         shouldRetry,
-      });
+      }).catch((e) => e);
 
       await vi.runAllTimersAsync();
 
-      await expect(promise).rejects.toThrow("Network timeout");
+      const result = await promise;
+      expect(result).toBeInstanceOf(Error);
+      expect(result.message).toBe("Network timeout");
       expect(fn).toHaveBeenCalledTimes(3);
     });
   });
@@ -211,20 +217,24 @@ describe("retry utilities", () => {
         throw new Error("sync error");
       });
 
-      const promise = withRetry(fn, { maxAttempts: 2 });
+      const promise = withRetry(fn, { maxAttempts: 2 }).catch((e) => e);
       await vi.runAllTimersAsync();
 
-      await expect(promise).rejects.toThrow("sync error");
+      const result = await promise;
+      expect(result).toBeInstanceOf(Error);
+      expect(result.message).toBe("sync error");
       expect(fn).toHaveBeenCalledTimes(2);
     });
 
     it("should handle maxAttempts of 1", async () => {
       const fn = vi.fn().mockRejectedValue(new Error("fail"));
 
-      const promise = withRetry(fn, { maxAttempts: 1 });
+      const promise = withRetry(fn, { maxAttempts: 1 }).catch((e) => e);
       await vi.runAllTimersAsync();
 
-      await expect(promise).rejects.toThrow("fail");
+      const result = await promise;
+      expect(result).toBeInstanceOf(Error);
+      expect(result.message).toBe("fail");
       expect(fn).toHaveBeenCalledTimes(1);
     });
 
