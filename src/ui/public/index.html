@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Pipeline Orchestrator - File Watcher</title>
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <div class="container">
+      <header>
+        <h1>Pipeline Orchestrator</h1>
+        <div class="connection-status" id="connectionStatus">
+          <span class="status-dot"></span>
+          <span class="status-text">Connecting...</span>
+        </div>
+      </header>
+
+      <main>
+        <section class="stats-section">
+          <div class="stat-card">
+            <div class="stat-label">Total Changes</div>
+            <div class="stat-value" id="changeCount">0</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Last Updated</div>
+            <div class="stat-value stat-time" id="updatedAt">Never</div>
+          </div>
+        </section>
+
+        <section class="changes-section">
+          <h2>Recent Changes</h2>
+          <div class="watched-paths" id="watchedPaths">
+            <span class="label">Watching:</span>
+            <span class="paths">Loading...</span>
+          </div>
+          <div class="changes-list" id="changesList">
+            <div class="empty-state">
+              No changes yet. Modify files in watched directories to see
+              updates.
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <footer>
+        <p>Watching for file changes in real-time via Server-Sent Events</p>
+      </footer>
+    </div>
+
+    <script src="/app.js"></script>
+  </body>
+</html>
