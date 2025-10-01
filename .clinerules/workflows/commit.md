@@ -20,5 +20,6 @@
 
 5. Confirm & commit
    - Show final message for approval
-   - On approval, run:
-     - `git commit -m "<title>" -m "<wrapped body + footers>"`
+   - Write the complete message to a temporary file (e.g., `.git/COMMIT_EDITMSG`)
+   - On approval, run: `git commit -F .git/COMMIT_EDITMSG`
+   - This avoids shell escaping issues with newlines and special characters
