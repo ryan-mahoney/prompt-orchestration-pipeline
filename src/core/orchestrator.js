@@ -5,6 +5,7 @@ import crypto from "node:crypto";
 import chokidar from "chokidar";
 import { spawn } from "node:child_process";
 import url from "node:url";
+import { validateSeed, formatValidationErrors } from "./validation.js";
 
 export class Orchestrator {
   constructor({ paths, pipelineDefinition }) {
@@ -76,6 +77,23 @@ export class Orchestrator {
       }
 
       const seed = JSON.parse(await fs.readFile(seedPath, "utf8"));
+
+      // Validate seed file structure
+      const validation = validateSeed(seed);
+      if (!validation.valid) {
+        const errorMsg = formatValidationErrors(validation.errors);
+        console.error(`Invalid seed file ${base}:\n${errorMsg}`);
+        // Move invalid seed to a rejected directory for inspection
+        const rejectedDir = path.join(
+          path.dirname(this.paths.pending),
+          "rejected"
+        );
+        await fs.mkdir(rejectedDir, { recursive: true });
+        const rejectedPath = path.join(rejectedDir, base);
+        await fs.rename(seedPath, rejectedPath);
+        return;
+      }
+
       const pipelineId = this.#makeId();
 
       await this.#atomicWrite(

@@ -1,6 +1,7 @@
 import { Orchestrator } from "../core/orchestrator.js";
 import path from "node:path";
 import fs from "node:fs/promises";
+import { validateSeedOrThrow } from "../core/validation.js";
 
 // Pure functional utilities
 const createPaths = (config) => {
@@ -99,7 +100,10 @@ export const createPipelineOrchestrator = async (options = {}) => {
 
 // Job management functions
 export const submitJob = async (state, seed) => {
-  const name = seed.name || `job-${Date.now()}`;
+  // Validate seed structure before submitting
+  validateSeedOrThrow(seed);
+
+  const name = seed.name;
   const seedPath = path.join(state.paths.pending, `${name}-seed.json`);
   await fs.writeFile(seedPath, JSON.stringify(seed, null, 2));
   return { name, seedPath };

@@ -132,7 +132,7 @@ describe("API Module", () => {
       const state = {
         paths: { pending: "/test/pending" },
       };
-      const seed = { name: "custom-job", data: "test" };
+      const seed = { name: "custom-job", data: { test: "value" } };
 
       // Act
       const result = await apiModule.submitJob(state, seed);
@@ -146,21 +146,21 @@ describe("API Module", () => {
       );
     });
 
-    it("should submit job with generated name", async () => {
+    it("should submit job with provided name", async () => {
       // Arrange
       vi.spyOn(fs, "writeFile").mockResolvedValue();
 
       const state = {
         paths: { pending: "/test/pending" },
       };
-      const seed = { data: "test" }; // No name provided
+      const seed = { name: "test-job", data: { test: "value" } };
 
       // Act
       const result = await apiModule.submitJob(state, seed);
 
       // Assert
-      expect(result.name).toMatch(/^job-\d+$/);
-      expect(result.seedPath).toMatch(/^\/test\/pending\/job-\d+-seed\.json$/);
+      expect(result.name).toBe("test-job");
+      expect(result.seedPath).toBe("/test/pending/test-job-seed.json");
     });
   });
 
@@ -452,7 +452,7 @@ describe("API Module", () => {
         await instance.start();
         const jobResult = await instance.submitJob({
           name: "test-job",
-          data: "test",
+          data: { test: "value" },
         });
         const status = await instance.getStatus("test-job");
         const jobs = await instance.listJobs();

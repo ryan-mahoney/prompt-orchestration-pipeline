@@ -111,7 +111,11 @@ describe("orchestrator", () => {
   it("creates pipeline dirs and runs pipeline on seed add", async () => {
     const seedPath = path.join(tmpDir, "pipeline-pending", "demo-seed.json");
     await fs.mkdir(path.dirname(seedPath), { recursive: true });
-    await fs.writeFile(seedPath, JSON.stringify({ foo: "bar" }), "utf8");
+    await fs.writeFile(
+      seedPath,
+      JSON.stringify({ name: "demo", data: { foo: "bar" } }),
+      "utf8"
+    );
 
     const add = getAddHandler();
     expect(typeof add).toBe("function");
@@ -125,7 +129,7 @@ describe("orchestrator", () => {
       await fs.readFile(path.join(workDir, "tasks-status.json"), "utf8")
     );
 
-    expect(seedCopy).toEqual({ foo: "bar" });
+    expect(seedCopy).toEqual({ name: "demo", data: { foo: "bar" } });
     expect(status.name).toBe("demo");
     expect(status.pipelineId).toMatch(/^pl-/);
     await fs.access(path.join(workDir, "tasks"));
@@ -140,7 +144,11 @@ describe("orchestrator", () => {
   it("is idempotent if the same seed is added twice", async () => {
     const seedPath = path.join(tmpDir, "pipeline-pending", "x-seed.json");
     await fs.mkdir(path.dirname(seedPath), { recursive: true });
-    await fs.writeFile(seedPath, "{}", "utf8");
+    await fs.writeFile(
+      seedPath,
+      JSON.stringify({ name: "x", data: {} }),
+      "utf8"
+    );
 
     const add = getAddHandler();
     await add(seedPath);
@@ -153,7 +161,11 @@ describe("orchestrator", () => {
     // create one running child in this test only
     const seedPath = path.join(tmpDir, "pipeline-pending", "killme-seed.json");
     await fs.mkdir(path.dirname(seedPath), { recursive: true });
-    await fs.writeFile(seedPath, "{}", "utf8");
+    await fs.writeFile(
+      seedPath,
+      JSON.stringify({ name: "killme", data: {} }),
+      "utf8"
+    );
     const add = getAddHandler();
     await add(seedPath);
     expect(spawnMock).toHaveBeenCalledTimes(1);
