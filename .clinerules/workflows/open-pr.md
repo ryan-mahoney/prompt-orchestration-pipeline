@@ -15,5 +15,9 @@
    - Ensure linked issues (`Closes #...`) where appropriate
    - If breaking changes exist, include clear migration notes
 
-5. Review with user
+5. Create PR
+   - Write the PR body to a temporary file (e.g., `/tmp/pr-body.md`)
    - Show full title/body for approval before creating the PR
+   - On approval, use: `gh pr create --title "..." --body-file /tmp/pr-body.md --web`
+   - The `--web` flag automatically opens the PR in the browser
+   - This avoids shell escaping issues with newlines and special characters
