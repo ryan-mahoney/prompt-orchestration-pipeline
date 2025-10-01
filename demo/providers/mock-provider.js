@@ -289,6 +289,9 @@ This demonstrates the architecture without requiring actual API keys or incurrin
    */
   estimateTokens(text) {
     if (!text) return 0;
+    // Rough token estimation: OpenAI models typically average ~4 characters per token in English text.
+    // This heuristic is widely used for quick approximations, but actual tokenization may vary.
+    // For mock/demo purposes only; do not use for production accuracy.
     return Math.ceil(text.length / 4);
   }
 
