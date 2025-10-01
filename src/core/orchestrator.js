@@ -139,7 +139,9 @@ export class Orchestrator {
 
     const config = getConfig();
 
-    // Wrap process spawn in retry logic
+    // Wrap process spawn in retry logic (fire-and-forget)
+    // This is intentionally not awaited - we want to start runners asynchronously
+    // and let them run in the background. Failures are handled via dead letter queue.
     withRetry(() => this.#spawnRunner(name), {
       maxAttempts: config.orchestrator.processSpawnRetries,
       initialDelay: config.orchestrator.processSpawnRetryDelay,
