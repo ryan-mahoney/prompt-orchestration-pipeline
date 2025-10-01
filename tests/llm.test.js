@@ -52,6 +52,7 @@ describe("LLM Module", () => {
         openai: true,
         deepseek: true,
         anthropic: true,
+        mock: false,
       });
     });
 
@@ -799,6 +800,7 @@ describe("LLM Module", () => {
         openai: true,
         deepseek: true,
         anthropic: true,
+        mock: false,
       });
     });
   });
