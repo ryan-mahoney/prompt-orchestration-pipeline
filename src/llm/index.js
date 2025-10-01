@@ -1,6 +1,7 @@
 import { openaiChat } from "../providers/openai.js";
 import { deepseekChat } from "../providers/deepseek.js";
 import { EventEmitter } from "node:events";
+import { getConfig } from "../core/config.js";
 
 // Global event bus for LLM metrics
 const llmEvents = new EventEmitter();
@@ -217,12 +218,11 @@ export function createChain() {
 }
 
 // Retry wrapper
-export async function withRetry(
-  fn,
-  args = [],
-  maxRetries = 3,
-  backoffMs = 1000
-) {
+export async function withRetry(fn, args = [], options = {}) {
+  const config = getConfig();
+  const maxRetries = options.maxRetries ?? config.llm.retryMaxAttempts;
+  const backoffMs = options.backoffMs ?? config.llm.retryBackoffMs;
+
   let lastError;
 
   for (let i = 0; i <= maxRetries; i++) {
@@ -244,10 +244,13 @@ export async function withRetry(
 }
 
 // Parallel execution with concurrency control
-export async function parallel(fn, items, maxConcurrency = 5) {
+export async function parallel(fn, items, maxConcurrency) {
+  const config = getConfig();
+  const concurrency = maxConcurrency ?? config.llm.maxConcurrency;
+
   const results = [];
-  for (let i = 0; i < items.length; i += maxConcurrency) {
-    const batch = items.slice(i, i + maxConcurrency);
+  for (let i = 0; i < items.length; i += concurrency) {
+    const batch = items.slice(i, i + concurrency);
     const batchResults = await Promise.all(batch.map((item) => fn(item)));
     results.push(...batchResults);
   }
@@ -256,7 +259,8 @@ export async function parallel(fn, items, maxConcurrency = 5) {
 
 // Create a bound LLM interface (no metrics handling needed!)
 export function createLLM(options = {}) {
-  const defaultProvider = options.defaultProvider || "openai";
+  const config = getConfig();
+  const defaultProvider = options.defaultProvider || config.llm.defaultProvider;
 
   return {
     chat: (opts) => chat({ provider: defaultProvider, ...opts }),
