@@ -2,8 +2,19 @@
 // Exports mock provider for use in demo tasks
 
 import { createMockProvider, mockChat } from "./mock-provider.js";
+import { registerMockProvider } from "../../src/llm/index.js";
 
 export { createMockProvider, mockChat };
+
+/**
+ * Initialize and register the mock provider with the LLM layer
+ * This allows the demo to use the mock provider through the standard LLM interface
+ */
+export function initializeMockProvider(config = {}) {
+  const provider = createMockProvider(config);
+  registerMockProvider(provider);
+  return provider;
+}
 
 /**
  * Create a mock LLM interface for demo purposes
