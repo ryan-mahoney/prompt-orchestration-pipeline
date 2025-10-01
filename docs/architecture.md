@@ -67,7 +67,6 @@ The Prompt Orchestration Pipeline is a sophisticated system for managing and exe
 
 **Potential Issues**:
 
-- ⚠️ No validation of seed file format before submission
 - ⚠️ Limited error handling for malformed commands
 
 ### 2. API Layer (`src/api/index.js`)
@@ -102,7 +101,6 @@ state = {
 
 - ⚠️ State object is mutable and passed around
 - ⚠️ No validation of pipeline definition structure
-- ⚠️ UI server integration tightly coupled to API layer
 
 ### 3. Orchestrator (`src/core/orchestrator.js`)
 
@@ -138,13 +136,6 @@ pipeline-data/
 - Implements lock files to prevent race conditions
 - SIGTERM → 2s wait → SIGKILL shutdown strategy
 
-**Potential Issues**:
-
-- ⚠️ Lock file mechanism could fail on abnormal termination
-- ⚠️ No retry mechanism for failed process spawns
-- ⚠️ Hard-coded 2-second timeout for graceful shutdown
-- ⚠️ Process environment variables could conflict in multi-instance scenarios
-
 ### 4. Pipeline Runner (`src/core/pipeline-runner.js`)
 
 **Purpose**: Execute individual pipeline jobs in isolated processes
@@ -177,10 +168,8 @@ pipeline-data/
 
 **Potential Issues**:
 
-- ⚠️ No transaction safety for file operations
 - ⚠️ Single point of failure - if runner crashes, job is lost
 - ⚠️ No mechanism to resume interrupted pipelines
-- ⚠️ Hardcoded exit on first task failure
 
 ### 5. Task Runner (`src/core/task-runner.js`)
 
@@ -235,14 +224,6 @@ context = {
 - Records task, stage, duration, tokens, cost
 - Aggregates metrics per pipeline run
 
-**Potential Issues**:
-
-- ⚠️ Fixed refinement limit (2) not configurable
-- ⚠️ No partial success handling - all or nothing
-- ⚠️ Stage order is rigid and cannot be customized per task
-- ⚠️ Context object grows unbounded during execution
-- ⚠️ No timeout mechanism for long-running stages
-
 ### 6. Environment Management (`src/core/environment.js`)
 
 **Purpose**: Load and validate environment configuration
@@ -263,7 +244,6 @@ context = {
 **Potential Issues**:
 
 - ⚠️ Only warns about missing API keys, doesn't enforce
-- ⚠️ No validation of API key format
 - ⚠️ Loads .env.local after .env (override behavior not documented)
 
 ### 7. LLM Integration Layer (`src/llm/index.js`)
@@ -299,9 +279,6 @@ Events:
 
 **Potential Issues**:
 
-- ⚠️ Token estimation is crude (length/4)
-- ⚠️ Cost calculation may be outdated for newer models
-- ⚠️ No rate limiting built-in
 - ⚠️ Parallel execution doesn't handle partial failures well
 
 ### 8. Provider Implementations
@@ -357,37 +334,20 @@ Events:
 - Retry logic
 - Usage tracking
 
-**Potential Issues**:
+#### Provider Architecture
 
-- ⚠️ No streaming support
-- ⚠️ Limited error handling compared to OpenAI
-- ⚠️ No tool calling support
+**Note**: The legacy `src/providers/index.js` file has been removed (see `docs/providers-fix.md` for details).
 
-#### Anthropic Provider (`src/providers/anthropic.js`)
+**Current Structure**:
 
-**Implementation**: Official Anthropic SDK
+- `src/llm/index.js` - Canonical LLM abstraction layer
+- `src/providers/` - Individual provider implementations
+  - `base.js` - Shared utilities
+  - `openai.js` - OpenAI implementation
+  - `deepseek.js` - DeepSeek implementation
+  - `anthropic.js` - Anthropic implementation
 
-**Features**:
-
-- Message alternation handling
-- Cache token tracking
-- JSON parsing support
-
-**Potential Issues**:
-
-- ⚠️ Automatically inserts "Hello" message if needed (could be confusing)
-- ⚠️ No streaming support
-- ⚠️ No tool calling support
-
-#### Provider Index (`src/providers/index.js`)
-
-**Purpose**: Unified provider interface (appears to be duplicate of llm/index.js)
-
-**Potential Issues**:
-
-- ⚠️ **CRITICAL**: Duplicate implementation of LLM layer
-- ⚠️ Import paths reference `./providers/` which creates circular dependency
-- ⚠️ This file appears to be legacy code that should be removed
+**Documentation**: See `src/llm/README.md` for complete API reference
 
 ### 9. UI System
 
@@ -409,13 +369,6 @@ Events:
 - SSE for real-time updates
 - Heartbeat to keep connections alive
 - CORS support
-
-**Potential Issues**:
-
-- ⚠️ No authentication/authorization
-- ⚠️ No request rate limiting
-- ⚠️ SSE clients not cleaned up on error
-- ⚠️ No compression for static files
 
 #### UI State (`src/ui/state.js`)
 
@@ -439,7 +392,6 @@ Events:
 - ⚠️ State is global and mutable
 - ⚠️ No persistence - lost on restart
 - ⚠️ Limited to 10 recent changes
-- ⚠️ No state history or time-travel debugging
 
 #### UI Watcher (`src/ui/watcher.js`)
 
@@ -450,12 +402,6 @@ Events:
 - Chokidar-based watching
 - Debounced change batching (200ms)
 - Ignores .git, node_modules, dist
-
-**Potential Issues**:
-
-- ⚠️ No error recovery if watcher crashes
-- ⚠️ Debounce timer not configurable per path
-- ⚠️ No filtering by file type
 
 ## Data Flow
 
@@ -602,10 +548,9 @@ export async function refine(context) {
 
 ### 1. Code Duplication
 
-- **CRITICAL**: `src/providers/index.js` duplicates `src/llm/index.js`
-- Creates circular dependency risk
-- Maintenance burden
-- **Recommendation**: Remove `src/providers/index.js` and consolidate to `src/llm/index.js`
+- ✅ **RESOLVED**: Removed duplicate `src/providers/index.js` file
+- All LLM abstraction now consolidated in `src/llm/index.js`
+- See `docs/providers-fix.md` for resolution details
 
 ### 2. Error Handling
 
@@ -668,7 +613,7 @@ export async function refine(context) {
 
 ### Immediate (High Priority)
 
-1. Remove duplicate `src/providers/index.js`
+1. ✅ ~~Remove duplicate `src/providers/index.js`~~ (Completed)
 2. Add input validation for seed files
 3. Implement proper error recovery in orchestrator
 4. Add authentication to UI server
