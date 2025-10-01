@@ -98,7 +98,7 @@ class IntegratedDemo {
             PO_COMPLETE_DIR: COMPLETE_DIR,
             PO_CONFIG_DIR: path.join(ROOT, "pipeline-config"),
             PO_PIPELINE_PATH: path.join(ROOT, "pipeline-config/pipeline.json"),
-            PO_TASK_REGISTRY: path.join(ROOT, "pipeline-tasks/index.js"),
+            PO_TASK_REGISTRY: path.join(ROOT, "pipeline-config/tasks/index.js"),
           },
           cwd: ROOT,
         }

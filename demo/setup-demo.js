@@ -72,18 +72,19 @@ async function createConfigFiles() {
   await fs.writeFile("pipeline.json", JSON.stringify(pipelineConfig, null, 2));
   console.log("   ✓ Created pipeline.json");
 
-  // pipeline-tasks/index.js
+  // pipeline-config/tasks/index.js
   const taskRegistry = {
-    "data-extraction": "./data-extraction.js",
-    analysis: "./analysis.js",
-    "report-generation": "./report-generation.js",
+    "data-extraction": "../../pipeline-tasks/data-extraction/index.js",
+    analysis: "../../pipeline-tasks/analysis/index.js",
+    "report-generation": "../../pipeline-tasks/report-generation/index.js",
   };
 
+  await fs.mkdir(path.join("pipeline-config", "tasks"), { recursive: true });
   await fs.writeFile(
-    path.join("pipeline-tasks", "index.js"),
+    path.join("pipeline-config", "tasks", "index.js"),
     `export default ${JSON.stringify(taskRegistry, null, 2)};`
   );
-  console.log("   ✓ Created pipeline-tasks/index.js");
+  console.log("   ✓ Created pipeline-config/tasks/index.js");
 }
 
 async function createSeedFiles() {
@@ -170,7 +171,7 @@ async function verifySetup() {
 
   const requiredFiles = [
     "pipeline.json",
-    "pipeline-tasks/index.js",
+    "pipeline-config/tasks/index.js",
     "pipeline-pending/renewable-energy-seed.json",
     "integrated-demo-runner.js",
     "mock-chatgpt.js",
