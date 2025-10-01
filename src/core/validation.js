@@ -1,32 +1,34 @@
 import Ajv from "ajv";
+import { getConfig } from "./config.js";
 
 const ajv = new Ajv({ allErrors: true });
 
-// JSON schema for seed file structure
-const seedSchema = {
-  type: "object",
-  required: ["name", "data"],
-  properties: {
-    name: {
-      type: "string",
-      minLength: 1,
-      maxLength: 100,
-      pattern: "^[a-zA-Z0-9-_]+$",
-      description: "Job name (alphanumeric, hyphens, underscores only)",
+// JSON schema for seed file structure - uses config for validation rules
+function getSeedSchema() {
+  const config = getConfig();
+  return {
+    type: "object",
+    required: ["name", "data"],
+    properties: {
+      name: {
+        type: "string",
+        minLength: config.validation.seedNameMinLength,
+        maxLength: config.validation.seedNameMaxLength,
+        pattern: config.validation.seedNamePattern,
+        description: "Job name (alphanumeric, hyphens, underscores only)",
+      },
+      data: {
+        type: "object",
+        description: "Job data payload",
+      },
+      metadata: {
+        type: "object",
+        description: "Optional metadata",
+      },
     },
-    data: {
-      type: "object",
-      description: "Job data payload",
-    },
-    metadata: {
-      type: "object",
-      description: "Optional metadata",
-    },
-  },
-  additionalProperties: false,
-};
-
-const validateSeedSchema = ajv.compile(seedSchema);
+    additionalProperties: false,
+  };
+}
 
 /**
  * Validates a seed file structure
@@ -47,6 +49,9 @@ export function validateSeed(seed) {
     };
   }
 
+  // Compile schema with current config values
+  const seedSchema = getSeedSchema();
+  const validateSeedSchema = ajv.compile(seedSchema);
   const valid = validateSeedSchema(seed);
 
   if (!valid) {

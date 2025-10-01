@@ -1,0 +1,45 @@
+{
+  "orchestrator": {
+    "shutdownTimeout": 2000,
+    "processSpawnRetries": 3,
+    "lockFileTimeout": 5000,
+    "watchDebounce": 100,
+    "watchStabilityThreshold": 200,
+    "watchPollInterval": 50
+  },
+  "taskRunner": {
+    "maxRefinementAttempts": 2,
+    "stageTimeout": 300000,
+    "llmRequestTimeout": 60000
+  },
+  "llm": {
+    "defaultProvider": "openai",
+    "defaultModel": "gpt-5-chat-latest",
+    "maxConcurrency": 5,
+    "retryMaxAttempts": 3,
+    "retryBackoffMs": 1000
+  },
+  "ui": {
+    "port": 3000,
+    "host": "localhost",
+    "heartbeatInterval": 30000,
+    "maxRecentChanges": 10
+  },
+  "paths": {
+    "dataDir": "pipeline-data",
+    "configDir": "pipeline-config",
+    "pendingDir": "pending",
+    "currentDir": "current",
+    "completeDir": "complete"
+  },
+  "validation": {
+    "seedNameMinLength": 1,
+    "seedNameMaxLength": 100,
+    "seedNamePattern": "^[a-zA-Z0-9-_]+$"
+  },
+  "logging": {
+    "level": "info",
+    "format": "json",
+    "destination": "stdout"
+  }
+}
