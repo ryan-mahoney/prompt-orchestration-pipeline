@@ -103,7 +103,7 @@ export const submitJob = async (state, seed) => {
   // Validate seed structure before submitting
   validateSeedOrThrow(seed);
 
-  const name = seed.name || `job-${Date.now()}`;
+  const name = seed.name;
   const seedPath = path.join(state.paths.pending, `${name}-seed.json`);
   await fs.writeFile(seedPath, JSON.stringify(seed, null, 2));
   return { name, seedPath };
