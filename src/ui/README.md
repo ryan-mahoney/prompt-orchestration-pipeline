@@ -78,5 +78,9 @@ The UI server automatically:
 ## Requirements
 
 - Node.js 20+
-- Dependencies: chokidar (file watching)
-- Dev dependencies: nodemon (auto-restart)
+- Dependencies:
+  - chokidar (file watching)
+  - yaml (YAML file parsing)
+  - commander (CLI argument parsing)
+- Dev dependencies:
+  - nodemon (auto-restart)
