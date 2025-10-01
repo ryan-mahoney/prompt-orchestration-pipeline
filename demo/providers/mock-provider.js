@@ -54,7 +54,7 @@ export class MockProvider {
     });
 
     // Calculate token usage
-    const promptTokens = this.estimateTokens(systemMsg + userMsg);
+    const promptTokens = this.estimateTokens((systemMsg ?? "") + (userMsg ?? ""));
     const completionTokens = this.estimateTokens(content);
     const usage = {
       prompt_tokens: promptTokens,
