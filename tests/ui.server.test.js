@@ -415,6 +415,16 @@ describe("Server", () => {
   });
 
   describe("broadcastStateUpdate", () => {
+    beforeEach(() => {
+      // Ensure clean state before each test
+      serverModule.sseClients.clear();
+    });
+
+    afterEach(() => {
+      // Clean up mock clients after each test
+      serverModule.sseClients.clear();
+    });
+
     it("should send state to all connected clients", () => {
       const mockClient1 = { write: vi.fn() };
       const mockClient2 = { write: vi.fn() };
