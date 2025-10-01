@@ -16,6 +16,7 @@ export const defaultConfig = {
   orchestrator: {
     shutdownTimeout: 2000,
     processSpawnRetries: 3,
+    processSpawnRetryDelay: 1000,
     lockFileTimeout: 5000,
     watchDebounce: 100,
     watchStabilityThreshold: 200,

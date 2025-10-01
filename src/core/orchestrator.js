@@ -7,6 +7,7 @@ import { spawn } from "node:child_process";
 import url from "node:url";
 import { validateSeed, formatValidationErrors } from "./validation.js";
 import { getConfig } from "./config.js";
+import { withRetry } from "./retry.js";
 
 export class Orchestrator {
   constructor({ paths, pipelineDefinition }) {
@@ -136,56 +137,140 @@ export class Orchestrator {
   #ensureRunner(name) {
     if (this.runningProcesses.has(name)) return;
 
-    const __dirname = path.dirname(url.fileURLToPath(import.meta.url));
-    const runnerPath = path.join(__dirname, "pipeline-runner.js");
+    const config = getConfig();
 
-    const env = {
-      ...process.env,
-      PO_ROOT: process.cwd(),
-      PO_DATA_DIR: path.relative(
-        process.cwd(),
-        path.dirname(this.paths.pending)
-      ),
-      PO_CURRENT_DIR: this.paths.current,
-      PO_COMPLETE_DIR: this.paths.complete,
-      PO_CONFIG_DIR: path.join(process.cwd(), "pipeline-config"),
-      PO_PIPELINE_PATH:
-        this.pipelineDefinition?.__path ||
-        path.join(process.cwd(), "pipeline-config", "pipeline.json"),
-      PO_TASK_REGISTRY: path.join(
-        process.cwd(),
-        "pipeline-config",
-        "tasks/index.js"
-      ),
+    // Wrap process spawn in retry logic
+    withRetry(() => this.#spawnRunner(name), {
+      maxAttempts: config.orchestrator.processSpawnRetries,
+      initialDelay: config.orchestrator.processSpawnRetryDelay,
+      onRetry: ({ attempt, delay, error }) => {
+        console.warn(
+          `Failed to start pipeline ${name} (attempt ${attempt}): ${error.message}. Retrying in ${delay}ms...`
+        );
+      },
+      shouldRetry: (error) => {
+        // Don't retry if the error is due to missing files or invalid config
+        const nonRetryableErrors = [
+          "ENOENT",
+          "EACCES",
+          "MODULE_NOT_FOUND",
+          "Invalid pipeline",
+        ];
+        return !nonRetryableErrors.some((msg) => error.message?.includes(msg));
+      },
+    }).catch((error) => {
+      console.error(
+        `Failed to start pipeline ${name} after ${config.orchestrator.processSpawnRetries} attempts:`,
+        error
+      );
+      // Move to dead letter queue
+      this.#moveToDeadLetter(name, error).catch((dlqError) => {
+        console.error(`Failed to move ${name} to dead letter queue:`, dlqError);
+      });
+    });
+  }
+
+  #spawnRunner(name) {
+    return new Promise((resolve, reject) => {
+      const __dirname = path.dirname(url.fileURLToPath(import.meta.url));
+      const runnerPath = path.join(__dirname, "pipeline-runner.js");
+
+      const env = {
+        ...process.env,
+        PO_ROOT: process.cwd(),
+        PO_DATA_DIR: path.relative(
+          process.cwd(),
+          path.dirname(this.paths.pending)
+        ),
+        PO_CURRENT_DIR: this.paths.current,
+        PO_COMPLETE_DIR: this.paths.complete,
+        PO_CONFIG_DIR: path.join(process.cwd(), "pipeline-config"),
+        PO_PIPELINE_PATH:
+          this.pipelineDefinition?.__path ||
+          path.join(process.cwd(), "pipeline-config", "pipeline.json"),
+        PO_TASK_REGISTRY: path.join(
+          process.cwd(),
+          "pipeline-config",
+          "tasks/index.js"
+        ),
+      };
+
+      const child = spawn(process.execPath, [runnerPath, name], {
+        stdio: ["ignore", "inherit", "inherit"],
+        env,
+        cwd: process.cwd(),
+      });
+
+      // Track if process started successfully
+      let started = false;
+
+      // Consider spawn successful after a short delay
+      const startupTimeout = setTimeout(() => {
+        started = true;
+        resolve();
+      }, 100);
+
+      this.runningProcesses.set(name, {
+        process: child,
+        startedAt: new Date().toISOString(),
+        name,
+      });
+
+      child.on("exit", (code, signal) => {
+        clearTimeout(startupTimeout);
+        this.runningProcesses.delete(name);
+        if (code !== 0) {
+          console.error(
+            `Pipeline ${name} exited with code ${code}, signal ${signal}`
+          );
+        } else {
+          console.log(`Pipeline ${name} completed successfully`);
+        }
+      });
+
+      child.on("error", (err) => {
+        clearTimeout(startupTimeout);
+        this.runningProcesses.delete(name);
+        if (!started) {
+          reject(err);
+        } else {
+          console.error(`Pipeline ${name} encountered error:`, err);
+        }
+      });
+    });
+  }
+
+  async #moveToDeadLetter(name, error) {
+    const workDir = path.join(this.paths.current, name);
+    const deadLetterDir = path.join(
+      path.dirname(this.paths.pending),
+      "dead-letter"
+    );
+    await fs.mkdir(deadLetterDir, { recursive: true });
+
+    const errorLog = {
+      name,
+      error: {
+        message: error.message,
+        stack: error.stack,
+      },
+      timestamp: new Date().toISOString(),
+      attempts: getConfig().orchestrator.processSpawnRetries,
     };
 
-    const child = spawn(process.execPath, [runnerPath, name], {
-      stdio: ["ignore", "inherit", "inherit"],
-      env,
-      cwd: process.cwd(),
-    });
+    await this.#atomicWrite(
+      path.join(deadLetterDir, `${name}-error.json`),
+      JSON.stringify(errorLog, null, 2)
+    );
 
-    this.runningProcesses.set(name, {
-      process: child,
-      startedAt: new Date().toISOString(),
-      name,
-    });
-
-    child.on("exit", (code, signal) => {
-      this.runningProcesses.delete(name);
-      if (code !== 0) {
-        console.error(
-          `Pipeline ${name} exited with code ${code}, signal ${signal}`
-        );
-      } else {
-        console.log(`Pipeline ${name} completed successfully`);
-      }
-    });
-
-    child.on("error", (err) => {
-      console.error(`Failed to start pipeline ${name}:`, err);
-      this.runningProcesses.delete(name);
-    });
+    // Move the work directory to dead letter
+    const deadLetterWorkDir = path.join(deadLetterDir, name);
+    try {
+      await fs.rename(workDir, deadLetterWorkDir);
+    } catch (err) {
+      // If rename fails, try to copy
+      console.warn(`Could not move ${name} to dead letter, attempting copy`);
+    }
   }
 
   async #listDirs(dir) {
