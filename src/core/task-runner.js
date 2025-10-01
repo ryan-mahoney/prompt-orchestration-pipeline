@@ -2,6 +2,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { createLLM, getLLMEvents } from "../llm/index.js";
 import { loadEnvironment } from "./environment.js";
+import { getConfig } from "./config.js";
 
 /** Canonical order using the field terms we discussed */
 const ORDER = [
@@ -33,6 +34,7 @@ export async function runPipeline(modulePath, initialContext = {}) {
     });
   }
 
+  const config = getConfig();
   const llmMetrics = [];
   const llmEvents = getLLMEvents();
 
@@ -45,7 +47,9 @@ export async function runPipeline(modulePath, initialContext = {}) {
   };
 
   llmEvents.on("llm:request:complete", onLLMComplete);
-  llmEvents.on("llm:request:error", (m) => llmMetrics.push({ ...m, failed: true }));
+  llmEvents.on("llm:request:error", (m) =>
+    llmMetrics.push({ ...m, failed: true })
+  );
 
   const abs = toAbsFileURL(modulePath);
   const mod = await import(abs.href);
@@ -55,7 +59,7 @@ export async function runPipeline(modulePath, initialContext = {}) {
   const logs = [];
   let needsRefinement = false;
   let refinementCount = 0;
-  const maxRefinements = 2;
+  const maxRefinements = config.taskRunner.maxRefinementAttempts;
 
   do {
     needsRefinement = false;
@@ -69,7 +73,10 @@ export async function runPipeline(modulePath, initialContext = {}) {
         continue;
       }
 
-      if (refinementCount > 0 && ["ingestion", "preProcessing"].includes(stage)) {
+      if (
+        refinementCount > 0 &&
+        ["ingestion", "preProcessing"].includes(stage)
+      ) {
         logs.push({
           stage,
           skipped: true,
@@ -144,7 +151,8 @@ export async function runPipeline(modulePath, initialContext = {}) {
       const start = performance.now();
       try {
         const result = await fn(context);
-        if (result && typeof result === "object") Object.assign(context, result);
+        if (result && typeof result === "object")
+          Object.assign(context, result);
 
         const ms = +(performance.now() - start).toFixed(2);
         logs.push({ stage, ok: true, ms, refinementCycle: refinementCount });
@@ -161,7 +169,13 @@ export async function runPipeline(modulePath, initialContext = {}) {
       } catch (error) {
         const ms = +(performance.now() - start).toFixed(2);
         const errInfo = normalizeError(error);
-        logs.push({ stage, ok: false, ms, error: errInfo, refinementCycle: refinementCount });
+        logs.push({
+          stage,
+          ok: false,
+          ms,
+          error: errInfo,
+          refinementCycle: refinementCount,
+        });
 
         if (
           (stage === "validateStructure" || stage === "validateQuality") &&
@@ -188,7 +202,9 @@ export async function runPipeline(modulePath, initialContext = {}) {
       logs.push({
         stage: "refinement-trigger",
         refinementCycle: refinementCount,
-        reason: context.lastValidationError ? "validation-error" : "validation-failed-flag",
+        reason: context.lastValidationError
+          ? "validation-error"
+          : "validation-failed-flag",
       });
     }
   } while (needsRefinement && refinementCount <= maxRefinements);
@@ -206,10 +222,20 @@ export async function runPipeline(modulePath, initialContext = {}) {
 
   llmEvents.off("llm:request:complete", onLLMComplete);
 
-  return { ok: true, logs, context, refinementAttempts: refinementCount, llmMetrics };
+  return {
+    ok: true,
+    logs,
+    context,
+    refinementAttempts: refinementCount,
+    llmMetrics,
+  };
 }
 
-export async function runPipelineWithModelRouting(modulePath, initialContext = {}, modelConfig = {}) {
+export async function runPipelineWithModelRouting(
+  modulePath,
+  initialContext = {},
+  modelConfig = {}
+) {
   const context = {
     ...initialContext,
     modelConfig,
@@ -245,7 +271,8 @@ function toAbsFileURL(p) {
 }
 
 function normalizeError(err) {
-  if (err instanceof Error) return { name: err.name, message: err.message, stack: err.stack };
+  if (err instanceof Error)
+    return { name: err.name, message: err.message, stack: err.stack };
   return { message: String(err) };
 }
 

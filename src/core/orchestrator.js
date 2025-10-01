@@ -6,6 +6,7 @@ import chokidar from "chokidar";
 import { spawn } from "node:child_process";
 import url from "node:url";
 import { validateSeed, formatValidationErrors } from "./validation.js";
+import { getConfig } from "./config.js";
 
 export class Orchestrator {
   constructor({ paths, pipelineDefinition }) {
@@ -24,9 +25,13 @@ export class Orchestrator {
       this.#ensureRunner(name);
     }
 
+    const config = getConfig();
     this.watcher = chokidar
       .watch(path.join(this.paths.pending, "*-seed.json"), {
-        awaitWriteFinish: { stabilityThreshold: 200, pollInterval: 50 },
+        awaitWriteFinish: {
+          stabilityThreshold: config.orchestrator.watchStabilityThreshold,
+          pollInterval: config.orchestrator.watchPollInterval,
+        },
       })
       .on("add", (p) => this.#onSeed(p));
 
@@ -43,9 +48,12 @@ export class Orchestrator {
       info.process.kill("SIGTERM");
     }
 
-    // Skip the 2-second delay in test environment
+    // Skip the shutdown timeout in test environment
     if (process.env.NODE_ENV !== "test") {
-      await new Promise((r) => setTimeout(r, 2000));
+      const config = getConfig();
+      await new Promise((r) =>
+        setTimeout(r, config.orchestrator.shutdownTimeout)
+      );
     }
 
     for (const [name, info] of this.runningProcesses) {

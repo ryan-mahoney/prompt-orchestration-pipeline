@@ -611,9 +611,9 @@ describe("LLM Module", () => {
       const mockFn = vi.fn().mockRejectedValue(authError);
 
       // Act & Assert
-      await expect(withRetry(mockFn, [], 3, 10)).rejects.toThrow(
-        "API key invalid"
-      );
+      await expect(
+        withRetry(mockFn, [], { maxRetries: 3, backoffMs: 10 })
+      ).rejects.toThrow("API key invalid");
       expect(mockFn).toHaveBeenCalledTimes(1);
     });
 
@@ -628,7 +628,7 @@ describe("LLM Module", () => {
         .mockResolvedValue("success");
 
       // Act
-      const promise = withRetry(mockFn, [], 3, 100);
+      const promise = withRetry(mockFn, [], { maxRetries: 3, backoffMs: 100 });
 
       // Advance timers for first retry (100ms)
       await vi.advanceTimersByTimeAsync(100);

@@ -1,0 +1,220 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Prompt Orchestration Pipeline Configuration",
+  "description": "Configuration schema for the Prompt Orchestration Pipeline",
+  "type": "object",
+  "properties": {
+    "orchestrator": {
+      "type": "object",
+      "description": "Orchestrator configuration",
+      "properties": {
+        "shutdownTimeout": {
+          "type": "integer",
+          "description": "Timeout in milliseconds for graceful shutdown",
+          "minimum": 100,
+          "default": 2000
+        },
+        "processSpawnRetries": {
+          "type": "integer",
+          "description": "Number of retries for process spawn failures",
+          "minimum": 0,
+          "default": 3
+        },
+        "lockFileTimeout": {
+          "type": "integer",
+          "description": "Timeout in milliseconds for lock file acquisition",
+          "minimum": 100,
+          "default": 5000
+        },
+        "watchDebounce": {
+          "type": "integer",
+          "description": "Debounce time in milliseconds for file watcher",
+          "minimum": 0,
+          "default": 100
+        },
+        "watchStabilityThreshold": {
+          "type": "integer",
+          "description": "Stability threshold in milliseconds for file watcher",
+          "minimum": 0,
+          "default": 200
+        },
+        "watchPollInterval": {
+          "type": "integer",
+          "description": "Poll interval in milliseconds for file watcher",
+          "minimum": 10,
+          "default": 50
+        }
+      }
+    },
+    "taskRunner": {
+      "type": "object",
+      "description": "Task runner configuration",
+      "properties": {
+        "maxRefinementAttempts": {
+          "type": "integer",
+          "description": "Maximum number of refinement attempts for validation failures",
+          "minimum": 0,
+          "default": 2
+        },
+        "stageTimeout": {
+          "type": "integer",
+          "description": "Timeout in milliseconds for each pipeline stage",
+          "minimum": 1000,
+          "default": 300000
+        },
+        "llmRequestTimeout": {
+          "type": "integer",
+          "description": "Timeout in milliseconds for LLM requests",
+          "minimum": 1000,
+          "default": 60000
+        }
+      }
+    },
+    "llm": {
+      "type": "object",
+      "description": "LLM configuration",
+      "properties": {
+        "defaultProvider": {
+          "type": "string",
+          "description": "Default LLM provider",
+          "enum": ["openai", "deepseek", "anthropic"],
+          "default": "openai"
+        },
+        "defaultModel": {
+          "type": "string",
+          "description": "Default model to use",
+          "default": "gpt-5-chat-latest"
+        },
+        "maxConcurrency": {
+          "type": "integer",
+          "description": "Maximum concurrent LLM requests",
+          "minimum": 1,
+          "default": 5
+        },
+        "retryMaxAttempts": {
+          "type": "integer",
+          "description": "Maximum retry attempts for failed LLM requests",
+          "minimum": 0,
+          "default": 3
+        },
+        "retryBackoffMs": {
+          "type": "integer",
+          "description": "Initial backoff time in milliseconds for retries",
+          "minimum": 100,
+          "default": 1000
+        }
+      }
+    },
+    "ui": {
+      "type": "object",
+      "description": "UI server configuration",
+      "properties": {
+        "port": {
+          "type": "integer",
+          "description": "UI server port",
+          "minimum": 1,
+          "maximum": 65535,
+          "default": 3000
+        },
+        "host": {
+          "type": "string",
+          "description": "UI server host",
+          "default": "localhost"
+        },
+        "heartbeatInterval": {
+          "type": "integer",
+          "description": "Heartbeat interval in milliseconds",
+          "minimum": 1000,
+          "default": 30000
+        },
+        "maxRecentChanges": {
+          "type": "integer",
+          "description": "Maximum number of recent changes to track",
+          "minimum": 1,
+          "default": 10
+        }
+      }
+    },
+    "paths": {
+      "type": "object",
+      "description": "Path configuration",
+      "properties": {
+        "root": {
+          "type": "string",
+          "description": "Root directory for pipeline operations"
+        },
+        "dataDir": {
+          "type": "string",
+          "description": "Directory for pipeline data",
+          "default": "pipeline-data"
+        },
+        "configDir": {
+          "type": "string",
+          "description": "Directory for pipeline configuration",
+          "default": "pipeline-config"
+        },
+        "pendingDir": {
+          "type": "string",
+          "description": "Directory for pending jobs",
+          "default": "pending"
+        },
+        "currentDir": {
+          "type": "string",
+          "description": "Directory for current jobs",
+          "default": "current"
+        },
+        "completeDir": {
+          "type": "string",
+          "description": "Directory for completed jobs",
+          "default": "complete"
+        }
+      }
+    },
+    "validation": {
+      "type": "object",
+      "description": "Validation configuration",
+      "properties": {
+        "seedNameMinLength": {
+          "type": "integer",
+          "description": "Minimum length for seed names",
+          "minimum": 1,
+          "default": 1
+        },
+        "seedNameMaxLength": {
+          "type": "integer",
+          "description": "Maximum length for seed names",
+          "minimum": 1,
+          "default": 100
+        },
+        "seedNamePattern": {
+          "type": "string",
+          "description": "Regex pattern for seed names",
+          "default": "^[a-zA-Z0-9-_]+$"
+        }
+      }
+    },
+    "logging": {
+      "type": "object",
+      "description": "Logging configuration",
+      "properties": {
+        "level": {
+          "type": "string",
+          "description": "Log level",
+          "enum": ["debug", "info", "warn", "error"],
+          "default": "info"
+        },
+        "format": {
+          "type": "string",
+          "description": "Log format",
+          "enum": ["json", "text"],
+          "default": "json"
+        },
+        "destination": {
+          "type": "string",
+          "description": "Log destination (stdout or file path)",
+          "default": "stdout"
+        }
+      }
+    }
+  }
+}
