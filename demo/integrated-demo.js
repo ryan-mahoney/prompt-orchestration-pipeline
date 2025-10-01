@@ -87,10 +87,19 @@ class IntegratedDemo {
 
       const child = spawn(
         process.execPath,
-        ["./../lib/pipeline-runner.js", pipelineName],
+        ["../src/core/pipeline-runner.js", pipelineName],
         {
           stdio: ["ignore", "pipe", "pipe"],
-          env: process.env,
+          env: {
+            ...process.env,
+            PO_ROOT: ROOT,
+            PO_DATA_DIR: path.join(ROOT, "pipeline-data"),
+            PO_CURRENT_DIR: CURRENT_DIR,
+            PO_COMPLETE_DIR: COMPLETE_DIR,
+            PO_CONFIG_DIR: path.join(ROOT, "pipeline-config"),
+            PO_PIPELINE_PATH: path.join(ROOT, "pipeline-config/pipeline.json"),
+            PO_TASK_REGISTRY: path.join(ROOT, "pipeline-tasks/index.js"),
+          },
           cwd: ROOT,
         }
       );
