@@ -1,5 +1,5 @@
 export default {
-  "data-extraction": "data-extraction/index.js",
-  "analysis": "analysis/index.js",
-  "report-generation": "report-generation/index.js"
+  "data-extraction": "./data-extraction.js",
+  "analysis": "./analysis.js",
+  "report-generation": "./report-generation.js"
 };
