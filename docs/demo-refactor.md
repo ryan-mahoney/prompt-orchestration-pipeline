@@ -82,9 +82,11 @@ async inference(context) {
 - No token/cost tracking
 - Cannot leverage provider abstraction
 
-### 2. Missing Refinement Stages ❌ HIGH PRIORITY
+### 2. Missing Refinement Stages ✅ COMPLETED (PR #22)
 
 **Problem**: Demo tasks don't implement `critique` and `refine` stages required by the 11-stage pipeline.
+
+**Status**: ✅ Resolved in commit 6b2889e (PR #22)
 
 **Architecture Requirement**: Tasks must implement all relevant stages from the 11-stage pipeline:
 
