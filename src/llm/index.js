@@ -129,9 +129,10 @@ export async function chat(options) {
         totalTokens: result.usage.total_tokens,
       };
     } else if (provider === "openai") {
-      const result = await openaiChat(systemMsg, userMsg, {
+      const result = await openaiChat({
+        messages,
         model: model || "gpt-5-chat-latest",
-        max_output_tokens: maxTokens,
+        maxTokens,
         temperature,
         ...rest,
       });
