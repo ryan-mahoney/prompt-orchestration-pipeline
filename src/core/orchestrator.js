@@ -126,8 +126,14 @@ export class Orchestrator {
 
       await fs.mkdir(path.join(workDir, "tasks"), { recursive: true });
 
-      // Delete the seed file after successful processing
-      await fs.unlink(seedPath);
+      // Move the seed file to a 'processed' directory after successful processing
+      const processedDir = path.join(
+        path.dirname(this.paths.pending),
+        "processed"
+      );
+      await fs.mkdir(processedDir, { recursive: true });
+      const processedPath = path.join(processedDir, base);
+      await fs.rename(seedPath, processedPath);
     } finally {
       try {
         await fs.unlink(lockFile);
