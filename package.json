@@ -1,9 +1,21 @@
 {
-  "name": "prompt-orchestration-pipeline",
+  "name": "@ryanfw/prompt-orchestration-pipeline",
   "version": "0.0.1",
   "description": "A Prompt-orchestration pipeline (POP) is a framework for building, running, and experimenting with complex chains of LLM tasks.",
   "type": "module",
-  "main": "index.js",
+  "main": "src/ui/server.js",
+  "files": [
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ryan-mahoney/prompt-orchestration-pipeline.git"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "test": "vitest run",
     "ui": "nodemon src/ui/server.js",
