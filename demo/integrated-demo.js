@@ -4,8 +4,11 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { demoSeeds } from "./demo-config.js";
+import { fileURLToPath } from "node:url";
 
-const ROOT = process.cwd();
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const ROOT = path.resolve(__dirname, "..");
 const PENDING_DIR = path.join(ROOT, "pipeline-pending");
 const CURRENT_DIR = path.join(ROOT, "pipeline-current");
 const COMPLETE_DIR = path.join(ROOT, "pipeline-complete");
@@ -87,7 +90,7 @@ class IntegratedDemo {
 
       const child = spawn(
         process.execPath,
-        ["../src/core/pipeline-runner.js", pipelineName],
+        [path.join(ROOT, "src/core/pipeline-runner.js"), pipelineName],
         {
           stdio: ["ignore", "pipe", "pipe"],
           env: {
@@ -96,9 +99,15 @@ class IntegratedDemo {
             PO_DATA_DIR: path.join(ROOT, "pipeline-data"),
             PO_CURRENT_DIR: CURRENT_DIR,
             PO_COMPLETE_DIR: COMPLETE_DIR,
-            PO_CONFIG_DIR: path.join(ROOT, "pipeline-config"),
-            PO_PIPELINE_PATH: path.join(ROOT, "pipeline-config/pipeline.json"),
-            PO_TASK_REGISTRY: path.join(ROOT, "pipeline-config/tasks/index.js"),
+            PO_CONFIG_DIR: path.join(ROOT, "demo/pipeline-config"),
+            PO_PIPELINE_PATH: path.join(
+              ROOT,
+              "demo/pipeline-config/pipeline.json"
+            ),
+            PO_TASK_REGISTRY: path.join(
+              ROOT,
+              "demo/pipeline-config/tasks/index.js"
+            ),
           },
           cwd: ROOT,
         }
