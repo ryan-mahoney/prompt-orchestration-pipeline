@@ -126,12 +126,16 @@ export class Orchestrator {
 
       await fs.mkdir(path.join(workDir, "tasks"), { recursive: true });
 
-      this.#ensureRunner(name);
+      // Delete the seed file after successful processing
+      await fs.unlink(seedPath);
     } finally {
       try {
         await fs.unlink(lockFile);
       } catch {}
     }
+
+    // Start runner after all file operations are complete
+    this.#ensureRunner(name);
   }
 
   #ensureRunner(name) {
@@ -152,14 +156,8 @@ export class Orchestrator {
       },
       shouldRetry: (error) => {
         // Don't retry if the error is due to missing files or invalid config
-        const nonRetryableCodes = [
-          "ENOENT",
-          "EACCES",
-          "MODULE_NOT_FOUND",
-        ];
-        const nonRetryableMessages = [
-          "Invalid pipeline",
-        ];
+        const nonRetryableCodes = ["ENOENT", "EACCES", "MODULE_NOT_FOUND"];
+        const nonRetryableMessages = ["Invalid pipeline"];
         if (error.code && nonRetryableCodes.includes(error.code)) {
           return false;
         }

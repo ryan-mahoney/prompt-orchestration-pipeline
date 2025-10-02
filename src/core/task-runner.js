@@ -52,7 +52,9 @@ export async function runPipeline(modulePath, initialContext = {}) {
   );
 
   const abs = toAbsFileURL(modulePath);
-  const mod = await import(abs.href);
+  // Add cache busting to force module reload
+  const modUrl = `${abs.href}?t=${Date.now()}`;
+  const mod = await import(modUrl);
   const tasks = mod.default ?? mod;
 
   const context = { ...initialContext, currentStage: null };
@@ -209,7 +211,12 @@ export async function runPipeline(modulePath, initialContext = {}) {
     }
   } while (needsRefinement && refinementCount <= maxRefinements);
 
-  if (context.validationFailed) {
+  // Only fail on validationFailed if we actually have validation functions
+  const hasValidation =
+    typeof tasks.validateStructure === "function" ||
+    typeof tasks.validateQuality === "function";
+
+  if (context.validationFailed && hasValidation) {
     return {
       ok: false,
       failedStage: "final-validation",
@@ -265,9 +272,13 @@ export function selectModel(taskType, complexity, speed = "normal") {
 }
 
 function toAbsFileURL(p) {
-  const cwd = process.cwd();
-  const absPath = path.isAbsolute(p) ? p : path.join(cwd, "pipeline-tasks", p);
-  return pathToFileURL(absPath);
+  if (!path.isAbsolute(p)) {
+    throw new Error(
+      `Task module path must be absolute. Received: ${p}\n` +
+        `Hint: Task paths should be resolved by pipeline-runner.js using the task registry.`
+    );
+  }
+  return pathToFileURL(p);
 }
 
 function normalizeError(err) {

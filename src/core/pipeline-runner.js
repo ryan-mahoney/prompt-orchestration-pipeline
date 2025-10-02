@@ -5,12 +5,17 @@ import { runPipeline } from "./task-runner.js";
 
 const ROOT = process.env.PO_ROOT || process.cwd();
 const DATA_DIR = path.join(ROOT, process.env.PO_DATA_DIR || "pipeline-data");
-const CURRENT_DIR = process.env.PO_CURRENT_DIR || path.join(DATA_DIR, "current");
-const COMPLETE_DIR = process.env.PO_COMPLETE_DIR || path.join(DATA_DIR, "complete");
+const CURRENT_DIR =
+  process.env.PO_CURRENT_DIR || path.join(DATA_DIR, "current");
+const COMPLETE_DIR =
+  process.env.PO_COMPLETE_DIR || path.join(DATA_DIR, "complete");
 
-const CONFIG_DIR = process.env.PO_CONFIG_DIR || path.join(ROOT, "pipeline-config");
-const TASK_REGISTRY = process.env.PO_TASK_REGISTRY || path.join(CONFIG_DIR, "tasks/index.js");
-const PIPELINE_DEF_PATH = process.env.PO_PIPELINE_PATH || path.join(CONFIG_DIR, "pipeline.json");
+const CONFIG_DIR =
+  process.env.PO_CONFIG_DIR || path.join(ROOT, "pipeline-config");
+const TASK_REGISTRY =
+  process.env.PO_TASK_REGISTRY || path.join(CONFIG_DIR, "tasks/index.js");
+const PIPELINE_DEF_PATH =
+  process.env.PO_PIPELINE_PATH || path.join(CONFIG_DIR, "pipeline.json");
 
 const name = process.argv[2];
 if (!name) throw new Error("runner requires pipeline name");
@@ -19,10 +24,14 @@ const workDir = path.join(CURRENT_DIR, name);
 const tasksStatusPath = path.join(workDir, "tasks-status.json");
 
 const pipeline = JSON.parse(await fs.readFile(PIPELINE_DEF_PATH, "utf8"));
-const tasks = (await import(pathToFileURL(TASK_REGISTRY))).default;
+// Add cache busting to force task registry reload
+const taskRegistryUrl = `${pathToFileURL(TASK_REGISTRY).href}?t=${Date.now()}`;
+const tasks = (await import(taskRegistryUrl)).default;
 
 const status = JSON.parse(await fs.readFile(tasksStatusPath, "utf8"));
-const seed = JSON.parse(await fs.readFile(path.join(workDir, "seed.json"), "utf8"));
+const seed = JSON.parse(
+  await fs.readFile(path.join(workDir, "seed.json"), "utf8")
+);
 
 let pipelineArtifacts = {};
 
@@ -50,11 +59,23 @@ for (const taskName of pipeline.tasks) {
   );
 
   try {
-    const ctx = { workDir, taskDir, seed, artifacts: pipelineArtifacts, taskName };
+    const ctx = {
+      workDir,
+      taskDir,
+      seed,
+      artifacts: pipelineArtifacts,
+      taskName,
+      taskConfig: pipeline.taskConfig?.[taskName] || {},
+    };
     const modulePath = tasks[taskName];
     if (!modulePath) throw new Error(`Task not registered: ${taskName}`);
 
-    const result = await runPipeline(modulePath, ctx);
+    // Resolve relative paths from task registry to absolute paths
+    const absoluteModulePath = path.isAbsolute(modulePath)
+      ? modulePath
+      : path.resolve(path.dirname(TASK_REGISTRY), modulePath);
+
+    const result = await runPipeline(absoluteModulePath, ctx);
 
     if (!result.ok) {
       throw new Error(
@@ -63,12 +84,18 @@ for (const taskName of pipeline.tasks) {
     }
 
     if (result.context?.output) {
-      await atomicWrite(path.join(taskDir, "output.json"), JSON.stringify(result.context.output, null, 2));
+      await atomicWrite(
+        path.join(taskDir, "output.json"),
+        JSON.stringify(result.context.output, null, 2)
+      );
       pipelineArtifacts[taskName] = result.context.output;
     }
 
     if (result.logs) {
-      await atomicWrite(path.join(taskDir, "execution-logs.json"), JSON.stringify(result.logs, null, 2));
+      await atomicWrite(
+        path.join(taskDir, "execution-logs.json"),
+        JSON.stringify(result.logs, null, 2)
+      );
     }
 
     const artifacts = await getArtifacts(taskDir);
@@ -76,11 +103,16 @@ for (const taskName of pipeline.tasks) {
       state: "done",
       endedAt: now(),
       artifacts,
-      executionTime: result.logs?.reduce((total, log) => total + (log.ms || 0), 0) || 0,
+      executionTime:
+        result.logs?.reduce((total, log) => total + (log.ms || 0), 0) || 0,
       refinementAttempts: result.refinementAttempts || 0,
     });
   } catch (err) {
-    await updateStatus(taskName, { state: "failed", endedAt: now(), error: normalizeError(err) });
+    await updateStatus(taskName, {
+      state: "failed",
+      endedAt: now(),
+      error: normalizeError(err),
+    });
     process.exitCode = 1;
     process.exit(1);
   }
@@ -96,13 +128,21 @@ await appendLine(
     pipelineId: status.pipelineId,
     finishedAt: now(),
     tasks: Object.keys(status.tasks),
-    totalExecutionTime: Object.values(status.tasks).reduce((total, t) => total + (t.executionTime || 0), 0),
-    totalRefinementAttempts: Object.values(status.tasks).reduce((total, t) => total + (t.refinementAttempts || 0), 0),
+    totalExecutionTime: Object.values(status.tasks).reduce(
+      (total, t) => total + (t.executionTime || 0),
+      0
+    ),
+    totalRefinementAttempts: Object.values(status.tasks).reduce(
+      (total, t) => total + (t.refinementAttempts || 0),
+      0
+    ),
     finalArtifacts: Object.keys(pipelineArtifacts),
   }) + "\n"
 );
 
-function now() { return new Date().toISOString(); }
+function now() {
+  return new Date().toISOString();
+}
 
 async function updateStatus(taskName, patch) {
   const current = JSON.parse(await fs.readFile(tasksStatusPath, "utf8"));
@@ -124,7 +164,8 @@ async function atomicWrite(file, data) {
 }
 
 function normalizeError(e) {
-  if (e instanceof Error) return { name: e.name, message: e.message, stack: e.stack };
+  if (e instanceof Error)
+    return { name: e.name, message: e.message, stack: e.stack };
   return { message: String(e) };
 }
 
