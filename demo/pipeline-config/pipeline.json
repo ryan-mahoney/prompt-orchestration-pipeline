@@ -1,16 +1,33 @@
 {
-  "name": "demo-market-analysis",
+  "name": "demo-pipeline",
   "version": "1.0.0",
-  "tasks": ["data-extraction", "analysis", "report-generation"],
-  "config": {
-    "retryPolicy": {
-      "maxRetries": 3,
-      "retryableStages": ["validateStructure", "validateQuality"]
+  "description": "Demo pipeline showcasing multi-stage LLM workflows",
+  "tasks": ["research", "analysis", "synthesis", "formatting"],
+  "taskConfig": {
+    "research": {
+      "model": "gpt-5-nano",
+      "temperature": 0.7,
+      "maxTokens": 2000
     },
-    "models": {
-      "fast": "gpt-3.5-turbo",
-      "accurate": "gpt-4",
-      "creative": "claude-3-opus"
+    "analysis": {
+      "model": "gpt-5-nano",
+      "temperature": 0.6,
+      "maxTokens": 2500
+    },
+    "synthesis": {
+      "model": "gpt-5-nano",
+      "temperature": 0.8,
+      "maxTokens": 3000
+    },
+    "formatting": {
+      "model": "gpt-5-nano",
+      "temperature": 0.3,
+      "maxTokens": 2000
     }
+  },
+  "metadata": {
+    "author": "Prompt Orchestration Pipeline",
+    "created": "2024-01-01",
+    "tags": ["demo", "example", "reference"]
   }
 }
