@@ -1,0 +1,12 @@
+# Runtime data directories
+pipeline-data/pending/*
+pipeline-data/current/*
+pipeline-data/complete/*
+
+# Keep directory structure
+!pipeline-data/pending/.gitkeep
+!pipeline-data/current/.gitkeep
+!pipeline-data/complete/.gitkeep
+
+# Environment variables
+.env
