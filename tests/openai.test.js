@@ -454,7 +454,7 @@ describe("OpenAI Provider", () => {
       expect(result.content).toBe("Classic response");
     });
 
-    it("should pass through temperature, maxTokens, and other parameters", async () => {
+    it("should pass through maxTokens parameter (temperature and tuning params not supported in Responses API)", async () => {
       // Arrange
       const mockResponse = {
         output_text: "Test response",
@@ -466,27 +466,32 @@ describe("OpenAI Provider", () => {
       await openaiChat({
         messages: [{ role: "user", content: "Test" }],
         model: "gpt-5-chat-latest",
-        temperature: 0.5,
+        temperature: 0.5, // Not supported in Responses API
         maxTokens: 1000,
-        topP: 0.9,
-        frequencyPenalty: 0.1,
-        presencePenalty: 0.2,
-        seed: 123,
-        stop: ["\n"],
+        topP: 0.9, // Not supported in Responses API
+        frequencyPenalty: 0.1, // Not supported in Responses API
+        presencePenalty: 0.2, // Not supported in Responses API
+        seed: 123, // Not supported in Responses API
+        stop: ["\n"], // Not supported in Responses API
       });
 
-      // Assert
+      // Assert - Only max_output_tokens is supported in Responses API
       expect(mockOpenAIClient.responses.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          temperature: 0.5,
           max_output_tokens: 1000,
-          top_p: 0.9,
-          frequency_penalty: 0.1,
-          presence_penalty: 0.2,
-          seed: 123,
-          stop: ["\n"],
+          model: "gpt-5-chat-latest",
+          instructions: "Test system message",
+          input: "Test user message",
         })
       );
+      // Verify unsupported parameters are NOT included
+      const callArgs = mockOpenAIClient.responses.create.mock.calls[0][0];
+      expect(callArgs).not.toHaveProperty("temperature");
+      expect(callArgs).not.toHaveProperty("top_p");
+      expect(callArgs).not.toHaveProperty("frequency_penalty");
+      expect(callArgs).not.toHaveProperty("presence_penalty");
+      expect(callArgs).not.toHaveProperty("seed");
+      expect(callArgs).not.toHaveProperty("stop");
     });
   });
 
@@ -571,7 +576,7 @@ describe("OpenAI Provider", () => {
       expect(result).toEqual({ result: "test" });
     });
 
-    it("should pass through options to openaiChat", async () => {
+    it("should pass through model option (temperature not supported in Responses API)", async () => {
       // Arrange
       const mockResponse = {
         output_text: '{"result": "test"}',
@@ -583,16 +588,20 @@ describe("OpenAI Provider", () => {
       const { queryChatGPT } = await import("../src/providers/openai.js");
       await queryChatGPT("Test system", "Test prompt", {
         model: "gpt-4-turbo-preview",
-        temperature: 0.5,
+        temperature: 0.5, // Not supported in Responses API
       });
 
-      // Assert
+      // Assert - Only model is passed through, temperature is not supported
       expect(mockOpenAIClient.responses.create).toHaveBeenCalledWith(
         expect.objectContaining({
           model: "gpt-4-turbo-preview",
-          temperature: 0.5,
+          instructions: "Test system message",
+          input: "Test user message",
         })
       );
+      // Verify temperature is NOT included
+      const callArgs = mockOpenAIClient.responses.create.mock.calls[0][0];
+      expect(callArgs).not.toHaveProperty("temperature");
     });
   });
 });
