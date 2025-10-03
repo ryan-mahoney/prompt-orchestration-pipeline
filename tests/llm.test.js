@@ -52,6 +52,7 @@ describe("LLM Module", () => {
         openai: true,
         deepseek: true,
         anthropic: true,
+        mock: false,
       });
     });
 
@@ -208,11 +209,13 @@ describe("LLM Module", () => {
 
       // Assert
       expect(mockOpenAIChat).toHaveBeenCalledWith(
-        "Test system",
-        "Test user",
         expect.objectContaining({
+          messages: [
+            { role: "system", content: "Test system" },
+            { role: "user", content: "Test user" },
+          ],
           model: "gpt-4",
-          max_output_tokens: 100,
+          maxTokens: 100,
           temperature: 0.5,
         })
       );
@@ -351,9 +354,14 @@ describe("LLM Module", () => {
 
       // Assert
       expect(mockOpenAIChat).toHaveBeenCalledWith(
-        "System message",
-        "User message 1\nUser message 2",
-        expect.any(Object)
+        expect.objectContaining({
+          messages: [
+            { role: "system", content: "System message" },
+            { role: "user", content: "User message 1" },
+            { role: "user", content: "User message 2" },
+          ],
+          model: "gpt-5-chat-latest",
+        })
       );
     });
 
@@ -415,9 +423,10 @@ describe("LLM Module", () => {
 
       // Assert
       expect(mockOpenAIChat).toHaveBeenCalledWith(
-        "",
-        "Test",
-        expect.objectContaining({ model: "custom-model" })
+        expect.objectContaining({
+          messages: [{ role: "user", content: "Test" }],
+          model: "custom-model",
+        })
       );
     });
 
@@ -436,11 +445,11 @@ describe("LLM Module", () => {
 
       // Assert
       expect(mockOpenAIChat).toHaveBeenCalledWith(
-        "",
-        "Test",
         expect.objectContaining({
+          messages: [{ role: "user", content: "Test" }],
+          model: "gpt-5-chat-latest",
           temperature: 0.8,
-          max_output_tokens: 200,
+          maxTokens: 200,
         })
       );
     });
@@ -457,9 +466,10 @@ describe("LLM Module", () => {
 
       // Assert
       expect(mockOpenAIChat).toHaveBeenCalledWith(
-        "",
-        "Test prompt",
-        expect.any(Object)
+        expect.objectContaining({
+          messages: [{ role: "user", content: "Test prompt" }],
+          model: "gpt-5-chat-latest",
+        })
       );
     });
 
@@ -729,9 +739,11 @@ describe("LLM Module", () => {
 
       // Assert
       expect(mockOpenAIChat).toHaveBeenCalledWith(
-        "",
-        "Test",
-        expect.objectContaining({ temperature: 0.5 })
+        expect.objectContaining({
+          messages: [{ role: "user", content: "Test" }],
+          model: "gpt-5-chat-latest",
+          temperature: 0.5,
+        })
       );
     });
 
@@ -764,9 +776,10 @@ describe("LLM Module", () => {
 
       // Assert
       expect(mockOpenAIChat).toHaveBeenCalledWith(
-        "",
-        "Test",
-        expect.any(Object)
+        expect.objectContaining({
+          messages: [{ role: "user", content: "Test" }],
+          model: "gpt-5-chat-latest",
+        })
       );
     });
 
@@ -799,6 +812,7 @@ describe("LLM Module", () => {
         openai: true,
         deepseek: true,
         anthropic: true,
+        mock: false,
       });
     });
   });

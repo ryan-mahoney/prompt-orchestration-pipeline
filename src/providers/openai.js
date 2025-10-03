@@ -30,6 +30,7 @@ export async function openaiChat({
   model = "gpt-5-chat-latest",
   temperature,
   maxTokens,
+  max_tokens, // Explicitly destructure to prevent it from being in ...rest
   responseFormat, // { type: 'json_object' } | { json_schema, name } | 'json'
   tools,
   toolChoice,
@@ -41,10 +42,16 @@ export async function openaiChat({
   maxRetries = 3,
   ...rest
 }) {
+  console.log("\n[OpenAI] Starting openaiChat call");
+  console.log("[OpenAI] Model:", model);
+  console.log("[OpenAI] Response format:", responseFormat);
+
   const openai = getClient();
   if (!openai) throw new Error("OpenAI API key not configured");
 
   const { systemMsg, userMsg } = extractMessages(messages);
+  console.log("[OpenAI] System message length:", systemMsg.length);
+  console.log("[OpenAI] User message length:", userMsg.length);
 
   let lastError;
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
@@ -53,25 +60,21 @@ export async function openaiChat({
     const useResponsesAPI = /^gpt-5/i.test(model);
 
     try {
+      console.log(`[OpenAI] Attempt ${attempt + 1}/${maxRetries + 1}`);
+
       // ---------- RESPONSES API path (GPT-5 models) ----------
       if (useResponsesAPI) {
+        console.log("[OpenAI] Using Responses API for GPT-5 model");
         const responsesReq = {
           model,
           instructions: systemMsg,
           input: userMsg,
-          max_output_tokens: maxTokens ?? 25000,
+          max_output_tokens: maxTokens ?? max_tokens ?? 25000,
           ...rest,
         };
 
-        // Tuning params passthrough
-        if (temperature !== undefined) responsesReq.temperature = temperature;
-        if (topP !== undefined) responsesReq.top_p = topP;
-        if (frequencyPenalty !== undefined)
-          responsesReq.frequency_penalty = frequencyPenalty;
-        if (presencePenalty !== undefined)
-          responsesReq.presence_penalty = presencePenalty;
-        if (seed !== undefined) responsesReq.seed = seed;
-        if (stop !== undefined) responsesReq.stop = stop;
+        // Note: Responses API does not support temperature, top_p, frequency_penalty,
+        // presence_penalty, seed, or stop parameters. These are only for Chat Completions API.
 
         // Response format mapping
         if (responseFormat?.json_schema) {
@@ -89,8 +92,10 @@ export async function openaiChat({
           responsesReq.text = { format: { type: "json_object" } };
         }
 
+        console.log("[OpenAI] Calling responses.create...");
         const resp = await openai.responses.create(responsesReq);
         const text = resp.output_text ?? "";
+        console.log("[OpenAI] Response received, text length:", text.length);
 
         // Approximate usage (tests don't assert exact values)
         const promptTokens = Math.ceil((systemMsg + userMsg).length / 4);
@@ -115,10 +120,12 @@ export async function openaiChat({
           }
         }
 
+        console.log("[OpenAI] Returning response from Responses API");
         return { content: parsed ?? text, text, usage, raw: resp };
       }
 
       // ---------- CLASSIC CHAT COMPLETIONS path (non-GPT-5) ----------
+      console.log("[OpenAI] Using Classic Chat Completions API");
       const classicReq = {
         model,
         messages,
@@ -143,8 +150,13 @@ export async function openaiChat({
         classicReq.response_format = { type: "json_object" };
       }
 
+      console.log("[OpenAI] Calling chat.completions.create...");
       const classicRes = await openai.chat.completions.create(classicReq);
       const classicText = classicRes?.choices?.[0]?.message?.content ?? "";
+      console.log(
+        "[OpenAI] Response received, text length:",
+        classicText.length
+      );
 
       // If tool calls present, return them (test expects this)
       if (classicRes?.choices?.[0]?.message?.tool_calls) {
@@ -178,12 +190,17 @@ export async function openaiChat({
     } catch (error) {
       lastError = error;
       const msg = error?.error?.message || error?.message || "";
+      console.error("[OpenAI] Error occurred:", msg);
+      console.error("[OpenAI] Error status:", error?.status);
 
       // Only fall back when RESPONSES path failed due to lack of support
       if (
         useResponsesAPI &&
         (/not supported/i.test(msg) || /unsupported/i.test(msg))
       ) {
+        console.log(
+          "[OpenAI] Falling back to Classic API due to unsupported Responses API"
+        );
         const classicReq = {
           model,
           messages,
@@ -246,6 +263,9 @@ export async function openaiChat({
  * Always attempts to coerce JSON on return (falls back to string).
  */
 export async function queryChatGPT(system, prompt, options = {}) {
+  console.log("\n[OpenAI] Starting queryChatGPT call");
+  console.log("[OpenAI] Model:", options.model || "gpt-5-chat-latest");
+
   const openai = getClient();
   if (!openai) throw new Error("OpenAI API key not configured");
 
@@ -253,6 +273,8 @@ export async function queryChatGPT(system, prompt, options = {}) {
     { role: "system", content: system },
     { role: "user", content: prompt },
   ]);
+  console.log("[OpenAI] System message length:", systemMsg.length);
+  console.log("[OpenAI] User message length:", userMsg.length);
 
   const req = {
     model: options.model || "gpt-5-chat-latest",
@@ -261,15 +283,8 @@ export async function queryChatGPT(system, prompt, options = {}) {
     max_output_tokens: options.maxTokens ?? 25000,
   };
 
-  // Tuning params passthrough
-  if (options.temperature !== undefined) req.temperature = options.temperature;
-  if (options.topP !== undefined) req.top_p = options.topP;
-  if (options.frequencyPenalty !== undefined)
-    req.frequency_penalty = options.frequencyPenalty;
-  if (options.presencePenalty !== undefined)
-    req.presence_penalty = options.presencePenalty;
-  if (options.seed !== undefined) req.seed = options.seed;
-  if (options.stop !== undefined) req.stop = options.stop;
+  // Note: Responses API does not support temperature, top_p, frequency_penalty,
+  // presence_penalty, seed, or stop parameters. These are only for Chat Completions API.
 
   // Response format / schema mapping for Responses API
   if (options.schema) {
@@ -287,10 +302,13 @@ export async function queryChatGPT(system, prompt, options = {}) {
     req.text = { format: { type: "json_object" } };
   }
 
+  console.log("[OpenAI] Calling responses.create...");
   const resp = await openai.responses.create(req);
   const text = resp.output_text ?? "";
+  console.log("[OpenAI] Response received, text length:", text.length);
 
   // Always try to parse JSON; fall back to string
   const parsed = tryParseJSON(text);
+  console.log("[OpenAI] Parsed result:", parsed ? "JSON" : "text");
   return parsed ?? text;
 }

@@ -1,5 +1,6 @@
 export default {
-  "data-extraction": "../../pipeline-tasks/data-extraction/index.js",
-  analysis: "../../pipeline-tasks/analysis/index.js",
-  "report-generation": "../../pipeline-tasks/report-generation/index.js",
+  research: "./research/index.js",
+  analysis: "./analysis/index.js",
+  synthesis: "./synthesis/index.js",
+  formatting: "./formatting/index.js",
 };

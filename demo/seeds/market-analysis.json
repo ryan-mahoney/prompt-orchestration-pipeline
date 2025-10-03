@@ -1,0 +1,16 @@
+{
+  "name": "market-analysis",
+  "data": {
+    "type": "market-research",
+    "industry": "Renewable Energy Storage",
+    "region": "North America",
+    "timeframe": "2024-2025",
+    "focusAreas": [
+      "Market size and growth",
+      "Key players and competition",
+      "Technology trends",
+      "Regulatory landscape"
+    ],
+    "outputFormat": "executive-summary"
+  }
+}

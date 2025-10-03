@@ -1,0 +1,16 @@
+{
+  "name": "data-processing",
+  "data": {
+    "type": "data-extraction",
+    "sourceType": "unstructured-text",
+    "dataPoints": [
+      "company names",
+      "funding amounts",
+      "investment dates",
+      "investor names",
+      "industry sectors"
+    ],
+    "outputFormat": "structured-json",
+    "sampleText": "In Q1 2024, TechCorp raised $50M in Series B funding led by Venture Partners. The company, operating in the AI infrastructure space, plans to use the funds for product development and market expansion. Other notable deals include DataFlow's $30M Series A from Growth Capital in March 2024, and CloudScale's $75M Series C led by Enterprise Ventures in February 2024."
+  }
+}

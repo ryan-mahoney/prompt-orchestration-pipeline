@@ -3,9 +3,17 @@ import { deepseekChat } from "../providers/deepseek.js";
 import { EventEmitter } from "node:events";
 import { getConfig } from "../core/config.js";
 
+// Global mock provider instance (for demo/testing)
+let mockProviderInstance = null;
+
 // Global event bus for LLM metrics
 const llmEvents = new EventEmitter();
 export const getLLMEvents = () => llmEvents;
+
+// Register mock provider for demo/testing
+export function registerMockProvider(provider) {
+  mockProviderInstance = provider;
+}
 
 // Check available providers
 export function getAvailableProviders() {
@@ -13,6 +21,7 @@ export function getAvailableProviders() {
     openai: !!process.env.OPENAI_API_KEY,
     deepseek: !!process.env.DEEPSEEK_API_KEY,
     anthropic: !!process.env.ANTHROPIC_API_KEY,
+    mock: !!mockProviderInstance,
   };
 }
 
@@ -24,6 +33,11 @@ export function estimateTokens(text) {
 // Calculate cost based on provider and model
 export function calculateCost(provider, model, usage) {
   const pricing = {
+    mock: {
+      "gpt-3.5-turbo": { prompt: 0.0005, completion: 0.0015 },
+      "gpt-4": { prompt: 0.03, completion: 0.06 },
+      "gpt-4-turbo": { prompt: 0.01, completion: 0.03 },
+    },
     openai: {
       "gpt-5-chat-latest": { prompt: 0.015, completion: 0.06 },
       "gpt-4": { prompt: 0.03, completion: 0.06 },
@@ -89,10 +103,36 @@ export async function chat(options) {
     let response;
     let usage;
 
-    if (provider === "openai") {
-      const result = await openaiChat(systemMsg, userMsg, {
+    if (provider === "mock") {
+      if (!mockProviderInstance) {
+        throw new Error(
+          "Mock provider not registered. Call registerMockProvider() first."
+        );
+      }
+
+      const result = await mockProviderInstance.chat({
+        messages,
+        model: model || "gpt-3.5-turbo",
+        temperature,
+        maxTokens,
+        ...rest,
+      });
+
+      response = {
+        content: result.content,
+        raw: result.raw,
+      };
+
+      usage = {
+        promptTokens: result.usage.prompt_tokens,
+        completionTokens: result.usage.completion_tokens,
+        totalTokens: result.usage.total_tokens,
+      };
+    } else if (provider === "openai") {
+      const result = await openaiChat({
+        messages,
         model: model || "gpt-5-chat-latest",
-        max_output_tokens: maxTokens,
+        maxTokens,
         temperature,
         ...rest,
       });

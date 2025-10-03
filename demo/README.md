@@ -1,207 +1,252 @@
-# 🚀 Prompt-Orchestration Pipeline Demo
+# Prompt Orchestration Pipeline - Demo
 
-A complete working demonstration of the Prompt-Orchestration Pipeline using mocked ChatGPT functions and the **full pipeline system**.
+This demo showcases how to integrate the Prompt Orchestration Pipeline into your project. It demonstrates multi-stage LLM workflows with research, analysis, synthesis, and formatting tasks.
+
+## What This Demo Shows
+
+- How to integrate the pipeline into your project
+- Creating custom task definitions following the 11-stage pattern
+- Defining seed data for different use cases
+- Running pipelines programmatically via the API
+- Monitoring pipeline execution (optional UI)
 
 ## Quick Start
 
-### 1. Setup Demo Files
+### 1. Prerequisites
+
+- Node.js v18+ installed
+- OpenAI API key (or other supported provider)
+
+### 2. Setup
 
 ```bash
-# Create all necessary files and directories
-node setup-demo.js
+# Copy environment template
+cp .env.example .env
+
+# Add your API key to .env
+# OPENAI_API_KEY=your_key_here
 ```
 
-### 2. Run the Demo
+### 3. Run a Demo
 
 ```bash
-# Run with the full pipeline system (recommended)
-npm run demo
+# Run market analysis demo
+node run-demo.js run market-analysis
 
-# Run with orchestrator simulation
-npm run demo:orchestrator
+# Run content generation demo
+node run-demo.js run content-generation
 
-# Or run specific scenarios
-npm run demo:ai        # AI market analysis
-npm run demo:simple    # Simple EV analysis
-npm run demo:list      # List available scenarios
+# Run data processing demo
+node run-demo.js run data-processing
+
+# List all available scenarios
+node run-demo.js list
 ```
 
-### 3. View Results
-
-Results are saved in:
-
-- **Completed runs**: `pipeline-complete/<pipeline-id>/`
-- **Failed runs**: `pipeline-current/<pipeline-id>/` (for debugging)
-- **Run history**: `pipeline-complete/runs.jsonl`
-
-## How It Works
-
-### 🏗️ **Full Pipeline Architecture**
-
-The demo now uses the **complete orchestration system**:
-
-1. **integrated-demo.js** - Demo controller that creates seed files
-2. **pipeline-runner.js** - Outer pipeline (process management, state tracking)
-3. **task-runner.js** - Inner pipeline (task stage orchestration)
-4. **Individual task modules** - Actual task implementations
-
-### 🔄 **Execution Flow**
-
-```mermaid
-flowchart TD
-    A[integrated-demo.js] --> B[Create seed file]
-    B --> C[Spawn pipeline-runner.js]
-    C --> D[Load pipeline.json]
-    D --> E[Create working directory]
-    E --> F[Run Task 1: data-extraction]
-    F --> G[task-runner.js executes stages]
-    G --> H[Save artifacts + logs]
-    H --> I[Run Task 2: analysis]
-    I --> J[Pass artifacts from Task 1]
-    J --> K[Run Task 3: report-generation]
-    K --> L[Promote to pipeline-complete/]
-    L --> M[Update runs.jsonl]
-```
-
-## What the Demo Shows
-
-### 🎯 **Real Pipeline System Features**
-
-**Process Isolation**: Each pipeline runs in its own process via `pipeline-runner.js`
-
-**State Management**: Complete state tracking with atomic updates
-
-- `tasks-status.json` tracks execution progress
-- Working directories isolate runs
-- Failed runs preserved for debugging
-
-**Artifact Management**: Data flows between tasks automatically
-
-- Task outputs become inputs for next stage
-- Structured artifact passing with metadata
-- Complete audit trail of transformations
-
-**Error Recovery**: Production-ready error handling
-
-- Failed tasks leave debugging information
-- Retry logic with validation loops
-- Graceful degradation and cleanup
-
-**Pipeline Promotion**: Successful runs moved to `pipeline-complete/`
-
-- Atomic directory rename on success
-- Run history maintained in JSONL format
-- Failed runs remain in `pipeline-current/` for inspection
-
-### 🧪 **Mock ChatGPT Integration**
-
-**Realistic API Simulation**:
-
-- Model-specific response characteristics
-- Token usage and cost estimation
-- Confidence scoring for validation
-- 5% random failure rate for testing resilience
-
-**Intelligent Responses**:
-
-- Context-aware responses based on prompt content
-- Different response types (extraction, analysis, reports)
-- Varying quality and length based on model selection
-
-## Sample Output
+### 4. Enable UI Monitoring (Optional)
 
 ```bash
-🚀 Starting Full Pipeline System Demo
-============================================================
-This demo uses the complete orchestration system:
-• orchestrator.js (process management)
-• pipeline-runner.js (outer pipeline)
-• task-runner.js (inner pipeline)
-• Individual task modules
-============================================================
-📋 Demo Scenario: MARKET-RESEARCH
-🎯 Industry: renewable-energy
-🌍 Region: north-america
-📅 Timeframe: 2024-2025
-============================================================
+# Set environment variable
+export ENABLE_UI=true
 
-📁 Created seed file: renewable-energy-1734567890123-seed.json
-🔄 Triggering pipeline...
+# Run demo
+node run-demo.js run market-analysis
 
-🚀 Spawning pipeline-runner.js...
-
-📥 [Data Extraction] Starting ingestion...
-⚙️ [Data Extraction] Pre-processing...
-📝 [Data Extraction] Creating prompt...
-🤖 [Data Extraction] Calling ChatGPT...
-🔧 [Data Extraction] Parsing output...
-✅ [Data Extraction] Validating structure...
-🎯 [Data Extraction] Validating quality...
-📦 [Data Extraction] Finalizing...
-
-📥 [Analysis] Starting ingestion...
-📝 [Analysis] Creating analysis prompt...
-🤖 [Analysis] Generating analysis...
-... (continues with full pipeline execution)
-
-✅ Pipeline runner completed successfully!
-
-📊 PIPELINE RESULTS
-============================================================
-✅ Pipeline Status: COMPLETED
-📁 Results Location: pipeline-complete/renewable-energy-1734567890123
-🆔 Pipeline ID: pl-2024-09-24-15-45-30-abc123
-⏱️  Total Execution Time: 8.73s
-
-📋 Task Execution Summary:
-----------------------------------------
-✅ data-extraction: done (1247ms)
-✅ analysis: done (1456ms)
-✅ report-generation: done (1834ms)
-
-📦 Generated Artifacts:
-----------------------------------------
-
-📄 REPORT-GENERATION OUTPUT:
-# North American Renewable Energy Market Report 2024-2025
-
-## Executive Summary
-The North American renewable energy sector continues robust expansion, with total installed capacity reaching 250 GW and market valuation of $180 billion...
-
-📊 Report Stats:
-   Word Count: 1847
-   Report Type: executive-summary
-   Model: gpt-4-turbo
-   Confidence: 0.92
-   Tokens: 2156
+# Open browser to http://localhost:3000
 ```
 
-## Commands Reference
+## Available Scenarios
+
+### Market Analysis
+
+**File:** `seeds/market-analysis.json`
+
+Demonstrates a multi-stage market research workflow:
+
+1. **Research** - Gather information about renewable energy storage
+2. **Analysis** - Extract key findings and trends
+3. **Synthesis** - Combine insights into coherent narrative
+4. **Formatting** - Format as executive summary
+
+### Content Generation
+
+**File:** `seeds/content-generation.json`
+
+Demonstrates content creation workflow:
+
+1. **Research** - Gather information about AI development tools
+2. **Analysis** - Identify key themes and structure
+3. **Synthesis** - Create content outline and draft
+4. **Formatting** - Polish and format as blog post
+
+### Data Processing
+
+**File:** `seeds/data-processing.json`
+
+Demonstrates data extraction workflow:
+
+1. **Research** - Understand data structure requirements
+2. **Analysis** - Extract structured data from unstructured text
+3. **Synthesis** - Validate and normalize extracted data
+4. **Formatting** - Output in requested format (JSON, CSV, etc.)
+
+## Project Structure
+
+```
+demo/
+├── README.md                          # This file
+├── .env.example                       # Environment variable template
+├── run-demo.js                        # Demo runner script
+├── seeds/                             # Example seed data
+│   ├── market-analysis.json
+│   ├── content-generation.json
+│   └── data-processing.json
+├── pipeline-config/                   # Pipeline configuration
+│   ├── pipeline.json                  # Task sequence definition
+│   └── tasks/                         # Task implementations
+│       ├── index.js                   # Task registry
+│       ├── research/index.js          # Research task
+│       ├── analysis/index.js          # Analysis task
+│       ├── synthesis/index.js         # Synthesis task
+│       └── formatting/index.js        # Formatting task
+└── pipeline-data/                     # Runtime data (auto-created)
+    ├── pending/                       # Jobs awaiting processing
+    ├── current/                       # Active jobs
+    └── complete/                      # Completed jobs
+```
+
+## Creating Custom Tasks
+
+Tasks follow the 11-stage pipeline pattern. Here's a minimal example:
+
+```javascript
+// my-task/index.js
+
+// Stage 1: Load and prepare input data
+export async function ingestion(context) {
+  const { seed } = context;
+  return {
+    data: seed.input.data,
+  };
+}
+
+// Stage 2: Build prompt for LLM
+export async function promptTemplating(context) {
+  const { data } = context.output;
+  return {
+    system: "You are a helpful assistant.",
+    prompt: `Process this data: ${data}`,
+  };
+}
+
+// Stage 3: Call LLM
+export async function inference(context) {
+  const { system, prompt } = context.output;
+
+  const response = await context.llm.chat({
+    messages: [
+      { role: "system", content: system },
+      { role: "user", content: prompt },
+    ],
+    model: "gpt-4o",
+    temperature: 0.7,
+  });
+
+  return {
+    result: response.content,
+  };
+}
+
+// Stage 4: Validate output
+export async function validateStructure(context) {
+  const { result } = context.output;
+
+  if (!result || result.length < 10) {
+    context.validationFailed = true;
+    context.lastValidationError = "Result too short";
+  }
+}
+
+// Stage 5: Prepare final output
+export async function integration(context) {
+  const { result } = context.output;
+
+  return {
+    myTask: {
+      result,
+      timestamp: new Date().toISOString(),
+    },
+  };
+}
+```
+
+## Creating Custom Seeds
+
+Seeds define the input data and configuration for a pipeline run:
+
+```json
+{
+  "name": "my-custom-job",
+  "type": "custom-type",
+  "input": {
+    "field1": "value1",
+    "field2": "value2"
+  },
+  "config": {
+    "model": "gpt-4o",
+    "temperature": 0.7,
+    "maxTokens": 2000
+  }
+}
+```
+
+## Viewing Results
+
+After a pipeline completes, results are stored in:
+
+```
+demo/pipeline-data/complete/{job-name}/
+├── seed.json                          # Original seed data
+├── tasks-status.json                  # Execution status
+└── tasks/                             # Task outputs
+    ├── research/output.json
+    ├── analysis/output.json
+    ├── synthesis/output.json
+    └── formatting/output.json
+```
+
+## Troubleshooting
+
+### "Provider not available" Error
+
+Make sure you've set your API key in `.env`:
 
 ```bash
-# Use the full pipeline system
-npm run demo                    # Default renewable energy demo
-npm run demo:ai                # AI market analysis
-npm run demo:simple            # Simple EV analysis
-
-# Simulate orchestrator file-watching
-npm run demo:orchestrator      # Shows orchestrator workflow
-
-# Utilities
-npm run demo:list              # List available scenarios
-node setup-demo.js             # Reset/setup demo environment
+OPENAI_API_KEY=your_key_here
 ```
 
-## Key Differences from Simple Demo
+### Pipeline Fails Immediately
 
-| Feature              | Simple Demo           | Integrated Demo         |
-| -------------------- | --------------------- | ----------------------- |
-| **Execution**        | Direct function calls | Spawned processes       |
-| **State**            | In-memory only        | Persistent files        |
-| **Isolation**        | Shared process        | Process isolation       |
-| **Recovery**         | Basic error handling  | Full state preservation |
-| **Artifacts**        | Memory passing        | File-based artifacts    |
-| **Monitoring**       | Console output only   | Complete audit trail    |
-| **Production Ready** | No                    | Yes                     |
+Check the task-status.json file for error details:
 
-This integrated demo showcases the full power of the Prompt-Orchestration Pipeline system as a production-ready framework for complex LLM workflows.
+```bash
+cat demo/pipeline-data/current/*/tasks-status.json
+```
+
+### Tasks Not Found
+
+Ensure task paths in `pipeline-config/tasks/index.js` are correct and point to valid task modules.
+
+## Next Steps
+
+1. **Customize Tasks** - Modify existing tasks or create new ones
+2. **Add Scenarios** - Create new seed files for different use cases
+3. **Integrate** - Use the API layer to integrate into your own projects
+4. **Extend** - Add validation, error handling, and custom logic
+
+## Learn More
+
+- [Main Documentation](../README.md)
+- [Architecture Guide](../docs/architecture.md)
+- [API Reference](../src/api/README.md)
+- [Task Runner Details](../src/core/task-runner.js)
