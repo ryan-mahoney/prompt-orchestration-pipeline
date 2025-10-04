@@ -1,6 +1,8 @@
 import React from "react";
 import { Badge } from "@/components/ui/badge";
 import { CheckCircle2, Loader2, AlertTriangle, Circle } from "lucide-react";
+import { clsx } from "clsx";
+import { twMerge } from "tailwind-merge";
 
 export const statusBadge = (status) => {
   switch (status) {
@@ -18,7 +20,10 @@ export const statusBadge = (status) => {
       );
     case "completed":
       return (
-        <Badge className="bg-green-500 hover:bg-green-600" aria-label="Completed">
+        <Badge
+          className="bg-green-500 hover:bg-green-600"
+          aria-label="Completed"
+        >
           Completed
         </Badge>
       );
@@ -32,7 +37,9 @@ export const taskStatusIcon = (state) => {
     case "completed":
       return <CheckCircle2 className="h-4 w-4 text-green-600" aria-hidden />;
     case "running":
-      return <Loader2 className="h-4 w-4 animate-spin text-blue-600" aria-hidden />;
+      return (
+        <Loader2 className="h-4 w-4 animate-spin text-blue-600" aria-hidden />
+      );
     case "error":
       return <AlertTriangle className="h-4 w-4 text-red-600" aria-hidden />;
     default:
@@ -65,3 +72,7 @@ export const barColorForState = (state) => {
       return "bg-gray-300";
   }
 };
+
+export function cn(...inputs) {
+  return twMerge(clsx(inputs));
+}
