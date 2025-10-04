@@ -25,6 +25,10 @@
     "ui:prod": "node src/ui/server.js"
   },
   "dependencies": {
+    "@radix-ui/react-progress": "^1.1.7",
+    "@radix-ui/react-select": "^2.2.6",
+    "@radix-ui/react-separator": "^1.1.7",
+    "@radix-ui/react-tabs": "^1.1.13",
     "ajv": "^8.17.1",
     "chokidar": "^3.5.3",
     "class-variance-authority": "^0.7.1",
