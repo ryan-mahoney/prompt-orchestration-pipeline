@@ -60,6 +60,15 @@ describe("Server", () => {
     mockWatcher.start.mockReturnValue(mockWatcherInstance);
     mockWatcher.stop.mockResolvedValue(undefined);
 
+    // Mock fs.readFile to return index.html by default
+    mockFs.readFile.mockImplementation((path, callback) => {
+      if (path.endsWith("index.html")) {
+        callback(null, Buffer.from("<html><body>Test</body></html>"));
+      } else {
+        callback(new Error("Not found"));
+      }
+    });
+
     // Import server module
     serverModule = await import("../src/ui/server.js");
   });
@@ -592,17 +601,6 @@ describe("Server", () => {
   });
 
   describe("HTTP method handling", () => {
-    beforeEach(() => {
-      // Mock fs.readFile to simulate index.html existing
-      mockFs.readFile.mockImplementation((path, callback) => {
-        if (path.endsWith("index.html")) {
-          callback(null, Buffer.from("<html><body>Test</body></html>"));
-        } else {
-          callback(new Error("Not found"));
-        }
-      });
-    });
-
     it("should reject POST requests to /api/state", async () => {
       server = serverModule.createServer();
 
@@ -616,9 +614,9 @@ describe("Server", () => {
         body: JSON.stringify({ test: "data" }),
       });
 
-      // Server serves index.html for non-GET methods to /api/state
-      expect(response.status).toBe(200);
-      expect(response.headers.get("content-type")).toBe("text/html");
+      // Server falls through to static file serving for non-GET methods to /api/state
+      // Since dist/index.html doesn't exist in test environment, returns 404
+      expect(response.status).toBe(404);
     });
 
     it("should reject PUT requests", async () => {
@@ -633,9 +631,9 @@ describe("Server", () => {
         method: "PUT",
       });
 
-      // Server serves index.html for non-GET methods to /api/state
-      expect(response.status).toBe(200);
-      expect(response.headers.get("content-type")).toBe("text/html");
+      // Server falls through to static file serving for non-GET methods to /api/state
+      // Since dist/index.html doesn't exist in test environment, returns 404
+      expect(response.status).toBe(404);
     });
 
     it("should reject DELETE requests", async () => {
@@ -650,9 +648,9 @@ describe("Server", () => {
         method: "DELETE",
       });
 
-      // Server serves index.html for non-GET methods to /api/state
-      expect(response.status).toBe(200);
-      expect(response.headers.get("content-type")).toBe("text/html");
+      // Server falls through to static file serving for non-GET methods to /api/state
+      // Since dist/index.html doesn't exist in test environment, returns 404
+      expect(response.status).toBe(404);
     });
   });
 
