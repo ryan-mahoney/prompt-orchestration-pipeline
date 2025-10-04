@@ -3,49 +3,69 @@
 @layer base {
   :root {
     --font-sans: "Inter", system-ui, sans-serif;
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
-    --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-    --muted: 210 40% 96%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96%;
-    --accent-foreground: 222.2 47.4% 11.2%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
+    --background: 30 5% 97%; /* Soft warm gray */
+    --foreground: 210 15% 15%; /* Deep slate */
+    --card: 0 0% 100%; /* Pure white */
+    --card-foreground: 210 15% 15%; /* Deep slate */
+    --popover: 0 0% 100%; /* Pure white */
+    --popover-foreground: 210 15% 15%; /* Deep slate */
+    --primary: 200 15% 35%; /* Steel blue-gray */
+    --primary-foreground: 0 0% 100%; /* Pure white */
+    --secondary: 210 10% 92%; /* Cool gray */
+    --secondary-foreground: 210 15% 15%; /* Deep slate */
+    --muted: 210 10% 92%; /* Cool gray */
+    --muted-foreground: 210 10% 45%; /* Medium gray */
+    --accent: 175 45% 48%; /* Muted teal */
+    --accent-foreground: 0 0% 100%; /* Pure white */
+    --destructive: 0 70% 55%; /* Crimson */
+    --destructive-foreground: 0 0% 100%; /* Pure white */
+    --border: 210 10% 85%; /* Light gray */
+    --input: 210 10% 92%; /* Cool gray */
+    --ring: 200 15% 35%; /* Steel blue-gray */
     --radius: 0.5rem;
+
+    /* Status Colors (Extended) */
+    --success: 145 50% 45%; /* Forest green (light) */
+    --success-foreground: 0 0% 100%; /* Pure white */
+    --warning: 35 85% 55%; /* Amber (light) */
+    --warning-foreground: 210 15% 15%; /* Deep slate */
+    --error: 0 70% 55%; /* Crimson (light) */
+    --error-foreground: 0 0% 100%; /* Pure white */
+    --info: 200 75% 52%; /* Steel blue (light) */
+    --info-foreground: 0 0% 100%; /* Pure white */
   }
 
   .dark {
     --font-sans: "Inter", system-ui, sans-serif;
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
-    --primary: 210 40% 98%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
+    --background: 215 20% 8%; /* Deep charcoal */
+    --foreground: 210 15% 92%; /* Soft white */
+    --card: 215 15% 12%; /* Dark slate */
+    --card-foreground: 210 15% 92%; /* Soft white */
+    --popover: 215 15% 12%; /* Dark slate */
+    --popover-foreground: 210 15% 92%; /* Soft white */
+    --primary: 200 20% 70%; /* Light steel */
+    --primary-foreground: 215 20% 8%; /* Deep charcoal */
+    --secondary: 215 15% 18%; /* Slate gray */
+    --secondary-foreground: 210 15% 92%; /* Soft white */
+    --muted: 215 15% 18%; /* Slate gray */
+    --muted-foreground: 210 15% 65%; /* Medium gray */
+    --accent: 175 55% 58%; /* Bright teal */
+    --accent-foreground: 215 20% 8%; /* Deep charcoal */
+    --destructive: 0 65% 62%; /* Soft red */
+    --destructive-foreground: 0 0% 100%; /* Pure white */
+    --border: 215 15% 25%; /* Medium slate */
+    --input: 215 15% 18%; /* Slate gray */
+    --ring: 200 20% 70%; /* Light steel */
+
+    /* Dark mode status colors */
+    --success: 145 45% 55%; /* Mint green */
+    --success-foreground: 215 20% 8%; /* Deep charcoal */
+    --warning: 35 80% 60%; /* Soft gold */
+    --warning-foreground: 215 20% 8%; /* Deep charcoal */
+    --error: 0 65% 62%; /* Soft red */
+    --error-foreground: 0 0% 100%; /* Pure white */
+    --info: 200 70% 62%; /* Sky blue */
+    --info-foreground: 215 20% 8%; /* Deep charcoal */
   }
 }
 
