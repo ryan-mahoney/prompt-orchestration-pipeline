@@ -190,11 +190,7 @@ export default function PromptPipelineDashboard() {
         ) : (
           <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v)}>
             <TabsList aria-label="Job filters">
-              <TabsTrigger
-                value="current"
-                activeValue={activeTab}
-                onClick={setActiveTab}
-              >
+              <TabsTrigger value="current">
                 Current Jobs{" "}
                 {currentCount > 0 && (
                   <Badge variant="secondary" className="ml-2">
@@ -202,11 +198,7 @@ export default function PromptPipelineDashboard() {
                   </Badge>
                 )}
               </TabsTrigger>
-              <TabsTrigger
-                value="errors"
-                activeValue={activeTab}
-                onClick={setActiveTab}
-              >
+              <TabsTrigger value="errors">
                 Error Jobs{" "}
                 {errorCount > 0 && (
                   <Badge variant="secondary" className="ml-2">
@@ -214,11 +206,7 @@ export default function PromptPipelineDashboard() {
                   </Badge>
                 )}
               </TabsTrigger>
-              <TabsTrigger
-                value="completed"
-                activeValue={activeTab}
-                onClick={setActiveTab}
-              >
+              <TabsTrigger value="completed">
                 Completed Jobs{" "}
                 {completedCount > 0 && (
                   <Badge variant="secondary" className="ml-2">
