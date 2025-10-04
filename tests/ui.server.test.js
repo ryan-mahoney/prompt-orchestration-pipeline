@@ -21,7 +21,13 @@ const { mockWatcher, mockState, mockFs } = vi.hoisted(() => ({
 
 vi.mock("../src/ui/watcher", () => mockWatcher);
 vi.mock("../src/ui/state", () => mockState);
-vi.mock("fs", () => mockFs);
+vi.mock("fs", async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    ...actual,
+    readFile: mockFs.readFile,
+  };
+});
 
 describe("Server", () => {
   let server;
@@ -53,6 +59,15 @@ describe("Server", () => {
     mockWatcherInstance.close = vi.fn();
     mockWatcher.start.mockReturnValue(mockWatcherInstance);
     mockWatcher.stop.mockResolvedValue(undefined);
+
+    // Mock fs.readFile to return index.html by default
+    mockFs.readFile.mockImplementation((path, callback) => {
+      if (path.endsWith("index.html")) {
+        callback(null, Buffer.from("<html><body>Test</body></html>"));
+      } else {
+        callback(new Error("Not found"));
+      }
+    });
 
     // Import server module
     serverModule = await import("../src/ui/server.js");
@@ -599,6 +614,8 @@ describe("Server", () => {
         body: JSON.stringify({ test: "data" }),
       });
 
+      // Server falls through to static file serving for non-GET methods to /api/state
+      // Since dist/index.html doesn't exist in test environment, returns 404
       expect(response.status).toBe(404);
     });
 
@@ -614,6 +631,8 @@ describe("Server", () => {
         method: "PUT",
       });
 
+      // Server falls through to static file serving for non-GET methods to /api/state
+      // Since dist/index.html doesn't exist in test environment, returns 404
       expect(response.status).toBe(404);
     });
 
@@ -629,6 +648,8 @@ describe("Server", () => {
         method: "DELETE",
       });
 
+      // Server falls through to static file serving for non-GET methods to /api/state
+      // Since dist/index.html doesn't exist in test environment, returns 404
       expect(response.status).toBe(404);
     });
   });
