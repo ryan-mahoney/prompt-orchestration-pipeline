@@ -8,22 +8,19 @@ export const statusBadge = (status) => {
   switch (status) {
     case "running":
       return (
-        <Badge className="bg-blue-500 hover:bg-blue-600" aria-label="Running">
+        <Badge variant="info" aria-label="Running">
           Running
         </Badge>
       );
     case "error":
       return (
-        <Badge className="bg-red-500 hover:bg-red-600" aria-label="Error">
+        <Badge variant="error" aria-label="Error">
           Error
         </Badge>
       );
     case "completed":
       return (
-        <Badge
-          className="bg-green-500 hover:bg-green-600"
-          aria-label="Completed"
-        >
+        <Badge variant="success" aria-label="Completed">
           Completed
         </Badge>
       );
@@ -35,13 +32,11 @@ export const statusBadge = (status) => {
 export const taskStatusIcon = (state) => {
   switch (state) {
     case "completed":
-      return <CheckCircle2 className="h-4 w-4 text-green-600" aria-hidden />;
+      return <CheckCircle2 className="h-4 w-4 text-success" aria-hidden />;
     case "running":
-      return (
-        <Loader2 className="h-4 w-4 animate-spin text-blue-600" aria-hidden />
-      );
+      return <Loader2 className="h-4 w-4 animate-spin text-info" aria-hidden />;
     case "error":
-      return <AlertTriangle className="h-4 w-4 text-red-600" aria-hidden />;
+      return <AlertTriangle className="h-4 w-4 text-destructive" aria-hidden />;
     default:
       return <Circle className="h-4 w-4 text-muted-foreground" aria-hidden />;
   }
@@ -50,25 +45,25 @@ export const taskStatusIcon = (state) => {
 export const progressClasses = (status) => {
   switch (status) {
     case "running":
-      return "bg-blue-50 [&>div]:bg-blue-500";
+      return "bg-info/20 [&>div]:bg-info";
     case "error":
-      return "bg-red-50 [&>div]:bg-red-500";
+      return "bg-destructive/20 [&>div]:bg-destructive";
     case "completed":
-      return "bg-green-50 [&>div]:bg-green-500";
+      return "bg-success/20 [&>div]:bg-success";
     default:
-      return "bg-gray-100 [&>div]:bg-gray-500";
+      return "bg-muted [&>div]:bg-muted-foreground";
   }
 };
 
 export const barColorForState = (state) => {
   switch (state) {
     case "running":
-      return "bg-blue-500";
+      return "bg-info";
     case "error":
-      return "bg-red-500";
+      return "bg-destructive";
     case "completed":
-      return "bg-green-500";
+      return "bg-success";
     default:
-      return "bg-gray-300";
+      return "bg-muted-foreground";
   }
 };
