@@ -21,7 +21,13 @@ const { mockWatcher, mockState, mockFs } = vi.hoisted(() => ({
 
 vi.mock("../src/ui/watcher", () => mockWatcher);
 vi.mock("../src/ui/state", () => mockState);
-vi.mock("fs", () => mockFs);
+vi.mock("fs", async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    ...actual,
+    readFile: mockFs.readFile,
+  };
+});
 
 describe("Server", () => {
   let server;
@@ -599,7 +605,9 @@ describe("Server", () => {
         body: JSON.stringify({ test: "data" }),
       });
 
-      expect(response.status).toBe(404);
+      // Server serves index.html for non-GET methods to /api/state
+      expect(response.status).toBe(200);
+      expect(response.headers.get("content-type")).toBe("text/html");
     });
 
     it("should reject PUT requests", async () => {
@@ -614,7 +622,9 @@ describe("Server", () => {
         method: "PUT",
       });
 
-      expect(response.status).toBe(404);
+      // Server serves index.html for non-GET methods to /api/state
+      expect(response.status).toBe(200);
+      expect(response.headers.get("content-type")).toBe("text/html");
     });
 
     it("should reject DELETE requests", async () => {
@@ -629,7 +639,9 @@ describe("Server", () => {
         method: "DELETE",
       });
 
-      expect(response.status).toBe(404);
+      // Server serves index.html for non-GET methods to /api/state
+      expect(response.status).toBe(200);
+      expect(response.headers.get("content-type")).toBe("text/html");
     });
   });
 
