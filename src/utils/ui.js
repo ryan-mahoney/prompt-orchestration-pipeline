@@ -72,7 +72,3 @@ export const barColorForState = (state) => {
       return "bg-gray-300";
   }
 };
-
-export function cn(...inputs) {
-  return twMerge(clsx(inputs));
-}
