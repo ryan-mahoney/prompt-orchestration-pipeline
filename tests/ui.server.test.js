@@ -592,6 +592,17 @@ describe("Server", () => {
   });
 
   describe("HTTP method handling", () => {
+    beforeEach(() => {
+      // Mock fs.readFile to simulate index.html existing
+      mockFs.readFile.mockImplementation((path, callback) => {
+        if (path.endsWith("index.html")) {
+          callback(null, Buffer.from("<html><body>Test</body></html>"));
+        } else {
+          callback(new Error("Not found"));
+        }
+      });
+    });
+
     it("should reject POST requests to /api/state", async () => {
       server = serverModule.createServer();
 
