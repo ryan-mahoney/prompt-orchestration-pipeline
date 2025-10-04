@@ -73,7 +73,7 @@ function startHeartbeat() {
 }
 
 /**
- * Serve static files from public directory
+ * Serve static files from dist directory (built React app)
  */
 function serveStatic(res, filePath) {
   const ext = path.extname(filePath);
@@ -81,6 +81,10 @@ function serveStatic(res, filePath) {
     ".html": "text/html",
     ".js": "application/javascript",
     ".css": "text/css",
+    ".json": "application/json",
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".svg": "image/svg+xml",
   };
 
   fs.readFile(filePath, (err, content) => {
@@ -145,16 +149,17 @@ function createServer() {
       return;
     }
 
-    // Serve static files
+    // Serve static files from dist directory (built React app)
     if (pathname === "/" || pathname === "/index.html") {
-      serveStatic(res, path.join(__dirname, "public", "index.html"));
-    } else if (pathname === "/app.js") {
-      serveStatic(res, path.join(__dirname, "public", "app.js"));
-    } else if (pathname === "/style.css") {
-      serveStatic(res, path.join(__dirname, "public", "style.css"));
+      serveStatic(res, path.join(__dirname, "dist", "index.html"));
+    } else if (pathname.startsWith("/assets/")) {
+      // Serve assets from dist/assets
+      const assetPath = pathname.substring(1); // Remove leading slash
+      serveStatic(res, path.join(__dirname, "dist", assetPath));
     } else {
-      res.writeHead(404);
-      res.end("Not Found");
+      // For any other route, serve the React app's index.html
+      // This allows client-side routing to work
+      serveStatic(res, path.join(__dirname, "dist", "index.html"));
     }
   });
 
