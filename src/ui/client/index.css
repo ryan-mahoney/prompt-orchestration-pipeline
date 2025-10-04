@@ -2,6 +2,7 @@
 
 @layer base {
   :root {
+    --font-sans: "Inter", system-ui, sans-serif;
     --background: 0 0% 100%;
     --foreground: 222.2 84% 4.9%;
     --card: 0 0% 100%;
@@ -25,6 +26,7 @@
   }
 
   .dark {
+    --font-sans: "Inter", system-ui, sans-serif;
     --background: 222.2 84% 4.9%;
     --foreground: 210 40% 98%;
     --card: 222.2 84% 4.9%;

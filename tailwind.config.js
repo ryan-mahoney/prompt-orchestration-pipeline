@@ -4,6 +4,9 @@ export default {
   content: ["./src/**/*.{js,jsx,ts,tsx}", "./src/ui/client/index.html"],
   theme: {
     extend: {
+      fontFamily: {
+        sans: ["Inter", "system-ui", "sans-serif"],
+      },
       colors: {
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
