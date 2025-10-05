@@ -8,8 +8,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
 import { ChevronLeft, X } from "lucide-react";
-import { statusBadge, barColorForState } from "../utils/ui";
+import { statusBadge } from "../utils/ui";
 import { fmtDuration, elapsedBetween } from "../utils/time";
 import ReactJson from "react18-json-view";
 import "react18-json-view/src/style.css";
@@ -25,8 +27,8 @@ export default function JobDetail({ job, pipeline, onClose, onResume }) {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="sticky top-0 z-10 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/60 border-b pb-2">
-        <div className="flex items-start justify-between gap-3 px-4 py-2">
+      <Card className="sticky top-0 z-10 rounded-none border-b-0 shadow-sm">
+        <CardHeader className="flex-row items-center justify-between gap-3 py-3">
           <div className="flex items-center gap-2">
             <Button
               variant="ghost"
@@ -37,161 +39,166 @@ export default function JobDetail({ job, pipeline, onClose, onResume }) {
               <ChevronLeft className="h-4 w-4" /> Back
             </Button>
             <div>
-              <h2 className="text-xl font-semibold">{job.name}</h2>
+              <CardTitle className="text-xl">{job.name}</CardTitle>
               <p className="text-xs text-slate-500">ID: {job.pipelineId}</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
             {statusBadge(job.status)}
           </div>
-        </div>
-      </div>
+        </CardHeader>
+      </Card>
 
       {job.status === "error" && (
-        <div className="mb-2 px-4">
-          <div className="flex items-center gap-2 text-sm">
-            <span className="font-semibold">Resume from:</span>
-            <Select value={resumeFrom} onValueChange={setResumeFrom}>
-              <SelectTrigger
-                className="w-[220px]"
-                aria-label="Resume from stage"
+        <Card className="mx-4 my-2">
+          <CardContent className="p-3">
+            <div className="flex items-center gap-3 text-sm">
+              <span className="font-semibold whitespace-nowrap">
+                Resume from:
+              </span>
+              <Select value={resumeFrom} onValueChange={setResumeFrom}>
+                <SelectTrigger
+                  className="w-[220px]"
+                  aria-label="Resume from stage"
+                >
+                  <SelectValue placeholder="Select task" />
+                </SelectTrigger>
+                <SelectContent>
+                  {pipeline.tasks.map((t) => (
+                    <SelectItem key={t.id} value={t.id}>
+                      {t.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button
+                onClick={() => onResume(resumeFrom)}
+                aria-label={`Resume from ${resumeFrom}`}
               >
-                <SelectValue placeholder="Select task" />
-              </SelectTrigger>
-              <SelectContent>
-                {pipeline.tasks.map((t) => (
-                  <SelectItem key={t.id} value={t.id}>
-                    {t.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Button
-              onClick={() => onResume(resumeFrom)}
-              aria-label={`Resume from ${resumeFrom}`}
-            >
-              Resume from {resumeFrom}
-            </Button>
-          </div>
-        </div>
+                Resume from {resumeFrom}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
       )}
 
-      <div className="flex min-h-0 flex-1">
+      <div className="flex min-h-0 flex-1 gap-4 p-4">
         <section
-          className="w-[44%] min-w-[300px] overflow-y-auto px-4"
+          className="flex-1 min-w-[320px] overflow-y-auto"
           aria-label="Task timeline"
         >
-          <h3 className="mb-2 text-sm font-semibold tracking-tight">
-            Timeline
-          </h3>
-          <ol className="relative ml-2 border-l border-slate-300/20">
-            {pipeline.tasks.map((t) => {
-              const st = job.tasks[t.id];
-              const state = st?.state ?? "pending";
-              const execMs =
-                st?.executionTime ?? elapsedBetween(st?.startedAt, st?.endedAt);
-              const attempts = st?.attempts ?? 0;
-              const refine = st?.refinementAttempts ?? 0;
+          <Card className="h-full">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm">Timeline</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {pipeline.tasks.map((t) => {
+                const st = job.tasks[t.id];
+                const state = st?.state ?? "pending";
+                const execMs =
+                  st?.executionTime ??
+                  elapsedBetween(st?.startedAt, st?.endedAt);
+                const attempts = st?.attempts ?? 0;
+                const refine = st?.refinementAttempts ?? 0;
 
-              const barColorClass = barColorForState(state);
-
-              const allExec = pipeline.tasks
-                .map((pt) => job.tasks[pt.id])
-                .map(
-                  (jt) =>
-                    jt?.executionTime ??
-                    elapsedBetween(jt?.startedAt, jt?.endedAt) ??
-                    0
+                const allExec = pipeline.tasks
+                  .map((pt) => job.tasks[pt.id])
+                  .map(
+                    (jt) =>
+                      jt?.executionTime ??
+                      elapsedBetween(jt?.startedAt, jt?.endedAt) ??
+                      0
+                  );
+                const maxExec = Math.max(1, ...allExec);
+                const pct = Math.min(
+                  100,
+                  Math.round(((execMs ?? 0) / maxExec) * 100)
                 );
-              const maxExec = Math.max(1, ...allExec);
-              const pct = Math.min(
-                100,
-                Math.round(((execMs ?? 0) / maxExec) * 100)
-              );
 
-              return (
-                <li key={t.id} className="relative pl-4 pb-4">
-                  <span className="absolute -left-[7px] mt-1 h-3 w-3 rounded-full border border-slate-500/40 bg-white" />
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="text-sm font-semibold">{t.name}</div>
-                    <div className="text-xs text-slate-500 flex items-center gap-2">
-                      {state === "running" && <span>running</span>}
-                      {state === "error" && <span>error</span>}
-                      {execMs ? <span>{fmtDuration(execMs)}</span> : <span />}
+                return (
+                  <Card key={t.id} className="p-4">
+                    <div className="flex items-start justify-between gap-2 mb-2">
+                      <div className="text-sm font-semibold">{t.name}</div>
+                      <div className="text-xs text-slate-500 flex items-center gap-2">
+                        {state === "running" && <span>running</span>}
+                        {state === "error" && <span>error</span>}
+                        {execMs ? <span>{fmtDuration(execMs)}</span> : <span />}
+                      </div>
                     </div>
-                  </div>
-                  <div className="mt-1 text-xs text-slate-500">
-                    attempts {attempts} · refinements {refine}
-                  </div>
-                  <div className="mt-2 h-[4px] w-full rounded-full bg-slate-200">
-                    <div
-                      className={`h-[4px] rounded-full ${barColorClass}`}
-                      style={{ width: `${pct}%` }}
-                    />
-                  </div>
-                  <div className="mt-2 text-xs text-slate-500">
-                    {t.config.model} · temp {t.config.temperature}
-                    {t.config.maxTokens != null
-                      ? ` · maxTokens ${t.config.maxTokens}`
-                      : ""}
-                  </div>
+                    <div className="text-xs text-slate-500 mb-2">
+                      attempts {attempts} · refinements {refine}
+                    </div>
+                    <Progress value={pct} variant={state} className="mb-2" />
+                    <div className="text-xs text-slate-500">
+                      {t.config.model} · temp {t.config.temperature}
+                      {t.config.maxTokens != null
+                        ? ` · maxTokens ${t.config.maxTokens}`
+                        : ""}
+                    </div>
 
-                  {st?.artifacts && st.artifacts.length > 0 && (
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {st.artifacts.map((a) => (
-                        <Button
-                          key={a.filename}
-                          variant="link"
-                          size="sm"
-                          className="px-0 text-slate-900 hover:text-slate-700"
-                          onClick={() => setSelectedArtifact(a)}
-                          aria-label={`Open artifact ${a.filename}`}
-                        >
-                          {a.filename}
-                        </Button>
-                      ))}
-                    </div>
-                  )}
-                </li>
-              );
-            })}
-          </ol>
+                    {st?.artifacts && st.artifacts.length > 0 && (
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {st.artifacts.map((a) => (
+                          <Button
+                            key={a.filename}
+                            variant="link"
+                            size="sm"
+                            className="px-0 text-slate-900 hover:text-slate-700"
+                            onClick={() => setSelectedArtifact(a)}
+                            aria-label={`Open artifact ${a.filename}`}
+                          >
+                            {a.filename}
+                          </Button>
+                        ))}
+                      </div>
+                    )}
+                  </Card>
+                );
+              })}
+            </CardContent>
+          </Card>
         </section>
 
-        <Separator orientation="vertical" className="mx-1" />
+        <Separator orientation="vertical" />
 
-        <section className="flex-1 overflow-y-auto px-4" aria-label="Outputs">
-          <h3 className="mb-2 text-sm font-semibold tracking-tight">Outputs</h3>
-          {!selectedArtifact ? (
-            <div className="rounded border border-dashed p-6 text-sm text-slate-500">
-              Select an artifact to preview its JSON here.
-            </div>
-          ) : (
-            <div className="rounded border">
-              <div className="flex items-center justify-between gap-2 border-b p-2">
-                <div className="text-sm font-semibold">
-                  {selectedArtifact.filename}
+        <section className="flex-1 overflow-y-auto" aria-label="Outputs">
+          <Card className="h-full">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm">Outputs</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {!selectedArtifact ? (
+                <div className="flex h-32 items-center justify-center rounded border border-dashed p-6 text-sm text-slate-500">
+                  Select an artifact to preview its JSON here.
                 </div>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setSelectedArtifact(null)}
-                  aria-label="Close artifact"
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              </div>
-              <div className="max-h-[62vh] overflow-auto p-2">
-                <ReactJson
-                  src={selectedArtifact.content}
-                  collapsed={2}
-                  displayDataTypes={false}
-                  enableClipboard={false}
-                  name={false}
-                />
-              </div>
-            </div>
-          )}
+              ) : (
+                <Card>
+                  <CardHeader className="flex-row items-center justify-between gap-2 py-3">
+                    <CardTitle className="text-sm">
+                      {selectedArtifact.filename}
+                    </CardTitle>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => setSelectedArtifact(null)}
+                      aria-label="Close artifact"
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </CardHeader>
+                  <CardContent className="max-h-[62vh] overflow-auto p-2">
+                    <ReactJson
+                      src={selectedArtifact.content}
+                      collapsed={2}
+                      displayDataTypes={false}
+                      enableClipboard={false}
+                      name={false}
+                    />
+                  </CardContent>
+                </Card>
+              )}
+            </CardContent>
+          </Card>
         </section>
       </div>
     </div>
