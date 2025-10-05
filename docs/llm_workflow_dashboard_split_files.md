@@ -41,9 +41,9 @@ src/
 
 ---
 
-## Integration (shadcn/ui + lucide-react)
+## Integration (Radix UI + lucide-react)
 
-The UI still uses your existing shadcn components via `@/components/ui/...` and icons from `lucide-react`. If your alias for `@` differs, update imports accordingly.
+The UI still uses your existing Radix UI components via `@/components/ui/...` and icons from `lucide-react`. If your alias for `@` differs, update imports accordingly.
 
 ---
 
@@ -1104,6 +1104,6 @@ This is unchanged from the original single-file implementation.
 
 ## Notes
 
-- Keep `@/components/ui/*` imports aligned with your shadcn setup.
+- Keep `@/components/ui/*` imports aligned with your Radix UI setup.
 - All pieces are plain JS; no TypeScript types remain.
 - You can further isolate visual styling rules in `utils/ui.js` for theming or brand-specific palettes.

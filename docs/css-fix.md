@@ -52,7 +52,7 @@ Edit **`src/ui/client/index.css`** so it drives Tailwind and then pulls in your 
 ```css
 /* src/ui/client/index.css */
 @import "tailwindcss";
-/* If you use shadcn/ui animations, keep this: */
+/* If you use Radix UI animations, keep this: */
 @plugin "tailwindcss-animate";
 
 /* Your custom styles last so they can override utilities as needed */
