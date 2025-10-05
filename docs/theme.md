@@ -227,7 +227,7 @@ className = "bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm";
 
 ## Migration Notes
 
-### From Default shadcn/ui Theme
+### From Default Radix UI Theme
 
 - **Backgrounds**: Warmer light mode, deeper dark mode
 - **Primary**: More sophisticated steel vs default blue

@@ -1,20 +1,20 @@
-# React + Tailwind CSS + ShadCN UI Implementation Plan
+# React + Tailwind CSS + Radix UI Implementation Plan
 
 ## Overview
 
-This document outlines the plan to enable the React dashboard (`src/pages/PromptPipelineDashboard.jsx`) to run from `src/ui/server.js` with Tailwind CSS styling and ShadCN UI components.
+This document outlines the plan to enable the React dashboard (`src/pages/PromptPipelineDashboard.jsx`) to run from `src/ui/server.js` with Tailwind CSS styling and Radix UI components.
 
 ## Current State Analysis
 
 The project has:
 
 - **React components** already created (`PromptPipelineDashboard.jsx`, `JobCard.jsx`, `JobDetail.jsx`, `JobList.jsx`)
-- **ShadCN imports** using `@/components/ui/*` path aliases (tabs, badge, button, card, progress)
+- **Radix UI imports** using `@/components/ui/*` path aliases (tabs, badge, button, card, progress)
 - **Utility functions** for time formatting and UI helpers
 - **Demo data** in `src/data/demoData.js`
 - **Node.js server** (`src/ui/server.js`) serving static files from `src/ui/public/`
 - **No React build tooling** - currently serving vanilla JS from public folder
-- **No Tailwind CSS** or ShadCN UI installed
+- **No Tailwind CSS** or Radix UI installed
 
 ## Implementation Plan
 
@@ -53,29 +53,30 @@ The project has:
 6. **Create Tailwind CSS file** with base, components, and utilities layers
    - Create `src/ui/client/index.css`
    - Add Tailwind directives
-   - Add custom CSS variables for ShadCN
+   - Add custom CSS variables for Radix UI
 
-### Phase 3: ShadCN UI Components ✅ COMPLETED
+### Phase 3: Radix UI Components ✅ COMPLETED
 
-7. **Install ShadCN dependencies** ✅
+7. **Install Radix UI dependencies** ✅
 
    ```bash
    npm install lucide-react class-variance-authority clsx tailwind-merge
    npm install react react-dom
    ```
 
-8. **Set up ShadCN configuration** ✅
-   - Create `components.json` for ShadCN CLI ✅
+8. **Set up Radix UI configuration** ✅
+   - Create `components.json` for component configuration ✅
    - Create `src/lib/utils.js` with `cn()` utility ✅
    - Configure component paths ✅
 
-9. **Install ShadCN components** needed by the dashboard: ✅
+9. **Install Radix UI components** needed by the dashboard: ✅
    ```bash
-   npx shadcn-ui@latest add tabs
-   npx shadcn-ui@latest add badge
-   npx shadcn-ui@latest add button
-   npx shadcn-ui@latest add card
-   npx shadcn-ui@latest add progress
+   # Components using Radix UI primitives
+   npm install @radix-ui/react-tabs
+   npm install @radix-ui/react-badge
+   npm install @radix-ui/react-button
+   npm install @radix-ui/react-card
+   npm install @radix-ui/react-progress
    ```
 
 **Additional components installed:**
@@ -119,7 +120,7 @@ The project has:
     - Verify dashboard loads at `http://localhost:4000` ✅
     - Confirm API endpoints respond correctly ✅
 
-15. **Verify Tailwind styles** and ShadCN components work properly ✅
+15. **Verify Tailwind styles** and Radix UI components work properly ✅
     - Check component styling ✅
     - Test responsive design ✅
     - Verify build process includes all styles ✅
@@ -161,7 +162,7 @@ src/ui/
 │   ├── main.jsx        # Entry point
 │   ├── App.jsx         # Root component (optional wrapper)
 │   └── index.css       # Tailwind imports
-├── components/         # ShadCN UI components
+├── components/         # Radix UI components
 │   └── ui/
 │       ├── tabs.jsx
 │       ├── badge.jsx
@@ -213,7 +214,7 @@ export default {
   content: ["./src/**/*.{js,jsx,ts,tsx}"],
   theme: {
     extend: {
-      // ShadCN theme extensions
+      // Radix UI theme extensions
     },
   },
   plugins: [require("tailwindcss-animate")],
@@ -224,7 +225,7 @@ export default {
 
 ```json
 {
-  "$schema": "https://ui.shadcn.com/schema.json",
+  "$schema": "./schema.json",
   "style": "default",
   "rsc": false,
   "tsx": false,
@@ -267,7 +268,7 @@ npm run ui:prod
 
 1. **Modern React Development**: Hot module replacement, fast refresh
 2. **Type-safe Styling**: Tailwind CSS with IntelliSense
-3. **Component Library**: Pre-built, accessible ShadCN components
+3. **Component Library**: Pre-built, accessible Radix UI components
 4. **Fast Builds**: Vite's lightning-fast build times
 5. **Maintainable**: Clear separation of concerns
 6. **Production Ready**: Optimized builds with code splitting
@@ -276,7 +277,7 @@ npm run ui:prod
 
 After implementation:
 
-1. Add more ShadCN components as needed
+1. Add more Radix UI components as needed
 2. Implement dark mode toggle
 3. Add loading states and error boundaries
 4. Connect to real API endpoints
