@@ -2,7 +2,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 
 // Radix UI primitives
-import { Tabs } from "radix-ui";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import * as Toast from "@radix-ui/react-toast";
 
@@ -12,13 +11,15 @@ import {
   Text,
   Heading,
   Badge as RadixBadge,
+  Tabs,
+  Button,
 } from "@radix-ui/themes";
 
-import { Button } from "../components/ui/button";
+//import { Button } from "../components/ui/button";
 import { Progress } from "../components/ui/progress";
 
 // Referenced components — leave these alone
-import JobList from "../components/JobList";
+import JobTable from "../components/JobTable";
 import JobDetail from "../components/JobDetail";
 import { demoPipeline, demoJobs } from "../data/demoData";
 
@@ -274,25 +275,15 @@ export default function PromptPipelineDashboard() {
                 }
               />
             ) : (
-              <Tabs.Root
-                value={activeTab}
-                onValueChange={setActiveTab}
-                color="mint"
-              >
-                <Tabs.List aria-label="Job filters" className="flex gap-6">
-                  <Tabs.Trigger value="current" className="flex items-center">
-                    Current
-                  </Tabs.Trigger>
-                  <Tabs.Trigger value="errors" className="flex items-center">
-                    Errors
-                  </Tabs.Trigger>
-                  <Tabs.Trigger value="completed" className="flex items-center">
-                    Completed
-                  </Tabs.Trigger>
+              <Tabs.Root value={activeTab} onValueChange={setActiveTab}>
+                <Tabs.List aria-label="Job filters">
+                  <Tabs.Trigger value="current">Current</Tabs.Trigger>
+                  <Tabs.Trigger value="errors">Errors</Tabs.Trigger>
+                  <Tabs.Trigger value="completed">Completed</Tabs.Trigger>
                 </Tabs.List>
 
                 <Tabs.Content value="current">
-                  <JobList
+                  <JobTable
                     jobs={filteredJobs}
                     pipeline={pipeline}
                     onOpenJob={openJob}
@@ -301,7 +292,7 @@ export default function PromptPipelineDashboard() {
                   />
                 </Tabs.Content>
                 <Tabs.Content value="errors">
-                  <JobList
+                  <JobTable
                     jobs={filteredJobs}
                     pipeline={pipeline}
                     onOpenJob={openJob}
@@ -310,7 +301,7 @@ export default function PromptPipelineDashboard() {
                   />
                 </Tabs.Content>
                 <Tabs.Content value="completed">
-                  <JobList
+                  <JobTable
                     jobs={filteredJobs}
                     pipeline={pipeline}
                     onOpenJob={openJob}
