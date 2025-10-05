@@ -11,6 +11,7 @@ import { fileURLToPath } from "url";
 import { start as startWatcher, stop as stopWatcher } from "./watcher.js";
 import * as state from "./state.js";
 import { submitJobWithValidation } from "../api/index.js";
+import { sseRegistry } from "./sse.js";
 
 // Get __dirname equivalent in ES modules
 const __filename = fileURLToPath(import.meta.url);
@@ -25,7 +26,6 @@ const HEARTBEAT_INTERVAL = 30000; // 30 seconds
 const DATA_DIR = process.env.PO_ROOT || process.cwd();
 
 // SSE clients management
-const sseClients = new Set();
 let heartbeatTimer = null;
 
 /**
@@ -39,18 +39,10 @@ function sendSSE(res, event, data) {
  * Broadcast state update to all SSE clients
  */
 function broadcastStateUpdate(currentState) {
-  const deadClients = new Set();
-
-  sseClients.forEach((client) => {
-    try {
-      sendSSE(client, "state", currentState);
-    } catch (err) {
-      deadClients.add(client);
-    }
+  sseRegistry.broadcast({
+    type: "state",
+    data: currentState,
   });
-
-  // Clean up dead connections
-  deadClients.forEach((client) => sseClients.delete(client));
 }
 
 /**
@@ -60,17 +52,10 @@ function startHeartbeat() {
   if (heartbeatTimer) clearInterval(heartbeatTimer);
 
   heartbeatTimer = setInterval(() => {
-    const deadClients = new Set();
-
-    sseClients.forEach((client) => {
-      try {
-        client.write(":heartbeat\n\n");
-      } catch (err) {
-        deadClients.add(client);
-      }
+    sseRegistry.broadcast({
+      type: "heartbeat",
+      data: { timestamp: Date.now() },
     });
-
-    deadClients.forEach((client) => sseClients.delete(client));
   }, HEARTBEAT_INTERVAL);
 }
 
@@ -196,6 +181,12 @@ async function handleSeedUpload(req, res) {
     if (result.success) {
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify(result));
+
+      // Broadcast SSE event for successful upload
+      sseRegistry.broadcast({
+        type: "seed:uploaded",
+        data: { jobName: result.jobName },
+      });
     } else {
       res.writeHead(400, { "Content-Type": "application/json" });
       res.end(JSON.stringify(result));
@@ -278,12 +269,12 @@ function createServer() {
       // Send initial state
       sendSSE(res, "state", state.getState());
 
-      // Add to clients
-      sseClients.add(res);
+      // Add to SSE registry
+      sseRegistry.addClient(res);
 
       // Remove client on disconnect
       req.on("close", () => {
-        sseClients.delete(res);
+        sseRegistry.removeClient(res);
       });
 
       return;
@@ -360,8 +351,7 @@ function start(customPort) {
     if (heartbeatTimer) clearInterval(heartbeatTimer);
     if (watcher) await stopWatcher(watcher);
 
-    sseClients.forEach((client) => client.end());
-    sseClients.clear();
+    sseRegistry.closeAll();
 
     server.close(() => {
       console.log("Server closed");
@@ -377,7 +367,7 @@ export {
   createServer,
   start,
   broadcastStateUpdate,
-  sseClients,
+  sseRegistry,
   initializeWatcher,
   state,
 };
