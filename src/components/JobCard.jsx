@@ -26,14 +26,12 @@ export default function JobCard({
       aria-label={`Open ${job.name}`}
       onClick={onClick}
       onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && onClick()}
-      className="group transition-colors cursor-pointer hover:bg-accent/40 hover:shadow-sm focus-visible:ring-2 rounded-xl border border-border"
+      className="group transition-colors cursor-pointer hover:bg-slate-100/40 hover:shadow-sm focus-visible:ring-2 rounded-xl border border-slate-200"
     >
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between gap-2">
           <div>
-            <div className="text-xs text-muted-foreground">
-              {job.pipelineId}
-            </div>
+            <div className="text-xs text-slate-500">{job.pipelineId}</div>
             <CardTitle className="text-lg font-semibold">{job.name}</CardTitle>
           </div>
           <div className="flex items-center gap-2">
@@ -53,12 +51,12 @@ export default function JobCard({
                 : (job.current ?? "—")}
           </div>
           {currentTask && (
-            <div className="flex items-center gap-1 text-muted-foreground">
+            <div className="flex items-center gap-1 text-slate-500">
               <Clock className="h-4 w-4" /> {fmtDuration(currentElapsed)}
             </div>
           )}
           {currentTask?.config && (
-            <div className="text-muted-foreground">
+            <div className="text-slate-500">
               {currentTask.config.model} · temp {currentTask.config.temperature}
             </div>
           )}
@@ -70,7 +68,7 @@ export default function JobCard({
             value={progressPct}
             aria-label={`Progress ${progressPct}%`}
           />
-          <div className="mt-2 flex flex-wrap items-center justify-between text-sm text-muted-foreground">
+          <div className="mt-2 flex flex-wrap items-center justify-between text-sm text-slate-500">
             <div>
               {totalCompleted} of {pipeline.tasks.length} tasks complete
             </div>

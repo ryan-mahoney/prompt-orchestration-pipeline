@@ -1,8 +1,6 @@
 import React from "react";
-import { Badge } from "@/components/ui/badge";
+import { Badge } from "@/components/ui/badge.jsx";
 import { CheckCircle2, Loader2, AlertTriangle, Circle } from "lucide-react";
-import { clsx } from "clsx";
-import { twMerge } from "tailwind-merge";
 
 export const statusBadge = (status) => {
   switch (status) {
@@ -38,7 +36,7 @@ export const taskStatusIcon = (state) => {
     case "error":
       return <AlertTriangle className="h-4 w-4 text-destructive" aria-hidden />;
     default:
-      return <Circle className="h-4 w-4 text-muted-foreground" aria-hidden />;
+      return <Circle className="h-4 w-4 text-slate-500" aria-hidden />;
   }
 };
 
