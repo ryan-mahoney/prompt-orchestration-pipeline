@@ -13,6 +13,7 @@ import {
   Badge as RadixBadge,
   Tabs,
   Button,
+  Card,
 } from "@radix-ui/themes";
 
 //import { Button } from "../components/ui/button";
@@ -21,9 +22,10 @@ import { Progress } from "../components/ui/progress";
 // Referenced components — leave these alone
 import JobTable from "../components/JobTable";
 import JobDetail from "../components/JobDetail";
+import UploadSeed from "../components/UploadSeed";
 import { demoPipeline, demoJobs } from "../data/demoData";
 
-export default function PromptPipelineDashboard() {
+export default function PromptPipelineDashboard({ isConnected }) {
   const [pipeline, setPipeline] = useState(demoPipeline);
   const [jobs, setJobs] = useState(demoJobs);
   const [seedName, setSeedName] = useState("content-generation");
@@ -32,6 +34,8 @@ export default function PromptPipelineDashboard() {
   const [uploading, setUploading] = useState(false);
   const [uploadMsg, setUploadMsg] = useState(null);
   const [toastOpen, setToastOpen] = useState(false);
+  const [seedUploadSuccess, setSeedUploadSuccess] = useState(null);
+  const [seedUploadTimer, setSeedUploadTimer] = useState(null);
 
   const fileRef = useRef(null);
 
@@ -101,6 +105,37 @@ export default function PromptPipelineDashboard() {
 
   const openJob = (job) => setSelectedJob(job);
   const onUploadClick = () => fileRef.current?.click();
+
+  // Handle seed upload success
+  const handleSeedUploadSuccess = ({ jobName }) => {
+    // Clear any existing timer
+    if (seedUploadTimer) {
+      clearTimeout(seedUploadTimer);
+    }
+
+    // Set success message
+    setSeedUploadSuccess(jobName);
+
+    // Auto-clear after exactly 5000 ms
+    const timer = setTimeout(() => {
+      setSeedUploadSuccess(null);
+      setSeedUploadTimer(null);
+    }, 5000);
+
+    setSeedUploadTimer(timer);
+  };
+
+  // Cleanup timer on unmount
+  useEffect(() => {
+    return () => {
+      if (seedUploadTimer) {
+        clearTimeout(seedUploadTimer);
+      }
+    };
+  }, [seedUploadTimer]);
+
+  // Determine connection state - prop overrides any hook value
+  const connectionState = isConnected !== undefined ? isConnected : true;
 
   const handleFiles = async (files) => {
     if (!files || files.length === 0) return;
@@ -260,6 +295,30 @@ export default function PromptPipelineDashboard() {
 
           {/* Main Content */}
           <Box className="mx-auto max-w-6xl px-6 py-6">
+            {/* Upload Seed File Section */}
+            <Card className="mb-6">
+              <Flex direction="column" gap="3">
+                <Heading size="4" weight="medium" className="text-gray-12">
+                  Upload Seed File
+                </Heading>
+
+                {/* Success Message */}
+                {seedUploadSuccess && (
+                  <Box className="rounded-md bg-green-50 p-3 border border-green-200">
+                    <Text size="2" className="text-green-800">
+                      Job <strong>{seedUploadSuccess}</strong> created
+                      successfully
+                    </Text>
+                  </Box>
+                )}
+
+                <UploadSeed
+                  disabled={!connectionState}
+                  onUploadSuccess={handleSeedUploadSuccess}
+                />
+              </Flex>
+            </Card>
+
             {selectedJob ? (
               <JobDetail
                 job={selectedJob}
