@@ -156,6 +156,13 @@ function createServer() {
       // Serve assets from dist/assets
       const assetPath = pathname.substring(1); // Remove leading slash
       serveStatic(res, path.join(__dirname, "dist", assetPath));
+    } else if (pathname.startsWith("/public/")) {
+      // Serve static files from public directory
+      const publicPath = pathname.substring(1); // Remove leading slash
+      serveStatic(
+        res,
+        path.join(__dirname, "public", publicPath.replace("public/", ""))
+      );
     } else {
       // For any other route, serve the React app's index.html
       // This allows client-side routing to work

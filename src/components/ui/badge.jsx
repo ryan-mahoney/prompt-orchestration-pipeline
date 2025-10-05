@@ -1,31 +1,20 @@
 import React from "react";
-import { cva } from "class-variance-authority";
-import { cn } from "../../utils/ui";
-
-const badgeVariants = cva(
-  "inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2",
-  {
-    variants: {
-      variant: {
-        default:
-          "border-transparent bg-primary text-primary-foreground hover:bg-primary/80",
-        secondary:
-          "border-transparent bg-secondary text-secondary-foreground hover:bg-secondary/80",
-        destructive:
-          "border-transparent bg-destructive text-destructive-foreground hover:bg-destructive/80",
-        outline: "text-foreground",
-      },
-    },
-    defaultVariants: {
-      variant: "default",
-    },
-  }
-);
-
-function Badge({ className, variant, ...props }) {
+export function Badge({ children, intent = "gray", className = "", ...props }) {
+  const intents = {
+    gray: "border-slate-300 text-slate-700 bg-slate-100",
+    blue: "border-blue-300 text-blue-800 bg-blue-100",
+    green: "border-green-300 text-green-800 bg-green-100",
+    red: "border-red-300 text-red-800 bg-red-100",
+    amber: "border-amber-300 text-amber-900 bg-amber-100",
+  };
+  const cls = [
+    "inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium",
+    intents[intent] || intents.gray,
+    className,
+  ].join(" ");
   return (
-    <div className={cn(badgeVariants({ variant }), className)} {...props} />
+    <span className={cls} {...props}>
+      {children}
+    </span>
   );
 }
-
-export { Badge, badgeVariants };

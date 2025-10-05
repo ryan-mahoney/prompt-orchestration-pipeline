@@ -6,9 +6,17 @@ import { fmtDuration, elapsedBetween } from "../utils/time";
 import { countCompleted } from "../utils/jobs";
 import { progressClasses, statusBadge } from "../utils/ui";
 
-export default function JobCard({ job, pipeline, onClick, progressPct, overallElapsedMs }) {
+export default function JobCard({
+  job,
+  pipeline,
+  onClick,
+  progressPct,
+  overallElapsedMs,
+}) {
   const currentTask = job.current ? job.tasks[job.current] : undefined;
-  const currentElapsed = currentTask ? elapsedBetween(currentTask.startedAt, currentTask.endedAt) : 0;
+  const currentElapsed = currentTask
+    ? elapsedBetween(currentTask.startedAt, currentTask.endedAt)
+    : 0;
   const totalCompleted = countCompleted(job);
 
   return (
@@ -18,12 +26,12 @@ export default function JobCard({ job, pipeline, onClick, progressPct, overallEl
       aria-label={`Open ${job.name}`}
       onClick={onClick}
       onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && onClick()}
-      className="group transition-colors cursor-pointer hover:bg-accent/40 hover:shadow-sm focus-visible:ring-2 rounded-xl border border-gray-200"
+      className="group transition-colors cursor-pointer hover:bg-slate-100/40 hover:shadow-sm focus-visible:ring-2 rounded-xl border border-slate-200"
     >
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between gap-2">
           <div>
-            <div className="text-xs text-muted-foreground">{job.pipelineId}</div>
+            <div className="text-xs text-slate-500">{job.pipelineId}</div>
             <CardTitle className="text-lg font-semibold">{job.name}</CardTitle>
           </div>
           <div className="flex items-center gap-2">
@@ -35,23 +43,32 @@ export default function JobCard({ job, pipeline, onClick, progressPct, overallEl
       <CardContent className="pt-0">
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
           <div className="font-semibold">
-            Current: {currentTask ? currentTask.name : job.status === "completed" ? "—" : job.current ?? "—"}
+            Current:{" "}
+            {currentTask
+              ? currentTask.name
+              : job.status === "completed"
+                ? "—"
+                : (job.current ?? "—")}
           </div>
           {currentTask && (
-            <div className="flex items-center gap-1 text-muted-foreground">
+            <div className="flex items-center gap-1 text-slate-500">
               <Clock className="h-4 w-4" /> {fmtDuration(currentElapsed)}
             </div>
           )}
           {currentTask?.config && (
-            <div className="text-muted-foreground">
+            <div className="text-slate-500">
               {currentTask.config.model} · temp {currentTask.config.temperature}
             </div>
           )}
         </div>
 
         <div className="mt-3">
-          <Progress className={`h-2 ${progressClasses(job.status)}`} value={progressPct} aria-label={`Progress ${progressPct}%`} />
-          <div className="mt-2 flex flex-wrap items-center justify-between text-sm text-muted-foreground">
+          <Progress
+            className={`h-2 ${progressClasses(job.status)}`}
+            value={progressPct}
+            aria-label={`Progress ${progressPct}%`}
+          />
+          <div className="mt-2 flex flex-wrap items-center justify-between text-sm text-slate-500">
             <div>
               {totalCompleted} of {pipeline.tasks.length} tasks complete
             </div>

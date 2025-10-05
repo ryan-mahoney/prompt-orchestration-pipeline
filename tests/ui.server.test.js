@@ -615,7 +615,8 @@ describe("Server", () => {
       });
 
       // Server falls through to static file serving for non-GET methods to /api/state
-      // Since dist/index.html doesn't exist in test environment, returns 404
+      // In test environment, dist directory doesn't exist, so returns 404
+      // This is acceptable behavior - the server correctly ignores non-GET methods for API endpoints
       expect(response.status).toBe(404);
     });
 
@@ -632,7 +633,8 @@ describe("Server", () => {
       });
 
       // Server falls through to static file serving for non-GET methods to /api/state
-      // Since dist/index.html doesn't exist in test environment, returns 404
+      // In test environment, dist directory doesn't exist, so returns 404
+      // This is acceptable behavior - the server correctly ignores non-GET methods for API endpoints
       expect(response.status).toBe(404);
     });
 
@@ -649,7 +651,8 @@ describe("Server", () => {
       });
 
       // Server falls through to static file serving for non-GET methods to /api/state
-      // Since dist/index.html doesn't exist in test environment, returns 404
+      // In test environment, dist directory doesn't exist, so returns 404
+      // This is acceptable behavior - the server correctly ignores non-GET methods for API endpoints
       expect(response.status).toBe(404);
     });
   });

@@ -11,6 +11,8 @@ export default defineConfig({
   build: {
     outDir: "../dist",
     emptyOutDir: true,
+    assetsDir: "assets",
+    cssCodeSplit: false, // Ensure CSS is bundled properly
   },
   resolve: {
     alias: {
@@ -18,19 +20,22 @@ export default defineConfig({
     },
   },
   esbuild: {
-    loader: "jsx",
-    include: /src\/.*\.jsx?$/,
-    exclude: [],
+    loader: "jsx", // Default loader for all files
+    include: /.*\.jsx?$/, // Apply to both .js and .jsx files
   },
   optimizeDeps: {
     esbuildOptions: {
-      loader: {
-        ".js": "jsx",
-      },
+      loader: { ".js": "jsx" },
     },
+  },
+  css: {
+    postcss: "./postcss.config.mjs", // Explicitly point to PostCSS config
   },
   server: {
     port: 5173,
+    fs: {
+      allow: ["../../"], // Allow access to project root
+    },
     proxy: {
       "/api": {
         target: "http://localhost:4000",
@@ -42,5 +47,8 @@ export default defineConfig({
         ws: true,
       },
     },
+  },
+  preview: {
+    port: 5173,
   },
 });

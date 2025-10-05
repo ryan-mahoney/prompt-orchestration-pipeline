@@ -25,28 +25,30 @@
     "ui:prod": "node src/ui/server.js"
   },
   "dependencies": {
+    "@radix-ui/react-progress": "^1.1.7",
+    "@radix-ui/react-tabs": "^1.1.13",
+    "@radix-ui/react-toast": "^1.2.15",
+    "@radix-ui/react-tooltip": "^1.2.8",
+    "@radix-ui/themes": "^3.2.1",
     "ajv": "^8.17.1",
     "chokidar": "^3.5.3",
-    "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
-    "dotenv": "^17.2.2",
+    "dotenv": "^17.2.3",
     "lucide-react": "^0.544.0",
     "openai": "^5.23.1",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react18-json-view": "^0.2.9",
-    "tailwind-merge": "^3.3.1"
+    "tslib": "^2.8.1"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.1.14",
-    "@vitejs/plugin-react": "^4.7.0",
+    "@vitejs/plugin-react": "^5.0.4",
     "@vitest/coverage-v8": "^3.2.4",
-    "autoprefixer": "^10.4.21",
-    "nodemon": "^3.0.2",
-    "postcss": "^8.5.6",
-    "prettier": "^3.0.0",
+    "nodemon": "^3.1.10",
+    "prettier": "^3.6.2",
     "tailwindcss": "^4.1.14",
-    "vite": "^6.3.6",
+    "vite": "^7.1.9",
     "vitest": "^3.2.4"
   },
   "engines": {
