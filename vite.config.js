@@ -24,7 +24,6 @@ export default defineConfig({
     include: /.*\.jsx?$/, // Apply to both .js and .jsx files
   },
   optimizeDeps: {
-    //include: ["problematic-package"],
     esbuildOptions: {
       loader: { ".js": "jsx" },
     },
@@ -52,6 +51,4 @@ export default defineConfig({
   preview: {
     port: 5173,
   },
-  // resolve: { preserveSymlinks: true, alias: { tslib: "tslib/tslib.es6.js" } },
-  // optimizeDeps: { include: ["tslib", "react-remove-scroll"] },
 });

@@ -615,10 +615,9 @@ describe("Server", () => {
       });
 
       // Server falls through to static file serving for non-GET methods to /api/state
-      // In test environment, mock provides index.html, so returns 200
+      // In test environment, dist directory doesn't exist, so returns 404
       // This is acceptable behavior - the server correctly ignores non-GET methods for API endpoints
-      expect(response.status).toBe(200);
-      expect(response.headers.get("content-type")).toBe("text/html");
+      expect(response.status).toBe(404);
     });
 
     it("should reject PUT requests", async () => {
@@ -634,10 +633,9 @@ describe("Server", () => {
       });
 
       // Server falls through to static file serving for non-GET methods to /api/state
-      // In test environment, mock provides index.html, so returns 200
+      // In test environment, dist directory doesn't exist, so returns 404
       // This is acceptable behavior - the server correctly ignores non-GET methods for API endpoints
-      expect(response.status).toBe(200);
-      expect(response.headers.get("content-type")).toBe("text/html");
+      expect(response.status).toBe(404);
     });
 
     it("should reject DELETE requests", async () => {
@@ -653,10 +651,9 @@ describe("Server", () => {
       });
 
       // Server falls through to static file serving for non-GET methods to /api/state
-      // In test environment, mock provides index.html, so returns 200
+      // In test environment, dist directory doesn't exist, so returns 404
       // This is acceptable behavior - the server correctly ignores non-GET methods for API endpoints
-      expect(response.status).toBe(200);
-      expect(response.headers.get("content-type")).toBe("text/html");
+      expect(response.status).toBe(404);
     });
   });
 
