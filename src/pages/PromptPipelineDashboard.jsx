@@ -274,7 +274,11 @@ export default function PromptPipelineDashboard() {
                 }
               />
             ) : (
-              <Tabs.Root color="mint">
+              <Tabs.Root
+                value={activeTab}
+                onValueChange={setActiveTab}
+                color="mint"
+              >
                 <Tabs.List aria-label="Job filters" className="flex gap-6">
                   <Tabs.Trigger value="current" className="flex items-center">
                     Current
