@@ -1,4 +1,19 @@
 /* src/ui/client/index.css */
+@import "@radix-ui/themes/styles.css" layer(radix);
 @import "tailwindcss";
 
-@import "@radix-ui/themes/styles.css";
+/* Reset and base styles */
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+
+  html {
+    font-family: system-ui, sans-serif;
+  }
+
+  body {
+    margin: 0;
+    line-height: inherit;
+  }
+}
