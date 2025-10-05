@@ -2,6 +2,9 @@ import { Orchestrator } from "../core/orchestrator.js";
 import path from "node:path";
 import fs from "node:fs/promises";
 import { validateSeedOrThrow } from "../core/validation.js";
+import { validateSeed } from "./validators/seed.js";
+import { atomicWrite, cleanupOnFailure } from "./files.js";
+import { getPendingSeedPath, resolvePipelinePaths } from "../config/paths.js";
 
 // Pure functional utilities
 const createPaths = (config) => {
@@ -107,6 +110,62 @@ export const submitJob = async (state, seed) => {
   const seedPath = path.join(state.paths.pending, `${name}-seed.json`);
   await fs.writeFile(seedPath, JSON.stringify(seed, null, 2));
   return { name, seedPath };
+};
+
+/**
+ * Submit a job with comprehensive validation and atomic writes
+ * @param {Object} options - Options object
+ * @param {string} options.dataDir - Base data directory
+ * @param {Object} options.seedObject - Seed object to submit
+ * @returns {Promise<Object>} Result object with success status
+ */
+export const submitJobWithValidation = async ({ dataDir, seedObject }) => {
+  let partialFilePath = null;
+
+  try {
+    // Validate the seed object
+    const validatedSeed = await validateSeed(
+      JSON.stringify(seedObject),
+      dataDir
+    );
+
+    // Get the pending file path
+    const pendingPath = getPendingSeedPath(dataDir, validatedSeed.name);
+    partialFilePath = pendingPath;
+
+    // Ensure the pending directory exists
+    const paths = resolvePipelinePaths(dataDir);
+    await fs.mkdir(paths.pending, { recursive: true });
+
+    // Write atomically to pending directory
+    await atomicWrite(pendingPath, JSON.stringify(validatedSeed, null, 2));
+
+    return {
+      success: true,
+      jobName: validatedSeed.name,
+      message: "Seed file uploaded successfully",
+    };
+  } catch (error) {
+    // Clean up any partial files on failure
+    if (partialFilePath) {
+      await cleanupOnFailure(partialFilePath);
+    }
+
+    // Map validation errors to appropriate error messages
+    let errorMessage = error.message;
+    if (error.message.includes("Invalid JSON")) {
+      errorMessage = "Invalid JSON";
+    } else if (error.message.includes("required")) {
+      errorMessage = "Required fields missing";
+    } else if (error.message.includes("already exists")) {
+      errorMessage = "Job with this name already exists";
+    }
+
+    return {
+      success: false,
+      message: errorMessage,
+    };
+  }
 };
 
 export const getStatus = async (state, jobName) => {
