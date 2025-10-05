@@ -1,21 +1,14 @@
 import React from "react";
-import { cn } from "../../utils/ui";
-
-const Progress = React.forwardRef(({ className, value, ...props }, ref) => (
-  <div
-    ref={ref}
-    className={cn(
-      "relative h-4 w-full overflow-hidden rounded-full bg-secondary",
-      className
-    )}
-    {...props}
-  >
+export function Progress({ value = 0, className = "" }) {
+  const pct = Math.max(0, Math.min(100, Number(value)));
+  return (
     <div
-      className="h-full w-full flex-1 bg-primary transition-all"
-      style={{ transform: `translateX(-${100 - (value || 0)}%)` }}
-    />
-  </div>
-));
-Progress.displayName = "Progress";
-
-export { Progress };
+      className={[
+        "h-2 w-full overflow-hidden rounded bg-slate-200",
+        className,
+      ].join(" ")}
+    >
+      <div className="h-full bg-blue-600" style={{ width: `${pct}%` }} />
+    </div>
+  );
+}
