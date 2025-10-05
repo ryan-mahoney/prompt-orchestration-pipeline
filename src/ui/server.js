@@ -362,10 +362,70 @@ function start(customPort) {
   return server;
 }
 
+/**
+ * Start server with configurable data directory and port
+ * @param {Object} options - Server options
+ * @param {string} options.dataDir - Base data directory for pipeline data
+ * @param {number} [options.port] - Optional port (defaults to PORT env var or 4000)
+ * @returns {Promise<{url: string, close: function}>} Server instance with URL and close method
+ */
+async function startServer({ dataDir, port: customPort }) {
+  // Set the data directory environment variable
+  if (dataDir) {
+    process.env.PO_ROOT = dataDir;
+  }
+
+  const port = customPort || PORT;
+  const server = createServer();
+
+  return new Promise((resolve, reject) => {
+    server.listen(port, (err) => {
+      if (err) {
+        reject(err);
+        return;
+      }
+
+      console.log(`Server running at http://localhost:${port}`);
+      console.log(`Watching paths: ${WATCHED_PATHS.join(", ")}`);
+      if (dataDir) {
+        console.log(`Data directory: ${dataDir}`);
+      }
+
+      initializeWatcher();
+      startHeartbeat();
+
+      const url = `http://localhost:${port}`;
+
+      // Create close function that returns a promise
+      const close = () => {
+        return new Promise((resolveClose) => {
+          if (heartbeatTimer) clearInterval(heartbeatTimer);
+          if (watcher) stopWatcher(watcher);
+          sseRegistry.closeAll();
+
+          server.close((err) => {
+            if (err) {
+              console.error("Error closing server:", err);
+            } else {
+              console.log("Server closed");
+            }
+            resolveClose();
+          });
+        });
+      };
+
+      resolve({ url, close });
+    });
+
+    server.on("error", reject);
+  });
+}
+
 // Export for testing
 export {
   createServer,
   start,
+  startServer,
   broadcastStateUpdate,
   sseRegistry,
   initializeWatcher,
