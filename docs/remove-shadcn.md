@@ -1,10 +1,10 @@
-Perfect—let’s strip shadcn and dark mode cleanly and land on plain React + Tailwind v4.
+Perfect—let’s strip Radix UI and dark mode cleanly and land on plain React + Tailwind v4.
 
 ---
 
 # Step-by-step (light-mode only)
 
-## 1) Remove shadcn deps (optional)
+## 1) Remove Radix UI deps (optional)
 
 If you installed any of these, remove them:
 
@@ -60,7 +60,7 @@ import "./index.css";
 import "./style.css"; // optional; delete if empty
 ```
 
-## 4) Replace shadcn UI components with plain ones
+## 4) Replace Radix UI components with plain ones
 
 Keep the same paths so imports don’t break; replace file contents with these minimal versions.
 
@@ -261,11 +261,11 @@ export function SelectValue({ placeholder }) {
 }
 ```
 
-## 5) Replace shadcn token classes in your code
+## 5) Replace Radix UI token classes in your code
 
 Use Tailwind’s built-ins. Quick swaps:
 
-| shadcn token class          | replace with                   |
+| Radix UI token class        | replace with                   |
 | --------------------------- | ------------------------------ |
 | `bg-primary`                | `bg-slate-900` (or your brand) |
 | `text-primary-foreground`   | `text-white`                   |
@@ -293,7 +293,7 @@ sed -i '' -E 's/\bring-ring\b/ring-slate-400/g; s/\bring-offset-background\b/rin
 
 ## 6) Clean out leftovers
 
-- Delete any shadcn token blocks or `@plugin "tailwindcss-animate"` from your CSS.
+- Delete any Radix UI token blocks or `@plugin "tailwindcss-animate"` from your CSS.
 - Remove unused helpers (`cva`, `cn`) if present.
 
 ## 7) Clean & run

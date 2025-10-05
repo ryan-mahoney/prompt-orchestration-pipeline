@@ -85,7 +85,7 @@ src/
 │   ├── JobCard.jsx         # Job display cards
 │   ├── JobDetail.jsx       # Detailed job view
 │   ├── JobTable.jsx        # Tabular job listing
-│   └── ui/                 # shadcn/ui component library
+│   └── ui/                 # Radix UI component library
 │       ├── badge.jsx
 │       ├── button.jsx
 │       ├── card.jsx
@@ -690,7 +690,7 @@ src/components/
 ├── JobCard.jsx          # Individual job display cards
 ├── JobDetail.jsx        # Detailed job view with task breakdown
 ├── JobTable.jsx         # Tabular job listing with filtering
-└── ui/                  # shadcn/ui component library
+└── ui/                  # Radix UI component library
     ├── badge.jsx        # Status badges
     ├── button.jsx       # Interactive buttons
     ├── card.jsx         # Card containers
@@ -721,7 +721,7 @@ src/ui/client/
 
 - **Component Hierarchy**: Dashboard → JobTable/JobCard → JobDetail
 - **State Management**: React hooks with server state via SSE
-- **Styling**: Tailwind CSS + shadcn/ui design system
+- **Styling**: Tailwind CSS + Radix UI design system
 - **Communication**: Server-Sent Events (SSE) for real-time updates
 - **Data Flow**: Unidirectional data flow with props
 
@@ -734,7 +734,7 @@ src/ui/client/
 - **React 18+** - Frontend framework for UI components
 - **Vite** - Modern build tool and development server
 - **Tailwind CSS** - Utility-first CSS framework
-- **shadcn/ui** - Component library built on Radix UI primitives
+- **Radix UI** - Component library with accessible primitives
 - **Chokidar** - File system watching for orchestrator
 - **Express** - HTTP server for UI and API endpoints
 
