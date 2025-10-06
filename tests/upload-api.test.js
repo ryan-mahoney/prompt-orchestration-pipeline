@@ -8,16 +8,8 @@ import path from "path";
 import { startTestServer, cleanupAllServers } from "./utils/serverHelper.js";
 import { createTempDir } from "./test-utils.js";
 
-// Fetch timeout wrapper to prevent hanging tests
-async function fetchWithTimeout(input, init = {}, ms = 10000) {
-  const controller = new AbortController();
-  const t = setTimeout(() => controller.abort(), ms);
-  try {
-    return await fetch(input, { ...init, signal: controller.signal });
-  } finally {
-    clearTimeout(t);
-  }
-}
+// Use native fetch - rely on test timeouts for hanging prevention
+const fetchWithTimeout = fetch;
 
 describe("Upload API (Step 2)", () => {
   let tempDir;

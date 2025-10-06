@@ -28,6 +28,10 @@ test("runs one task and writes artifacts", async () => {
     `export default { hello: "${path.join(ROOT, "pipeline-tasks", "noop.js")}" };`,
     "utf8"
   );
+  // Also create the task registry at the expected location
+  await fs.mkdir(path.join(ROOT, "pipeline-config", "tasks"), {
+    recursive: true,
+  });
   // Create the task module in pipeline-tasks where the task runner expects it
   await fs.mkdir(path.join(ROOT, "pipeline-tasks"), { recursive: true });
   await fs.writeFile(

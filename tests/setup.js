@@ -5,6 +5,55 @@ import {
   getActiveServerCount,
 } from "./utils/serverHelper.js";
 
+// Polyfill EventSource for test environment (jsdom doesn't have it)
+if (!global.EventSource) {
+  class EventSource {
+    constructor(url) {
+      this.url = url;
+      this.listeners = {};
+      this.readyState = 0; // CONNECTING
+
+      // Mock implementation for testing
+      setTimeout(() => {
+        this.readyState = 1; // OPEN
+        if (this.onopen) this.onopen();
+      }, 10);
+    }
+
+    addEventListener(event, callback) {
+      if (!this.listeners[event]) {
+        this.listeners[event] = [];
+      }
+      this.listeners[event].push(callback);
+    }
+
+    removeEventListener(event, callback) {
+      if (this.listeners[event]) {
+        this.listeners[event] = this.listeners[event].filter(
+          (cb) => cb !== callback
+        );
+      }
+    }
+
+    close() {
+      this.readyState = 2; // CLOSED
+      if (this.onclose) this.onclose();
+    }
+
+    // Mock method to simulate receiving events in tests
+    _mockReceiveEvent(event) {
+      if (this.listeners[event.type]) {
+        this.listeners[event.type].forEach((callback) => callback(event));
+      }
+      if (this.onmessage) {
+        this.onmessage(event);
+      }
+    }
+  }
+
+  global.EventSource = EventSource;
+}
+
 // Global test utilities and setup
 global.testUtils = {
   // Helper to create mock context for pipeline tests

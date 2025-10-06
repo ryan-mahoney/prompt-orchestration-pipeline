@@ -26,13 +26,16 @@ describe("E2E Upload Flow", () => {
     // Create temporary pipeline directory using Step 7 utility
     pipelineDataDir = await createTempPipelineDir();
 
-    // Start server using new server helper - pass the parent directory as base
+    // Start orchestrator FIRST to ensure it's ready
     const baseDir = path.dirname(pipelineDataDir);
+    orchestrator = await startOrchestrator({ dataDir: baseDir });
+
+    // Then start server
     server = await startTestServer({ dataDir: baseDir, port: 0 });
     baseUrl = server.url;
 
-    // Start orchestrator using Step 7 utility
-    orchestrator = await startOrchestrator({ dataDir: baseDir });
+    // Add small delay to ensure server is fully ready
+    await new Promise((resolve) => setTimeout(resolve, 100));
   });
 
   afterEach(async () => {
