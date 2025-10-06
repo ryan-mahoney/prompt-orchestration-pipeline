@@ -47,7 +47,7 @@
 - **Endpoint:** `GET /api/events`
 - **Event on success:** An event object with:
   - `type: "seed:uploaded"`
-  - `jobName: "<name>"`
+  - `data: { jobName: "<name>" }`
 
 - **Stream requirements:** Standard `text/event-stream`, keep-alive; events broadcast to all connected clients.
 
@@ -340,7 +340,7 @@
 - [ ] **Exact strings**: “Upload Seed File”, “created successfully”, “Invalid JSON”, “required”, “already exists”, `console.log("Seed uploaded:", jobName)`.
 - [ ] **Exact timeouts**: success message clears after **5000 ms** with fake timers supported.
 - [ ] **Exact endpoints**: `POST /api/upload/seed`, `GET /api/events`.
-- [ ] **Exact event shape**: `{ type: "seed:uploaded", jobName }`.
+- [ ] **Exact event shape**: `{ type: "seed:uploaded", data: { jobName } }`.
 - [ ] **Exact filenames/paths**: `pending/{name}-seed.json`, `current/{name}/seed.json`.
 - [ ] **Exports**:
   - `startServer({ dataDir, port? }) -> { url, close }`
