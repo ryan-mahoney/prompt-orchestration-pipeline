@@ -12,10 +12,14 @@ import { Constants } from "../config-bridge.js";
  * @returns {Array} Merged and sorted job list
  */
 export function aggregateAndSortJobs(currentJobs = [], completeJobs = []) {
+  // Ensure arrays
+  const current = Array.isArray(currentJobs) ? currentJobs : [];
+  const complete = Array.isArray(completeJobs) ? completeJobs : [];
+
   // Instrumentation: log aggregation start
   console.log(`[ListTransformer] Aggregating jobs:`, {
-    currentJobs: currentJobs.length,
-    completeJobs: completeJobs.length,
+    currentJobs: current.length,
+    completeJobs: complete.length,
   });
 
   try {
@@ -23,14 +27,14 @@ export function aggregateAndSortJobs(currentJobs = [], completeJobs = []) {
     const jobMap = new Map();
 
     // Add complete jobs first (lower precedence)
-    completeJobs.forEach((job) => {
+    complete.forEach((job) => {
       if (job && job.id) {
         jobMap.set(job.id, { ...job, _source: "complete" });
       }
     });
 
     // Add current jobs (higher precedence - overwrites complete)
-    currentJobs.forEach((job) => {
+    current.forEach((job) => {
       if (job && job.id) {
         jobMap.set(job.id, { ...job, _source: "current" });
       }
@@ -192,7 +196,7 @@ export function getJobListStats(jobs) {
     total: jobs.length,
     byStatus,
     byLocation,
-    averageProgress: validJobs > 0 ? Math.round(totalProgress / validJobs) : 0,
+    averageProgress: validJobs > 0 ? Math.floor(totalProgress / validJobs) : 0,
   };
 
   // Instrumentation: log summary statistics

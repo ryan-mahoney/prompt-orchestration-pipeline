@@ -160,7 +160,8 @@ describe("List Transformer", () => {
 
     it("should handle aggregation errors gracefully", () => {
       // Mock an error scenario
-      vi.spyOn(Map.prototype, "set").mockImplementation(() => {
+      const originalSet = Map.prototype.set;
+      Map.prototype.set = vi.fn(() => {
         throw new Error("Test error");
       });
 
@@ -168,6 +169,9 @@ describe("List Transformer", () => {
 
       expect(result).toEqual([]);
       expect(console.error).toHaveBeenCalled();
+
+      // Restore original implementation
+      Map.prototype.set = originalSet;
     });
   });
 

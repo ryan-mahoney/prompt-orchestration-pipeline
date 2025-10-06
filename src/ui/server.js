@@ -13,6 +13,7 @@ import * as state from "./state.js";
 let submitJobWithValidation;
 import { sseRegistry } from "./sse.js";
 import { getPendingSeedPath, resolvePipelinePaths } from "../config/paths.js";
+import { handleJobList, handleJobDetail } from "./endpoints/job-endpoints.js";
 
 // Get __dirname equivalent in ES modules
 const __filename = fileURLToPath(import.meta.url);
@@ -531,6 +532,59 @@ function createServer() {
 
       // Use the handleSeedUpload function which properly parses multipart data
       await handleSeedUpload(req, res);
+      return;
+    }
+
+    // Route: GET /api/jobs
+    if (pathname === "/api/jobs" && req.method === "GET") {
+      try {
+        const result = await handleJobList();
+
+        if (result.ok) {
+          sendJson(res, 200, result.data);
+        } else {
+          sendJson(res, 500, result);
+        }
+      } catch (error) {
+        console.error("Error handling /api/jobs:", error);
+        sendJson(res, 500, {
+          ok: false,
+          code: "internal_error",
+          message: "Internal server error",
+        });
+      }
+      return;
+    }
+
+    // Route: GET /api/jobs/:jobId
+    if (pathname.startsWith("/api/jobs/") && req.method === "GET") {
+      const jobId = pathname.substring("/api/jobs/".length);
+
+      try {
+        const result = await handleJobDetail(jobId);
+
+        if (result.ok) {
+          sendJson(res, 200, result.data);
+        } else {
+          switch (result.code) {
+            case "job_not_found":
+              sendJson(res, 404, result);
+              break;
+            case "bad_request":
+              sendJson(res, 400, result);
+              break;
+            default:
+              sendJson(res, 500, result);
+          }
+        }
+      } catch (error) {
+        console.error(`Error handling /api/jobs/${jobId}:`, error);
+        sendJson(res, 500, {
+          ok: false,
+          code: "internal_error",
+          message: "Internal server error",
+        });
+      }
       return;
     }
 
