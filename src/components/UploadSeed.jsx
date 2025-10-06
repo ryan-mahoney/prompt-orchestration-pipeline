@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 
 /**
  * UploadSeed component for uploading seed files
@@ -9,6 +9,20 @@ import React from "react";
  */
 export default function UploadSeed({ disabled = false, onUploadSuccess }) {
   const fileInputRef = React.useRef(null);
+  const [showSample, setShowSample] = useState(false);
+
+  // Sample seed file structure for reference
+  const sampleSeed = {
+    name: "some-name",
+    data: {
+      type: "some-type",
+      contentType: "blog-post",
+      targetAudience: "software-developers",
+      tone: "professional-yet-accessible",
+      length: "1500-2000 words",
+      outputFormat: "blog-post",
+    },
+  };
 
   const handleFileChange = async (event) => {
     const files = event.target.files;
@@ -138,6 +152,61 @@ export default function UploadSeed({ disabled = false, onUploadSuccess }) {
         disabled={disabled}
         data-testid="file-input"
       />
+
+      {/* Sample seed file section */}
+      <div className="border border-gray-200 rounded-lg overflow-hidden">
+        <button
+          type="button"
+          onClick={() => setShowSample(!showSample)}
+          className="w-full px-4 py-3 text-left bg-gray-50 hover:bg-gray-100 transition-colors flex items-center justify-between"
+          aria-expanded={showSample}
+          data-testid="sample-toggle"
+        >
+          <span className="text-sm font-medium text-gray-700">
+            Need help? View sample seed file structure
+          </span>
+          <svg
+            className={`w-4 h-4 text-gray-500 transition-transform ${
+              showSample ? "rotate-180" : ""
+            }`}
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M19 9l-7 7-7-7"
+            />
+          </svg>
+        </button>
+
+        {showSample && (
+          <div className="p-4 bg-white border-t border-gray-200">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-xs text-gray-600">
+                Use this structure as a reference for your seed file:
+              </p>
+              <button
+                type="button"
+                onClick={() =>
+                  navigator.clipboard.writeText(
+                    JSON.stringify(sampleSeed, null, 2)
+                  )
+                }
+                className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded hover:bg-blue-200 transition-colors"
+                data-testid="copy-sample"
+              >
+                Copy
+              </button>
+            </div>
+            <pre className="text-xs bg-gray-50 p-3 rounded overflow-auto max-h-60">
+              {JSON.stringify(sampleSeed, null, 2)}
+            </pre>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

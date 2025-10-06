@@ -80,20 +80,15 @@ export const createPipelineOrchestrator = async (options = {}) => {
 
   // Start UI if configured
   if (config.ui) {
-    const { createUIServer } = await import("../ui/server.js");
+    const { startServer } = await import("../ui/server.js");
 
-    // Create API object with state injection for UI server
-    const uiApi = {
-      submitJob: (seed) => submitJob(state, seed),
-      getStatus: (jobName) => getStatus(state, jobName),
-      listJobs: (status) => listJobs(state, status),
-    };
-
-    uiServer = createUIServer(uiApi);
-    uiServer.listen(config.uiPort, () => {
-      console.log(`Pipeline UI available at http://localhost:${config.uiPort}`);
+    uiServer = await startServer({
+      dataDir: config.rootDir,
+      port: config.uiPort,
     });
+
     state.uiServer = uiServer;
+    console.log(`Pipeline UI available at ${uiServer.url}`);
   }
 
   return state;
@@ -229,7 +224,7 @@ export const start = async (state) => {
 
 export const stop = async (state) => {
   if (state.uiServer) {
-    await new Promise((resolve) => state.uiServer.close(resolve));
+    await state.uiServer.close();
   }
   await state.orchestrator.stop();
   return state;

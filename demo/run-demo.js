@@ -2,6 +2,7 @@
 
 import { createPipelineOrchestrator, submitJob } from "../src/api/index.js";
 import { readFile } from "node:fs/promises";
+import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -12,14 +13,35 @@ async function runDemo(scenarioName) {
   console.log(`\n🚀 Starting Demo: ${scenarioName}\n`);
 
   try {
+    // Check if UI build files are available
+    const uiBuildPath = path.join(
+      __dirname,
+      "..",
+      "src",
+      "ui",
+      "dist",
+      "index.html"
+    );
+
+    let uiEnabled = true;
+    try {
+      await fs.access(uiBuildPath);
+    } catch (error) {
+      console.log("⚠️  UI build files are missing.");
+      console.log("💡 Run 'npm run ui:build' from the project root first.");
+      console.log("💡 Or use development mode: 'npm run ui:dev'");
+      console.log("\nContinuing without UI...");
+      uiEnabled = false;
+    }
+
     // Initialize orchestrator
     const state = await createPipelineOrchestrator({
       rootDir: __dirname,
       configDir: "pipeline-config",
       dataDir: "pipeline-data",
       autoStart: true,
-      ui: process.env.ENABLE_UI === "true",
-      uiPort: 3000,
+      ui: uiEnabled,
+      uiPort: 4123,
     });
 
     console.log("✅ Orchestrator initialized");
@@ -35,13 +57,11 @@ async function runDemo(scenarioName) {
     const { name } = await submitJob(state, seed);
     console.log(`\n✅ Job submitted: ${name}`);
 
-    if (process.env.ENABLE_UI === "true") {
-      console.log(`\n🌐 Monitor at: http://localhost:3000`);
+    if (uiEnabled) {
+      console.log(`\n🌐 Monitor at: http://localhost:4123`);
       console.log("\nPress Ctrl+C to stop the orchestrator");
     } else {
-      console.log(
-        "\n💡 Tip: Set ENABLE_UI=true to monitor progress in browser"
-      );
+      console.log("\n💡 Tip: Run 'npm run ui:build' to enable UI monitoring");
       console.log("\nOrchestrator will process the job in the background.");
       console.log("Check demo/pipeline-data/complete/ for results.");
     }
@@ -91,7 +111,6 @@ Examples:
   node run-demo.js list
 
 Environment Variables:
-  ENABLE_UI=true    Enable web UI for monitoring
   OPENAI_API_KEY    Your OpenAI API key (required)
       `);
   }

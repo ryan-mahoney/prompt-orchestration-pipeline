@@ -8,7 +8,7 @@ vi.mock("../src/core/orchestrator.js", () => ({
 
 // Mock the UI server module at the top level
 vi.mock("../src/ui/server.js", () => ({
-  createUIServer: vi.fn(),
+  startServer: vi.fn(),
 }));
 
 describe("API Module", () => {
@@ -27,18 +27,16 @@ describe("API Module", () => {
     };
 
     mockUIServer = {
-      listen: vi.fn((port, callback) => {
-        callback?.();
-        return { close: vi.fn() };
-      }),
+      url: "http://localhost:3000",
+      close: vi.fn().mockResolvedValue(),
     };
 
     // Setup mock implementations
     const { startOrchestrator } = await import("../src/core/orchestrator.js");
-    const { createUIServer } = await import("../src/ui/server.js");
+    const { startServer } = await import("../src/ui/server.js");
 
     startOrchestrator.mockResolvedValue(mockOrchestrator);
-    createUIServer.mockImplementation(() => mockUIServer);
+    startServer.mockResolvedValue(mockUIServer);
 
     // Import the API module after mocks are set up
     apiModule = await import("../src/api/index.js");
@@ -100,13 +98,13 @@ describe("API Module", () => {
       );
 
       // Act
-      await apiModule.createPipelineOrchestrator({ ui: true, uiPort: 8080 });
+      const state = await apiModule.createPipelineOrchestrator({
+        ui: true,
+        uiPort: 8080,
+      });
 
       // Assert
-      expect(mockUIServer.listen).toHaveBeenCalledWith(
-        8080,
-        expect.any(Function)
-      );
+      expect(state.uiServer).toBe(mockUIServer);
     });
 
     it("should not start UI server when disabled", async () => {
@@ -117,10 +115,10 @@ describe("API Module", () => {
       );
 
       // Act
-      await apiModule.createPipelineOrchestrator({ ui: false });
+      const state = await apiModule.createPipelineOrchestrator({ ui: false });
 
       // Assert
-      expect(mockUIServer.listen).not.toHaveBeenCalled();
+      expect(state.uiServer).toBeNull();
     });
   });
 
@@ -379,7 +377,7 @@ describe("API Module", () => {
     it("should stop orchestrator and UI server", async () => {
       // Arrange
       const mockStop = vi.fn().mockResolvedValue();
-      const mockClose = vi.fn((cb) => cb());
+      const mockClose = vi.fn().mockResolvedValue();
       const mockServer = { close: mockClose };
       const state = {
         orchestrator: { stop: mockStop },
