@@ -43,16 +43,31 @@ node run-demo.js run data-processing
 node run-demo.js list
 ```
 
-### 4. Enable UI Monitoring (Optional)
+### 4. UI Monitoring
+
+**Important:** The UI requires the React app to be built first. The demo will automatically detect if build files are available and enable the UI accordingly.
 
 ```bash
-# Set environment variable
-export ENABLE_UI=true
+# Build the UI (from project root)
+npm run ui:build
 
-# Run demo
+# Run demo - UI will be automatically enabled
 node run-demo.js run market-analysis
 
-# Open browser to http://localhost:3000
+# Open browser to http://localhost:4123
+```
+
+**Alternative Development Mode:** For development with hot-reload, use:
+
+```bash
+# Terminal 1: Start the UI dev server
+npm run ui:dev
+
+# Terminal 2: Run demo - UI will be automatically enabled
+cd demo
+node run-demo.js run market-analysis
+
+# Open browser to http://localhost:5173
 ```
 
 ## Available Scenarios
