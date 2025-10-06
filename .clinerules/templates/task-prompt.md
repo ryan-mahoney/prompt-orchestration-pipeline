@@ -11,7 +11,7 @@ Follow the repository’s Cline rules from `.clinerules/`:
 TASK INPUTS
 
 - Task Description File: {{TASK_FILE_PATH}}
-- Step to execute: {{STEP_ID_OR_NAME}}
+- Step or Phase to execute: {{STEP_ID_OR_NAME}}
 
 REQUIREMENTS
 
