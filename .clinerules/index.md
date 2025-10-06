@@ -1,19 +1,33 @@
 # Cline Rules (Index)
 
-Use these rules to generate **Conventional Commits** and high-signal PRs.
+Use these rules to generate **Conventional Commits** and high-signal PRs, and to run a consistent, test-first workflow.
 
-- See `commit-rules.md` for commit message rules and examples
-- See `pr-rules.md` + `templates/pr-template.md` for PR guidance
-- Follow `workflows/commit.md` and `workflows/open-pr.md` step-by-step
-- Use `scopes.md` to pick precise scopes
-- Use `validation.md` to run commitlint and fix failures
-- Use `commands.md` for optional test/lint helpers
+## Quick links
 
-**Principles**
+- **Workflow:** [`workflows/plan-do-check-commit.md`](./workflows/plan-do-check-commit.md)
+- **Testing (principles):** [`testing-principles.md`](./testing-principles.md)
+- **Testing (guardrails):** [`testing-guardrails.md`](./testing-guardrails.md)
+- **Vitest examples:** [`vitest-examples.md`](./vitest-examples.md)
+- **Commit/PR examples:** [`examples.md`](./examples.md)
+- **Scopes for commits:** [`scopes.md`](./scopes.md)
+- **Commit validation:** [`validation.md`](./validation.md)
+- **Helper commands:** [`commands.md`](./commands.md)
+- **FAQ:** [`faq.md`](./faq.md)
+- **Task prompt template (for Cline):** [`templates/task-prompt.md`](./templates/task-prompt.md)
 
-- Small, focused commits; one logical change per commit
+## How to use this
+
+1. Start every task with the **Plan → Do → Check → Commit** loop.
+2. Write/adjust tests first (see **Testing** docs), then the smallest code to pass, then refactor.
+3. Use **Conventional Commits** with an appropriate **scope** from `scopes.md`.
+4. Validate commits per `validation.md`. Use `commands.md` for local helpers.
+5. For PR language and structure, borrow from `examples.md` and the FAQ.
+
+## Principles
+
+- Small, focused commits; **one logical change per commit**
 - Titles: ≤ 50 chars, imperative, no trailing period
-- Bodies: wrap ~72 chars; explain **why**, notable **what/how**, risks
+- Bodies: wrap ~72 chars; explain **why**, notable **what/how**, and **risks**
 - Footers: `Closes #123`, `BREAKING CHANGE: ...` when needed
 
 ## Granularity
