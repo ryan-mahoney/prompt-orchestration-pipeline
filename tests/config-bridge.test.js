@@ -60,7 +60,8 @@ describe("config-bridge", () => {
 
     it("should have correct retry configuration", () => {
       expect(Constants.RETRY_CONFIG.MAX_ATTEMPTS).toBe(3);
-      expect(Constants.RETRY_CONFIG.DELAY_MS).toBe(50);
+      // In test mode, delay should be shorter (10ms) for faster tests
+      expect(Constants.RETRY_CONFIG.DELAY_MS).toBe(10);
     });
 
     it("should have correct SSE configuration", () => {

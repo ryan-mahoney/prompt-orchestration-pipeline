@@ -54,7 +54,7 @@ export const Constants = {
    */
   RETRY_CONFIG: {
     MAX_ATTEMPTS: 3,
-    DELAY_MS: 50,
+    DELAY_MS: process.env.NODE_ENV === "test" ? 10 : 1000,
   },
 
   /**
