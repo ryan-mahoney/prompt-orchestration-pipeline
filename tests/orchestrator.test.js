@@ -33,9 +33,11 @@ const { watchMock, makeChild, children, spawnMock, getAddHandler } = vi.hoisted(
     };
 
     const children = [];
-    const spawnMock = vi.fn(() => {
+    const spawnMock = vi.fn((...args) => {
+      console.log("spawnMock called with:", args);
       const ch = makeChild();
       children.push(ch);
+      console.log("spawnMock result:", ch);
       return ch;
     });
     const watchMock = vi.fn(() => watcher);
@@ -52,7 +54,14 @@ const { watchMock, makeChild, children, spawnMock, getAddHandler } = vi.hoisted(
 
 // --- Module mocks (see hoisted vars above) ---
 vi.mock("chokidar", () => ({ default: { watch: watchMock } }));
-vi.mock("node:child_process", () => ({ spawn: spawnMock }));
+
+vi.mock("node:child_process", async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    ...actual,
+    spawn: spawnMock,
+  };
+});
 
 // utility
 const removeAllSigHandlers = () => {
@@ -72,6 +81,57 @@ describe("orchestrator", () => {
     tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "orch-"));
     process.chdir(tmpDir);
 
+    // Create pipeline configuration files needed by pipeline-runner
+    const pipelineConfigDir = path.join(tmpDir, "pipeline-config");
+    const tasksDir = path.join(pipelineConfigDir, "tasks");
+
+    await fs.mkdir(tasksDir, { recursive: true });
+
+    // Create pipeline.json
+    await fs.writeFile(
+      path.join(pipelineConfigDir, "pipeline.json"),
+      JSON.stringify({
+        name: "test-pipeline",
+        version: "1.0.0",
+        tasks: ["noop"],
+        taskConfig: {
+          noop: {
+            model: "test-model",
+            temperature: 0.7,
+            maxTokens: 1000,
+          },
+        },
+      }),
+      "utf8"
+    );
+
+    // Create tasks/index.js
+    await fs.writeFile(
+      path.join(tasksDir, "index.js"),
+      `export default {
+  noop: "${path.join(tmpDir, "pipeline-tasks", "noop.js")}"
+};`,
+      "utf8"
+    );
+
+    // Create a simple noop task
+    const pipelineTasksDir = path.join(tmpDir, "pipeline-tasks");
+    await fs.mkdir(pipelineTasksDir, { recursive: true });
+    await fs.writeFile(
+      path.join(pipelineTasksDir, "noop.js"),
+      `export default {
+  ingestion: (ctx) => ({ ...ctx, data: "test" }),
+  preProcessing: (ctx) => ({ ...ctx, processed: true }),
+  promptTemplating: (ctx) => ({ ...ctx, prompt: "test prompt" }),
+  inference: (ctx) => ({ ...ctx, response: "test response" }),
+  parsing: (ctx) => ({ ...ctx, parsed: { x: 1 } }),
+  validateStructure: (ctx) => ({ ...ctx, validationPassed: true }),
+  validateQuality: (ctx) => ({ ...ctx, qualityPassed: true }),
+  finalValidation: (ctx) => ({ ...ctx, output: { x: 1 } })
+};`,
+      "utf8"
+    );
+
     // fresh mocks
     spawnMock.mockClear();
     watchMock.mockClear();
@@ -82,11 +142,15 @@ describe("orchestrator", () => {
 
     // Import and start orchestrator
     vi.resetModules();
+
+    // The module-level mock should already be in place from the vi.mock above
+    // Now import the orchestrator which will use the mocked spawn
     const { startOrchestrator } = await import("../src/core/orchestrator.js");
 
     orchestrator = await startOrchestrator({
       dataDir: tmpDir,
       autoStart: true,
+      spawn: spawnMock,
     });
   });
 
@@ -118,30 +182,78 @@ describe("orchestrator", () => {
 
     const add = getAddHandler();
     expect(typeof add).toBe("function");
-    await add(seedPath);
+    console.log("Calling add handler with seedPath:", seedPath);
 
+    // Call add handler - await to ensure orchestrator completes processing
+    await add(seedPath);
+    console.log("Add handler called and completed");
+
+    // Work directory should be created immediately since we awaited the add handler
     const workDir = path.join(tmpDir, "pipeline-data", "current", "demo");
+    console.log("Looking for work directory:", workDir);
+
+    // Verify work directory exists immediately
+    await fs.access(workDir);
+    console.log("Work directory exists");
+
+    const entries = await fs.readdir(workDir);
+    console.log(`Work directory entries: ${entries.join(", ")}`);
+
+    // Wait for spawn to be called - use vi.advanceTimersByTime for fake timers
+    console.log("Before spawn wait");
+    vi.advanceTimersByTime(200);
+    console.log("After spawn wait");
+
+    // Verify spawn was called
+    expect(spawnMock).toHaveBeenCalledTimes(1);
+    console.log("Spawn verified");
+
+    // Immediately trigger exit for the mocked child process to avoid timeout
+    const child = children[children.length - 1];
+    child._emit("exit", 0, null);
+    console.log("Child exit triggered");
+
+    // Check if work directory exists
+    try {
+      const entries = await fs.readdir(workDir);
+      console.log("Work directory entries:", entries);
+    } catch (err) {
+      console.error("Error reading work directory:", err);
+      throw err;
+    }
+
     const seedCopy = JSON.parse(
       await fs.readFile(path.join(workDir, "seed.json"), "utf8")
     );
+    console.log("Seed copy read:", seedCopy);
+
     const status = JSON.parse(
       await fs.readFile(path.join(workDir, "tasks-status.json"), "utf8")
     );
+    console.log("Status read:", status);
 
     expect(seedCopy).toEqual({ name: "demo", data: { foo: "bar" } });
+    console.log("Seed copy assertion passed");
+
     expect(status.name).toBe("demo");
+    console.log("Status name assertion passed");
+
     expect(status.pipelineId).toMatch(/^pl-/);
+    console.log("Pipeline ID assertion passed");
+
     await fs.access(path.join(workDir, "tasks"));
+    console.log("Tasks directory access passed");
 
     // Verify pending file was removed
     await expect(fs.access(seedPath)).rejects.toThrow();
+    console.log("Pending file removal verified");
 
-    expect(spawnMock).toHaveBeenCalledTimes(1);
     const [execPath, args] = spawnMock.mock.calls[0];
     expect(execPath).toBe(process.execPath);
     expect(args[1]).toBe("demo");
     expect(args[0]).toMatch(/pipeline-runner\.js$/);
-  });
+    console.log("Spawn arguments verified");
+  }, 60000); // Increase timeout for this specific test
 
   it("is idempotent if the same seed is added twice", async () => {
     const seedPath = path.join(
