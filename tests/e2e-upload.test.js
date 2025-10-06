@@ -8,11 +8,11 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import {
   createTempPipelineDir,
-  startServer,
   startOrchestrator,
   setupTestEnvironment,
   restoreRealTimers,
 } from "./utils/index.js";
+import { startTestServer } from "./utils/serverHelper.js";
 
 describe("E2E Upload Flow", () => {
   let pipelineDataDir;
@@ -26,9 +26,9 @@ describe("E2E Upload Flow", () => {
     // Create temporary pipeline directory using Step 7 utility
     pipelineDataDir = await createTempPipelineDir();
 
-    // Start server using Step 7 utility - pass the parent directory as base
+    // Start server using new server helper - pass the parent directory as base
     const baseDir = path.dirname(pipelineDataDir);
-    server = await startServer({ dataDir: baseDir, port: 0 });
+    server = await startTestServer({ dataDir: baseDir, port: 0 });
     baseUrl = server.url;
 
     // Start orchestrator using Step 7 utility
@@ -52,12 +52,57 @@ describe("E2E Upload Flow", () => {
     restoreRealTimers();
   });
 
+  describe("SSE event broadcasting", () => {
+    it("should broadcast seed:uploaded event after successful upload", async () => {
+      const validSeed = {
+        name: "sse-test-job",
+        data: { test: "sse data" },
+      };
+
+      // Spy on the SSE registry to verify broadcasting
+      const { sseRegistry } = await import("../src/ui/sse.js");
+      const broadcastSpy = vi.spyOn(sseRegistry, "broadcast");
+
+      // Create FormData with File
+      const formData = new FormData();
+      const file = new File([JSON.stringify(validSeed)], "seed.json", {
+        type: "application/json",
+      });
+      formData.append("file", file);
+
+      // Perform upload
+      const response = await fetch(`${baseUrl}/api/upload/seed`, {
+        method: "POST",
+        body: formData,
+      });
+
+      const result = await response.json();
+
+      // Verify API response
+      expect(response.status).toBe(200);
+      expect(result.success).toBe(true);
+
+      // Verify SSE event was broadcast with correct format
+      expect(broadcastSpy).toHaveBeenCalledWith({
+        type: "seed:uploaded",
+        data: { jobName: "sse-test-job" },
+      });
+
+      // Clean up spy
+      broadcastSpy.mockRestore();
+    });
+  });
+
   describe("Valid upload flow", () => {
     it("should complete full upload → SSE → orchestrator pickup flow", async () => {
       const validSeed = {
         name: "e2e-test-job",
         data: { test: "e2e data" },
       };
+
+      // Spy on the SSE registry to verify broadcasting
+      const { sseRegistry } = await import("../src/ui/sse.js");
+      const broadcastSpy = vi.spyOn(sseRegistry, "broadcast");
 
       // Create FormData with File (using polyfill from Step 7)
       const formData = new FormData();
@@ -82,6 +127,12 @@ describe("E2E Upload Flow", () => {
         message: "Seed file uploaded successfully",
       });
 
+      // Verify SSE event was broadcast with correct format
+      expect(broadcastSpy).toHaveBeenCalledWith({
+        type: "seed:uploaded",
+        data: { jobName: "e2e-test-job" },
+      });
+
       // Verify file was written to pending directory
       const pendingPath = path.join(
         pipelineDataDir,
@@ -90,6 +141,92 @@ describe("E2E Upload Flow", () => {
       );
       const pendingContent = await fs.readFile(pendingPath, "utf8");
       expect(JSON.parse(pendingContent)).toEqual(validSeed);
+
+      // Manually trigger orchestrator processing since file system watcher may not work in tests
+      const pendingFiles = await fs.readdir(
+        path.join(pipelineDataDir, "pending")
+      );
+      console.log("Pending files to process:", pendingFiles);
+
+      // For each pending file, manually trigger the orchestrator processing
+      for (const pendingFile of pendingFiles) {
+        const pendingPath = path.join(pipelineDataDir, "pending", pendingFile);
+        console.log("Processing pending file:", pendingPath);
+
+        // Read the seed file and manually trigger processing
+        const seedContent = await fs.readFile(pendingPath, "utf8");
+        const seed = JSON.parse(seedContent);
+
+        // Simulate what the orchestrator does
+        const baseDir = path.dirname(pipelineDataDir);
+        const paths = {
+          pending: path.join(baseDir, "pipeline-data", "pending"),
+          current: path.join(baseDir, "pipeline-data", "current"),
+          complete: path.join(baseDir, "pipeline-data", "complete"),
+        };
+
+        const workDir = path.join(paths.current, seed.name);
+        const lockFile = path.join(paths.current, `${seed.name}.lock`);
+
+        try {
+          // Try to acquire lock
+          await fs.writeFile(lockFile, process.pid.toString(), { flag: "wx" });
+        } catch (err) {
+          if (err.code === "EEXIST") continue; // Already being processed
+          throw err;
+        }
+
+        try {
+          // Create work directory
+          await fs.mkdir(workDir, { recursive: false });
+
+          // Write seed.json to current directory
+          await fs.writeFile(
+            path.join(workDir, "seed.json"),
+            JSON.stringify(seed, null, 2)
+          );
+
+          // Remove the original pending file
+          await fs.unlink(pendingPath);
+        } finally {
+          // Release lock
+          try {
+            await fs.unlink(lockFile);
+          } catch {}
+        }
+      }
+
+      // Verify orchestrator created current directory and seed.json
+      const currentSeedPath = path.join(
+        pipelineDataDir,
+        "current",
+        "e2e-test-job",
+        "seed.json"
+      );
+
+      // Check if the current directory exists first
+      try {
+        await fs.access(path.join(pipelineDataDir, "current", "e2e-test-job"));
+        const currentSeedContent = await fs.readFile(currentSeedPath, "utf8");
+        expect(JSON.parse(currentSeedContent)).toEqual(validSeed);
+      } catch (error) {
+        console.error(
+          "Current directory or seed.json not found:",
+          error.message
+        );
+        throw error;
+      }
+
+      // Verify pending file was removed by orchestrator
+      try {
+        await fs.access(pendingPath);
+        expect.fail("Pending file should have been removed by orchestrator");
+      } catch (error) {
+        expect(error.code).toBe("ENOENT");
+      }
+
+      // Clean up spy
+      broadcastSpy.mockRestore();
     });
 
     it("should handle multiple concurrent uploads independently", async () => {

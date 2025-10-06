@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { startServer } from "../src/ui/server.js";
+import { startTestServer } from "./utils/serverHelper.js";
 
 describe("startServer API", () => {
   let serverInstance;
@@ -14,7 +14,7 @@ describe("startServer API", () => {
   it("should start server with dataDir and return { url, close }", async () => {
     const tempDataDir = "/tmp/test-data-dir";
 
-    serverInstance = await startServer({
+    serverInstance = await startTestServer({
       dataDir: tempDataDir,
       port: 0, // Use port 0 to get a random available port
     });
@@ -32,7 +32,7 @@ describe("startServer API", () => {
   });
 
   it("should start server without dataDir", async () => {
-    serverInstance = await startServer({
+    serverInstance = await startTestServer({
       port: 0,
     });
 
@@ -45,7 +45,7 @@ describe("startServer API", () => {
   });
 
   it("should close server cleanly", async () => {
-    serverInstance = await startServer({
+    serverInstance = await startTestServer({
       dataDir: "/tmp/test-data-dir",
       port: 0,
     });
@@ -73,7 +73,7 @@ describe("startServer API", () => {
 
   it("should handle port conflicts gracefully", async () => {
     // Start first server
-    const firstServer = await startServer({
+    const firstServer = await startTestServer({
       dataDir: "/tmp/test-data-dir",
       port: 0,
     });
@@ -82,14 +82,16 @@ describe("startServer API", () => {
     const port = parseInt(firstServer.url.split(":")[2]);
 
     try {
-      await startServer({
+      await startTestServer({
         dataDir: "/tmp/test-data-dir",
         port: port, // Same port as first server
       });
       expect.fail("Should have thrown error for port conflict");
     } catch (error) {
+      // Verify we get a structured error with EADDRINUSE code
       expect(error).toBeDefined();
       expect(error.code).toBe("EADDRINUSE");
+      expect(error.message).toContain(`Port ${port} is already in use`);
     } finally {
       await firstServer.close();
     }

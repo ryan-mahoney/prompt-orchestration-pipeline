@@ -2,11 +2,11 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import path from "node:path";
 import {
   createTempPipelineDir,
-  startServer,
   startOrchestrator,
   setupTestEnvironment,
   restoreRealTimers,
 } from "./index.js";
+import { startTestServer } from "./serverHelper.js";
 
 describe("Test Utilities for E2E", () => {
   beforeEach(() => {
@@ -48,7 +48,10 @@ describe("Test Utilities for E2E", () => {
   describe("startServer", () => {
     it("should start server with provided data directory", async () => {
       const pipelineDataDir = await createTempPipelineDir();
-      const server = await startServer({ dataDir: pipelineDataDir, port: 0 });
+      const server = await startTestServer({
+        dataDir: pipelineDataDir,
+        port: 0,
+      });
 
       expect(server).toBeDefined();
       expect(server.url).toBeDefined();

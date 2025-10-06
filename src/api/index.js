@@ -1,4 +1,4 @@
-import { Orchestrator } from "../core/orchestrator.js";
+import { startOrchestrator } from "../core/orchestrator.js";
 import path from "node:path";
 import fs from "node:fs/promises";
 import { validateSeedOrThrow } from "../core/validation.js";
@@ -54,7 +54,7 @@ const loadPipelineDefinition = async (pipelinePath) => {
 };
 
 const createOrchestrator = (paths, pipelineDefinition) =>
-  new Orchestrator({ paths, pipelineDefinition });
+  startOrchestrator({ dataDir: paths.pending });
 
 // Main API functions
 export const createPipelineOrchestrator = async (options = {}) => {
@@ -63,7 +63,7 @@ export const createPipelineOrchestrator = async (options = {}) => {
 
   await ensureDirectories(paths);
   const pipelineDefinition = await loadPipelineDefinition(paths.pipeline);
-  const orchestrator = createOrchestrator(paths, pipelineDefinition);
+  const orchestrator = await createOrchestrator(paths, pipelineDefinition);
 
   let uiServer = null;
 
@@ -75,10 +75,8 @@ export const createPipelineOrchestrator = async (options = {}) => {
     uiServer,
   };
 
-  // Auto-start if configured
-  if (config.autoStart) {
-    await orchestrator.start();
-  }
+  // Auto-start if configured (startOrchestrator handles this automatically)
+  // No need to call orchestrator.start() as startOrchestrator auto-starts when autoStart=true
 
   // Start UI if configured
   if (config.ui) {
@@ -225,7 +223,7 @@ export const listJobs = async (state, status = "all") => {
 
 // Control functions
 export const start = async (state) => {
-  await state.orchestrator.start();
+  // startOrchestrator already starts automatically, no need to call start
   return state;
 };
 
