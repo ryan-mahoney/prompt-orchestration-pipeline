@@ -80,20 +80,14 @@ describe("orchestrator", () => {
     // prevent real exit
     exitSpy = vi.spyOn(process, "exit").mockImplementation(() => {});
 
-    // Import and create orchestrator instance
+    // Import and start orchestrator
     vi.resetModules();
-    const { Orchestrator } = await import("../src/core/orchestrator.js");
+    const { startOrchestrator } = await import("../src/core/orchestrator.js");
 
-    orchestrator = new Orchestrator({
-      paths: {
-        pending: path.join(tmpDir, "pipeline-pending"),
-        current: path.join(tmpDir, "pipeline-current"),
-        complete: path.join(tmpDir, "pipeline-complete"),
-      },
-      pipelineDefinition: {},
+    orchestrator = await startOrchestrator({
+      dataDir: tmpDir,
+      autoStart: true,
     });
-
-    await orchestrator.start();
   });
 
   afterEach(async () => {
@@ -109,7 +103,12 @@ describe("orchestrator", () => {
   }, 30000); // Increase timeout for afterEach hook
 
   it("creates pipeline dirs and runs pipeline on seed add", async () => {
-    const seedPath = path.join(tmpDir, "pipeline-pending", "demo-seed.json");
+    const seedPath = path.join(
+      tmpDir,
+      "pipeline-data",
+      "pending",
+      "demo-seed.json"
+    );
     await fs.mkdir(path.dirname(seedPath), { recursive: true });
     await fs.writeFile(
       seedPath,
@@ -121,7 +120,7 @@ describe("orchestrator", () => {
     expect(typeof add).toBe("function");
     await add(seedPath);
 
-    const workDir = path.join(tmpDir, "pipeline-current", "demo");
+    const workDir = path.join(tmpDir, "pipeline-data", "current", "demo");
     const seedCopy = JSON.parse(
       await fs.readFile(path.join(workDir, "seed.json"), "utf8")
     );
@@ -134,6 +133,9 @@ describe("orchestrator", () => {
     expect(status.pipelineId).toMatch(/^pl-/);
     await fs.access(path.join(workDir, "tasks"));
 
+    // Verify pending file was removed
+    await expect(fs.access(seedPath)).rejects.toThrow();
+
     expect(spawnMock).toHaveBeenCalledTimes(1);
     const [execPath, args] = spawnMock.mock.calls[0];
     expect(execPath).toBe(process.execPath);
@@ -142,7 +144,12 @@ describe("orchestrator", () => {
   });
 
   it("is idempotent if the same seed is added twice", async () => {
-    const seedPath = path.join(tmpDir, "pipeline-pending", "x-seed.json");
+    const seedPath = path.join(
+      tmpDir,
+      "pipeline-data",
+      "pending",
+      "x-seed.json"
+    );
     await fs.mkdir(path.dirname(seedPath), { recursive: true });
     await fs.writeFile(
       seedPath,
@@ -159,7 +166,12 @@ describe("orchestrator", () => {
 
   it("kills children on shutdown (SIGTERM and SIGKILL)", async () => {
     // create one running child in this test only
-    const seedPath = path.join(tmpDir, "pipeline-pending", "killme-seed.json");
+    const seedPath = path.join(
+      tmpDir,
+      "pipeline-data",
+      "pending",
+      "killme-seed.json"
+    );
     await fs.mkdir(path.dirname(seedPath), { recursive: true });
     await fs.writeFile(
       seedPath,
@@ -184,4 +196,57 @@ describe("orchestrator", () => {
       expect(ch.kill).toHaveBeenCalledWith("SIGKILL");
     }
   }, 15000); // Increase timeout for this specific test
+
+  it("handles multiple distinct names concurrently without races", async () => {
+    const seed1Path = path.join(
+      tmpDir,
+      "pipeline-data",
+      "pending",
+      "job1-seed.json"
+    );
+    const seed2Path = path.join(
+      tmpDir,
+      "pipeline-data",
+      "pending",
+      "job2-seed.json"
+    );
+
+    await fs.mkdir(path.dirname(seed1Path), { recursive: true });
+    await fs.writeFile(
+      seed1Path,
+      JSON.stringify({ name: "job1", data: { test: "data1" } }),
+      "utf8"
+    );
+    await fs.writeFile(
+      seed2Path,
+      JSON.stringify({ name: "job2", data: { test: "data2" } }),
+      "utf8"
+    );
+
+    const add = getAddHandler();
+
+    // Process both seeds concurrently
+    await Promise.all([add(seed1Path), add(seed2Path)]);
+
+    // Verify both jobs were processed independently
+    const job1Dir = path.join(tmpDir, "pipeline-data", "current", "job1");
+    const job2Dir = path.join(tmpDir, "pipeline-data", "current", "job2");
+
+    const job1Seed = JSON.parse(
+      await fs.readFile(path.join(job1Dir, "seed.json"), "utf8")
+    );
+    const job2Seed = JSON.parse(
+      await fs.readFile(path.join(job2Dir, "seed.json"), "utf8")
+    );
+
+    expect(job1Seed).toEqual({ name: "job1", data: { test: "data1" } });
+    expect(job2Seed).toEqual({ name: "job2", data: { test: "data2" } });
+
+    // Verify both pending files were removed
+    await expect(fs.access(seed1Path)).rejects.toThrow();
+    await expect(fs.access(seed2Path)).rejects.toThrow();
+
+    // Both runners should have been started
+    expect(spawnMock).toHaveBeenCalledTimes(2);
+  });
 });

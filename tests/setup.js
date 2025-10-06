@@ -1,5 +1,9 @@
 // Global test setup file for Vitest
-import { vi, beforeEach, afterEach } from "vitest";
+import { vi, beforeEach, afterEach, afterAll } from "vitest";
+import {
+  cleanupAllServers,
+  getActiveServerCount,
+} from "./utils/serverHelper.js";
 
 // Global test utilities and setup
 global.testUtils = {
@@ -48,3 +52,15 @@ afterEach(() => {
 
 // Global test timeout configuration
 // (overridden by individual test timeouts if needed)
+
+// Global cleanup guard - catch any leaked servers after all tests
+afterAll(async () => {
+  const activeCount = getActiveServerCount();
+  if (activeCount > 0) {
+    console.warn(
+      `⚠️  WARNING: ${activeCount} server(s) still active after all tests completed`
+    );
+    console.warn("This indicates a test cleanup issue - forcing cleanup now");
+    await cleanupAllServers();
+  }
+});
