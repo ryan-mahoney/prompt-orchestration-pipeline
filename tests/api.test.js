@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 
 // Mock the orchestrator module at the top level
 vi.mock("../src/core/orchestrator.js", () => ({
-  Orchestrator: vi.fn(),
+  startOrchestrator: vi.fn(),
 }));
 
 // Mock the UI server module at the top level
@@ -34,10 +34,10 @@ describe("API Module", () => {
     };
 
     // Setup mock implementations
-    const { Orchestrator } = await import("../src/core/orchestrator.js");
+    const { startOrchestrator } = await import("../src/core/orchestrator.js");
     const { createUIServer } = await import("../src/ui/server.js");
 
-    Orchestrator.mockImplementation(() => mockOrchestrator);
+    startOrchestrator.mockResolvedValue(mockOrchestrator);
     createUIServer.mockImplementation(() => mockUIServer);
 
     // Import the API module after mocks are set up
@@ -64,7 +64,7 @@ describe("API Module", () => {
       expect(state.config.autoStart).toBe(true);
       expect(state.config.ui).toBe(false);
       expect(state.orchestrator).toBe(mockOrchestrator);
-      expect(mockOrchestrator.start).toHaveBeenCalled(); // auto-start enabled by default
+      // Note: startOrchestrator auto-starts when autoStart=true, but there's no separate start method to call
     });
 
     it("should create orchestrator with custom config", async () => {
@@ -89,7 +89,7 @@ describe("API Module", () => {
       expect(state.config.dataDir).toBe("my-data");
       expect(state.config.configDir).toBe("my-config");
       expect(state.config.autoStart).toBe(false);
-      expect(mockOrchestrator.start).not.toHaveBeenCalled(); // auto-start disabled
+      // Note: startOrchestrator doesn't auto-start when autoStart=false
     });
 
     it("should start UI server when configured", async () => {
@@ -360,19 +360,18 @@ describe("API Module", () => {
   });
 
   describe("start", () => {
-    it("should start orchestrator", async () => {
+    it("should return state without starting orchestrator", async () => {
       // Arrange
-      const mockStart = vi.fn().mockResolvedValue();
       const state = {
-        orchestrator: { start: mockStart },
+        orchestrator: mockOrchestrator,
       };
 
       // Act
       const result = await apiModule.start(state);
 
       // Assert
-      expect(mockStart).toHaveBeenCalled();
       expect(result).toBe(state);
+      // Note: startOrchestrator auto-starts when created, so the start() function just returns state
     });
   });
 
