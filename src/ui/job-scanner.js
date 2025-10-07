@@ -8,7 +8,7 @@
  */
 
 import { promises as fs } from "node:fs";
-import { PATHS, Constants } from "./config-bridge.js";
+import { PATHS, Constants } from "./config-bridge.node.js";
 
 /**
  * List job directory names for a given location.

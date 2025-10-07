@@ -18,7 +18,7 @@ import {
   aggregateAndSortJobs,
   transformJobListForAPI,
 } from "../transformers/list-transformer.js";
-import * as configBridge from "../config-bridge.js";
+import * as configBridge from "../config-bridge.node.js";
 
 /**
  * Return a list of job summaries suitable for the API.

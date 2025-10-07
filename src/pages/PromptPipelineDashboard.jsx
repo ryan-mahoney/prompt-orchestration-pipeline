@@ -22,10 +22,9 @@ import { adaptJobSummary } from "../ui/client/adapters/job-adapter";
 import JobTable from "../components/JobTable";
 import JobDetail from "../components/JobDetail";
 import UploadSeed from "../components/UploadSeed";
-import { demoPipeline, demoJobs } from "../data/demoData";
 
 export default function PromptPipelineDashboard({ isConnected }) {
-  const [pipeline, setPipeline] = useState(demoPipeline);
+  const [pipeline, setPipeline] = useState(null);
   const {
     data: apiJobs,
     loading,
@@ -33,11 +32,10 @@ export default function PromptPipelineDashboard({ isConnected }) {
     connectionStatus,
   } = useJobListWithUpdates();
   const jobs = useMemo(() => {
-    // If API returned jobs, adapt them for the UI.
-    // On error or empty API result, fall back to bundled demo jobs.
     const src = Array.isArray(apiJobs) ? apiJobs : [];
-    if (error || src.length === 0) {
-      return demoJobs.map(adaptJobSummary);
+    if (error) {
+      // On error, render empty job list and show disconnected banner
+      return [];
     }
     return src.map(adaptJobSummary);
   }, [apiJobs, error]);
@@ -81,12 +79,18 @@ export default function PromptPipelineDashboard({ isConnected }) {
   }, [jobs, activeTab]);
 
   const totalProgressPct = (job) => {
-    const total = pipeline?.tasks?.length ?? 0;
+    const total =
+      pipeline?.tasks?.length ??
+      (Array.isArray(job.tasks)
+        ? job.tasks.length
+        : Object.keys(job.tasks || {}).length);
     if (!total) return 0;
     const taskList = Array.isArray(job.tasks)
       ? job.tasks
       : Object.values(job.tasks || {});
-    const done = taskList.filter((t) => t.state === "done").length;
+    const done = taskList.filter(
+      (t) => t.state === "done" || t.state === "completed"
+    ).length;
     return Math.round((done / total) * 100);
   };
 
@@ -234,7 +238,8 @@ export default function PromptPipelineDashboard({ isConnected }) {
               {error && (
                 <Box className="mb-4 rounded-md bg-yellow-50 p-3 border border-yellow-200">
                   <Text size="2" className="text-yellow-800">
-                    Using demo data (live API unavailable)
+                    Live API unavailable — showing no jobs. Upload a seed to
+                    start.
                   </Text>
                 </Box>
               )}
