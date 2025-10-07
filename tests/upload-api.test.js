@@ -5,7 +5,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { promises as fs } from "fs";
 import path from "path";
-import { startTestServer, cleanupAllServers } from "./utils/serverHelper.js";
+import { startTestServer } from "./utils/serverHelper.js";
 import { createTempDir } from "./test-utils.js";
 
 // Use native fetch - rely on test timeouts for hanging prevention

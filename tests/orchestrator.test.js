@@ -8,12 +8,21 @@ const { watchMock, makeChild, children, spawnMock, getAddHandler } = vi.hoisted(
   () => {
     let addHandler = null;
 
+    const watchHandlers = {};
     const watcher = {
       on(evt, cb) {
+        watchHandlers[evt] = cb;
         if (evt === "add") addHandler = cb;
+        if (evt === "ready") {
+          // Fire synchronously so startOrchestrator resolves without needing timers
+          cb();
+        }
         return watcher;
       },
       close: vi.fn(() => Promise.resolve()),
+      _emit(evt, ...args) {
+        watchHandlers[evt]?.(...args);
+      },
     };
 
     const makeChild = () => {

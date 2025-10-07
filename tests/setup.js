@@ -5,6 +5,9 @@ import {
   getActiveServerCount,
 } from "./utils/serverHelper.js";
 
+// Set NODE_ENV to 'test' for all tests
+process.env.NODE_ENV = "test";
+
 // Polyfill EventSource for test environment (jsdom doesn't have it)
 if (!global.EventSource) {
   class EventSource {

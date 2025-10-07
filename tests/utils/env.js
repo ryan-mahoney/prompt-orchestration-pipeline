@@ -92,8 +92,15 @@ export function restoreRealTimers() {
 /**
  * Setup test environment with all required polyfills
  */
-export function setupTestEnvironment() {
-  configureFakeTimers();
+export function setupTestEnvironment(options = {}) {
+  const { useFakeTimers = false } = options;
+
+  if (useFakeTimers) {
+    configureFakeTimers();
+  } else {
+    // Default to real timers for E2E-style tests to avoid hanging async waits
+    restoreRealTimers();
+  }
 
   // Ensure fetch is available (Node 18+ has fetch built-in)
   if (isNode && !global.fetch) {
