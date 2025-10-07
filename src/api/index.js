@@ -53,8 +53,10 @@ const loadPipelineDefinition = async (pipelinePath) => {
   }
 };
 
-const createOrchestrator = (paths, pipelineDefinition) =>
-  startOrchestrator({ dataDir: paths.pending });
+const createOrchestrator = (paths, pipelineDefinition, rootDir) =>
+  // Accept an explicit rootDir (project root) to avoid passing a subpath.
+  // If not provided, fall back to the (possibly-misused) pending path for backward-compat.
+  startOrchestrator({ dataDir: rootDir || paths.pending });
 
 // Main API functions
 export const createPipelineOrchestrator = async (options = {}) => {
@@ -63,7 +65,13 @@ export const createPipelineOrchestrator = async (options = {}) => {
 
   await ensureDirectories(paths);
   const pipelineDefinition = await loadPipelineDefinition(paths.pipeline);
-  const orchestrator = await createOrchestrator(paths, pipelineDefinition);
+  // Pass config.rootDir as the orchestrator dataDir root so the orchestrator resolves
+  // pipeline-data/... correctly (avoids duplicate path segments).
+  const orchestrator = await createOrchestrator(
+    paths,
+    pipelineDefinition,
+    config.rootDir
+  );
 
   let uiServer = null;
 
