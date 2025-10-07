@@ -11,7 +11,7 @@
  */
 
 import { readFileWithRetry } from "./file-reader.js";
-import * as configBridge from "./config-bridge.node.js";
+import * as configBridge from "./config-bridge.js";
 
 /**
  * Read a single job's tasks-status.json with lock-awareness and precedence.

@@ -17,6 +17,7 @@ import {
 import { Progress } from "../components/ui/progress";
 import { useJobListWithUpdates } from "../ui/client/hooks/useJobListWithUpdates";
 import { adaptJobSummary } from "../ui/client/adapters/job-adapter";
+import { demoJobs } from "../data/demoData";
 
 // Referenced components — leave these alone
 import JobTable from "../components/JobTable";
@@ -34,8 +35,8 @@ export default function PromptPipelineDashboard({ isConnected }) {
   const jobs = useMemo(() => {
     const src = Array.isArray(apiJobs) ? apiJobs : [];
     if (error) {
-      // On error, render empty job list and show disconnected banner
-      return [];
+      // On error, render demo job list and show disconnected banner
+      return demoJobs.map(adaptJobSummary);
     }
     return src.map(adaptJobSummary);
   }, [apiJobs, error]);
@@ -238,8 +239,7 @@ export default function PromptPipelineDashboard({ isConnected }) {
               {error && (
                 <Box className="mb-4 rounded-md bg-yellow-50 p-3 border border-yellow-200">
                   <Text size="2" className="text-yellow-800">
-                    Live API unavailable — showing no jobs. Upload a seed to
-                    start.
+                    Using demo data (live API unavailable)
                   </Text>
                 </Box>
               )}
