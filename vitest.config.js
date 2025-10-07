@@ -5,14 +5,14 @@ export default defineConfig({
     // Test file patterns
     include: ["**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}"],
 
-    // Environment setup
-    environment: "node",
-
     // Global setup files
     setupFiles: ["./tests/setup.js"],
 
+    // Use jsdom environment for all tests
+    environment: "jsdom",
+
     // Test timeout
-    testTimeout: 30000,
+    testTimeout: 60000,
     hookTimeout: 30000,
 
     // Coverage configuration

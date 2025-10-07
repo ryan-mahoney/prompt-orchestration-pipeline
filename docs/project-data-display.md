@@ -463,46 +463,6 @@ These rules govern every phase. Do not diverge.
 
 ---
 
-## Phase 7: Robustness
-
-### 7.1 Request Cache
-
-**Create**
-
-- `src/ui/client/utils/cache.js`
-
-**Acceptance**
-
-- TTL cache with max size 100 entries; LRU eviction.
-- Cache key includes method + URL + query params.
-- SSE invalidation: any `job:updated` invalidates `/api/jobs` and the specific `/api/jobs/:id`.
-
-**Unit Tests**
-
-- Hits vs misses.
-- TTL expiry evicts.
-- LRU evicts oldest when >100.
-- Invalidation on events.
-
-### 7.2 Resilient Fetching
-
-**Create**
-
-- `src/ui/client/hooks/useRobustJobList.js`
-
-**Acceptance**
-
-- Wraps `useJobList` with retries: initial delay 500ms, factor 2.0, jitter ±20%, max 4 attempts.
-- Presents user feedback during retries; offers manual retry after max.
-
-**Unit Tests**
-
-- First failure retries with backoff timings within jitter bounds.
-- Success clears error state.
-- Manual retry works after exhaustion.
-
----
-
 ## Validation Checkpoints (now measurable)
 
 **Phase 1**
@@ -532,11 +492,6 @@ These rules govern every phase. Do not diverge.
 **Phase 6**
 
 - Dashboard shows real jobs; drill-downs accurate; fallback banner on API failure.
-
-**Phase 7**
-
-- Cache reduces duplicate network calls; events invalidate correctly.
-- Transient failures auto-recover; no infinite loops.
 
 ---
 

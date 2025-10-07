@@ -15,6 +15,24 @@ export function registerMockProvider(provider) {
   mockProviderInstance = provider;
 }
 
+// Auto-register mock provider in test mode when default provider is "mock"
+function autoRegisterMockProvider() {
+  const config = getConfig();
+  if (config.llm.defaultProvider === "mock" && !mockProviderInstance) {
+    // Auto-register a basic mock provider for testing
+    mockProviderInstance = {
+      chat: async () => ({
+        content: "Mock response for testing",
+        usage: {
+          prompt_tokens: 100,
+          completion_tokens: 200,
+          total_tokens: 300,
+        },
+      }),
+    };
+  }
+}
+
 // Check available providers
 export function getAvailableProviders() {
   return {
@@ -75,6 +93,9 @@ export async function chat(options) {
     metadata = {},
     ...rest
   } = options;
+
+  // Auto-register mock provider if needed
+  autoRegisterMockProvider();
 
   const available = getAvailableProviders();
 

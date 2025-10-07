@@ -38,7 +38,7 @@ describe("Test Utilities for E2E", () => {
       await expect(fs.access(completeDir)).resolves.not.toThrow();
 
       // Clean up
-      await fs.rm(path.dirname(pipelineDataDir), {
+      await fs.rm(pipelineDataDir, {
         recursive: true,
         force: true,
       });
@@ -63,7 +63,7 @@ describe("Test Utilities for E2E", () => {
       // Clean up
       await server.close();
       const fs = await import("node:fs/promises");
-      await fs.rm(path.dirname(pipelineDataDir), {
+      await fs.rm(pipelineDataDir, {
         recursive: true,
         force: true,
       });
@@ -83,7 +83,7 @@ describe("Test Utilities for E2E", () => {
       // Clean up
       await orchestrator.stop();
       const fs = await import("node:fs/promises");
-      await fs.rm(path.dirname(pipelineDataDir), {
+      await fs.rm(pipelineDataDir, {
         recursive: true,
         force: true,
       });

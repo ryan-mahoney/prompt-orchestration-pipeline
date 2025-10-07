@@ -5,9 +5,14 @@ import { startOrchestrator as startOrchestratorImpl } from "../../src/core/orche
  * @param {Object} options
  * @param {string} options.dataDir - Data directory path
  * @param {boolean} [options.autoStart] - Whether to auto-start the orchestrator
+ * @param {Function} [options.spawn] - Spawn function to use (for testing)
  * @returns {Promise<{stop: function}>} Orchestrator instance with stop function
  */
-export async function startOrchestrator({ dataDir, autoStart = true }) {
-  const orchestrator = await startOrchestratorImpl({ dataDir, autoStart });
+export async function startOrchestrator({ dataDir, autoStart = true, spawn }) {
+  const orchestrator = await startOrchestratorImpl({
+    dataDir,
+    autoStart,
+    spawn,
+  });
   return orchestrator;
 }

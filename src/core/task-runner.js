@@ -30,7 +30,10 @@ export async function runPipeline(modulePath, initialContext = {}) {
 
   if (!initialContext.llm) {
     initialContext.llm = createLLM({
-      defaultProvider: initialContext.modelConfig?.defaultProvider || "openai",
+      defaultProvider:
+        initialContext.modelConfig?.defaultProvider ||
+        process.env.PO_DEFAULT_PROVIDER ||
+        "openai",
     });
   }
 

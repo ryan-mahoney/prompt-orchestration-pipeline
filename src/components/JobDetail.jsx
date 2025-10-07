@@ -1,15 +1,15 @@
 import React, { useEffect, useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
+import { Button } from "./ui/button";
+import { Separator } from "./ui/separator";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { Progress } from "@/components/ui/progress";
+} from "./ui/select";
+import { Card, CardHeader, CardTitle, CardContent } from "./ui/card";
+import { Progress } from "./ui/progress";
 import { ChevronLeft, X } from "lucide-react";
 import { statusBadge } from "../utils/ui";
 import { fmtDuration, elapsedBetween } from "../utils/time";

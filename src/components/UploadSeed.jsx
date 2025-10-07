@@ -47,7 +47,7 @@ export default function UploadSeed({ disabled = false, onUploadSuccess }) {
 
         // Call success callback
         if (onUploadSuccess) {
-          onUploadSuccess({ jobName: result.jobName });
+          onUploadSuccess({ name: result.jobName });
         }
       } else {
         console.error("Upload failed:", result.message);

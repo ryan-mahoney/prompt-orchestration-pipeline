@@ -20,8 +20,9 @@ if (isNode && !global.File) {
   global.File = File;
 }
 
-// Polyfill EventSource if not available (Node.js environment)
-if (isNode && !global.EventSource) {
+// Polyfill EventSource for Node.js environment
+// Always set it to ensure consistent test environment
+if (isNode) {
   class EventSource {
     constructor(url) {
       this.url = url;
@@ -65,6 +66,8 @@ if (isNode && !global.EventSource) {
       }
     }
   }
+
+  // Always set global.EventSource in Node.js environment for tests
   global.EventSource = EventSource;
 }
 
@@ -89,8 +92,15 @@ export function restoreRealTimers() {
 /**
  * Setup test environment with all required polyfills
  */
-export function setupTestEnvironment() {
-  configureFakeTimers();
+export function setupTestEnvironment(options = {}) {
+  const { useFakeTimers = false } = options;
+
+  if (useFakeTimers) {
+    configureFakeTimers();
+  } else {
+    // Default to real timers for E2E-style tests to avoid hanging async waits
+    restoreRealTimers();
+  }
 
   // Ensure fetch is available (Node 18+ has fetch built-in)
   if (isNode && !global.fetch) {

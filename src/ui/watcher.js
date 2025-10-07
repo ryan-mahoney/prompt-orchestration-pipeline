@@ -4,6 +4,8 @@
  */
 
 import chokidar from "chokidar";
+import { detectJobChange } from "./job-change-detector.js";
+import { sseEnhancer } from "./sse-enhancer.js";
 
 /**
  * Start watching specified paths for file changes
@@ -45,16 +47,34 @@ export function start(paths, onChange, options = {}) {
   watcher.on("add", (path) => {
     pendingChanges.push({ path, type: "created" });
     scheduleFlush();
+
+    // Check for job-specific changes
+    const jobChange = detectJobChange(path);
+    if (jobChange) {
+      sseEnhancer.handleJobChange(jobChange);
+    }
   });
 
   watcher.on("change", (path) => {
     pendingChanges.push({ path, type: "modified" });
     scheduleFlush();
+
+    // Check for job-specific changes
+    const jobChange = detectJobChange(path);
+    if (jobChange) {
+      sseEnhancer.handleJobChange(jobChange);
+    }
   });
 
   watcher.on("unlink", (path) => {
     pendingChanges.push({ path, type: "deleted" });
     scheduleFlush();
+
+    // Check for job-specific changes
+    const jobChange = detectJobChange(path);
+    if (jobChange) {
+      sseEnhancer.handleJobChange(jobChange);
+    }
   });
 
   // Return watcher with enhanced close method
