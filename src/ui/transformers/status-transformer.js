@@ -23,7 +23,7 @@
  *      - pending otherwise
  */
 
-import * as configBridge from "../config-bridge.js";
+import * as configBridge from "../config-bridge.browser.js";
 
 // Known/valid task states for basic validation
 const VALID_TASK_STATES = new Set(["pending", "running", "done", "error"]);

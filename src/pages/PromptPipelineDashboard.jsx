@@ -17,15 +17,15 @@ import {
 import { Progress } from "../components/ui/progress";
 import { useJobListWithUpdates } from "../ui/client/hooks/useJobListWithUpdates";
 import { adaptJobSummary } from "../ui/client/adapters/job-adapter";
+import { demoJobs } from "../data/demoData";
 
 // Referenced components — leave these alone
 import JobTable from "../components/JobTable";
 import JobDetail from "../components/JobDetail";
 import UploadSeed from "../components/UploadSeed";
-import { demoPipeline, demoJobs } from "../data/demoData";
 
 export default function PromptPipelineDashboard({ isConnected }) {
-  const [pipeline, setPipeline] = useState(demoPipeline);
+  const [pipeline, setPipeline] = useState(null);
   const {
     data: apiJobs,
     loading,
@@ -33,10 +33,9 @@ export default function PromptPipelineDashboard({ isConnected }) {
     connectionStatus,
   } = useJobListWithUpdates();
   const jobs = useMemo(() => {
-    // If API returned jobs, adapt them for the UI.
-    // On error or empty API result, fall back to bundled demo jobs.
     const src = Array.isArray(apiJobs) ? apiJobs : [];
-    if (error || src.length === 0) {
+    if (error) {
+      // On error, render demo job list and show disconnected banner
       return demoJobs.map(adaptJobSummary);
     }
     return src.map(adaptJobSummary);
@@ -81,12 +80,18 @@ export default function PromptPipelineDashboard({ isConnected }) {
   }, [jobs, activeTab]);
 
   const totalProgressPct = (job) => {
-    const total = pipeline?.tasks?.length ?? 0;
+    const total =
+      pipeline?.tasks?.length ??
+      (Array.isArray(job.tasks)
+        ? job.tasks.length
+        : Object.keys(job.tasks || {}).length);
     if (!total) return 0;
     const taskList = Array.isArray(job.tasks)
       ? job.tasks
       : Object.values(job.tasks || {});
-    const done = taskList.filter((t) => t.state === "done").length;
+    const done = taskList.filter(
+      (t) => t.state === "done" || t.state === "completed"
+    ).length;
     return Math.round((done / total) * 100);
   };
 
