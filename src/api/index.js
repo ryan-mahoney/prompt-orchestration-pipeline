@@ -141,7 +141,9 @@ export const submitJobWithValidation = async ({ dataDir, seedObject }) => {
   } catch (error) {
     // Clean up any partial files on failure
     if (partialFilePath) {
-      await cleanupOnFailure(partialFilePath);
+      try {
+        await cleanupOnFailure(partialFilePath);
+      } catch (error) {}
     }
 
     // Map validation errors to appropriate error messages

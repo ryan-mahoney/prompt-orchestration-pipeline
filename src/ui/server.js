@@ -13,6 +13,7 @@ import * as state from "./state.js";
 let submitJobWithValidation;
 import { sseRegistry } from "./sse.js";
 import { getPendingSeedPath, resolvePipelinePaths } from "../config/paths.js";
+import { handleJobList, handleJobDetail } from "./endpoints/job-endpoints.js";
 
 // Get __dirname equivalent in ES modules
 const __filename = fileURLToPath(import.meta.url);
@@ -25,6 +26,16 @@ const WATCHED_PATHS = (process.env.WATCHED_PATHS || "pipeline-config,runs")
   .map((p) => p.trim());
 const HEARTBEAT_INTERVAL = 30000; // 30 seconds
 const DATA_DIR = process.env.PO_ROOT || process.cwd();
+
+function hasValidPayload(seed) {
+  if (!seed || typeof seed !== "object") return false;
+  const hasData = seed.data && typeof seed.data === "object";
+  const hasPipelineParams =
+    typeof seed.pipeline === "string" &&
+    seed.params &&
+    typeof seed.params === "object";
+  return hasData || hasPipelineParams;
+}
 
 /**
  * Handle seed upload directly without starting orchestrator (for test environment)
@@ -48,11 +59,8 @@ async function handleSeedUploadDirect(seedObject, dataDir) {
       };
     }
 
-    if (!seedObject.data || typeof seedObject.data !== "object") {
-      return {
-        success: false,
-        message: "Required fields missing",
-      };
+    if (!hasValidPayload(seedObject)) {
+      return { success: false, message: "Required fields missing" };
     }
 
     // Validate name format
@@ -76,6 +84,11 @@ async function handleSeedUploadDirect(seedObject, dataDir) {
     // Check for duplicates
     try {
       await fs.promises.access(pendingPath);
+      if (partialFilePath) {
+        try {
+          await fs.promises.unlink(partialFilePath);
+        } catch {}
+      }
       return {
         success: false,
         message: "Job with this name already exists",
@@ -291,34 +304,34 @@ function parseMultipartFormData(req) {
  */
 async function handleSeedUpload(req, res) {
   try {
-    // Parse multipart form data
-    const formData = await parseMultipartFormData(req);
-
-    // Validate that we have file content
-    if (!formData.content) {
-      res.writeHead(400, { "Content-Type": "application/json" });
-      res.end(
-        JSON.stringify({
-          success: false,
-          message: "No file content found",
-        })
-      );
-      return;
-    }
-
-    // Parse JSON content
+    const ct = req.headers["content-type"] || "";
     let seedObject;
-    try {
-      seedObject = JSON.parse(formData.content);
-    } catch (parseError) {
-      res.writeHead(400, { "Content-Type": "application/json" });
-      res.end(
-        JSON.stringify({
-          success: false,
-          message: "Invalid JSON",
-        })
-      );
-      return;
+    if (ct.includes("application/json")) {
+      const raw = await readRawBody(req);
+      try {
+        seedObject = JSON.parse(raw.toString("utf8") || "{}");
+      } catch {
+        res.writeHead(400, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ success: false, message: "Invalid JSON" }));
+        return;
+      }
+    } else {
+      // Parse multipart form data (existing behavior)
+      const formData = await parseMultipartFormData(req);
+      if (!formData.content) {
+        res.writeHead(400, { "Content-Type": "application/json" });
+        res.end(
+          JSON.stringify({ success: false, message: "No file content found" })
+        );
+        return;
+      }
+      try {
+        seedObject = JSON.parse(formData.content);
+      } catch {
+        res.writeHead(400, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ success: false, message: "Invalid JSON" }));
+        return;
+      }
     }
 
     // Use current PO_ROOT or fallback to DATA_DIR
@@ -345,7 +358,7 @@ async function handleSeedUpload(req, res) {
         // Broadcast SSE event for successful upload
         sseRegistry.broadcast({
           type: "seed:uploaded",
-          data: { jobName: result.jobName },
+          data: { name: result.jobName },
         });
       } else {
         console.log("Sending 400 response");
@@ -380,7 +393,7 @@ async function handleSeedUpload(req, res) {
         // Broadcast SSE event for successful upload
         sseRegistry.broadcast({
           type: "seed:uploaded",
-          data: { jobName: result.jobName },
+          data: { name: result.jobName },
         });
       } else {
         res.writeHead(400, { "Content-Type": "application/json" });
@@ -439,6 +452,7 @@ function serveStatic(res, filePath) {
  * Create and start the HTTP server
  */
 function createServer() {
+  console.log("Creating HTTP server...");
   const server = http.createServer(async (req, res) => {
     // Use WHATWG URL API instead of deprecated url.parse
     const { pathname, searchParams } = new URL(
@@ -480,7 +494,10 @@ function createServer() {
     }
 
     // Route: GET /api/events (SSE)
-    if (pathname === "/api/events" && req.method === "GET") {
+    if (
+      (pathname === "/api/events" || pathname === "/api/sse") &&
+      req.method === "GET"
+    ) {
       // Set SSE headers
       res.writeHead(200, {
         "Content-Type": "text/event-stream",
@@ -531,6 +548,59 @@ function createServer() {
 
       // Use the handleSeedUpload function which properly parses multipart data
       await handleSeedUpload(req, res);
+      return;
+    }
+
+    // Route: GET /api/jobs
+    if (pathname === "/api/jobs" && req.method === "GET") {
+      try {
+        const result = await handleJobList();
+
+        if (result.ok) {
+          sendJson(res, 200, result.data);
+        } else {
+          sendJson(res, 500, result);
+        }
+      } catch (error) {
+        console.error("Error handling /api/jobs:", error);
+        sendJson(res, 500, {
+          ok: false,
+          code: "internal_error",
+          message: "Internal server error",
+        });
+      }
+      return;
+    }
+
+    // Route: GET /api/jobs/:jobId
+    if (pathname.startsWith("/api/jobs/") && req.method === "GET") {
+      const jobId = pathname.substring("/api/jobs/".length);
+
+      try {
+        const result = await handleJobDetail(jobId);
+
+        if (result.ok) {
+          sendJson(res, 200, result.data);
+        } else {
+          switch (result.code) {
+            case "job_not_found":
+              sendJson(res, 404, result);
+              break;
+            case "bad_request":
+              sendJson(res, 400, result);
+              break;
+            default:
+              sendJson(res, 500, result);
+          }
+        }
+      } catch (error) {
+        console.error(`Error handling /api/jobs/${jobId}:`, error);
+        sendJson(res, 500, {
+          ok: false,
+          code: "internal_error",
+          message: "Internal server error",
+        });
+      }
       return;
     }
 
@@ -633,6 +703,13 @@ function start(customPort) {
  */
 async function startServer({ dataDir, port: customPort }) {
   try {
+    console.log(
+      "DEBUG: startServer called with dataDir:",
+      dataDir,
+      "customPort:",
+      customPort
+    );
+
     // Set the data directory environment variable
     if (dataDir) {
       process.env.PO_ROOT = dataDir;
@@ -645,9 +722,13 @@ async function startServer({ dataDir, port: customPort }) {
         : process.env.PORT
           ? parseInt(process.env.PORT)
           : 0;
+
+    console.log("DEBUG: About to create server...");
     const server = createServer();
+    console.log("DEBUG: Server created successfully");
 
     // Robust promise with proper error handling and race condition prevention
+    console.log(`Attempting to start server on port ${port}...`);
     await new Promise((resolve, reject) => {
       let settled = false;
 
@@ -662,6 +743,7 @@ async function startServer({ dataDir, port: customPort }) {
             error.port = port;
           }
 
+          console.error(`Server error on port ${port}:`, error);
           reject(error);
         }
       };
@@ -670,13 +752,27 @@ async function startServer({ dataDir, port: customPort }) {
         if (!settled) {
           settled = true;
           server.removeListener("error", errorHandler);
+          console.log(`Server successfully started on port ${port}`);
           resolve();
         }
       };
 
       // Attach error handler BEFORE attempting to listen
       server.on("error", errorHandler);
-      server.listen(port, successHandler);
+
+      // Add timeout to prevent hanging
+      const timeout = setTimeout(() => {
+        if (!settled) {
+          settled = true;
+          server.removeListener("error", errorHandler);
+          reject(new Error(`Server startup timeout on port ${port}`));
+        }
+      }, 5000); // 5 second timeout
+
+      server.listen(port, () => {
+        clearTimeout(timeout);
+        successHandler();
+      });
     });
 
     const address = server.address();

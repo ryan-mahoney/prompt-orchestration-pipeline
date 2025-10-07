@@ -1,5 +1,5 @@
 import React from "react";
-import { Badge } from "@/components/ui/badge.jsx";
+import { Badge } from "../components/ui/badge.jsx";
 import { CheckCircle2, Loader2, AlertTriangle, Circle } from "lucide-react";
 
 export const statusBadge = (status) => {
