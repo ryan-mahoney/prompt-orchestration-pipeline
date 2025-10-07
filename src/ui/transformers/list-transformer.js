@@ -14,7 +14,7 @@
  * Behavior guided by tests in tests/list-transformer.test.js and docs/project-data-display.md
  */
 
-import * as configBridge from "../config-bridge.js";
+import * as configBridge from "../config-bridge.browser.js";
 
 export function getStatusPriority(status) {
   // Map to numeric priority where higher = higher priority

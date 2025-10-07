@@ -9,6 +9,9 @@ import { fileURLToPath } from "node:url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// Ensure demo runs in production-like mode by default
+process.env.NODE_ENV = process.env.NODE_ENV || "production";
+
 async function runDemo(scenarioName) {
   console.log(`\n🚀 Starting Demo: ${scenarioName}\n`);
 
@@ -27,11 +30,11 @@ async function runDemo(scenarioName) {
     try {
       await fs.access(uiBuildPath);
     } catch (error) {
-      console.log("⚠️  UI build files are missing.");
-      console.log("💡 Run 'npm run ui:build' from the project root first.");
-      console.log("💡 Or use development mode: 'npm run ui:dev'");
-      console.log("\nContinuing without UI...");
-      uiEnabled = false;
+      console.error("⚠️  UI build files are missing.");
+      console.error(
+        "Run 'npm run ui:build' from the project root, then re-run the demo."
+      );
+      process.exit(1);
     }
 
     // Initialize orchestrator

@@ -12,7 +12,7 @@
 
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import { Constants, createErrorResponse } from "./config-bridge.js";
+import { Constants, createErrorResponse } from "./config-bridge.node.js";
 
 /**
  * Validate that a path points to a readable file within size limits.

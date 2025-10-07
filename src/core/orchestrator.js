@@ -9,7 +9,28 @@ import { spawn as defaultSpawn } from "node:child_process";
  * @param {string} dataDir
  */
 function resolveDirs(dataDir) {
-  const root = path.join(dataDir, "pipeline-data");
+  // Normalize incoming dataDir: callers may pass either the project root,
+  // the pipeline-data root, or even pipeline-data/pending by mistake.
+  // Detect if 'pipeline-data' is present in the provided path and normalize
+  // to the canonical pipeline-data root to avoid duplicated segments.
+  const normalized = path.normalize(String(dataDir || ""));
+  const parts = normalized.split(path.sep).filter(Boolean);
+  const idx = parts.lastIndexOf("pipeline-data");
+  let root;
+  if (idx !== -1) {
+    // Preserve original root (drive letter on Windows, '/' on POSIX, or '' for relative)
+    const originalRoot = path.parse(normalized).root; // '' | '/' | 'C:\\'
+    if (originalRoot) {
+      // Prepend original root to preserve absolute / drive-letter semantics
+      root = path.join(originalRoot, ...parts.slice(0, idx + 1));
+    } else {
+      // Relative input -> keep relative result
+      root = path.join(...parts.slice(0, idx + 1));
+    }
+  } else {
+    root = path.join(dataDir, "pipeline-data");
+  }
+
   const pending = path.join(root, "pending");
   const current = path.join(root, "current");
   const complete = path.join(root, "complete");
