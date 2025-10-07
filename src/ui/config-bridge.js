@@ -305,6 +305,15 @@ export function determineJobStatus(tasks = {}) {
   return "pending";
 }
 
-// Export the resolved paths for convenience
-export const PATHS = resolvePipelinePaths();
+// Export the resolved paths for convenience (lazy-loaded to avoid circular dependencies)
+let _PATHS = null;
+export function getPATHS() {
+  if (!_PATHS) {
+    _PATHS = resolvePipelinePaths();
+  }
+  return _PATHS;
+}
+
+export const PATHS = getPATHS();
+
 export const CONFIG = getUIConfig();

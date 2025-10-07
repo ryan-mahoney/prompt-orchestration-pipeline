@@ -5,7 +5,7 @@
 
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import { PATHS, Constants, createErrorResponse } from "./config-bridge.js";
+import { PATHS, Constants } from "./config-bridge.js";
 
 /**
  * Lists job directory names (job IDs) from a specified location
