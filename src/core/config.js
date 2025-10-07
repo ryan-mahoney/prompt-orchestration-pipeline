@@ -236,7 +236,7 @@ function validateConfig(config) {
   }
 
   // Validate provider
-  const validProviders = ["openai", "deepseek", "anthropic"];
+  const validProviders = ["openai", "deepseek", "anthropic", "mock"];
   if (!validProviders.includes(config.llm.defaultProvider)) {
     errors.push(
       `llm.defaultProvider must be one of: ${validProviders.join(", ")}`
