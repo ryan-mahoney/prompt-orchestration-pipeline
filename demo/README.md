@@ -45,30 +45,39 @@ node run-demo.js list
 
 ### 4. UI Monitoring
 
-**Important:** The UI requires the React app to be built first. The demo will automatically detect if build files are available and enable the UI accordingly.
+Note: The demo runner does not start the UI dev server for you. It will only serve the built UI assets when they are present. For development with Vite (hot-reload) you must run the dev server in a separate terminal.
+
+Build mode (serve the production build)
 
 ```bash
-# Build the UI (from project root)
+# From the project root: build the UI
 npm run ui:build
 
-# Run demo - UI will be automatically enabled
-node run-demo.js run market-analysis
+# Then run the demo runner (from the project root)
+node demo/run-demo.js run market-analysis
 
 # Open browser to http://localhost:4123
 ```
 
-**Alternative Development Mode:** For development with hot-reload, use:
+Dev mode (hot-reload with Vite)
 
 ```bash
-# Terminal 1: Start the UI dev server
+# Terminal 1 (project root): Start the UI dev server (Vite)
 npm run ui:dev
+# Vite will serve the app at http://localhost:5173 by default
 
-# Terminal 2: Run demo - UI will be automatically enabled
-cd demo
-node run-demo.js run market-analysis
+# Terminal 2 (project root): Run the demo runner
+node demo/run-demo.js run market-analysis
 
 # Open browser to http://localhost:5173
 ```
+
+Troubleshooting
+
+- If the UI does not appear in build mode, confirm that `src/ui/dist/index.html` exists after running `npm run ui:build`.
+- If you see a "Duplicate export of 'createSSEEnhancer'" or similar SSE-related errors, they indicate a module export collision. Ensure your local changes include the fix that exports `createSSEEnhancer` from a single canonical module (see `src/ui/sse-enhancer.js`).
+- If the dev server is running but the demo UI is unreachable, verify Vite is listening on port 5173 and that no other process is blocking the port.
+- For CI or automated runs where you don't want the UI, you may skip building or running the dev server; the demo runner will still execute pipeline jobs in headless mode.
 
 ## Available Scenarios
 

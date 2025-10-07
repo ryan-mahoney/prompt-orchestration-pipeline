@@ -104,4 +104,4 @@ try {
   console.warn("sseEnhancer singleton not initialized:", err?.message || err);
 }
 
-export { sseEnhancer, createSSEEnhancer };
+export { sseEnhancer };
