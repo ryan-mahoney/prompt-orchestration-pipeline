@@ -1,144 +1,172 @@
 /**
- * Job directory scanner for listing job IDs from pipeline data directories
- * @module ui/job-scanner
+ * Job scanner utilities
+ * - listJobs(location) -> array of job IDs (directory names)
+ * - listAllJobs() -> { current: [], complete: [] }
+ * - getJobDirectoryStats(location) -> info about the directory
+ *
+ * Behavior guided by docs/project-data-display.md and tests/job-scanner.test.js
  */
 
 import { promises as fs } from "node:fs";
-import path from "node:path";
 import { PATHS, Constants } from "./config-bridge.js";
 
 /**
- * Lists job directory names (job IDs) from a specified location
- * @param {string} location - Job location ('current' or 'complete')
- * @returns {Promise<string[]>} Array of job IDs
+ * List job directory names for a given location.
+ * Returns [] for invalid location, missing directory, or on permission errors.
  */
-export async function listJobs(location = "current") {
+export async function listJobs(location) {
+  if (!Constants || !Constants.JOB_LOCATIONS) {
+    // Defensive: if Constants not available, return empty
+    return [];
+  }
+
   if (!Constants.JOB_LOCATIONS.includes(location)) {
     return [];
   }
 
-  const locationPath = PATHS[location];
+  const dirPath = PATHS?.[location];
+  if (!dirPath) {
+    return [];
+  }
 
   try {
-    // Check if directory exists
-    try {
-      await fs.access(locationPath);
-    } catch (error) {
-      if (error.code === "ENOENT") {
-        // Directory doesn't exist, return empty array
-        return [];
+    // Check existence/access first to provide clearer handling in tests
+    await fs.access(dirPath);
+  } catch (err) {
+    // Directory doesn't exist or access denied -> return empty
+    return [];
+  }
+
+  try {
+    const entries = await fs.readdir(dirPath, { withFileTypes: true });
+    const jobs = [];
+
+    for (const entry of entries) {
+      if (!entry.isDirectory()) {
+        continue;
       }
-      throw error;
+
+      const name = entry.name;
+
+      // Skip hidden directories
+      if (name.startsWith(".")) {
+        continue;
+      }
+
+      // Validate job ID format
+      if (!Constants.JOB_ID_REGEX.test(name)) {
+        console.warn(`Skipping invalid job directory name: ${name}`);
+        continue;
+      }
+
+      jobs.push(name);
     }
 
-    // Read directory entries
-    const entries = await fs.readdir(locationPath, { withFileTypes: true });
-
-    // Filter for valid job directories
-    const jobIds = entries
-      .filter((entry) => {
-        // Must be a directory
-        if (!entry.isDirectory()) {
-          return false;
-        }
-
-        // Must match job ID format
-        if (!Constants.JOB_ID_REGEX.test(entry.name)) {
-          console.warn(
-            `Skipping invalid job directory name: ${entry.name} in ${location}`
-          );
-          return false;
-        }
-
-        // Skip hidden/system directories
-        if (entry.name.startsWith(".")) {
-          return false;
-        }
-
-        return true;
-      })
-      .map((entry) => entry.name);
-
-    return jobIds;
-  } catch (error) {
-    // Handle permission errors and other FS issues gracefully
-    if (error.code === "EACCES" || error.code === "EPERM") {
-      console.warn(
-        `Permission denied reading ${location} directory: ${error.message}`
-      );
-      return [];
-    }
-
-    // Log other errors but don't throw
-    console.warn(`Error reading ${location} directory: ${error.message}`);
+    return jobs;
+  } catch (err) {
+    // Permission errors or other fs errors: log and return empty
+    console.warn(
+      `Error reading ${location} directory: ${err?.message || String(err)}`
+    );
     return [];
   }
 }
 
 /**
- * Lists all jobs from both current and complete locations
- * @returns {Promise<Object>} Object with current and complete job lists
+ * List jobs from both current and complete locations.
  */
 export async function listAllJobs() {
-  const [currentJobs, completeJobs] = await Promise.all([
-    listJobs("current"),
-    listJobs("complete"),
-  ]);
+  const current = await listJobs("current");
+  const complete = await listJobs("complete");
 
-  return {
-    current: currentJobs,
-    complete: completeJobs,
-  };
+  return { current, complete };
 }
 
 /**
- * Gets job directory statistics for instrumentation
- * @param {string} location - Job location ('current' or 'complete')
- * @returns {Promise<Object>} Directory statistics
+ * Return basic stats about a job directory location.
+ * { location, exists, jobCount, totalEntries, error? }
  */
-export async function getJobDirectoryStats(location = "current") {
+export async function getJobDirectoryStats(location) {
+  if (!Constants || !Constants.JOB_LOCATIONS) {
+    return {
+      location,
+      exists: false,
+      jobCount: 0,
+      totalEntries: 0,
+      error: "Invalid location",
+    };
+  }
+
   if (!Constants.JOB_LOCATIONS.includes(location)) {
     return {
       location,
       exists: false,
       jobCount: 0,
+      totalEntries: 0,
       error: "Invalid location",
     };
   }
 
-  const locationPath = PATHS[location];
+  const dirPath = PATHS?.[location];
+  if (!dirPath) {
+    return {
+      location,
+      exists: false,
+      jobCount: 0,
+      totalEntries: 0,
+      error: "Directory not found",
+    };
+  }
 
   try {
-    await fs.access(locationPath);
-    const entries = await fs.readdir(locationPath, { withFileTypes: true });
-    const jobCount = entries.filter(
-      (entry) =>
-        entry.isDirectory() &&
-        Constants.JOB_ID_REGEX.test(entry.name) &&
-        !entry.name.startsWith(".")
-    ).length;
+    await fs.access(dirPath);
+  } catch (err) {
+    // Directory does not exist
+    if (err && err.code === "ENOENT") {
+      return {
+        location,
+        exists: false,
+        jobCount: 0,
+        totalEntries: 0,
+        error: "Directory not found",
+      };
+    }
+    return {
+      location,
+      exists: false,
+      jobCount: 0,
+      totalEntries: 0,
+      error: err?.message || String(err),
+    };
+  }
+
+  try {
+    const entries = await fs.readdir(dirPath, { withFileTypes: true });
+    const totalEntries = entries.length;
+    let jobCount = 0;
+
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      const name = entry.name;
+      if (name.startsWith(".")) continue;
+      if (!Constants.JOB_ID_REGEX.test(name)) continue;
+      jobCount += 1;
+    }
 
     return {
       location,
       exists: true,
       jobCount,
-      totalEntries: entries.length,
+      totalEntries,
     };
-  } catch (error) {
-    if (error.code === "ENOENT") {
-      return {
-        location,
-        exists: false,
-        jobCount: 0,
-        error: "Directory not found",
-      };
-    }
-
+  } catch (err) {
+    // Permission or other error while reading
     return {
       location,
       exists: false,
       jobCount: 0,
-      error: error.message,
+      totalEntries: 0,
+      error: err?.message || String(err),
     };
   }
 }

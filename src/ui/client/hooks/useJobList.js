@@ -1,8 +1,8 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 
 /**
- * Custom hook for fetching job list from API
- * @returns {Object} Hook state with loading, data, error, and refetch function
+ * Simple fetch hook for /api/jobs
+ * Exposes: { loading, data, error, refetch }
  */
 export function useJobList() {
   const [loading, setLoading] = useState(true);
@@ -10,26 +10,23 @@ export function useJobList() {
   const [error, setError] = useState(null);
 
   const fetchJobs = useCallback(async (signal) => {
+    setLoading(true);
+    setError(null);
     try {
-      setLoading(true);
-      setError(null);
-
-      const response = await fetch("/api/jobs", { signal });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const result = await response.json();
-
-      if (result.ok) {
-        setData(result.data);
+      const res = await fetch("/api/jobs", { signal });
+      if (!res.ok) {
+        const payload = await res.json().catch(() => ({}));
+        setError(payload);
+        setData(null);
       } else {
-        throw new Error(result.message || "Failed to fetch jobs");
+        const json = await res.json();
+        setData(json);
       }
     } catch (err) {
-      if (err.name !== "AbortError") {
-        setError(err.message);
+      if (err.name === "AbortError") {
+        // ignore
+      } else {
+        setError({ message: err.message });
         setData(null);
       }
     } finally {
@@ -39,22 +36,15 @@ export function useJobList() {
 
   const refetch = useCallback(() => {
     const controller = new AbortController();
-    fetchJobs(controller.signal);
+    void fetchJobs(controller.signal);
+    // no persistence of controller here - immediate refetch
   }, [fetchJobs]);
 
   useEffect(() => {
     const controller = new AbortController();
-    fetchJobs(controller.signal);
-
-    return () => {
-      controller.abort();
-    };
+    void fetchJobs(controller.signal);
+    return () => controller.abort();
   }, [fetchJobs]);
 
-  return {
-    loading,
-    data,
-    error,
-    refetch,
-  };
+  return { loading, data, error, refetch };
 }

@@ -26,7 +26,12 @@ import { demoPipeline, demoJobs } from "../data/demoData";
 
 export default function PromptPipelineDashboard({ isConnected }) {
   const [pipeline, setPipeline] = useState(demoPipeline);
-  const { data: apiJobs, loading, error } = useJobListWithUpdates();
+  const {
+    data: apiJobs,
+    loading,
+    error,
+    connectionStatus,
+  } = useJobListWithUpdates();
   const jobs = useMemo(() => {
     // If API returned jobs, adapt them for the UI.
     // On error or empty API result, fall back to bundled demo jobs.
@@ -139,8 +144,9 @@ export default function PromptPipelineDashboard({ isConnected }) {
     };
   }, [seedUploadTimer]);
 
-  // Determine connection state - prop overrides any hook value
-  const connectionState = isConnected !== undefined ? isConnected : true;
+  // Determine connection state - prop overrides any hook value; otherwise use hook's status
+  const connectionState =
+    isConnected !== undefined ? isConnected : connectionStatus === "connected";
 
   return (
     <Tooltip.Provider delayDuration={200}>

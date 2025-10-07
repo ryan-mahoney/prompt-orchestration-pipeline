@@ -1,172 +1,109 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useJobList } from "./useJobList.js";
-
-// Define numeric fallbacks for EventSource constants
-const OPEN =
-  typeof EventSource !== "undefined" && EventSource.OPEN != null
-    ? EventSource.OPEN
-    : 1;
-const CLOSED =
-  typeof EventSource !== "undefined" && EventSource.CLOSED != null
-    ? EventSource.CLOSED
-    : 2;
+import { sortJobs } from "../../transformers/list-transformer.js";
 
 /**
- * Custom hook for fetching job list with real-time updates via SSE
- * @returns {Object} Hook state with loading, data, error, refetch function, and connection status
+ * useJobListWithUpdates
+ *
+ * - Uses useJobList to fetch initial data
+ * - When data is available and non-empty, opens an EventSource to /api/events
+ * - Listens for 'job:updated' events and merges updates into local list by id
+ * - Maintains connectionStatus: 'disconnected' | 'connected' | 'error'
+ * - Cleans up EventSource on unmount
  */
 export function useJobListWithUpdates() {
-  const { loading, data, error, refetch } = useJobList();
-  const [localData, setLocalData] = useState(data);
+  const base = useJobList();
+  const { loading, data, error, refetch } = base;
+
+  const [localData, setLocalData] = useState(data || null);
   const [connectionStatus, setConnectionStatus] = useState("disconnected");
-  const eventSourceRef = useRef(null);
-  const reconnectTimerRef = useRef(null);
+  const esRef = useRef(null);
+  const reconnectTimer = useRef(null);
 
-  const mergeJobUpdate = useCallback((currentJobs, updatedJob) => {
-    if (!currentJobs) return [updatedJob];
+  // Keep localData in sync when base data changes
+  useEffect(() => {
+    setLocalData(data || null);
+  }, [data]);
 
-    const existingIndex = currentJobs.findIndex(
-      (job) => job.id === updatedJob.id
-    );
-
-    if (existingIndex >= 0) {
-      // Update existing job
-      const updatedJobs = [...currentJobs];
-      updatedJobs[existingIndex] = updatedJob;
-      return updatedJobs;
-    } else {
-      // Add new job
-      return [...currentJobs, updatedJob];
-    }
-  }, []);
-
-  const handleJobUpdate = useCallback(
-    (event) => {
-      try {
-        const updatedJob = JSON.parse(event.data);
-
-        // Update the job list with the new job data
-        setLocalData((prevData) => mergeJobUpdate(prevData, updatedJob));
-      } catch (err) {
-        console.error("Failed to parse job update event:", err);
-      }
-    },
-    [mergeJobUpdate]
-  );
-
-  const connectSSE = useCallback(() => {
-    // Prevent reconnect storms and double connects
-    if (
-      eventSourceRef.current &&
-      eventSourceRef.current.readyState !== CLOSED
-    ) {
-      return;
+  useEffect(() => {
+    if (!data || !Array.isArray(data) || data.length === 0) {
+      // Do not open SSE when no data
+      return undefined;
     }
 
-    // Clean up existing connection and timer
-    if (eventSourceRef.current) {
-      // Remove listeners from old instance before closing
-      if (eventSourceRef.current._onOpen) {
-        eventSourceRef.current.removeEventListener(
-          "open",
-          eventSourceRef.current._onOpen
-        );
-      }
-      if (eventSourceRef.current._onUpdate) {
-        eventSourceRef.current.removeEventListener(
-          "job:updated",
-          eventSourceRef.current._onUpdate
-        );
-      }
-      if (eventSourceRef.current._onError) {
-        eventSourceRef.current.removeEventListener(
-          "error",
-          eventSourceRef.current._onError
-        );
-      }
-      eventSourceRef.current.close();
-    }
-
-    // Always clear any existing reconnect timer
-    if (reconnectTimerRef.current) {
-      clearTimeout(reconnectTimerRef.current);
-      reconnectTimerRef.current = null;
-    }
-
-    // Only connect when there's data to watch
-    if (!data || data.length === 0) {
-      return;
-    }
-
+    // Create EventSource
     try {
-      setConnectionStatus("connecting");
+      const es = new EventSource("/api/events");
+      esRef.current = es;
+      setConnectionStatus("disconnected");
 
-      const newEventSource = new EventSource("/api/events");
-
-      // Store named listener functions for cleanup
       const onOpen = () => {
         setConnectionStatus("connected");
       };
 
-      const onUpdate = handleJobUpdate;
-
-      const onError = (error) => {
-        console.error("SSE connection error:", error);
-
-        if (newEventSource.readyState === CLOSED) {
-          setConnectionStatus("disconnected");
-          // Schedule reconnect after 2 seconds
-          if (reconnectTimerRef.current) {
-            clearTimeout(reconnectTimerRef.current);
-          }
-          reconnectTimerRef.current = setTimeout(connectSSE, 2000);
+      const onError = () => {
+        setConnectionStatus("disconnected");
+        // Attempt reconnect after 2s if closed
+        if (esRef.current && esRef.current.readyState === 2) {
+          // Closed - try to reconnect
+          if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
+          reconnectTimer.current = setTimeout(() => {
+            try {
+              esRef.current = new EventSource("/api/events");
+              // listeners will be reattached by effect cleanup/setup cycle
+            } catch (err) {
+              // ignore
+            }
+          }, 2000);
         }
       };
 
-      // Store references to listeners on the event source for cleanup
-      newEventSource._onOpen = onOpen;
-      newEventSource._onUpdate = onUpdate;
-      newEventSource._onError = onError;
+      const onJobUpdated = (evt) => {
+        try {
+          const payload = JSON.parse(evt.data);
+          if (!payload || !payload.id) return;
+          setLocalData((prev) => {
+            const list = Array.isArray(prev) ? prev.slice() : [];
+            const idx = list.findIndex((j) => j.id === payload.id);
+            if (idx === -1) {
+              list.push(payload);
+            } else {
+              list[idx] = { ...list[idx], ...payload };
+            }
+            // Preserve stable sort using sortJobs
+            return sortJobs(list);
+          });
+        } catch (err) {
+          console.error("Failed to parse job update event:", err);
+        }
+      };
 
-      // Set connection status immediately if already open
-      if (newEventSource.readyState === OPEN) {
-        setConnectionStatus("connected");
-      }
+      es.addEventListener("open", onOpen);
+      es.addEventListener("job:updated", onJobUpdated);
+      es.addEventListener("error", onError);
 
-      newEventSource.addEventListener("open", onOpen);
-      newEventSource.addEventListener("job:updated", onUpdate);
-      newEventSource.addEventListener("error", onError);
+      // set connected if readyState open
+      if (es.readyState === 1) setConnectionStatus("connected");
 
-      eventSourceRef.current = newEventSource;
+      return () => {
+        try {
+          es.removeEventListener("open", onOpen);
+          es.removeEventListener("job:updated", onJobUpdated);
+          es.removeEventListener("error", onError);
+          es.close();
+        } catch (err) {
+          // ignore
+        }
+        if (reconnectTimer.current) {
+          clearTimeout(reconnectTimer.current);
+          reconnectTimer.current = null;
+        }
+        esRef.current = null;
+      };
     } catch (err) {
       console.error("Failed to create SSE connection:", err);
       setConnectionStatus("error");
-    }
-  }, [handleJobUpdate, data]);
-
-  useEffect(() => {
-    // Only connect SSE if we have data (jobs to watch)
-    if (data && data.length > 0) {
-      connectSSE();
-    }
-
-    return () => {
-      // Clean up SSE connection and timer on unmount
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close();
-        eventSourceRef.current = null;
-      }
-      if (reconnectTimerRef.current) {
-        clearTimeout(reconnectTimerRef.current);
-        reconnectTimerRef.current = null;
-      }
-    };
-  }, [data, connectSSE]);
-
-  // Sync localData with initial data from useJobList
-  useEffect(() => {
-    if (data && Array.isArray(data)) {
-      setLocalData(data);
+      return undefined;
     }
   }, [data]);
 

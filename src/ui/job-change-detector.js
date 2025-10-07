@@ -1,88 +1,77 @@
 /**
- * Job Change Detector for identifying job-related file changes
- * Determines which job a file change belongs to and categorizes the change type
+ * Job change detector
+ *
+ * Exports:
+ *  - detectJobChange(filePath) -> { jobId, category, filePath } | null
+ *  - getJobLocation(filePath) -> 'current' | 'complete' | null
+ *
+ * Normalizes Windows backslashes to forward slashes for detection.
  */
 
-import path from "path";
+const JOB_ID_RE = /^[A-Za-z0-9-_]+$/;
 
 /**
- * Categorize a file change by type
- * @param {string} filePath - The changed file path
- * @returns {Object|null} Change information or null if not a job-related file
+ * Normalize path separators to forward slash and trim
  */
-export function detectJobChange(filePath) {
-  // Normalize path separators
-  const normalizedPath = filePath.replace(/\\/g, "/");
-
-  // Extract job ID from path
-  const jobId = extractJobId(normalizedPath);
-  if (!jobId) {
-    return null; // Not a job-related file
-  }
-
-  // Categorize the change type
-  const category = categorizeChange(normalizedPath);
-  if (!category) {
-    return null; // Not a relevant job file
-  }
-
-  return {
-    jobId,
-    category,
-    filePath: normalizedPath,
-  };
+function normalizePath(p) {
+  if (!p || typeof p !== "string") return "";
+  return p.replace(/\\/g, "/").replace(/\/\/+/g, "/");
 }
 
 /**
- * Extract job ID from file path
- * @param {string} filePath - Normalized file path
- * @returns {string|null} Job ID or null if not a job directory
- */
-function extractJobId(filePath) {
-  // Look for pipeline-data/{current|complete}/{job_id}/ pattern
-  const jobPattern = /pipeline-data\/(current|complete)\/([A-Za-z0-9_-]+)\//;
-  const match = filePath.match(jobPattern);
-
-  if (match && match[2]) {
-    return match[2];
-  }
-
-  return null;
-}
-
-/**
- * Categorize the type of job change
- * @param {string} filePath - Normalized file path
- * @returns {string|null} Change category or null if not relevant
- */
-function categorizeChange(filePath) {
-  // Check for tasks-status.json (status change)
-  if (filePath.endsWith("/tasks-status.json")) {
-    return "status";
-  }
-
-  // Check for task artifacts (anything under tasks/**)
-  if (filePath.includes("/tasks/")) {
-    return "task";
-  }
-
-  // Check for seed.json
-  if (filePath.endsWith("/seed.json")) {
-    return "seed";
-  }
-
-  return null; // Not a relevant job file
-}
-
-/**
- * Get the location (current or complete) from file path
- * @param {string} filePath - Normalized file path
- * @returns {string|null} "current" or "complete" or null
+ * Determine the job location ('current'|'complete') from a path, or null.
  */
 export function getJobLocation(filePath) {
-  const normalizedPath = filePath.replace(/\\/g, "/");
-  const locationPattern = /pipeline-data\/(current|complete)\//;
-  const match = normalizedPath.match(locationPattern);
+  const p = normalizePath(filePath);
+  const m = p.match(/^pipeline-data\/(current|complete)\/([^/]+)\/?/);
+  if (!m) return null;
+  return m[1] || null;
+}
 
-  return match ? match[1] : null;
+/**
+ * Given a file path, determine whether it belongs to a job and what category the change is.
+ * Categories: 'status' (tasks-status.json), 'task' (anything under tasks/**), 'seed' (seed.json)
+ * Returns normalized filePath (with forward slashes).
+ */
+export function detectJobChange(filePath) {
+  const p = normalizePath(filePath);
+
+  // Must start with pipeline-data/{current|complete}/{jobId}/...
+  const m = p.match(/^pipeline-data\/(current|complete)\/([^/]+)\/(.*)$/);
+  if (!m) return null;
+
+  const [, location, jobId, rest] = m;
+  if (!JOB_ID_RE.test(jobId)) return null;
+
+  const normalized = `pipeline-data/${location}/${jobId}/${rest}`;
+
+  // status
+  if (rest === "tasks-status.json") {
+    return {
+      jobId,
+      category: "status",
+      filePath: normalized,
+    };
+  }
+
+  // seed
+  if (rest === "seed.json") {
+    return {
+      jobId,
+      category: "seed",
+      filePath: normalized,
+    };
+  }
+
+  // tasks/** (task artifacts)
+  if (rest.startsWith("tasks/")) {
+    return {
+      jobId,
+      category: "task",
+      filePath: `pipeline-data/${location}/${jobId}/${rest}`,
+    };
+  }
+
+  // anything else is not relevant
+  return null;
 }

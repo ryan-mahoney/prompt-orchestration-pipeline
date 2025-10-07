@@ -1,168 +1,143 @@
 /**
- * List aggregation transformer for merging and sorting jobs from multiple locations
- * @module ui/transformers/list-transformer
+ * List transformer utilities
+ *
+ * Exports:
+ *  - aggregateAndSortJobs(currentJobs, completeJobs)
+ *  - sortJobs(jobs)
+ *  - getStatusPriority(status)
+ *  - groupJobsByStatus(jobs)
+ *  - getJobListStats(jobs)
+ *  - filterJobs(jobs, searchTerm, options)
+ *  - transformJobListForAPI(jobs)
+ *  - getAggregationStats(currentJobs, completeJobs, aggregatedJobs)
+ *
+ * Behavior guided by tests in tests/list-transformer.test.js and docs/project-data-display.md
  */
 
-import { Constants } from "../config-bridge.js";
+import * as configBridge from "../config-bridge.js";
 
-/**
- * Merges and sorts job lists from current and complete locations
- * @param {Array} currentJobs - Jobs from current location
- * @param {Array} completeJobs - Jobs from complete location
- * @returns {Array} Merged and sorted job list
- */
-export function aggregateAndSortJobs(currentJobs = [], completeJobs = []) {
-  // Ensure arrays
-  const current = Array.isArray(currentJobs) ? currentJobs : [];
-  const complete = Array.isArray(completeJobs) ? completeJobs : [];
-
-  // Instrumentation: log aggregation start
-  console.log(`[ListTransformer] Aggregating jobs:`, {
-    currentJobs: current.length,
-    completeJobs: complete.length,
-  });
-
-  try {
-    // Create a map to handle precedence (current wins over complete)
-    const jobMap = new Map();
-
-    // Add complete jobs first (lower precedence)
-    complete.forEach((job) => {
-      if (job && job.id) {
-        jobMap.set(job.id, { ...job, _source: "complete" });
-      }
-    });
-
-    // Add current jobs (higher precedence - overwrites complete)
-    current.forEach((job) => {
-      if (job && job.id) {
-        jobMap.set(job.id, { ...job, _source: "current" });
-      }
-    });
-
-    // Convert map to array and sort
-    const allJobs = Array.from(jobMap.values());
-    const sortedJobs = sortJobs(allJobs);
-
-    // Instrumentation: log aggregation results
-    console.log(`[ListTransformer] Aggregation completed:`, {
-      totalJobs: sortedJobs.length,
-      fromCurrent: currentJobs.length,
-      fromComplete: completeJobs.length,
-      duplicatesResolved:
-        currentJobs.length + completeJobs.length - sortedJobs.length,
-    });
-
-    return sortedJobs;
-  } catch (error) {
-    console.error(`[ListTransformer] Error aggregating jobs:`, error);
-    return [];
+export function getStatusPriority(status) {
+  // Map to numeric priority where higher = higher priority
+  switch (status) {
+    case "running":
+      return 4;
+    case "error":
+      return 3;
+    case "pending":
+      return 2;
+    case "complete":
+      return 1;
+    default:
+      return 0;
   }
 }
 
 /**
- * Sorts jobs according to global contracts status order and creation time
- * @param {Array} jobs - Array of job objects
- * @returns {Array} Sorted job array
+ * Validate a job object minimally: must have id, status, and createdAt
+ */
+function isValidJob(job) {
+  if (!job || typeof job !== "object") return false;
+  if (!job.id) return false;
+  if (!job.status) return false;
+  if (!job.createdAt) return false;
+  return true;
+}
+
+/**
+ * Sort jobs by status priority (descending), then createdAt ascending, then id ascending.
+ * Filters out invalid jobs.
  */
 export function sortJobs(jobs) {
-  if (!Array.isArray(jobs)) {
-    return [];
-  }
+  if (!Array.isArray(jobs) || jobs.length === 0) return [];
 
-  // Filter out invalid jobs
-  const validJobs = jobs.filter(
-    (job) =>
-      job && typeof job === "object" && job.id && job.status && job.createdAt
-  );
+  const filtered = jobs.filter(isValidJob).slice();
 
-  if (validJobs.length === 0) {
-    return [];
-  }
+  filtered.sort((a, b) => {
+    const pa = getStatusPriority(a.status);
+    const pb = getStatusPriority(b.status);
 
-  // Sort by status priority first, then by creation time
-  return validJobs.sort((a, b) => {
-    // Compare by status priority
-    const statusPriorityA = getStatusPriority(a.status);
-    const statusPriorityB = getStatusPriority(b.status);
+    if (pa !== pb) return pb - pa; // higher priority first
 
-    if (statusPriorityA !== statusPriorityB) {
-      return statusPriorityB - statusPriorityA; // Higher priority first
-    }
+    // parse createdAt; if invalid, treat as 0
+    const ta = Date.parse(a.createdAt) || 0;
+    const tb = Date.parse(b.createdAt) || 0;
 
-    // Same status, sort by creation time (ascending)
-    const timeA = new Date(a.createdAt).getTime();
-    const timeB = new Date(b.createdAt).getTime();
+    if (ta !== tb) return ta - tb; // older first
 
-    if (timeA !== timeB) {
-      return timeA - timeB; // Older first
-    }
-
-    // Same creation time, sort by ID for stability
-    return a.id.localeCompare(b.id);
+    // stable tie-breaker by id
+    if (a.id < b.id) return -1;
+    if (a.id > b.id) return 1;
+    return 0;
   });
+
+  return filtered;
 }
 
 /**
- * Gets the priority value for a job status (higher = more important)
- * @param {string} status - Job status
- * @returns {number} Priority value
+ * Merge current and complete job lists with precedence: current wins.
+ * Returns sorted result using sortJobs.
  */
-export function getStatusPriority(status) {
-  const priorities = {
-    running: 4,
-    error: 3,
-    pending: 2,
-    complete: 1,
-  };
+export function aggregateAndSortJobs(currentJobs, completeJobs) {
+  try {
+    const cur = Array.isArray(currentJobs) ? currentJobs : [];
+    const comp = Array.isArray(completeJobs) ? completeJobs : [];
 
-  return priorities[status] || 0;
+    const map = new Map();
+
+    // Add complete jobs first
+    for (const j of comp) {
+      if (!j || !j.id) continue;
+      map.set(j.id, j);
+    }
+
+    // Override with current jobs (precedence)
+    for (const j of cur) {
+      if (!j || !j.id) continue;
+      map.set(j.id, j);
+    }
+
+    const aggregated = Array.from(map.values());
+
+    return sortJobs(aggregated);
+  } catch (err) {
+    console.error("Error aggregating jobs:", err);
+    return [];
+  }
 }
 
 /**
- * Groups jobs by status for UI display
- * @param {Array} jobs - Array of job objects
- * @returns {Object} Jobs grouped by status
+ * Group jobs into buckets by status.
+ * Unknown statuses are ignored.
  */
 export function groupJobsByStatus(jobs) {
-  if (!Array.isArray(jobs)) {
-    return {};
-  }
-
-  const groups = {
+  const buckets = {
     running: [],
     error: [],
     pending: [],
     complete: [],
   };
 
-  jobs.forEach((job) => {
-    if (job && job.status && groups[job.status]) {
-      groups[job.status].push(job);
-    }
-  });
+  if (!Array.isArray(jobs)) return buckets;
 
-  // Instrumentation: log grouping results
-  const groupStats = Object.entries(groups).reduce(
-    (stats, [status, jobList]) => {
-      stats[status] = jobList.length;
-      return stats;
-    },
-    {}
-  );
+  for (const job of jobs) {
+    if (!job || typeof job !== "object") continue;
+    const status = job.status;
+    if (!status || !buckets[status]) continue;
+    buckets[status].push(job);
+  }
 
-  console.log(`[ListTransformer] Jobs grouped by status:`, groupStats);
-
-  return groups;
+  return buckets;
 }
 
 /**
- * Creates job list summary statistics
- * @param {Array} jobs - Array of job objects
- * @returns {Object} Summary statistics
+ * Compute job list statistics:
+ *  - total
+ *  - byStatus: counts
+ *  - byLocation: counts
+ *  - averageProgress: floor average of available progress values (0 if none)
  */
-export function getJobListStats(jobs) {
-  if (!Array.isArray(jobs)) {
+export function getJobListStats(jobs = []) {
+  if (!Array.isArray(jobs) || jobs.length === 0) {
     return {
       total: 0,
       byStatus: {},
@@ -173,134 +148,135 @@ export function getJobListStats(jobs) {
 
   const byStatus = {};
   const byLocation = {};
-  let totalProgress = 0;
-  let validJobs = 0;
+  let progressSum = 0;
+  let progressCount = 0;
+  let total = 0;
 
-  jobs.forEach((job) => {
-    if (job && job.status) {
-      // Count by status
+  for (const job of jobs) {
+    if (!job || typeof job !== "object") continue;
+    total += 1;
+
+    if (job.status) {
       byStatus[job.status] = (byStatus[job.status] || 0) + 1;
-
-      // Count by location
-      byLocation[job.location] = (byLocation[job.location] || 0) + 1;
-
-      // Sum progress
-      if (typeof job.progress === "number") {
-        totalProgress += job.progress;
-        validJobs++;
-      }
     }
-  });
 
-  const stats = {
-    total: jobs.length,
+    if (job.location) {
+      byLocation[job.location] = (byLocation[job.location] || 0) + 1;
+    }
+
+    if (typeof job.progress === "number" && !Number.isNaN(job.progress)) {
+      progressSum += job.progress;
+      progressCount += 1;
+    }
+  }
+
+  const averageProgress =
+    progressCount === 0 ? 0 : Math.floor(progressSum / progressCount);
+
+  return {
+    total,
     byStatus,
     byLocation,
-    averageProgress: validJobs > 0 ? Math.floor(totalProgress / validJobs) : 0,
+    averageProgress,
   };
-
-  // Instrumentation: log summary statistics
-  console.log(`[ListTransformer] Job list statistics:`, stats);
-
-  return stats;
 }
 
 /**
- * Filters jobs based on search criteria
- * @param {Array} jobs - Array of job objects
- * @param {string} searchTerm - Search term
- * @param {Object} filters - Filter criteria
- * @returns {Array} Filtered job array
+ * Filter jobs by search term (matches id or name, case-insensitive) and options {status, location}
+ * Returns jobs in original order (filtered).
  */
-export function filterJobs(jobs, searchTerm = "", filters = {}) {
-  if (!Array.isArray(jobs)) {
-    return [];
-  }
-
-  const lowerSearchTerm = searchTerm.toLowerCase();
+export function filterJobs(jobs, searchTerm = "", options = {}) {
+  if (!Array.isArray(jobs) || jobs.length === 0) return [];
+  const term = (searchTerm || "").trim().toLowerCase();
 
   return jobs.filter((job) => {
-    if (!job) return false;
+    if (!job || typeof job !== "object") return false;
 
-    // Apply search filter
-    if (searchTerm) {
-      const matchesName = job.name?.toLowerCase().includes(lowerSearchTerm);
-      const matchesId = job.id?.toLowerCase().includes(lowerSearchTerm);
-      if (!matchesName && !matchesId) {
-        return false;
-      }
-    }
-
-    // Apply status filter
-    if (filters.status && job.status !== filters.status) {
+    if (options && options.status && job.status !== options.status)
       return false;
-    }
-
-    // Apply location filter
-    if (filters.location && job.location !== filters.location) {
+    if (options && options.location && job.location !== options.location)
       return false;
-    }
 
-    return true;
+    if (!term) return true;
+
+    const hay = `${job.name || ""} ${job.id || ""}`.toLowerCase();
+    return hay.includes(term);
   });
 }
 
 /**
- * Transforms job list for API response format
- * @param {Array} jobs - Array of job objects
- * @returns {Array} API-ready job list
+ * Transform job list for API: pick only allowed fields and drop nulls
  */
-export function transformJobListForAPI(jobs) {
-  if (!Array.isArray(jobs)) {
-    return [];
+export function transformJobListForAPI(jobs = []) {
+  if (!Array.isArray(jobs) || jobs.length === 0) return [];
+
+  const allowed = [
+    "id",
+    "name",
+    "status",
+    "progress",
+    "createdAt",
+    "updatedAt",
+    "location",
+  ];
+
+  const out = [];
+  for (const job of jobs) {
+    if (!job || typeof job !== "object") continue;
+    const obj = {};
+    for (const k of allowed) {
+      if (k in job) obj[k] = job[k];
+    }
+    out.push(obj);
   }
 
-  return jobs
-    .map((job) => {
-      if (!job) return null;
-
-      // Extract only the fields needed for the list API
-      return {
-        id: job.id,
-        name: job.name,
-        status: job.status,
-        progress: job.progress,
-        createdAt: job.createdAt,
-        updatedAt: job.updatedAt,
-        location: job.location,
-      };
-    })
-    .filter((job) => job !== null);
+  return out;
 }
 
 /**
- * Gets aggregation statistics for instrumentation
- * @param {Array} currentJobs - Jobs from current location
- * @param {Array} completeJobs - Jobs from complete location
- * @param {Array} aggregatedJobs - Final aggregated jobs
- * @returns {Object} Aggregation statistics
+ * Compute aggregation diagnostics
  */
-export function getAggregationStats(currentJobs, completeJobs, aggregatedJobs) {
-  const totalInput = currentJobs.length + completeJobs.length;
-  const totalOutput = aggregatedJobs.length;
-  const duplicates = totalInput - totalOutput;
+export function getAggregationStats(
+  currentJobs = [],
+  completeJobs = [],
+  aggregatedJobs = []
+) {
+  const current = Array.isArray(currentJobs) ? currentJobs : [];
+  const complete = Array.isArray(completeJobs) ? completeJobs : [];
+  const aggregated = Array.isArray(aggregatedJobs) ? aggregatedJobs : [];
+
+  const totalInput = current.length + complete.length;
+
+  // duplicates: ids present in both
+  const compIds = new Set(complete.map((j) => j && j.id).filter(Boolean));
+  const curIds = new Set(current.map((j) => j && j.id).filter(Boolean));
+
+  let duplicates = 0;
+  for (const id of curIds) {
+    if (compIds.has(id)) duplicates += 1;
+  }
+
+  const totalOutput = aggregated.length;
+  const efficiency =
+    totalInput === 0 ? 0 : Math.round((totalOutput / totalInput) * 100);
 
   const statusDistribution = {};
-  aggregatedJobs.forEach((job) => {
-    statusDistribution[job.status] = (statusDistribution[job.status] || 0) + 1;
-  });
-
   const locationDistribution = {};
-  aggregatedJobs.forEach((job) => {
-    locationDistribution[job.location] =
-      (locationDistribution[job.location] || 0) + 1;
-  });
+
+  for (const j of aggregated) {
+    if (!j || typeof j !== "object") continue;
+    if (j.status)
+      statusDistribution[j.status] = (statusDistribution[j.status] || 0) + 1;
+    if (j.location)
+      locationDistribution[j.location] =
+        (locationDistribution[j.location] || 0) + 1;
+  }
 
   return {
     totalInput,
     totalOutput,
     duplicates,
-    efficiency: totalInput > 0 ? (totalOutput / totalInput) * 100 : 0,
+    efficiency,
     statusDistribution,
     locationDistribution,
   };
