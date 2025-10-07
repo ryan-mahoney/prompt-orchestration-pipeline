@@ -8,23 +8,34 @@
  */
 
 import { promises as fs } from "node:fs";
-import { PATHS, Constants } from "./config-bridge.js";
+import path from "node:path";
+import * as configBridge from "./config-bridge.js";
 
 /**
  * List job directory names for a given location.
  * Returns [] for invalid location, missing directory, or on permission errors.
  */
 export async function listJobs(location) {
-  if (!Constants || !Constants.JOB_LOCATIONS) {
+  if (!configBridge || !configBridge.Constants) {
     // Defensive: if Constants not available, return empty
     return [];
   }
 
-  if (!Constants.JOB_LOCATIONS.includes(location)) {
+  if (!configBridge.Constants.JOB_LOCATIONS.includes(location)) {
     return [];
   }
 
-  const dirPath = PATHS?.[location];
+  // Primary: use mocked PATHS (tests spy on this getter). Fallbacks:
+  //  - configBridge.getPATHS() if available
+  //  - environment PO_<LOCATION>_DIR (used by orchestrator/tests)
+  //  - default pipeline-data/<location> under cwd
+  const dirPath =
+    configBridge.PATHS?.[location] ??
+    (typeof configBridge.getPATHS === "function" &&
+      configBridge.getPATHS()[location]) ??
+    process.env[`PO_${location.toUpperCase()}_DIR`] ??
+    path.join(process.cwd(), "pipeline-data", location);
+
   if (!dirPath) {
     return [];
   }
@@ -54,7 +65,7 @@ export async function listJobs(location) {
       }
 
       // Validate job ID format
-      if (!Constants.JOB_ID_REGEX.test(name)) {
+      if (!configBridge.Constants.JOB_ID_REGEX.test(name)) {
         console.warn(`Skipping invalid job directory name: ${name}`);
         continue;
       }
@@ -87,7 +98,7 @@ export async function listAllJobs() {
  * { location, exists, jobCount, totalEntries, error? }
  */
 export async function getJobDirectoryStats(location) {
-  if (!Constants || !Constants.JOB_LOCATIONS) {
+  if (!configBridge || !configBridge.Constants) {
     return {
       location,
       exists: false,
@@ -97,7 +108,7 @@ export async function getJobDirectoryStats(location) {
     };
   }
 
-  if (!Constants.JOB_LOCATIONS.includes(location)) {
+  if (!configBridge.Constants.JOB_LOCATIONS.includes(location)) {
     return {
       location,
       exists: false,
@@ -107,7 +118,13 @@ export async function getJobDirectoryStats(location) {
     };
   }
 
-  const dirPath = PATHS?.[location];
+  const dirPath =
+    configBridge.PATHS?.[location] ??
+    (typeof configBridge.getPATHS === "function" &&
+      configBridge.getPATHS()[location]) ??
+    process.env[`PO_${location.toUpperCase()}_DIR`] ??
+    path.join(process.cwd(), "pipeline-data", location);
+
   if (!dirPath) {
     return {
       location,
@@ -149,7 +166,7 @@ export async function getJobDirectoryStats(location) {
       if (!entry.isDirectory()) continue;
       const name = entry.name;
       if (name.startsWith(".")) continue;
-      if (!Constants.JOB_ID_REGEX.test(name)) continue;
+      if (!configBridge.Constants.JOB_ID_REGEX.test(name)) continue;
       jobCount += 1;
     }
 

@@ -18,12 +18,14 @@ function resolveDirs(dataDir) {
   const idx = parts.lastIndexOf("pipeline-data");
   let root;
   if (idx !== -1) {
-    // Rebuild path up to and including pipeline-data
-    root = path.sep + path.join(...parts.slice(0, idx + 1));
-    // If original path was absolute without leading slash on some platforms,
-    // ensure we handle that case (path.join with leading slash above keeps absolute)
-    if (!path.isAbsolute(root) && path.isAbsolute(normalized)) {
-      root = path.resolve(root);
+    // Preserve original root (drive letter on Windows, '/' on POSIX, or '' for relative)
+    const originalRoot = path.parse(normalized).root; // '' | '/' | 'C:\\'
+    if (originalRoot) {
+      // Prepend original root to preserve absolute / drive-letter semantics
+      root = path.join(originalRoot, ...parts.slice(0, idx + 1));
+    } else {
+      // Relative input -> keep relative result
+      root = path.join(...parts.slice(0, idx + 1));
     }
   } else {
     root = path.join(dataDir, "pipeline-data");

@@ -284,11 +284,43 @@ export function determineJobStatus(tasks = {}) {
 
 // Export helper to resolve paths lazily for server use
 let _PATHS = null;
+
+/**
+ * Initialize cached PATHS for a given project root.
+ * Callers should use this when they need PATHS tied to a specific root.
+ * Returns the resolved paths.
+ */
+export function initPATHS(root) {
+  // If root is falsy, resolvePipelinePaths will use the default project root
+  _PATHS = resolvePipelinePaths(root || path.resolve(__dirname, "../.."));
+  return _PATHS;
+}
+
+/**
+ * Reset the cached PATHS so future calls will re-resolve.
+ * Useful in tests or server code that needs to change the project root at runtime.
+ */
+export function resetPATHS() {
+  _PATHS = null;
+}
+
+/**
+ * Get the cached PATHS. If a root argument is provided, re-initialize the cache
+ * for backward-compatible callers that pass a root to getPATHS(root).
+ *
+ * If not initialized, initialize with the default project root (two levels up
+ * from this file).
+ */
 export function getPATHS(root) {
-  if (!_PATHS) {
+  if (root) {
     _PATHS = resolvePipelinePaths(root);
+    return _PATHS;
+  }
+  if (!_PATHS) {
+    _PATHS = resolvePipelinePaths(path.resolve(__dirname, "../.."));
   }
   return _PATHS;
 }
 
+// Convenience export for existing callsites
 export const PATHS = getPATHS();

@@ -12,6 +12,7 @@
 
 import { readFileWithRetry } from "./file-reader.js";
 import * as configBridge from "./config-bridge.js";
+import path from "node:path";
 
 /**
  * Read a single job's tasks-status.json with lock-awareness and precedence.
@@ -33,9 +34,22 @@ export async function readJob(jobId) {
 
   for (const location of locations) {
     console.log(`readJob: checking location ${location} for ${jobId}`);
-    // Build paths using bridge helpers (tests may mock these)
-    const jobDir = configBridge.getJobPath(jobId, location);
-    const tasksPath = configBridge.getTasksStatusPath(jobId, location);
+    // Prefer using resolvePipelinePaths (tests spy on this) to derive paths.
+    // Fall back to getJobPath/getTasksStatusPath if resolvePipelinePaths is not available.
+    let jobDir;
+    let tasksPath;
+    if (typeof configBridge.resolvePipelinePaths === "function") {
+      const paths = configBridge.resolvePipelinePaths();
+      jobDir = path.join(paths[location], jobId);
+      tasksPath = path.join(paths[location], jobId, "tasks-status.json");
+    } else if (typeof configBridge.getJobPath === "function") {
+      jobDir = configBridge.getJobPath(jobId, location);
+      tasksPath = configBridge.getTasksStatusPath(jobId, location);
+    } else {
+      // As a last resort, build paths relative to cwd
+      jobDir = path.join(process.cwd(), "pipeline-data", location, jobId);
+      tasksPath = path.join(jobDir, "tasks-status.json");
+    }
 
     // Debug: trace lock checks and reading steps
     console.log(
