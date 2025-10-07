@@ -1,247 +1,286 @@
 /**
- * Status transformer for converting raw job data to UI-ready format
- * @module ui/transformers/status-transformer
+ * Status transformer
+ *
+ * Responsibilities:
+ *  - Normalize a raw tasks-status.json object into a job detail shape used by the UI
+ *  - Compute job-level status and progress per docs/project-data-display.md (0.2)
+ *  - Emit a warnings array (e.g., job id mismatch) but do not throw
+ *
+ * Exports expected by tests:
+ *  - transformJobStatus(rawJobData, jobId, location) -> job object | null
+ *  - computeJobStatus(tasks) -> { status, progress }
+ *  - transformTasks(rawTasks) -> Array<task>
+ *  - transformMultipleJobs(jobReadResults) -> Array<job>
+ *  - getTransformationStats(readResults, transformedJobs) -> stats object
+ *
+ * Notes:
+ *  - jobId is the directory name and is authoritative; raw.id may mismatch
+ *  - Progress calculation: round(100 * done_count / max(1, total_tasks))
+ *  - Job status rules:
+ *      - error if any task error
+ *      - running if any task running and none error
+ *      - complete if all tasks done
+ *      - pending otherwise
  */
 
-import { Constants } from "../config-bridge.js";
+import * as configBridge from "../config-bridge.js";
+
+// Known/valid task states for basic validation
+const VALID_TASK_STATES = new Set(["pending", "running", "done", "error"]);
 
 /**
- * Transforms raw job data to UI-ready format with computed status and progress
- * @param {Object} rawJobData - Raw job data from tasks-status.json
- * @param {string} jobId - Job ID (directory name)
- * @param {string} location - Job location ('current' or 'complete')
- * @returns {Object|null} Transformed job data or null if invalid
+ * Compute progress percentage from tasks mapping.
+ * Accepts tasks object where each value may have a `state` property.
  */
-export function transformJobStatus(rawJobData, jobId, location) {
-  // Instrumentation: log transformation start
-  console.log(`[StatusTransformer] Transforming job ${jobId} from ${location}`);
-
-  if (!rawJobData || typeof rawJobData !== "object") {
-    console.warn(`[StatusTransformer] Invalid raw job data for ${jobId}`);
-    return null;
-  }
-
-  try {
-    // Compute overall job status and progress
-    const { status, progress } = computeJobStatus(rawJobData.tasks);
-
-    // Transform tasks array
-    const tasks = transformTasks(rawJobData.tasks);
-
-    // Build the transformed job object
-    const transformedJob = {
-      id: jobId, // Always use directory name as authoritative ID
-      name: rawJobData.name || "Unnamed Job",
-      status,
-      progress,
-      createdAt: rawJobData.createdAt,
-      updatedAt: rawJobData.updatedAt || rawJobData.createdAt,
-      location,
-      tasks,
-    };
-
-    // Add warnings if there are any issues
-    const warnings = [];
-    if (rawJobData.id && rawJobData.id !== jobId) {
-      warnings.push(
-        `Job ID mismatch: JSON has "${rawJobData.id}", using directory name "${jobId}"`
-      );
-    }
-
-    if (warnings.length > 0) {
-      transformedJob.warnings = warnings;
-      console.warn(`[StatusTransformer] Warnings for job ${jobId}:`, warnings);
-    }
-
-    // Instrumentation: log successful transformation
-    console.log(`[StatusTransformer] Successfully transformed job ${jobId}:`, {
-      status,
-      progress,
-      taskCount: tasks.length,
-    });
-
-    return transformedJob;
-  } catch (error) {
-    console.error(
-      `[StatusTransformer] Error transforming job ${jobId}:`,
-      error
-    );
-    return null;
-  }
+export function computeProgress(tasks = {}) {
+  if (!tasks || typeof tasks !== "object") return 0;
+  const names = Object.keys(tasks);
+  const total = names.length;
+  if (total === 0) return 0;
+  const doneCount = names.filter((n) => tasks[n]?.state === "done").length;
+  return Math.round((100 * doneCount) / Math.max(1, total));
 }
 
 /**
- * Computes overall job status and progress percentage
- * @param {Object} tasks - Raw tasks object from tasks-status.json
- * @returns {Object} Status and progress information
+ * Determine job-level status from tasks mapping.
  */
-export function computeJobStatus(tasks) {
-  if (!tasks || typeof tasks !== "object") {
+export function determineJobStatus(tasks = {}) {
+  if (!tasks || typeof tasks !== "object") return "pending";
+  const names = Object.keys(tasks);
+  if (names.length === 0) return "pending";
+
+  const states = names.map((n) => tasks[n]?.state);
+
+  if (states.includes("error")) return "error";
+  if (states.includes("running")) return "running";
+  if (states.every((s) => s === "done")) return "complete";
+  return "pending";
+}
+
+/**
+ * Compute job status object { status, progress } and emit warnings for unknown states.
+ * Tests expect console.warn to be called for unknown states with substring:
+ *   Unknown task state "..."
+ */
+export function computeJobStatus(tasksInput) {
+  // Guard invalid input
+  if (
+    !tasksInput ||
+    typeof tasksInput !== "object" ||
+    Array.isArray(tasksInput)
+  ) {
     return { status: "pending", progress: 0 };
   }
 
-  const taskEntries = Object.entries(tasks);
-  const totalTasks = taskEntries.length;
+  // Normalize task states, and detect unknown states
+  const names = Object.keys(tasksInput);
+  if (names.length === 0) return { status: "pending", progress: 0 };
 
-  // Count task states
-  let doneCount = 0;
-  let runningCount = 0;
-  let errorCount = 0;
-  let pendingCount = 0;
+  let unknownStatesFound = new Set();
 
-  taskEntries.forEach(([taskName, task]) => {
-    const state = task?.state || "pending";
-
-    // Handle unknown states by treating as pending with warning
-    if (!Constants.TASK_STATES.includes(state)) {
-      console.warn(
-        `[StatusTransformer] Unknown task state "${state}" for task "${taskName}", treating as pending`
-      );
-      pendingCount++;
-      return;
+  const normalized = {};
+  for (const name of names) {
+    const t = tasksInput[name];
+    const state = t && typeof t === "object" ? t.state : undefined;
+    if (state == null || !VALID_TASK_STATES.has(state)) {
+      if (state != null && !VALID_TASK_STATES.has(state)) {
+        unknownStatesFound.add(state);
+      }
+      normalized[name] = { state: "pending" };
+    } else {
+      normalized[name] = { state };
     }
-
-    switch (state) {
-      case "done":
-        doneCount++;
-        break;
-      case "running":
-        runningCount++;
-        break;
-      case "error":
-        errorCount++;
-        break;
-      case "pending":
-      default:
-        pendingCount++;
-        break;
-    }
-  });
-
-  // Determine overall job status according to global contracts
-  let status;
-  if (errorCount > 0) {
-    status = "error";
-  } else if (runningCount > 0) {
-    status = "running";
-  } else if (doneCount === totalTasks && totalTasks > 0) {
-    status = "complete";
-  } else {
-    status = "pending";
   }
 
-  // Compute progress percentage
-  const progress = Math.round((100 * doneCount) / Math.max(1, totalTasks));
+  // Warn for unknown states
+  for (const s of unknownStatesFound) {
+    console.warn(`Unknown task state "${s}"`);
+  }
 
-  // Instrumentation: log status computation
-  console.log(`[StatusTransformer] Status computed:`, {
-    totalTasks,
-    doneCount,
-    runningCount,
-    errorCount,
-    pendingCount,
-    status,
-    progress,
-  });
+  const progress = computeProgress(normalized);
+  const status = determineJobStatus(normalized);
 
   return { status, progress };
 }
 
 /**
- * Transforms raw tasks object to UI-ready tasks array
- * @param {Object} rawTasks - Raw tasks object from tasks-status.json
- * @returns {Array} Transformed tasks array
+ * Transform raw tasks object -> ordered array of task objects.
+ * - Returns [] for invalid inputs
+ * - Missing or invalid state -> "pending" and console.warn with:
+ *   Invalid task state "invalid-state"
  */
 export function transformTasks(rawTasks) {
-  if (!rawTasks || typeof rawTasks !== "object") {
+  if (!rawTasks || typeof rawTasks !== "object" || Array.isArray(rawTasks)) {
     return [];
   }
 
-  return Object.entries(rawTasks).map(([taskName, rawTask]) => {
-    const task = {
-      name: taskName,
-      state: rawTask.state || "pending",
-    };
+  const out = [];
 
-    // Add optional fields if present
-    if (rawTask.startedAt) task.startedAt = rawTask.startedAt;
-    if (rawTask.endedAt) task.endedAt = rawTask.endedAt;
-    if (rawTask.attempts !== undefined) task.attempts = rawTask.attempts;
-    if (rawTask.executionTimeMs !== undefined)
-      task.executionTimeMs = rawTask.executionTimeMs;
-    if (rawTask.artifacts) task.artifacts = rawTask.artifacts;
+  for (const [name, raw] of Object.entries(rawTasks || {})) {
+    const state =
+      raw && typeof raw === "object" && "state" in raw ? raw.state : undefined;
 
-    // Validate task state
-    if (!Constants.TASK_STATES.includes(task.state)) {
-      console.warn(
-        `[StatusTransformer] Invalid task state "${task.state}" for task "${taskName}", defaulting to "pending"`
-      );
-      task.state = "pending";
+    let finalState = "pending";
+    if (state != null && VALID_TASK_STATES.has(state)) {
+      finalState = state;
+    } else if (state != null && !VALID_TASK_STATES.has(state)) {
+      // Invalid state value provided
+      console.warn(`Invalid task state "${state}"`);
+      finalState = "pending";
+    } else {
+      // missing state -> pending (no warn required by tests)
+      finalState = "pending";
     }
 
-    return task;
-  });
+    const task = {
+      name,
+      state: finalState,
+    };
+
+    if (raw && typeof raw === "object") {
+      if ("startedAt" in raw) task.startedAt = raw.startedAt;
+      if ("endedAt" in raw) task.endedAt = raw.endedAt;
+      if ("attempts" in raw) task.attempts = raw.attempts;
+      if ("executionTimeMs" in raw) task.executionTimeMs = raw.executionTimeMs;
+      if ("artifacts" in raw) task.artifacts = raw.artifacts;
+    }
+
+    out.push(task);
+  }
+
+  return out;
 }
 
 /**
- * Transforms multiple jobs in batch with instrumentation
- * @param {Array} jobReadResults - Array of job read results from job-reader
- * @returns {Array} Array of transformed job data
+ * Transform a single raw job payload into the canonical job object expected by UI/tests.
+ *
+ * Tests expect:
+ *  - Signature transformJobStatus(rawJobData, jobId, location)
+ *  - Return null for invalid raw inputs (null/undefined/non-object)
+ *  - On ID mismatch, include a warnings array containing:
+ *      'Job ID mismatch: JSON has "different-id", using directory name "job-123"'
+ *  - Fallbacks:
+ *      name => "Unnamed Job"
+ *      updatedAt => createdAt
+ *  - tasks normalized via transformTasks
+ *  - status/progress via computeJobStatus (operate on the raw tasks object)
+ *
+ * Note: older code returned { ok: true, job } style; tests expect a plain job object.
  */
-export function transformMultipleJobs(jobReadResults) {
-  console.log(`[StatusTransformer] Transforming ${jobReadResults.length} jobs`);
+export function transformJobStatus(raw, jobId, location) {
+  // Validate raw input: tests expect null for invalid raw
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
 
-  const startTime = Date.now();
-  const results = jobReadResults
-    .filter((result) => result.ok)
-    .map((result) =>
-      transformJobStatus(
-        result.data,
-        result.jobId || result.data.id,
-        result.location
-      )
-    )
-    .filter((job) => job !== null);
+  const warnings = [];
 
-  const endTime = Date.now();
-  const duration = endTime - startTime;
+  // ID mismatch warning (tests expect exact substring)
+  if ("id" in raw && String(raw.id) !== String(jobId)) {
+    const msg = `Job ID mismatch: JSON has "${raw.id}", using directory name "${jobId}"`;
+    warnings.push(msg);
+    console.warn(msg);
+  }
 
-  // Instrumentation: log batch transformation stats
-  console.log(`[StatusTransformer] Batch transformation completed:`, {
-    totalJobs: jobReadResults.length,
-    successfulTransforms: results.length,
-    failedTransforms: jobReadResults.length - results.length,
-    durationMs: duration,
-    jobsPerSecond: results.length / (duration / 1000),
-  });
+  // name fallback
+  const name = raw.name || "Unnamed Job";
 
-  return results;
+  // createdAt/updatedAt handling
+  const createdAt = raw.createdAt || null;
+  const updatedAt = raw.updatedAt || createdAt || null;
+
+  // Tasks normalization
+  let tasksArray = [];
+  if (
+    !("tasks" in raw) ||
+    typeof raw.tasks !== "object" ||
+    raw.tasks === null
+  ) {
+    // tests expect that invalid tasks are treated as empty array (not an error)
+    tasksArray = [];
+  } else {
+    tasksArray = transformTasks(raw.tasks);
+  }
+
+  // Compute status/progress based on the raw tasks mapping (so computeJobStatus sees unknown states)
+  const jobStatusObj = computeJobStatus(raw.tasks);
+
+  const job = {
+    id: jobId,
+    name,
+    status: jobStatusObj.status,
+    progress: jobStatusObj.progress,
+    createdAt,
+    updatedAt,
+    location,
+    tasks: tasksArray,
+  };
+
+  if (warnings.length > 0) job.warnings = warnings;
+
+  return job;
 }
 
 /**
- * Gets transformation statistics for instrumentation
- * @param {Array} jobReadResults - Original job read results
- * @param {Array} transformedJobs - Transformed job data
- * @returns {Object} Transformation statistics
+ * Transform multiple job read results (as returned by readJob and job scanner logic)
+ * - Logs "Transforming N jobs" (tests assert this substring)
+ * - Filters out failed reads (ok !== true)
+ * - Uses transformJobStatus for each successful read
+ * - Preserves order of reads as provided
  */
-export function getTransformationStats(jobReadResults, transformedJobs) {
-  const totalRead = jobReadResults.length;
-  const successfulReads = jobReadResults.filter((r) => r.ok).length;
-  const successfulTransforms = transformedJobs.length;
-  const failedTransforms = successfulReads - successfulTransforms;
+export function transformMultipleJobs(jobReadResults = []) {
+  const total = Array.isArray(jobReadResults) ? jobReadResults.length : 0;
+  console.log(`Transforming ${total} jobs`);
+
+  if (!Array.isArray(jobReadResults) || jobReadResults.length === 0) return [];
+
+  const out = [];
+  for (const r of jobReadResults) {
+    if (!r || r.ok !== true) continue;
+    // r.data is expected to be the raw job JSON
+    const raw = r.data || {};
+    // jobId and location metadata may be present on the read result (tests attach them)
+    const jobId = r.jobId || (raw && raw.id) || undefined;
+    const location = r.location || raw.location || undefined;
+    // If jobId is missing, skip (defensive)
+    if (!jobId) continue;
+    const transformed = transformJobStatus(raw, jobId, location);
+    if (transformed) out.push(transformed);
+  }
+  return out;
+}
+
+/**
+ * Compute transformation statistics used by tests:
+ * - totalRead: total read attempts
+ * - successfulReads: count of readResults with ok === true
+ * - successfulTransforms: transformedJobs.length
+ * - failedTransforms: successfulReads - successfulTransforms
+ * - transformationRate: Math.round(successfulTransforms / totalRead * 100) or 0
+ * - statusDistribution: counts of statuses in transformedJobs
+ */
+export function getTransformationStats(readResults = [], transformedJobs = []) {
+  const totalRead = Array.isArray(readResults) ? readResults.length : 0;
+  const successfulReads = Array.isArray(readResults)
+    ? readResults.filter((r) => r && r.ok === true).length
+    : 0;
+  const successfulTransforms = Array.isArray(transformedJobs)
+    ? transformedJobs.length
+    : 0;
+  const failedTransforms = Math.max(0, successfulReads - successfulTransforms);
+  const transformationRate =
+    totalRead === 0 ? 0 : Math.round((successfulTransforms / totalRead) * 100);
 
   const statusDistribution = {};
-  transformedJobs.forEach((job) => {
-    statusDistribution[job.status] = (statusDistribution[job.status] || 0) + 1;
-  });
+  for (const j of transformedJobs || []) {
+    if (!j || !j.status) continue;
+    statusDistribution[j.status] = (statusDistribution[j.status] || 0) + 1;
+  }
 
   return {
     totalRead,
     successfulReads,
     successfulTransforms,
     failedTransforms,
-    transformationRate:
-      totalRead > 0 ? (successfulTransforms / totalRead) * 100 : 0,
+    transformationRate,
     statusDistribution,
   };
 }
