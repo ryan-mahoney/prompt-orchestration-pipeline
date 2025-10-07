@@ -15,6 +15,8 @@ import {
 } from "@radix-ui/themes";
 
 import { Progress } from "../components/ui/progress";
+import { useJobListWithUpdates } from "../ui/client/hooks/useJobListWithUpdates";
+import { adaptJobSummary } from "../ui/client/adapters/job-adapter";
 
 // Referenced components — leave these alone
 import JobTable from "../components/JobTable";
@@ -24,7 +26,16 @@ import { demoPipeline, demoJobs } from "../data/demoData";
 
 export default function PromptPipelineDashboard({ isConnected }) {
   const [pipeline, setPipeline] = useState(demoPipeline);
-  const [jobs, setJobs] = useState(demoJobs);
+  const { data: apiJobs, loading, error } = useJobListWithUpdates();
+  const jobs = useMemo(() => {
+    // If API returned jobs, adapt them for the UI.
+    // On error or empty API result, fall back to bundled demo jobs.
+    const src = Array.isArray(apiJobs) ? apiJobs : [];
+    if (error || src.length === 0) {
+      return demoJobs.map(adaptJobSummary);
+    }
+    return src.map(adaptJobSummary);
+  }, [apiJobs, error]);
   const [seedName, setSeedName] = useState("content-generation");
   const [activeTab, setActiveTab] = useState("current");
   const [selectedJob, setSelectedJob] = useState(null);
@@ -47,7 +58,7 @@ export default function PromptPipelineDashboard({ isConnected }) {
     [jobs]
   );
   const completedCount = useMemo(
-    () => jobs.filter((j) => j.status === "completed").length,
+    () => jobs.filter((j) => j.status === "complete").length,
     [jobs]
   );
 
@@ -57,8 +68,8 @@ export default function PromptPipelineDashboard({ isConnected }) {
         return jobs.filter((j) => j.status === "running");
       case "errors":
         return jobs.filter((j) => j.status === "error");
-      case "completed":
-        return jobs.filter((j) => j.status === "completed");
+      case "complete":
+        return jobs.filter((j) => j.status === "complete");
       default:
         return [];
     }
@@ -67,20 +78,23 @@ export default function PromptPipelineDashboard({ isConnected }) {
   const totalProgressPct = (job) => {
     const total = pipeline?.tasks?.length ?? 0;
     if (!total) return 0;
-    const done = Object.values(job.tasks || {}).filter(
-      (t) => t.state === "completed"
-    ).length;
+    const taskList = Array.isArray(job.tasks)
+      ? job.tasks
+      : Object.values(job.tasks || {});
+    const done = taskList.filter((t) => t.state === "done").length;
     return Math.round((done / total) * 100);
   };
 
   const overallElapsed = (job) => {
     const start = new Date(job.createdAt).getTime();
-    const latestEnd = Object.values(job.tasks || {})
+    const taskList = Array.isArray(job.tasks)
+      ? job.tasks
+      : Object.values(job.tasks || {});
+    const latestEnd = taskList
       .map((t) => (t.endedAt ? new Date(t.endedAt).getTime() : undefined))
       .filter(Boolean)
       .reduce((acc, ts) => (ts && (!acc || ts > acc) ? ts : acc), undefined);
-    const end =
-      job.status === "completed" && latestEnd ? latestEnd : Date.now();
+    const end = job.status === "complete" && latestEnd ? latestEnd : Date.now();
     return Math.max(0, end - start);
   };
 
@@ -210,41 +224,50 @@ export default function PromptPipelineDashboard({ isConnected }) {
               }
             />
           ) : (
-            <Tabs.Root value={activeTab} onValueChange={setActiveTab}>
-              <Tabs.List aria-label="Job filters">
-                <Tabs.Trigger value="current">Current</Tabs.Trigger>
-                <Tabs.Trigger value="errors">Errors</Tabs.Trigger>
-                <Tabs.Trigger value="completed">Completed</Tabs.Trigger>
-              </Tabs.List>
+            <>
+              {error && (
+                <Box className="mb-4 rounded-md bg-yellow-50 p-3 border border-yellow-200">
+                  <Text size="2" className="text-yellow-800">
+                    Using demo data (live API unavailable)
+                  </Text>
+                </Box>
+              )}
+              <Tabs.Root value={activeTab} onValueChange={setActiveTab}>
+                <Tabs.List aria-label="Job filters">
+                  <Tabs.Trigger value="current">Current</Tabs.Trigger>
+                  <Tabs.Trigger value="errors">Errors</Tabs.Trigger>
+                  <Tabs.Trigger value="complete">Completed</Tabs.Trigger>
+                </Tabs.List>
 
-              <Tabs.Content value="current">
-                <JobTable
-                  jobs={filteredJobs}
-                  pipeline={pipeline}
-                  onOpenJob={openJob}
-                  totalProgressPct={totalProgressPct}
-                  overallElapsed={overallElapsed}
-                />
-              </Tabs.Content>
-              <Tabs.Content value="errors">
-                <JobTable
-                  jobs={filteredJobs}
-                  pipeline={pipeline}
-                  onOpenJob={openJob}
-                  totalProgressPct={totalProgressPct}
-                  overallElapsed={overallElapsed}
-                />
-              </Tabs.Content>
-              <Tabs.Content value="completed">
-                <JobTable
-                  jobs={filteredJobs}
-                  pipeline={pipeline}
-                  onOpenJob={openJob}
-                  totalProgressPct={totalProgressPct}
-                  overallElapsed={overallElapsed}
-                />
-              </Tabs.Content>
-            </Tabs.Root>
+                <Tabs.Content value="current">
+                  <JobTable
+                    jobs={filteredJobs}
+                    pipeline={pipeline}
+                    onOpenJob={openJob}
+                    totalProgressPct={totalProgressPct}
+                    overallElapsed={overallElapsed}
+                  />
+                </Tabs.Content>
+                <Tabs.Content value="errors">
+                  <JobTable
+                    jobs={filteredJobs}
+                    pipeline={pipeline}
+                    onOpenJob={openJob}
+                    totalProgressPct={totalProgressPct}
+                    overallElapsed={overallElapsed}
+                  />
+                </Tabs.Content>
+                <Tabs.Content value="complete">
+                  <JobTable
+                    jobs={filteredJobs}
+                    pipeline={pipeline}
+                    onOpenJob={openJob}
+                    totalProgressPct={totalProgressPct}
+                    overallElapsed={overallElapsed}
+                  />
+                </Tabs.Content>
+              </Tabs.Root>
+            </>
           )}
         </Box>
       </Box>

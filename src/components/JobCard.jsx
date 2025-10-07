@@ -1,6 +1,6 @@
 import React from "react";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { Progress } from "@/components/ui/progress";
+import { Card, CardHeader, CardTitle, CardContent } from "./ui/card";
+import { Progress } from "./ui/progress";
 import { Clock, TimerReset, ChevronRight } from "lucide-react";
 import { fmtDuration, elapsedBetween } from "../utils/time";
 import { countCompleted } from "../utils/jobs";
