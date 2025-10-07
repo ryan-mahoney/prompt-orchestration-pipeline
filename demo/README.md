@@ -29,23 +29,41 @@ cp .env.example .env
 
 ### 3. Run a Demo
 
+There are two supported ways to run the demo. The recommended, canonical path is the production-mode demo which builds the UI and runs the runner in a production-like configuration. A developer convenience path for local development (Vite dev server) is also available.
+
+Production-mode (canonical)
+
 ```bash
-# Run market analysis demo
-node run-demo.js run market-analysis
+# Build UI and run demo in production mode (recommended)
+npm run demo:prod
 
-# Run content generation demo
-node run-demo.js run content-generation
-
-# Run data processing demo
-node run-demo.js run data-processing
-
-# List all available scenarios
-node run-demo.js list
+# Or: build UI then run manually
+npm run ui:build
+NODE_ENV=production node demo/run-demo.js run market-analysis
 ```
+
+Notes:
+
+- The production demo defaults NODE_ENV to "production" and the server will use the real upload/orchestrator behavior (no bundled demo data shown in the UI).
+- Use this path for reliable, repeatable demo behavior (CI, demos, or when you want the orchestrator+UI together).
+
+Dev-mode (developer convenience)
+
+```bash
+# Start the UI dev server (Vite) in one terminal
+npm run ui:dev
+# In another terminal run the demo runner (does NOT auto-start Vite)
+node demo/run-demo.js run market-analysis
+```
+
+Notes:
+
+- The demo runner will not start Vite automatically. If you want hot-reload, start Vite yourself (see above).
+- In dev mode the UI is served by the Vite dev server (default: http://localhost:5173).
 
 ### 4. UI Monitoring
 
-Note: The demo runner does not start the UI dev server for you. It will only serve the built UI assets when they are present. For development with Vite (hot-reload) you must run the dev server in a separate terminal.
+Important: the demo runner will serve built UI assets (production build) when present and will run in a production-like mode by default when you use the canonical demo command (`npm run demo:prod`). The demo runner intentionally does not auto-start the Vite dev server; if you want hot-reload, start Vite yourself in a separate terminal.
 
 Build mode (serve the production build)
 
@@ -53,28 +71,38 @@ Build mode (serve the production build)
 # From the project root: build the UI
 npm run ui:build
 
-# Then run the demo runner (from the project root)
-node demo/run-demo.js run market-analysis
+# Run the production-mode demo (recommended)
+npm run demo:prod
 
 # Open browser to http://localhost:4123
 ```
 
-Dev mode (hot-reload with Vite)
+Dev mode (hot-reload with Vite — contributor workflow)
 
 ```bash
 # Terminal 1 (project root): Start the UI dev server (Vite)
 npm run ui:dev
 # Vite will serve the app at http://localhost:5173 by default
 
-# Terminal 2 (project root): Run the demo runner
+# Terminal 2 (project root): Run the demo runner (does NOT start Vite)
 node demo/run-demo.js run market-analysis
 
 # Open browser to http://localhost:5173
 ```
 
+Notes:
+
+- Production-mode (`npm run demo:prod`) builds the UI and runs the demo with NODE_ENV=production so uploads and orchestration follow the real code paths.
+- The dashboard intentionally does not display bundled/demo jobs at runtime. When the API is unreachable you will see an empty state prompting you to upload a seed.
+- For local debugging you can run the dev server separately, but remember the canonical demo path is the production-mode command above.
+
 Troubleshooting
 
-- If the UI does not appear in build mode, confirm that `src/ui/dist/index.html` exists after running `npm run ui:build`.
+- If the UI does not appear in build mode, confirm that `src/ui/dist/index.html` exists after running `npm run ui:build`. If you used `npm run demo:prod` the build step runs automatically; watch the console for vite build output and any errors.
+- If jobs do not appear in the dashboard after submitting a seed:
+  - Check `demo/pipeline-data/pending/` for the `{name}-seed.json` file.
+  - If present, verify the orchestrator has moved it to `demo/pipeline-data/current/{name}/seed.json` and created `tasks-status.json`.
+  - If the file remains in `pending/` and no `current/` folder appears, check orchestrator logs for watcher events and any errors; there may be a path or watcher mismatch.
 - If you see a "Duplicate export of 'createSSEEnhancer'" or similar SSE-related errors, they indicate a module export collision. Ensure your local changes include the fix that exports `createSSEEnhancer` from a single canonical module (see `src/ui/sse-enhancer.js`).
 - If the dev server is running but the demo UI is unreachable, verify Vite is listening on port 5173 and that no other process is blocking the port.
 - For CI or automated runs where you don't want the UI, you may skip building or running the dev server; the demo runner will still execute pipeline jobs in headless mode.
