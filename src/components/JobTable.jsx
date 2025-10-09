@@ -40,13 +40,21 @@ export default function JobTable({
 
         <Table.Body>
           {jobs.map((job) => {
-            const currentTask = job.current
-              ? job.tasks[job.current]
-              : undefined;
+            const taskById = Array.isArray(job.tasks)
+              ? Object.fromEntries(
+                  (job.tasks || []).map((t) => [t.id ?? t.name, t])
+                )
+              : job.tasks || {};
+            const currentTask = job.current ? taskById[job.current] : undefined;
             const currentElapsed = currentTask
               ? elapsedBetween(currentTask.startedAt, currentTask.endedAt)
               : 0;
             const totalCompleted = countCompleted(job);
+            const totalTasks =
+              pipeline?.tasks?.length ??
+              (Array.isArray(job.tasks)
+                ? job.tasks.length
+                : Object.keys(job.tasks || {}).length);
             const progress = totalProgressPct(job);
             const duration = overallElapsed(job);
 
@@ -109,7 +117,7 @@ export default function JobTable({
 
                 <Table.Cell>
                   <Text size="2" className="text-slate-700">
-                    {totalCompleted} of {pipeline.tasks.length}
+                    {totalCompleted} of {totalTasks}
                   </Text>
                 </Table.Cell>
 

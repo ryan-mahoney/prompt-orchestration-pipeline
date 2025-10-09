@@ -155,14 +155,23 @@ pipeline-data/
   "name": "pipeline-name",
   "version": "1.0.0",
   "description": "Pipeline description",
-  "tasks": ["task1", "task2", "task3"],
-  "taskConfig": {
-    "task1": {
-      "model": "model-name",
-      "temperature": 0.7,
-      "maxTokens": 2000
+  "tasks": [
+    {
+      "id": "task1",
+      "name": "task1",
+      "config": { "model": "model-name", "temperature": 0.7, "maxTokens": 2000 }
+    },
+    {
+      "id": "task2",
+      "name": "task2",
+      "config": { "model": "model-name", "temperature": 0.5, "maxTokens": 1500 }
+    },
+    {
+      "id": "task3",
+      "name": "task3",
+      "config": { "model": "model-name", "temperature": 0.3, "maxTokens": 2000 }
     }
-  },
+  ],
   "metadata": {
     "author": "Author name",
     "created": "creation-date",
@@ -170,6 +179,8 @@ pipeline-data/
   }
 }
 ```
+
+See also: `docs/tasks-data-shape.md` — canonical Task[] schema and migration guidance.
 
 **Example**:
 

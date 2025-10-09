@@ -9,6 +9,18 @@ import { fileURLToPath } from "node:url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// Allow overriding the demo root directory via CLI:
+// Accept --root=path or --data-dir=path. If provided, resolve to an absolute path.
+// This must be computed before we create the orchestrator so the passed rootDir
+// is used to resolve pipeline-data and pipeline-config paths.
+const args = process.argv.slice(2);
+const rootArg =
+  args.find((a) => a.startsWith("--root="))?.split("=")[1] ||
+  args.find((a) => a.startsWith("--data-dir="))?.split("=")[1] ||
+  null;
+const DEMO_ROOT = rootArg ? path.resolve(process.cwd(), rootArg) : __dirname;
+console.log("Demo root resolved to:", DEMO_ROOT);
+
 // Ensure demo runs in production-like mode by default
 process.env.NODE_ENV = process.env.NODE_ENV || "production";
 
@@ -39,7 +51,7 @@ async function runDemo(scenarioName) {
 
     // Initialize orchestrator
     const state = await createPipelineOrchestrator({
-      rootDir: __dirname,
+      rootDir: DEMO_ROOT,
       configDir: "pipeline-config",
       dataDir: "pipeline-data",
       autoStart: true,

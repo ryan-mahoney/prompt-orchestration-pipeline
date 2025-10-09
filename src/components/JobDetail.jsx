@@ -18,12 +18,16 @@ import "react18-json-view/src/style.css";
 
 export default function JobDetail({ job, pipeline, onClose, onResume }) {
   const [selectedArtifact, setSelectedArtifact] = useState(null);
-  const [resumeFrom, setResumeFrom] = useState(pipeline.tasks[0]?.id ?? "");
+  const [resumeFrom, setResumeFrom] = useState(pipeline?.tasks?.[0]?.id ?? "");
 
   useEffect(() => {
     setSelectedArtifact(null);
-    setResumeFrom(pipeline.tasks[0]?.id ?? "");
-  }, [job.pipelineId, pipeline.tasks]);
+    setResumeFrom(pipeline?.tasks?.[0]?.id ?? "");
+  }, [job.pipelineId, pipeline?.tasks?.length]);
+
+  const taskById = Array.isArray(job?.tasks)
+    ? Object.fromEntries((job.tasks || []).map((x) => [x.id ?? x.name, x]))
+    : job?.tasks || {};
 
   return (
     <div className="flex h-full flex-col">
@@ -64,7 +68,7 @@ export default function JobDetail({ job, pipeline, onClose, onResume }) {
                   <SelectValue placeholder="Select task" />
                 </SelectTrigger>
                 <SelectContent>
-                  {pipeline.tasks.map((t) => (
+                  {(pipeline?.tasks ?? []).map((t) => (
                     <SelectItem key={t.id} value={t.id}>
                       {t.name}
                     </SelectItem>
@@ -92,8 +96,8 @@ export default function JobDetail({ job, pipeline, onClose, onResume }) {
               <CardTitle className="text-sm">Timeline</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              {pipeline.tasks.map((t) => {
-                const st = job.tasks[t.id];
+              {(pipeline?.tasks ?? []).map((t) => {
+                const st = taskById[t.id];
                 const state = st?.state ?? "pending";
                 const execMs =
                   st?.executionTime ??
@@ -101,8 +105,8 @@ export default function JobDetail({ job, pipeline, onClose, onResume }) {
                 const attempts = st?.attempts ?? 0;
                 const refine = st?.refinementAttempts ?? 0;
 
-                const allExec = pipeline.tasks
-                  .map((pt) => job.tasks[pt.id])
+                const allExec = (pipeline?.tasks ?? [])
+                  .map((pt) => taskById[pt.id])
                   .map(
                     (jt) =>
                       jt?.executionTime ??
