@@ -875,15 +875,32 @@ demo/
   "name": "demo-pipeline",
   "version": "1.0.0",
   "description": "Demo pipeline showcasing multi-stage LLM workflows",
-  "tasks": ["research", "analysis", "synthesis", "formatting"],
-  "taskConfig": {
-    "research": { "model": "gpt-5-nano", "temperature": 0.7 },
-    "analysis": { "model": "gpt-5-nano", "temperature": 0.6 },
-    "synthesis": { "model": "gpt-5-nano", "temperature": 0.8 },
-    "formatting": { "model": "gpt-5-nano", "temperature": 0.3 }
-  }
+  "tasks": [
+    {
+      "id": "research",
+      "name": "research",
+      "config": { "model": "gpt-5-nano", "temperature": 0.7, "maxTokens": 2000 }
+    },
+    {
+      "id": "analysis",
+      "name": "analysis",
+      "config": { "model": "gpt-5-nano", "temperature": 0.6, "maxTokens": 2500 }
+    },
+    {
+      "id": "synthesis",
+      "name": "synthesis",
+      "config": { "model": "gpt-5-nano", "temperature": 0.8, "maxTokens": 3000 }
+    },
+    {
+      "id": "formatting",
+      "name": "formatting",
+      "config": { "model": "gpt-5-nano", "temperature": 0.3, "maxTokens": 2000 }
+    }
+  ]
 }
 ```
+
+See also: `docs/tasks-data-shape.md` — canonical Task[] schema and migration guidance.
 
 ### Demo Execution
 
