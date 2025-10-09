@@ -83,14 +83,19 @@ export const Constants = {
  * @returns {Object} Object containing resolved paths
  */
 export function resolvePipelinePaths() {
-  // Get project root by going up from src/ui
-  const projectRoot = path.resolve(__dirname, "../..");
+  // Prefer an explicit PO_ROOT when provided (e.g. server sets this to the data root).
+  // Fall back to the project root (the previous behavior) when PO_ROOT is not set.
+  const base = process.env.PO_ROOT
+    ? path.resolve(process.env.PO_ROOT)
+    : path.resolve(__dirname, "../..");
 
   return {
-    current: path.join(projectRoot, "pipeline-data", "current"),
-    complete: path.join(projectRoot, "pipeline-data", "complete"),
-    pending: path.join(projectRoot, "pipeline-data", "pending"),
-    rejected: path.join(projectRoot, "pipeline-data", "rejected"),
+    current: path.join(base, "pipeline-data", "current"),
+    complete: path.join(base, "pipeline-data", "complete"),
+    pending: path.join(base, "pipeline-data", "pending"),
+    rejected: path.join(base, "pipeline-data", "rejected"),
+    // Pipeline definition location (useful for UI/server logic that wants to read pipeline.json)
+    pipeline: path.join(base, "pipeline-config", "pipeline.json"),
   };
 }
 
@@ -314,6 +319,9 @@ export function getPATHS() {
   return _PATHS;
 }
 
-export const PATHS = getPATHS();
+// NOTE: Historically we exported a null PATHS to defer resolution until runtime.
+// Many tests and server consumers expect `PATHS` to be defined synchronously,
+// so export a resolved PATHS object here (computed from the current environment).
+export const PATHS = resolvePipelinePaths();
 
 export const CONFIG = getUIConfig();

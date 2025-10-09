@@ -19,6 +19,7 @@ import {
   transformJobListForAPI,
 } from "../transformers/list-transformer.js";
 import * as configBridge from "../config-bridge.js";
+import fs from "node:fs/promises";
 
 /**
  * Return a list of job summaries suitable for the API.
@@ -31,6 +32,53 @@ import * as configBridge from "../config-bridge.js";
  */
 export async function handleJobList() {
   console.log("[JobEndpoints] GET /api/jobs called");
+
+  // Instrumentation: log resolved paths and check for pipeline.json presence
+  try {
+    const paths =
+      (typeof configBridge.getPATHS === "function" &&
+        configBridge.getPATHS()) ||
+      configBridge.PATHS ||
+      (typeof configBridge.resolvePipelinePaths === "function" &&
+        (function () {
+          try {
+            return configBridge.resolvePipelinePaths();
+          } catch {
+            return null;
+          }
+        })()) ||
+      null;
+
+    console.log("[JobEndpoints] resolved PATHS:", paths);
+
+    const pipelinePath =
+      (paths && paths.pipeline) ||
+      (typeof configBridge.resolvePipelinePaths === "function"
+        ? (function () {
+            try {
+              return configBridge.resolvePipelinePaths().pipeline;
+            } catch {
+              return null;
+            }
+          })()
+        : null);
+
+    if (pipelinePath) {
+      try {
+        await fs.access(pipelinePath);
+        console.log(`[JobEndpoints] pipeline.json exists at ${pipelinePath}`);
+      } catch (err) {
+        console.warn(
+          `[JobEndpoints] pipeline.json NOT found at ${pipelinePath}: ${err?.message}`
+        );
+      }
+    } else {
+      console.warn("[JobEndpoints] could not resolve pipeline.json path");
+    }
+  } catch (instrErr) {
+    console.error("JobEndpoints instrumentation error:", instrErr);
+  }
+
   try {
     const currentIds = await listJobs("current");
     const completeIds = await listJobs("complete");

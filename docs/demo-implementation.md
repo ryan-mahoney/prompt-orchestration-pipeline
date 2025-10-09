@@ -292,7 +292,28 @@ ENABLE_MOCK_PROVIDER=false        # Use mock provider for testing
   "name": "demo-pipeline",
   "version": "1.0.0",
   "description": "Demo pipeline showcasing multi-stage LLM workflows",
-  "tasks": ["research", "analysis", "synthesis", "formatting"],
+  "tasks": [
+    {
+      "id": "research",
+      "name": "research",
+      "config": { "model": "gpt-5-nano", "temperature": 0.7, "maxTokens": 2000 }
+    },
+    {
+      "id": "analysis",
+      "name": "analysis",
+      "config": { "model": "gpt-5-nano", "temperature": 0.6, "maxTokens": 2500 }
+    },
+    {
+      "id": "synthesis",
+      "name": "synthesis",
+      "config": { "model": "gpt-5-nano", "temperature": 0.8, "maxTokens": 3000 }
+    },
+    {
+      "id": "formatting",
+      "name": "formatting",
+      "config": { "model": "gpt-5-nano", "temperature": 0.3, "maxTokens": 2000 }
+    }
+  ],
   "metadata": {
     "author": "Prompt Orchestration Pipeline",
     "created": "2024-01-01",
@@ -300,6 +321,10 @@ ENABLE_MOCK_PROVIDER=false        # Use mock provider for testing
   }
 }
 ```
+
+See also: `docs/tasks-data-shape.md` — canonical Task[] schema and migration guidance.
+
+````
 
 #### 3.2 Task Registry (`demo/pipeline-config/tasks/index.js`)
 
@@ -314,7 +339,7 @@ export default {
   synthesis: "./synthesis/index.js",
   formatting: "./formatting/index.js",
 };
-```
+````
 
 ### Phase 4: Task Implementations
 

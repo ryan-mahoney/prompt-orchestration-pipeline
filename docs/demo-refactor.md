@@ -220,7 +220,23 @@ ANTHROPIC_API_KEY=demo-key-not-real
 {
   "name": "demo-market-analysis",
   "version": "1.0.0",
-  "tasks": ["data-extraction", "analysis", "report-generation"],
+  "tasks": [
+    {
+      "id": "data-extraction",
+      "name": "data-extraction",
+      "config": { "model": "gpt-5-nano", "temperature": 0.5, "maxTokens": 2000 }
+    },
+    {
+      "id": "analysis",
+      "name": "analysis",
+      "config": { "model": "gpt-5-nano", "temperature": 0.6, "maxTokens": 2500 }
+    },
+    {
+      "id": "report-generation",
+      "name": "report-generation",
+      "config": { "model": "gpt-5-nano", "temperature": 0.7, "maxTokens": 3000 }
+    }
+  ],
   "config": {
     "retryPolicy": {
       "maxRetries": 3,
