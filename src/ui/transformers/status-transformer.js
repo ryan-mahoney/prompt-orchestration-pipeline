@@ -28,6 +28,11 @@ import * as configBridge from "../config-bridge.browser.js";
 // Known/valid task states for basic validation
 const VALID_TASK_STATES = new Set(["pending", "running", "done", "error"]);
 
+// Legacy/alternative states mapping -> canonical
+const LEGACY_STATE_MAP = {
+  failed: "error",
+};
+
 /**
  * Compute progress percentage from tasks mapping.
  * Accepts tasks object where each value may have a `state` property.
@@ -82,13 +87,19 @@ export function computeJobStatus(tasksInput) {
   for (const name of names) {
     const t = tasksInput[name];
     const state = t && typeof t === "object" ? t.state : undefined;
-    if (state == null || !VALID_TASK_STATES.has(state)) {
-      if (state != null && !VALID_TASK_STATES.has(state)) {
+    const effectiveState =
+      state != null &&
+      Object.prototype.hasOwnProperty.call(LEGACY_STATE_MAP, state)
+        ? LEGACY_STATE_MAP[state]
+        : state;
+
+    if (effectiveState == null || !VALID_TASK_STATES.has(effectiveState)) {
+      if (state != null && !VALID_TASK_STATES.has(effectiveState)) {
         unknownStatesFound.add(state);
       }
       normalized[name] = { state: "pending" };
     } else {
-      normalized[name] = { state };
+      normalized[name] = { state: effectiveState };
     }
   }
 
@@ -117,15 +128,20 @@ export function transformTasks(rawTasks) {
   const out = [];
 
   for (const [name, raw] of Object.entries(rawTasks || {})) {
-    const state =
+    const rawState =
       raw && typeof raw === "object" && "state" in raw ? raw.state : undefined;
+    const mappedState =
+      rawState != null &&
+      Object.prototype.hasOwnProperty.call(LEGACY_STATE_MAP, rawState)
+        ? LEGACY_STATE_MAP[rawState]
+        : rawState;
 
     let finalState = "pending";
-    if (state != null && VALID_TASK_STATES.has(state)) {
-      finalState = state;
-    } else if (state != null && !VALID_TASK_STATES.has(state)) {
+    if (mappedState != null && VALID_TASK_STATES.has(mappedState)) {
+      finalState = mappedState;
+    } else if (rawState != null && !VALID_TASK_STATES.has(mappedState)) {
       // Invalid state value provided
-      console.warn(`Invalid task state "${state}"`);
+      console.warn(`Invalid task state "${rawState}"`);
       finalState = "pending";
     } else {
       // missing state -> pending (no warn required by tests)
