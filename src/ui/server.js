@@ -19,6 +19,9 @@ import { handleJobList, handleJobDetail } from "./endpoints/job-endpoints.js";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// Vite dev server instance (populated in development mode)
+let viteServer = null;
+
 // Configuration
 const PORT = process.env.PORT || 4000;
 const WATCHED_PATHS = (process.env.WATCHED_PATHS || "pipeline-config,runs")
@@ -618,24 +621,53 @@ function createServer() {
       return;
     }
 
-    // Serve static files from dist directory (built React app)
-    if (pathname === "/" || pathname === "/index.html") {
-      serveStatic(res, path.join(__dirname, "dist", "index.html"));
-    } else if (pathname.startsWith("/assets/")) {
-      // Serve assets from dist/assets
-      const assetPath = pathname.substring(1); // Remove leading slash
-      serveStatic(res, path.join(__dirname, "dist", assetPath));
-    } else if (pathname.startsWith("/public/")) {
-      // Serve static files from public directory
-      const publicPath = pathname.substring(1); // Remove leading slash
-      serveStatic(
-        res,
-        path.join(__dirname, "public", publicPath.replace("public/", ""))
-      );
+    // Prefer Vite middleware in development for non-API routes (HMR & asset serving)
+    if (viteServer && viteServer.middlewares) {
+      try {
+        // Let Vite handle all non-API requests (including assets). If Vite calls next,
+        // fall back to the static handlers below.
+        return viteServer.middlewares(req, res, () => {
+          if (pathname === "/" || pathname === "/index.html") {
+            serveStatic(res, path.join(__dirname, "dist", "index.html"));
+          } else if (pathname.startsWith("/assets/")) {
+            const assetPath = pathname.substring(1); // Remove leading slash
+            serveStatic(res, path.join(__dirname, "dist", assetPath));
+          } else if (pathname.startsWith("/public/")) {
+            const publicPath = pathname.substring(1); // Remove leading slash
+            serveStatic(
+              res,
+              path.join(__dirname, "public", publicPath.replace("public/", ""))
+            );
+          } else {
+            // Fallback to index.html for client-side routing
+            serveStatic(res, path.join(__dirname, "dist", "index.html"));
+          }
+        });
+      } catch (err) {
+        console.error("Vite middleware error:", err);
+        // Fallback to serving built assets
+        serveStatic(res, path.join(__dirname, "dist", "index.html"));
+      }
     } else {
-      // For any other route, serve the React app's index.html
-      // This allows client-side routing to work
-      serveStatic(res, path.join(__dirname, "dist", "index.html"));
+      // No Vite dev server available; serve static files from dist/public as before
+      if (pathname === "/" || pathname === "/index.html") {
+        serveStatic(res, path.join(__dirname, "dist", "index.html"));
+      } else if (pathname.startsWith("/assets/")) {
+        // Serve assets from dist/assets
+        const assetPath = pathname.substring(1); // Remove leading slash
+        serveStatic(res, path.join(__dirname, "dist", assetPath));
+      } else if (pathname.startsWith("/public/")) {
+        // Serve static files from public directory
+        const publicPath = pathname.substring(1); // Remove leading slash
+        serveStatic(
+          res,
+          path.join(__dirname, "public", publicPath.replace("public/", ""))
+        );
+      } else {
+        // For any other route, serve the React app's index.html
+        // This allows client-side routing to work
+        serveStatic(res, path.join(__dirname, "dist", "index.html"));
+      }
     }
   });
 
@@ -724,6 +756,26 @@ async function startServer({ dataDir, port: customPort }) {
           : 0;
 
     console.log("DEBUG: About to create server...");
+
+    // In development, start Vite in middlewareMode so the Node server can serve
+    // the client with HMR in a single process. We dynamically import Vite here
+    // to avoid including it in production bundles.
+    if (process.env.NODE_ENV !== "production") {
+      try {
+        // Import createServer under an alias to avoid collision with our createServer()
+        const { createServer: createViteServer } = await import("vite");
+        viteServer = await createViteServer({
+          root: path.join(__dirname, "client"),
+          server: { middlewareMode: true },
+          appType: "custom",
+        });
+        console.log("DEBUG: Vite dev server started (middleware mode)");
+      } catch (err) {
+        console.error("Failed to start Vite dev server:", err);
+        viteServer = null;
+      }
+    }
+
     const server = createServer();
     console.log("DEBUG: Server created successfully");
 
@@ -807,6 +859,17 @@ async function startServer({ dataDir, port: customPort }) {
         }
 
         sseRegistry.closeAll();
+
+        // Close Vite dev server if running (development single-process mode)
+        if (viteServer && typeof viteServer.close === "function") {
+          try {
+            await viteServer.close();
+            viteServer = null;
+            console.log("DEBUG: Vite dev server closed");
+          } catch (err) {
+            console.error("Error closing Vite dev server:", err);
+          }
+        }
 
         // Close the HTTP server
         return new Promise((resolve) => server.close(resolve));
