@@ -17,7 +17,8 @@ import {
 import { Progress } from "../components/ui/progress";
 import { useJobListWithUpdates } from "../ui/client/hooks/useJobListWithUpdates";
 import { adaptJobSummary } from "../ui/client/adapters/job-adapter";
-import { demoJobs } from "../data/demoData";
+import { demoPipeline, demoJobs } from "../data/demoData";
+import { CONFIG as UI_CONFIG } from "../ui/config-bridge.browser.js";
 
 // Referenced components — leave these alone
 import JobTable from "../components/JobTable";
@@ -32,12 +33,24 @@ export default function PromptPipelineDashboard({ isConnected }) {
     error,
     connectionStatus,
   } = useJobListWithUpdates();
+
+  // If the client is running in demo mode (no real data), initialize pipeline
+  // state from the demoPipeline so the header badge and task list render.
+  useEffect(() => {
+    if (!UI_CONFIG.useRealData) {
+      setPipeline(demoPipeline);
+    }
+  }, []);
   const jobs = useMemo(() => {
     const src = Array.isArray(apiJobs) ? apiJobs : [];
-    if (error) {
-      // On error, render demo job list and show disconnected banner
+
+    // Render demo jobs when:
+    //  - the API hook reported an error (existing behavior), OR
+    //  - we are running in demo mode (UI_CONFIG.useRealData === false) and the API returned an empty list.
+    if (error || (!UI_CONFIG.useRealData && src.length === 0)) {
       return demoJobs.map(adaptJobSummary);
     }
+
     return src.map(adaptJobSummary);
   }, [apiJobs, error]);
   const [seedName, setSeedName] = useState("content-generation");
