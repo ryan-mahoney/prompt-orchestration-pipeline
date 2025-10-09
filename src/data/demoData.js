@@ -1,10 +1,26 @@
 export const demoPipeline = {
   name: "AI Content Generation",
   tasks: [
-    { id: "ingest", name: "ingest", config: { model: "gpt-4o", temperature: 0.2, maxTokens: 2000 } },
-    { id: "analysis", name: "analysis", config: { model: "gpt-4.1", temperature: 0.3, maxTokens: 3000 } },
-    { id: "draft", name: "draft", config: { model: "gpt-4.1", temperature: 0.7, maxTokens: 4000 } },
-    { id: "validate", name: "validate", config: { model: "gpt-4o", temperature: 0.0, maxTokens: 1500 } },
+    {
+      id: "ingest",
+      name: "ingest",
+      config: { model: "gpt-4o", temperature: 0.2, maxTokens: 2000 },
+    },
+    {
+      id: "analysis",
+      name: "analysis",
+      config: { model: "gpt-4.1", temperature: 0.3, maxTokens: 3000 },
+    },
+    {
+      id: "draft",
+      name: "draft",
+      config: { model: "gpt-4.1", temperature: 0.7, maxTokens: 4000 },
+    },
+    {
+      id: "validate",
+      name: "validate",
+      config: { model: "gpt-4o", temperature: 0.0, maxTokens: 1500 },
+    },
   ],
 };
 
@@ -18,8 +34,8 @@ export const demoJobs = [
     createdAt: earlier(14),
     status: "running",
     current: "draft",
-    tasks: {
-      ingest: {
+    tasks: [
+      {
         id: "ingest",
         name: "ingest",
         state: "completed",
@@ -28,10 +44,15 @@ export const demoJobs = [
         executionTime: 60_000,
         attempts: 1,
         artifacts: [
-          { filename: "sources.json", content: { urls: ["https://example.com/a", "https://example.com/b"] } },
+          {
+            filename: "sources.json",
+            content: {
+              urls: ["https://example.com/a", "https://example.com/b"],
+            },
+          },
         ],
       },
-      analysis: {
+      {
         id: "analysis",
         name: "analysis",
         state: "completed",
@@ -40,23 +61,26 @@ export const demoJobs = [
         executionTime: 240_000,
         attempts: 1,
         artifacts: [
-          { filename: "analysis.json", content: { themes: ["headways", "dwell"], gaps: ["APC"] } },
+          {
+            filename: "analysis.json",
+            content: { themes: ["headways", "dwell"], gaps: ["APC"] },
+          },
         ],
       },
-      draft: {
+      {
         id: "draft",
         name: "draft",
         state: "running",
         startedAt: earlier(9),
         attempts: 1,
       },
-      validate: {
+      {
         id: "validate",
         name: "validate",
         state: "pending",
         attempts: 0,
       },
-    },
+    ],
   },
   {
     pipelineId: "run-002",
@@ -64,8 +88,8 @@ export const demoJobs = [
     createdAt: earlier(35),
     status: "error",
     current: "analysis",
-    tasks: {
-      ingest: {
+    tasks: [
+      {
         id: "ingest",
         name: "ingest",
         state: "completed",
@@ -74,10 +98,13 @@ export const demoJobs = [
         executionTime: 120_000,
         attempts: 1,
         artifacts: [
-          { filename: "sources.json", content: { driveIds: ["1ab", "2cd"], notes: "ok" } },
+          {
+            filename: "sources.json",
+            content: { driveIds: ["1ab", "2cd"], notes: "ok" },
+          },
         ],
       },
-      analysis: {
+      {
         id: "analysis",
         name: "analysis",
         state: "error",
@@ -87,12 +114,18 @@ export const demoJobs = [
         attempts: 2,
         refinementAttempts: 1,
         artifacts: [
-          { filename: "error.json", content: { message: "Rate limit", hint: "Resume with cached context" } },
+          {
+            filename: "error.json",
+            content: {
+              message: "Rate limit",
+              hint: "Resume with cached context",
+            },
+          },
         ],
       },
-      draft: { id: "draft", name: "draft", state: "pending", attempts: 0 },
-      validate: { id: "validate", name: "validate", state: "pending", attempts: 0 },
-    },
+      { id: "draft", name: "draft", state: "pending", attempts: 0 },
+      { id: "validate", name: "validate", state: "pending", attempts: 0 },
+    ],
   },
   {
     pipelineId: "run-003",
@@ -100,8 +133,8 @@ export const demoJobs = [
     createdAt: earlier(120),
     status: "completed",
     current: undefined,
-    tasks: {
-      ingest: {
+    tasks: [
+      {
         id: "ingest",
         name: "ingest",
         state: "completed",
@@ -110,7 +143,7 @@ export const demoJobs = [
         executionTime: 120_000,
         attempts: 1,
       },
-      analysis: {
+      {
         id: "analysis",
         name: "analysis",
         state: "completed",
@@ -119,7 +152,7 @@ export const demoJobs = [
         executionTime: 480_000,
         attempts: 1,
       },
-      draft: {
+      {
         id: "draft",
         name: "draft",
         state: "completed",
@@ -128,10 +161,13 @@ export const demoJobs = [
         executionTime: 600_000,
         attempts: 1,
         artifacts: [
-          { filename: "draft.json", content: { sections: 7, readingTime: "6m" } },
+          {
+            filename: "draft.json",
+            content: { sections: 7, readingTime: "6m" },
+          },
         ],
       },
-      validate: {
+      {
         id: "validate",
         name: "validate",
         state: "completed",
@@ -140,10 +176,13 @@ export const demoJobs = [
         executionTime: 300_000,
         attempts: 1,
         artifacts: [
-          { filename: "validation.json", content: { score: 0.93, notes: "Strong" } },
+          {
+            filename: "validation.json",
+            content: { score: 0.93, notes: "Strong" },
+          },
         ],
       },
-    },
+    ],
   },
   {
     pipelineId: "run-004",
@@ -151,8 +190,8 @@ export const demoJobs = [
     createdAt: earlier(6),
     status: "running",
     current: "analysis",
-    tasks: {
-      ingest: {
+    tasks: [
+      {
         id: "ingest",
         name: "ingest",
         state: "completed",
@@ -161,16 +200,16 @@ export const demoJobs = [
         executionTime: 60_000,
         attempts: 1,
       },
-      analysis: {
+      {
         id: "analysis",
         name: "analysis",
         state: "running",
         startedAt: earlier(5),
         attempts: 1,
       },
-      draft: { id: "draft", name: "draft", state: "pending", attempts: 0 },
-      validate: { id: "validate", name: "validate", state: "pending", attempts: 0 },
-    },
+      { id: "draft", name: "draft", state: "pending", attempts: 0 },
+      { id: "validate", name: "validate", state: "pending", attempts: 0 },
+    ],
   },
   {
     pipelineId: "run-005",
@@ -178,8 +217,8 @@ export const demoJobs = [
     createdAt: earlier(240),
     status: "completed",
     current: undefined,
-    tasks: {
-      ingest: {
+    tasks: [
+      {
         id: "ingest",
         name: "ingest",
         state: "completed",
@@ -188,7 +227,7 @@ export const demoJobs = [
         executionTime: 120_000,
         attempts: 1,
       },
-      analysis: {
+      {
         id: "analysis",
         name: "analysis",
         state: "completed",
@@ -197,7 +236,7 @@ export const demoJobs = [
         executionTime: 360_000,
         attempts: 1,
       },
-      draft: {
+      {
         id: "draft",
         name: "draft",
         state: "completed",
@@ -206,7 +245,7 @@ export const demoJobs = [
         executionTime: 720_000,
         attempts: 1,
       },
-      validate: {
+      {
         id: "validate",
         name: "validate",
         state: "completed",
@@ -215,9 +254,12 @@ export const demoJobs = [
         executionTime: 300_000,
         attempts: 1,
         artifacts: [
-          { filename: "validation.json", content: { score: 0.95, notes: "Excellent" } },
+          {
+            filename: "validation.json",
+            content: { score: 0.95, notes: "Excellent" },
+          },
         ],
       },
-    },
+    ],
   },
 ];
