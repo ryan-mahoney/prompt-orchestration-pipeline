@@ -456,15 +456,16 @@ describe("Server", () => {
 
       serverModule.broadcastStateUpdate(testState);
 
+      // Server now emits a compact summary for state updates when no recentChanges exist
       expect(mockClient1.write).toHaveBeenCalledWith(
-        expect.stringContaining("event: state")
+        expect.stringContaining("event: state:summary")
       );
       expect(mockClient1.write).toHaveBeenCalledWith(
         expect.stringContaining('"changeCount":5')
       );
 
       expect(mockClient2.write).toHaveBeenCalledWith(
-        expect.stringContaining("event: state")
+        expect.stringContaining("event: state:summary")
       );
     });
 
@@ -588,13 +589,13 @@ describe("Server", () => {
         .map((call) => call[0])
         .join("");
 
-      // Verify SSE format
-      expect(allWrites).toContain("event: state\n");
+      // Verify SSE format for incremental change events
+      expect(allWrites).toContain("event: state:change\n");
       expect(allWrites).toContain("data: ");
       expect(allWrites).toContain("\n\n");
 
-      // Verify JSON content
-      expect(allWrites).toContain('"changeCount":3');
+      // Verify JSON content includes the change details (no full-state dump)
+      expect(allWrites).not.toContain('"changeCount":3');
       expect(allWrites).toContain('"path":"test.txt"');
       expect(allWrites).toContain('"type":"created"');
     });
