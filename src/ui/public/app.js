@@ -169,7 +169,9 @@ function connectSSE() {
     try {
       const state = JSON.parse(event.data);
       renderState(state);
-      updateConnectionStatus("connected");
+      // Do not derive connection health from receipt of state payloads.
+      // Connection status should be driven by EventSource.readyState (open/error)
+      // or an explicit health/ping endpoint. Keep this handler focused on state updates.
     } catch (error) {
       console.error("Error parsing state event:", error);
     }

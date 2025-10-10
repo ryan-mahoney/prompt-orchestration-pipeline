@@ -178,9 +178,9 @@ describe("Dev single-process Vite integration (step 1 tests)", () => {
       const { value } = await reader.read();
       const text = decoder.decode(value);
 
-      expect(text).toContain("event: state");
-      // Should include serialized state with changeCount 0 from our mock
-      expect(text).toContain('"changeCount":0');
+      // Initial SSE chunk should not contain full state; client should fetch /api/state
+      expect(text).not.toContain("event: state");
+      // Initial chunk will typically be a comment/ping (e.g., ': connected' or ': keep-alive')
 
       // Cancel reader to close the body stream
       await reader.cancel();
@@ -217,10 +217,16 @@ describe("Dev single-process Vite integration (step 1 tests)", () => {
       }
 
       expect(broadcastSpy).toHaveBeenCalled();
-      // First broadcast should be a state update (object with type 'state')
-      const firstCallArg = broadcastSpy.mock.calls[0][0];
-      expect(firstCallArg).toBeDefined();
-      expect(firstCallArg.type).toBe("state");
+      // Server emits compact state-related events; ensure at least one broadcast
+      // is a state-related event (state:change or state:summary).
+      const hasStateEvent = broadcastSpy.mock.calls.some(
+        (c) =>
+          c[0] &&
+          c[0].type &&
+          typeof c[0].type === "string" &&
+          c[0].type.startsWith("state")
+      );
+      expect(hasStateEvent).toBe(true);
     } finally {
       await srv.close();
     }
