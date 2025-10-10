@@ -30,7 +30,18 @@ export async function bootstrap({
       await applySnapshot(json);
     } else {
       // Try to parse body when available, but still call applySnapshot with whatever we get
-      const body = res ? await res.json().catch(() => null) : null;
+      let body = null;
+      if (res) {
+        try {
+          body = await res.json();
+        } catch (jsonErr) {
+          const contentType = res.headers.get("content-type");
+          console.error(
+            `[bootstrap] Failed to parse JSON from ${stateUrl}: status=${res.status}, content-type=${contentType}, error=${jsonErr}`
+          );
+          body = null;
+        }
+      }
       await applySnapshot(body);
     }
   } catch (err) {
