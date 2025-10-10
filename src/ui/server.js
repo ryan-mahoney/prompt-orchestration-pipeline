@@ -180,12 +180,48 @@ function sendSSE(res, event, data) {
 
 /**
  * Broadcast state update to all SSE clients
+ *
+ * NOTE: Per plan, SSE should emit compact, incremental events rather than
+ * streaming the full application state. Use /api/state for full snapshot
+ * retrieval on client bootstrap. This function will emit only the most
+ * recent change when available (type: "state:change") and fall back to a
+ * lightweight summary event if no recent change is present.
  */
 function broadcastStateUpdate(currentState) {
-  sseRegistry.broadcast({
-    type: "state",
-    data: currentState,
-  });
+  try {
+    const latest =
+      currentState &&
+      currentState.recentChanges &&
+      currentState.recentChanges[0];
+    if (latest) {
+      // Emit only the most recent change as a compact, typed event
+      sseRegistry.broadcast({ type: "state:change", data: latest });
+    } else {
+      // Fallback: emit a minimal summary so clients can observe a state "tick"
+      sseRegistry.broadcast({
+        type: "state:summary",
+        data: {
+          changeCount:
+            currentState && currentState.changeCount
+              ? currentState.changeCount
+              : 0,
+        },
+      });
+    }
+  } catch (err) {
+    // Defensive: if something unexpected happens, fall back to a lightweight notification
+    try {
+      sseRegistry.broadcast({
+        type: "state:summary",
+        data: {
+          changeCount:
+            currentState && currentState.changeCount
+              ? currentState.changeCount
+              : 0,
+        },
+      });
+    } catch {}
+  }
 }
 
 /**
@@ -512,8 +548,11 @@ function createServer() {
       // Flush headers immediately
       res.flushHeaders();
 
-      // Write initial state event immediately
-      res.write(`event: state\ndata: ${JSON.stringify(state.getState())}\n\n`);
+      // Initial full-state is no longer sent over the SSE stream.
+      // Clients should fetch the snapshot from GET /api/state during bootstrap
+      // and then rely on SSE incremental events (state:change/state:summary).
+      // Keep headers flushed; sseRegistry.addClient will optionally send an initial ping.
+      // (Previously sent full state here; removed to reduce SSE payloads.)
 
       // Add to SSE registry
       sseRegistry.addClient(res);
@@ -683,13 +722,21 @@ function initializeWatcher() {
   state.setWatchedPaths(WATCHED_PATHS);
 
   watcher = startWatcher(WATCHED_PATHS, (changes) => {
-    // Update state for each change
+    // Update state for each change and capture the last returned state.
+    // Prefer broadcasting the state returned by recordChange (if available)
+    // to ensure tests and callers receive an up-to-date snapshot without
+    // relying on mocked module-level getState behavior.
+    let lastState = null;
     changes.forEach(({ path, type }) => {
-      state.recordChange(path, type);
+      try {
+        lastState = state.recordChange(path, type);
+      } catch (err) {
+        // Don't let a single change handler error prevent broadcasting
+      }
     });
 
-    // Broadcast updated state
-    broadcastStateUpdate(state.getState());
+    // Broadcast updated state: prefer the result returned by recordChange when available
+    broadcastStateUpdate(lastState || state.getState());
   });
 }
 

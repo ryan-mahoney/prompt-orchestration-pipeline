@@ -432,14 +432,16 @@ Events:
 **Endpoints**:
 
 - `GET /` - Serve UI HTML
-- `GET /api/state` - Get current state (JSON)
-- `GET /api/events` - Server-Sent Events stream
+- `GET /api/state` - Get a single JSON **snapshot** of the minimal UI state required for initial client bootstrap (job list, metadata). Clients should fetch this snapshot at startup to hydrate their global state.
+- `GET /api/events` - Server-Sent Events (SSE) stream that emits only incremental, typed events (e.g. `job_created`, `job_updated`, `job_removed`, `status_changed`) to update the hydrated client state. SSE should not be used to send full-state dumps.
+- `GET /api/health` (optional) - Lightweight health/ping endpoint that can be used by clients or monitoring to verify server responsiveness (useful for connection health checks beyond EventSource.readyState).
 
 **Features**:
 
 - Static file serving
-- SSE for real-time updates
-- Heartbeat to keep connections alive
+- SSE for real-time incremental updates (events are compact and typed; include id/version metadata when applicable)
+- Snapshot endpoint for initial client hydration to avoid race conditions and reduce round-trips
+- Heartbeat to keep connections alive (server-side heartbeat) — clients should determine connection health primarily from EventSource.readyState and/or the `/api/health` endpoint rather than from the arrival of data events
 - CORS support
 
 #### UI State (`src/ui/state.js`)
