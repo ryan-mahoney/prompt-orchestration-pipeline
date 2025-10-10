@@ -220,7 +220,10 @@ function broadcastStateUpdate(currentState) {
               : 0,
         },
       });
-    } catch {}
+    } catch (fallbackErr) {
+      // Log the error to aid debugging; this should never happen unless sseRegistry.broadcast is broken
+      console.error("Failed to broadcast fallback state summary in broadcastStateUpdate:", fallbackErr);
+    }
   }
 }
 
