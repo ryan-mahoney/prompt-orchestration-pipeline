@@ -1,134 +1,59 @@
 #!/usr/bin/env node
+/**
+ * Deprecated demo runner shim.
+ *
+ * The demo should now use the production server entrypoint with PO_ROOT set
+ * to the demo directory. This script remains as a backward-compatible shim
+ * that prints a deprecation warning and forwards to the production server.
+ */
 
-import { createPipelineOrchestrator, submitJob } from "../src/api/index.js";
-import { readFile } from "node:fs/promises";
-import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Allow overriding the demo root directory via CLI:
-// Accept --root=path or --data-dir=path. If provided, resolve to an absolute path.
-// This must be computed before we create the orchestrator so the passed rootDir
-// is used to resolve pipeline-data and pipeline-config paths.
-const args = process.argv.slice(2);
-const rootArg =
-  args.find((a) => a.startsWith("--root="))?.split("=")[1] ||
-  args.find((a) => a.startsWith("--data-dir="))?.split("=")[1] ||
-  null;
-const DEMO_ROOT = rootArg ? path.resolve(process.cwd(), rootArg) : __dirname;
-console.log("Demo root resolved to:", DEMO_ROOT);
+console.warn(
+  "Deprecated: demo/run-demo.js is deprecated and will be removed in a future release.\n" +
+    "Use `NODE_ENV=production PO_ROOT=demo node src/ui/server.js` to run the demo.\n" +
+    "This shim will forward to the production server for now."
+);
 
-// Ensure demo runs in production-like mode by default
+// Ensure environment defaults for demo parity with production
+process.env.PO_ROOT = process.env.PO_ROOT || path.join(__dirname);
 process.env.NODE_ENV = process.env.NODE_ENV || "production";
 
-async function runDemo(scenarioName) {
-  console.log(`\n🚀 Starting Demo: ${scenarioName}\n`);
+try {
+  const mod = await import("../src/ui/server.js");
 
-  try {
-    // Check if UI build files are available
-    const uiBuildPath = path.join(
-      __dirname,
-      "..",
-      "src",
-      "ui",
-      "dist",
-      "index.html"
-    );
-
-    let uiEnabled = true;
+  // Prefer the async startServer({ dataDir, port }) API when available, since it returns a promise.
+  if (mod && typeof mod.startServer === "function") {
     try {
-      await fs.access(uiBuildPath);
-    } catch (error) {
-      console.error("⚠️  UI build files are missing.");
-      console.error(
-        "Run 'npm run ui:build' from the project root, then re-run the demo."
-      );
+      // Start server with the configured PO_ROOT. startServer keeps process alive.
+      await mod.startServer({ dataDir: process.env.PO_ROOT });
+    } catch (err) {
+      console.error("Failed to start server via startServer():", err);
       process.exit(1);
     }
-
-    // Initialize orchestrator
-    const state = await createPipelineOrchestrator({
-      rootDir: DEMO_ROOT,
-      configDir: "pipeline-config",
-      dataDir: "pipeline-data",
-      autoStart: true,
-      ui: uiEnabled,
-      uiPort: 4123,
-    });
-
-    console.log("✅ Orchestrator initialized");
-
-    // Load seed data
-    const seedPath = path.join(__dirname, "seeds", `${scenarioName}.json`);
-    const seed = JSON.parse(await readFile(seedPath, "utf8"));
-
-    console.log(`📄 Loaded seed: ${seed.name}`);
-    console.log(`📋 Type: ${seed.data.type}`);
-
-    // Submit job
-    const { name } = await submitJob(state, seed);
-    console.log(`\n✅ Job submitted: ${name}`);
-
-    if (uiEnabled) {
-      console.log(`\n🌐 Monitor at: http://localhost:4123`);
-      console.log("\nPress Ctrl+C to stop the orchestrator");
-    } else {
-      console.log("\n💡 Tip: Run 'npm run ui:build' to enable UI monitoring");
-      console.log("\nOrchestrator will process the job in the background.");
-      console.log("Check demo/pipeline-data/complete/ for results.");
+  } else if (mod && typeof mod.start === "function") {
+    try {
+      // start() may be synchronous (returns server) or return a promise.
+      const result = mod.start();
+      if (result && typeof result.then === "function") {
+        await result;
+      }
+      // If it's synchronous, start() already started the server and we just keep the process alive.
+    } catch (err) {
+      console.error("Failed to start server via start():", err);
+      process.exit(1);
     }
-  } catch (error) {
-    console.error("\n❌ Demo failed:", error.message);
+  } else {
+    console.error(
+      "Unable to find an exported start/startServer function in src/ui/server.js. Please run the server directly with PO_ROOT set."
+    );
     process.exit(1);
   }
+} catch (err) {
+  console.error("Error forwarding to src/ui/server.js:", err);
+  process.exit(1);
 }
-
-async function listScenarios() {
-  console.log("\n📋 Available Demo Scenarios:\n");
-  console.log("  • market-analysis      - Multi-stage market research");
-  console.log("  • content-generation   - Content creation workflow");
-  console.log("  • data-processing      - Data extraction and transformation");
-  console.log("");
-}
-
-async function main() {
-  const args = process.argv.slice(2);
-  const command = args[0] || "help";
-
-  switch (command) {
-    case "run":
-      const scenario = args[1] || "market-analysis";
-      await runDemo(scenario);
-      break;
-
-    case "list":
-      await listScenarios();
-      break;
-
-    case "help":
-    default:
-      console.log(`
-Prompt Orchestration Pipeline - Demo
-
-Usage: node run-demo.js [command] [options]
-
-Commands:
-  run [scenario]    Run a demo scenario (default: market-analysis)
-  list              List available scenarios
-  help              Show this help message
-
-Examples:
-  node run-demo.js run market-analysis
-  node run-demo.js run content-generation
-  node run-demo.js list
-
-Environment Variables:
-  OPENAI_API_KEY    Your OpenAI API key (required)
-      `);
-  }
-}
-
-main().catch(console.error);
