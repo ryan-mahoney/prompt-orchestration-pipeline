@@ -26,8 +26,8 @@
     "ui:preview": "vite preview",
     "ui:prod": "node src/ui/server.js",
     "demo:list": "node demo/run-demo.js list",
-    "demo:run": "node demo/run-demo.js run content-generation --root=demo",
-    "demo:prod": "npm run ui:build && NODE_ENV=production node demo/run-demo.js run --root=demo"
+    "demo:run": "NODE_ENV=production PO_ROOT=demo node src/ui/server.js",
+    "demo:prod": "npm run ui:build && NODE_ENV=production PO_ROOT=demo node src/ui/server.js"
   },
   "dependencies": {
     "@radix-ui/react-progress": "^1.1.7",
