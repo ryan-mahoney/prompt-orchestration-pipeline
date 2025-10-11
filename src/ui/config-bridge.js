@@ -193,7 +193,16 @@ export async function isLocked(jobDir) {
 }
 
 /**
- * Gets UI configuration settings
+ * Gets UI configuration settings.
+ *
+ * NOTE: The `useRealData` flag is a pure configuration toggle intended to
+ * control server-side path selection (for example setting `PO_ROOT=demo`)
+ * and related feature/logging flags. It MUST NOT be used by client UI code
+ * to substitute in-memory demo arrays at runtime. The UI should always rely
+ * on API/SSE responses (or show neutral empty/error states) rather than
+ * falling back to demo data. Demo content belongs on-disk under `demo/` and
+ * is read by server-side readers when configured via `PO_ROOT`.
+ *
  * @returns {Object} UI configuration
  */
 export function getUIConfig() {

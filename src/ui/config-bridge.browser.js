@@ -28,6 +28,15 @@ export const Constants = {
 
 // Lightweight client-side config. Use Vite env override where available.
 export const CONFIG = {
+  // NOTE: `useRealData` in the browser build is a lightweight configuration
+  // flag exposed via Vite env variables (VITE_UI_REAL_DATA). This flag is
+  // intended to document/configure whether the server should be pointed at
+  // real filesystem-backed data (for example by setting PO_ROOT=demo) and to
+  // surface small feature/logging toggles. It MUST NOT be used by client code
+  // to substitute in-memory demo arrays at runtime. The UI should always rely
+  // on API/SSE responses (or show neutral empty/error states) rather than
+  // falling back to demo data. Demo content belongs on-disk under `demo/`
+  // and is read by server-side readers when configured via PO_ROOT.
   useRealData: Boolean(
     // Vite exposes env under import.meta.env
     typeof import.meta !== "undefined" &&

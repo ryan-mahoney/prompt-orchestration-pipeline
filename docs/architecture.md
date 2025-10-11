@@ -95,7 +95,7 @@ src/
 ├── pages/                  # React pages
 │   └── PromptPipelineDashboard.jsx
 ├── data/                   # Data utilities
-│   └── demoData.js         # Mock data for development
+│   └── (moved to demo/)    # Demo seeds live under the top-level `demo/` directory (PO_ROOT=demo)
 ├── lib/                    # Library utilities
 │   └── utils.js            # UI utility functions
 └── utils/                  # General utilities
@@ -917,24 +917,32 @@ node demo/run-demo.js run content-generation
 node demo/run-demo.js list
 ```
 
-## Demo Data Module (`src/data/demoData.js`)
+## Deprecated: Demo data module (moved to demo/)
 
-**Purpose**: Mock data for UI development and testing
+The repository no longer provides an in-memory runtime demo data module at `src/data/demoData.js`. Sample pipeline definitions and job seeds are stored under the top-level `demo/` directory as filesystem-backed examples. The demo directory is a seed environment that the server can read when explicitly configured — it is not used as a UI-side fallback.
 
-**Contents**:
+How to run the demo seeds (examples)
 
-- `demoPipeline` - Mock pipeline structure
-- `demoJobs` - Array of mock jobs with various states:
-  - Running jobs with progress
-  - Completed jobs with results
-  - Error jobs with failure details
-  - Multiple task states (pending, running, completed, error)
+- Run the server pointing at the demo folder:
+  - POSIX/macOS:
+    PO_ROOT=demo node src/ui/server.js
+  - With npm script (if available in your environment):
+    PO_ROOT=demo npm run start
+- In development you can also point the test/dev server at the demo path:
+  PO_ROOT=demo npm run dev
 
-**Usage**:
+Behavior expectations
 
-- UI development without backend
-- Component testing
-- Demo presentations
+- Server endpoints and file-readers will load files from the configured PO_ROOT (`demo/` when set). If no files exist or the server returns an empty list, the UI will display an empty state or a neutral error message — it will not inject demo jobs into the UI.
+- Do not import `src/data/demoData.js` anywhere in runtime code. If you have legacy references in tests or docs, replace them with filesystem-backed fixtures or explicit mocked adapter responses.
+
+Testing guidance
+
+- Use the helper `tests/utils/createTempPipelineDir.js` to create per-test temp directories with a small pipeline-data layout when tests need seeded jobs.
+- Prefer per-test temporary filesystem fixtures over shared repo-level demo arrays. Clean up temp dirs in `afterEach` to avoid cross-test pollution.
+- When mocking, follow the testing guardrails: spy on module objects (vi.spyOn(moduleObj, 'fn')) rather than destructured bindings, and assert console call arity where applicable.
+
+The demo content under `demo/` is intended as an on-disk seed only — not a UI fallback.
 
 ## Pipeline Configuration
 
