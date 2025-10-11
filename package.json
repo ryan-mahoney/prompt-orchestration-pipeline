@@ -25,8 +25,9 @@
     "ui:build": "vite build",
     "ui:preview": "vite preview",
     "ui:prod": "node src/ui/server.js",
-    "demo:list": "node demo/run-demo.js list",
     "demo:run": "NODE_ENV=production PO_ROOT=demo node src/ui/server.js",
+    "demo:orchestrator": "PO_ROOT=demo NODE_ENV=production node -e \"import('./src/core/orchestrator.js').then(m => m.startOrchestrator({ dataDir: process.env.PO_ROOT || 'demo' })).catch(err => { console.error(err); process.exit(1) })\"",
+    "demo:all": "npm run ui:build && concurrently \"npm:demo:run\" \"npm:demo:orchestrator\" --kill-others-on-fail",
     "demo:prod": "npm run ui:build && NODE_ENV=production PO_ROOT=demo node src/ui/server.js"
   },
   "dependencies": {
@@ -53,6 +54,7 @@
     "@testing-library/react": "^16.3.0",
     "@vitejs/plugin-react": "^5.0.4",
     "@vitest/coverage-v8": "^3.2.4",
+    "concurrently": "^9.2.1",
     "eslint": "^9.37.0",
     "eslint-plugin-react": "^7.37.5",
     "eslint-plugin-react-hooks": "^6.1.1",
