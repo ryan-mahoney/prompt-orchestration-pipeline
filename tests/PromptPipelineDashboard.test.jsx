@@ -1,6 +1,6 @@
 import React from "react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import PromptPipelineDashboard from "../src/pages/PromptPipelineDashboard.jsx";
 
 /* Mock the hook used by the dashboard */
@@ -10,7 +10,7 @@ vi.mock("../src/ui/client/hooks/useJobListWithUpdates.js", () => ({
 
 /* Stub heavy child components to make tests deterministic:
    - JobTable: render a simple list of job names (keys from pipelineId)
-   - UploadSeed: simple button stub
+   - UploadSeed: simple button stub that reflects the disabled prop
 */
 vi.mock("../src/components/JobTable.jsx", () => ({
   default: (props) => {
@@ -30,13 +30,20 @@ vi.mock("../src/components/JobTable.jsx", () => ({
 vi.mock("../src/components/UploadSeed.jsx", () => ({
   default: (props) => {
     const React = require("react");
+    // Render a stable test id so tests can target the UploadSeed instance
     return React.createElement(
-      "button",
-      {
-        onClick: () =>
-          props.onUploadSuccess && props.onUploadSuccess({ jobName: "mock" }),
-      },
-      "UploadSeedStub"
+      "div",
+      { "data-testid": "upload-seed" },
+      React.createElement(
+        "button",
+        {
+          "data-testid": "upload-seed-button",
+          disabled: !!props.disabled,
+          onClick: () =>
+            props.onUploadSuccess && props.onUploadSuccess({ jobName: "mock" }),
+        },
+        props.disabled ? "UploadSeedStub (disabled)" : "UploadSeedStub"
+      )
     );
   },
 }));
@@ -110,5 +117,40 @@ describe("PromptPipelineDashboard (integration-ish)", () => {
       screen.getByText("Using demo data (live API unavailable)")
     ).toBeTruthy();
     expect(screen.getByText("Demo Job 1")).toBeTruthy();
+  });
+
+  it("allows upload when API is reachable even if SSE is disconnected (data empty)", async () => {
+    useJobListWithUpdates.mockReturnValue({
+      loading: false,
+      data: [],
+      error: null,
+      refetch: vi.fn(),
+      connectionStatus: "disconnected",
+    });
+
+    render(<PromptPipelineDashboard />);
+
+    // Our UploadSeed stub renders a button; it should NOT be disabled when error == null
+    // There may be multiple mount instances during StrictMode double-render;
+    // assert at least one rendered UploadSeed button is enabled.
+    const buttons = screen.getAllByTestId("upload-seed-button");
+    expect(buttons.some((b) => b && b.disabled === false)).toBe(true);
+  });
+
+  it("disables upload when the jobs API reports an error", async () => {
+    useJobListWithUpdates.mockReturnValue({
+      loading: false,
+      data: [],
+      error: new Error("API down"),
+      refetch: vi.fn(),
+      connectionStatus: "disconnected",
+    });
+
+    render(<PromptPipelineDashboard />);
+
+    // There may be multiple mount instances during StrictMode double-render;
+    // assert at least one rendered UploadSeed button is disabled when API errors.
+    const buttons = screen.getAllByTestId("upload-seed-button");
+    expect(buttons.some((b) => b && b.disabled === true)).toBe(true);
   });
 });

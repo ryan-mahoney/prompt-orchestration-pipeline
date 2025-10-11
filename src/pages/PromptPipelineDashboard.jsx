@@ -162,6 +162,8 @@ export default function PromptPipelineDashboard({ isConnected }) {
     };
   }, [seedUploadTimer]);
 
+  console.log({ isConnected, connectionStatus });
+
   // Determine connection state - prop overrides any hook value; otherwise use hook's status
   const connectionState =
     isConnected !== undefined ? isConnected : connectionStatus === "connected";
