@@ -1,4 +1,20 @@
 import React, { useState } from "react";
+import { Box } from "@radix-ui/themes";
+import { Button } from "./ui/button.jsx";
+
+/**
+ * Normalize upload errors to a user-facing string
+ */
+export const normalizeUploadError = (err) => {
+  if (!err) return "Upload failed";
+  if (typeof err === "string") return err;
+  if (err instanceof Error) return err.message;
+  if (typeof err === "object") {
+    if ("message" in err && err.message) return String(err.message);
+    if ("error" in err && err.error) return String(err.error);
+  }
+  return "Upload failed";
+};
 
 /**
  * UploadSeed component for uploading seed files
@@ -10,6 +26,7 @@ import React, { useState } from "react";
 export default function UploadSeed({ disabled = false, onUploadSuccess }) {
   const fileInputRef = React.useRef(null);
   const [showSample, setShowSample] = useState(false);
+  const [error, setError] = useState(null);
 
   // Sample seed file structure for reference
   const sampleSeed = {
@@ -45,16 +62,18 @@ export default function UploadSeed({ disabled = false, onUploadSuccess }) {
         // Emit console log as required
         console.log("Seed uploaded:", result.jobName);
 
-        // Call success callback
+        // Clear any prior error and call success callback
+        setError(null);
         if (onUploadSuccess) {
-          onUploadSuccess({ name: result.jobName });
+          onUploadSuccess({ jobName: result.jobName });
         }
       } else {
         console.error("Upload failed:", result.message);
-        // Could show error toast here if needed
+        setError(normalizeUploadError(result));
       }
     } catch (error) {
       console.error("Upload error:", error);
+      setError(normalizeUploadError(error));
     } finally {
       // Reset file input
       if (fileInputRef.current) {
@@ -100,6 +119,25 @@ export default function UploadSeed({ disabled = false, onUploadSuccess }) {
 
   return (
     <div data-testid="upload-seed" className="space-y-3">
+      {error && (
+        <Box
+          role="alert"
+          data-testid="upload-error"
+          className="rounded-md bg-red-50 p-3 border border-red-200"
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div className="text-sm text-red-800">{error}</div>
+            <Button
+              size="1"
+              variant="ghost"
+              onClick={() => setError(null)}
+              data-testid="dismiss-error"
+            >
+              Dismiss
+            </Button>
+          </div>
+        </Box>
+      )}
       <div
         data-testid="upload-area"
         className={`
