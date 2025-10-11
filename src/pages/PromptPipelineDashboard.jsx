@@ -218,10 +218,7 @@ export default function PromptPipelineDashboard({ isConnected }) {
                   </Box>
                 )}
 
-                <UploadSeed
-                  disabled={!connectionState}
-                  onUploadSuccess={handleSeedUploadSuccess}
-                />
+                <UploadSeed onUploadSuccess={handleSeedUploadSuccess} />
               </Flex>
             </Card>
           )}

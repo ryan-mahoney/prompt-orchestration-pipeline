@@ -123,7 +123,7 @@ describe("PromptPipelineDashboard (integration-ish)", () => {
     expect(buttons.some((b) => b && b.disabled === false)).toBe(true);
   });
 
-  it("disables upload when the jobs API reports an error", async () => {
+  it("keeps upload enabled even when the jobs API reports an error", async () => {
     useJobListWithUpdates.mockReturnValue({
       loading: false,
       data: [],
@@ -134,9 +134,8 @@ describe("PromptPipelineDashboard (integration-ish)", () => {
 
     render(<PromptPipelineDashboard />);
 
-    // There may be multiple mount instances during StrictMode double-render;
-    // assert at least one rendered UploadSeed button is disabled when API errors.
+    // Upload should remain enabled even when API reports an error.
     const buttons = screen.getAllByTestId("upload-seed-button");
-    expect(buttons.some((b) => b && b.disabled === true)).toBe(true);
+    expect(buttons.some((b) => b && b.disabled === false)).toBe(true);
   });
 });
