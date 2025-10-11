@@ -95,7 +95,7 @@ src/
 ├── pages/                  # React pages
 │   └── PromptPipelineDashboard.jsx
 ├── data/                   # Data utilities
-│   └── demoData.js         # Mock data for development
+│   └── (moved to demo/)    # Demo seeds live under the top-level `demo/` directory (PO_ROOT=demo)
 ├── lib/                    # Library utilities
 │   └── utils.js            # UI utility functions
 └── utils/                  # General utilities
@@ -917,24 +917,11 @@ node demo/run-demo.js run content-generation
 node demo/run-demo.js list
 ```
 
-## Demo Data Module (`src/data/demoData.js`)
+## Deprecated: Demo data module (moved to demo/)
 
-**Purpose**: Mock data for UI development and testing
+The repository no longer provides an in-memory runtime demo data module at `src/data/demoData.js`. Sample pipeline definitions and job seeds are stored under the top-level `demo/` directory as filesystem-backed examples. To run the demo UI or server against these seeds, set `PO_ROOT=demo` (or configure `paths.root`) so server-side readers load the demo files from disk.
 
-**Contents**:
-
-- `demoPipeline` - Mock pipeline structure
-- `demoJobs` - Array of mock jobs with various states:
-  - Running jobs with progress
-  - Completed jobs with results
-  - Error jobs with failure details
-  - Multiple task states (pending, running, completed, error)
-
-**Usage**:
-
-- UI development without backend
-- Component testing
-- Demo presentations
+Tests and components should not import `src/data/demoData.js`. Replace any such references with small per-test filesystem fixtures (see `tests/utils/createTempPipelineDir.js`) or explicit mocked adapter responses. The demo content under `demo/` is intended as an on-disk seed only — not a UI fallback.
 
 ## Pipeline Configuration
 
