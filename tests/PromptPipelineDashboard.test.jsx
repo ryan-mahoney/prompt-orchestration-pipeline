@@ -51,23 +51,6 @@ vi.mock("../src/components/UploadSeed.jsx", () => ({
 // Import the mocked hook to control its return values per test
 import { useJobListWithUpdates } from "../src/ui/client/hooks/useJobListWithUpdates.js";
 
-// Also mock demo data import so tests are stable if demoJobs change shape
-vi.mock("../src/data/demoData", () => ({
-  demoPipeline: { name: "Demo Pipeline", tasks: [{ id: "t1" }, { id: "t2" }] },
-  demoJobs: [
-    {
-      id: "demo-job-1",
-      name: "Demo Job 1",
-      status: "running",
-      progress: 10,
-      createdAt: "2024-01-01T00:00:00Z",
-      tasks: [{ name: "task-1", state: "running" }],
-      location: "current",
-      pipelineId: "demo-job-1",
-    },
-  ],
-}));
-
 describe("PromptPipelineDashboard (integration-ish)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -101,7 +84,7 @@ describe("PromptPipelineDashboard (integration-ish)", () => {
     expect(screen.getByText("Test Job 1")).toBeTruthy();
   });
 
-  it("shows demo fallback banner when API hook errors and uses demo data", async () => {
+  it("shows error banner when API hook errors and does not use demo data", async () => {
     useJobListWithUpdates.mockReturnValue({
       loading: false,
       data: [],
@@ -112,11 +95,14 @@ describe("PromptPipelineDashboard (integration-ish)", () => {
 
     render(<PromptPipelineDashboard />);
 
-    // Banner text should be visible and demo job rendered
+    // Banner text should show a neutral error and NOT render demo jobs
     expect(
-      screen.getByText("Using demo data (live API unavailable)")
+      screen.queryByText("Using demo data (live API unavailable)")
+    ).toBeNull();
+    expect(
+      screen.getByText("Unable to load jobs from the server")
     ).toBeTruthy();
-    expect(screen.getByText("Demo Job 1")).toBeTruthy();
+    expect(screen.queryByText("Demo Job 1")).toBeNull();
   });
 
   it("allows upload when API is reachable even if SSE is disconnected (data empty)", async () => {

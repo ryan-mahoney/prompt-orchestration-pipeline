@@ -17,7 +17,6 @@ import {
 import { Progress } from "../components/ui/progress";
 import { useJobListWithUpdates } from "../ui/client/hooks/useJobListWithUpdates";
 import { adaptJobSummary } from "../ui/client/adapters/job-adapter";
-import { demoPipeline, demoJobs } from "../data/demoData";
 import { CONFIG as UI_CONFIG } from "../ui/config-bridge.browser.js";
 
 // Referenced components — leave these alone
@@ -34,21 +33,13 @@ export default function PromptPipelineDashboard({ isConnected }) {
     connectionStatus,
   } = useJobListWithUpdates();
 
-  // If the client is running in demo mode (no real data), initialize pipeline
-  // state from the demoPipeline so the header badge and task list render.
-  useEffect(() => {
-    if (!UI_CONFIG.useRealData) {
-      setPipeline(demoPipeline);
-    }
-  }, []);
   const jobs = useMemo(() => {
     const src = Array.isArray(apiJobs) ? apiJobs : [];
 
-    // Render demo jobs when:
-    //  - the API hook reported an error (existing behavior), OR
-    //  - we are running in demo mode (UI_CONFIG.useRealData === false) and the API returned an empty list.
-    if (error || (!UI_CONFIG.useRealData && src.length === 0)) {
-      return demoJobs.map(adaptJobSummary);
+    // Do not fall back to in-memory demo data. On error, return an empty list so
+    // the UI shows a neutral empty/error state rather than demo jobs.
+    if (error) {
+      return [];
     }
 
     return src.map(adaptJobSummary);
@@ -254,7 +245,7 @@ export default function PromptPipelineDashboard({ isConnected }) {
               {error && (
                 <Box className="mb-4 rounded-md bg-yellow-50 p-3 border border-yellow-200">
                   <Text size="2" className="text-yellow-800">
-                    Using demo data (live API unavailable)
+                    Unable to load jobs from the server
                   </Text>
                 </Box>
               )}
