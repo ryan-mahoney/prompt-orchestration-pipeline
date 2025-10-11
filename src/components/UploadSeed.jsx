@@ -20,10 +20,9 @@ export const normalizeUploadError = (err) => {
  * UploadSeed component for uploading seed files
  *
  * @param {Object} props
- * @param {boolean} props.disabled - Whether the upload area is disabled
  * @param {function} props.onUploadSuccess - Callback called on successful upload with { jobName }
  */
-export default function UploadSeed({ disabled = false, onUploadSuccess }) {
+export default function UploadSeed({ onUploadSuccess }) {
   const fileInputRef = React.useRef(null);
   const [showSample, setShowSample] = useState(false);
   const [error, setError] = useState(null);
@@ -83,16 +82,14 @@ export default function UploadSeed({ disabled = false, onUploadSuccess }) {
   };
 
   const handleDropAreaClick = () => {
-    if (!disabled && fileInputRef.current) {
+    if (fileInputRef.current) {
       fileInputRef.current.click();
     }
   };
 
   const handleDragOver = (event) => {
     event.preventDefault();
-    if (!disabled) {
-      event.currentTarget.classList.add("border-blue-500", "bg-blue-50");
-    }
+    event.currentTarget.classList.add("border-blue-500", "bg-blue-50");
   };
 
   const handleDragLeave = (event) => {
@@ -104,11 +101,10 @@ export default function UploadSeed({ disabled = false, onUploadSuccess }) {
     event.preventDefault();
     event.currentTarget.classList.remove("border-blue-500", "bg-blue-50");
 
-    if (!disabled && event.dataTransfer.files.length > 0) {
+    if (event.dataTransfer.files.length > 0) {
       const files = event.dataTransfer.files;
       const fileInput = fileInputRef.current;
       if (fileInput) {
-        // Create a new FileList-like object
         const dataTransfer = new DataTransfer();
         dataTransfer.items.add(files[0]);
         fileInput.files = dataTransfer.files;
@@ -142,19 +138,14 @@ export default function UploadSeed({ disabled = false, onUploadSuccess }) {
         data-testid="upload-area"
         className={`
           border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors
-          ${
-            disabled
-              ? "border-gray-300 bg-gray-100 text-gray-400 cursor-not-allowed"
-              : "border-gray-400 bg-white text-gray-600 hover:border-blue-500 hover:bg-blue-50"
-          }
+          border-gray-400 bg-white text-gray-600 hover:border-blue-500 hover:bg-blue-50
         `}
         onClick={handleDropAreaClick}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
         role="button"
-        tabIndex={disabled ? -1 : 0}
-        aria-disabled={disabled}
+        tabIndex={0}
       >
         <div className="space-y-2">
           <svg
@@ -172,9 +163,7 @@ export default function UploadSeed({ disabled = false, onUploadSuccess }) {
             />
           </svg>
           <div className="text-sm">
-            <span className="font-medium text-gray-900">
-              {disabled ? "Upload disabled" : "Click to upload"}
-            </span>{" "}
+            <span className="font-medium text-gray-900">Click to upload</span>{" "}
             or drag and drop
           </div>
           <p className="text-xs text-gray-500">JSON files only</p>
@@ -187,7 +176,6 @@ export default function UploadSeed({ disabled = false, onUploadSuccess }) {
         accept=".json"
         className="hidden"
         onChange={handleFileChange}
-        disabled={disabled}
         data-testid="file-input"
       />
 
