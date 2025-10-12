@@ -20,6 +20,7 @@ import {
 } from "../transformers/list-transformer.js";
 import * as configBridge from "../config-bridge.js";
 import fs from "node:fs/promises";
+import path from "node:path";
 
 /**
  * Return a list of job summaries suitable for the API.
@@ -145,6 +146,7 @@ export async function handleJobList() {
  *  - validate jobId using configBridge.validateJobId
  *  - call readJob(jobId)
  *  - pass [readResult] to transformMultipleJobs and return the transformed job
+ *  - read pipeline config and include pipeline.tasks in response
  */
 export async function handleJobDetail(jobId) {
   if (!configBridge.validateJobId(jobId)) {
@@ -179,7 +181,58 @@ export async function handleJobDetail(jobId) {
       );
     }
 
-    return { ok: true, data: job };
+    // Read pipeline config to include canonical task order
+    let pipelineConfig = null;
+    try {
+      const paths =
+        (typeof configBridge.getPATHS === "function" &&
+          configBridge.getPATHS()) ||
+        configBridge.PATHS ||
+        (typeof configBridge.resolvePipelinePaths === "function" &&
+          (function () {
+            try {
+              return configBridge.resolvePipelinePaths();
+            } catch {
+              return null;
+            }
+          })()) ||
+        null;
+
+      const pipelinePath =
+        (paths && paths.pipeline) ||
+        (typeof configBridge.resolvePipelinePaths === "function"
+          ? (function () {
+              try {
+                return configBridge.resolvePipelinePaths().pipeline;
+              } catch {
+                return null;
+              }
+            })()
+          : null);
+
+      if (pipelinePath) {
+        const pipelineData = await fs.readFile(pipelinePath, "utf8");
+        pipelineConfig = JSON.parse(pipelineData);
+      }
+    } catch (pipelineErr) {
+      // Log warning but don't fail the request
+      console.warn(
+        `[JobEndpoints] Failed to read pipeline config for job ${jobId}:`,
+        pipelineErr?.message
+      );
+    }
+
+    // Add pipeline to job data if available
+    const jobWithPipeline = pipelineConfig
+      ? {
+          ...job,
+          pipeline: {
+            tasks: pipelineConfig.tasks || [],
+          },
+        }
+      : job;
+
+    return { ok: true, data: jobWithPipeline };
   } catch (err) {
     console.error("handleJobDetail error:", err);
     return configBridge.createErrorResponse(
