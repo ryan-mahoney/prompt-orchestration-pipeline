@@ -222,7 +222,10 @@ export function useJobDetailWithUpdates(jobId) {
               }
 
               // Create a fresh EventSource and attach the same listeners
-              const newEs = new EventSource("/api/events");
+              const eventsUrl = jobId
+                ? `/api/events?jobId=${encodeURIComponent(jobId)}`
+                : "/api/events";
+              const newEs = new EventSource(eventsUrl);
               newEs.addEventListener("open", onOpen);
               newEs.addEventListener("job:updated", onJobUpdated);
               newEs.addEventListener("job:created", onJobCreated);
@@ -319,9 +322,12 @@ export function useJobDetailWithUpdates(jobId) {
       };
     };
 
-    // Create EventSource
+    // Create EventSource with jobId query parameter for server-side filtering
     try {
-      const es = new EventSource("/api/events");
+      const eventsUrl = jobId
+        ? `/api/events?jobId=${encodeURIComponent(jobId)}`
+        : "/api/events";
+      const es = new EventSource(eventsUrl);
       esRef.current = es;
 
       return attachListeners(es);

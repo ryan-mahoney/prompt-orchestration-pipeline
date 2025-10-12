@@ -617,6 +617,9 @@ function createServer() {
       (pathname === "/api/events" || pathname === "/api/sse") &&
       req.method === "GET"
     ) {
+      // Parse jobId from query parameters for filtering
+      const jobId = searchParams.get("jobId");
+
       // Set SSE headers
       res.writeHead(200, {
         "Content-Type": "text/event-stream",
@@ -634,8 +637,8 @@ function createServer() {
       // Keep headers flushed; sseRegistry.addClient will optionally send an initial ping.
       // (Previously sent full state here; removed to reduce SSE payloads.)
 
-      // Add to SSE registry
-      sseRegistry.addClient(res);
+      // Add to SSE registry with jobId metadata for filtering
+      sseRegistry.addClient(res, { jobId });
 
       // Start heartbeat for this connection
       const heartbeatInterval = setInterval(() => {
