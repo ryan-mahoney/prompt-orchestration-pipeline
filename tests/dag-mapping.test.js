@@ -168,6 +168,140 @@ describe("computeDagItems", () => {
       { id: "research", status: "error", source: "pipeline" },
     ]);
   });
+
+  it("handles array-based job tasks", () => {
+    const job = {
+      tasks: [
+        { name: "research", state: "done", config: { model: "gpt-4" } },
+        { name: "analysis", state: "running", config: { temperature: 0.7 } },
+        { name: "synthesis", state: "error" },
+      ],
+    };
+
+    const pipeline = {
+      tasks: ["research", "analysis", "synthesis"],
+    };
+
+    const items = computeDagItems(job, pipeline);
+
+    expect(items).toEqual([
+      { id: "research", status: "succeeded", source: "pipeline" },
+      { id: "analysis", status: "active", source: "pipeline" },
+      { id: "synthesis", status: "error", source: "pipeline" },
+    ]);
+  });
+
+  it("maintains pipeline order with array tasks", () => {
+    const job = {
+      tasks: [
+        { name: "research", state: "done" },
+        { name: "synthesis", state: "pending" },
+        { name: "analysis", state: "running" },
+      ],
+    };
+
+    const pipeline = {
+      tasks: ["synthesis", "research", "analysis"], // Different order
+    };
+
+    const items = computeDagItems(job, pipeline);
+
+    expect(items.map((item) => item.id)).toEqual([
+      "synthesis",
+      "research",
+      "analysis",
+    ]);
+
+    expect(items.map((item) => item.status)).toEqual([
+      "pending",
+      "succeeded",
+      "active",
+    ]);
+  });
+
+  it("handles array tasks with job-only tasks", () => {
+    const job = {
+      tasks: [
+        { name: "research", state: "done" },
+        { name: "extra1", state: "pending" },
+        { name: "analysis", state: "running" },
+        { name: "extra2", state: "done" },
+      ],
+    };
+
+    const pipeline = {
+      tasks: ["research", "analysis"],
+    };
+
+    const items = computeDagItems(job, pipeline);
+
+    expect(items.map((item) => item.id)).toEqual([
+      "research",
+      "analysis",
+      "extra1",
+      "extra2",
+    ]);
+
+    expect(items.map((item) => item.source)).toEqual([
+      "pipeline",
+      "pipeline",
+      "job-extra",
+      "job-extra",
+    ]);
+  });
+
+  it("handles array tasks missing name field", () => {
+    const job = {
+      tasks: [
+        { id: "research", state: "done" }, // Use id as fallback
+        { state: "running" }, // No identifier, should be skipped
+        { name: "analysis", state: "pending" },
+      ],
+    };
+
+    const pipeline = {
+      tasks: ["research", "analysis"],
+    };
+
+    const items = computeDagItems(job, pipeline);
+
+    expect(items).toEqual([
+      { id: "research", status: "succeeded", source: "pipeline" },
+      { id: "analysis", status: "pending", source: "pipeline" },
+    ]);
+  });
+
+  it("handles empty array tasks", () => {
+    const job = {
+      tasks: [],
+    };
+
+    const pipeline = {
+      tasks: ["research", "analysis"],
+    };
+
+    const items = computeDagItems(job, pipeline);
+
+    expect(items).toEqual([
+      { id: "research", status: "pending", source: "pipeline" },
+      { id: "analysis", status: "pending", source: "pipeline" },
+    ]);
+  });
+
+  it("handles null job with array pipeline tasks", () => {
+    const job = null;
+
+    const pipeline = {
+      tasks: ["research", "analysis"],
+    };
+
+    const items = computeDagItems(job, pipeline);
+
+    expect(items).toEqual([
+      { id: "research", status: "pending", source: "pipeline" },
+      { id: "analysis", status: "pending", source: "pipeline" },
+    ]);
+  });
 });
 
 describe("computeActiveIndex", () => {
