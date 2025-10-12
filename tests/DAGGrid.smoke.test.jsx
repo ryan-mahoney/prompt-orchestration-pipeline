@@ -267,4 +267,125 @@ describe("DAGGrid", () => {
     // Third card should show "pending" status
     expect(cards[2].innerHTML).toContain("pending");
   });
+
+  it("uses status fallback when status is absent", () => {
+    const itemsWithoutStatus = [
+      { id: "task1", title: "Task 1" },
+      { id: "task2", title: "Task 2" },
+      { id: "task3", title: "Task 3" },
+    ];
+
+    render(<DAGGrid items={itemsWithoutStatus} activeIndex={1} />);
+
+    const cards = screen.getAllByRole("listitem");
+
+    // First card should show "succeeded" (index < activeIndex)
+    expect(cards[0].innerHTML).toContain("succeeded");
+
+    // Second card should show "active" (index === activeIndex)
+    expect(cards[1].innerHTML).toContain("Active");
+
+    // Third card should show "pending" (index > activeIndex)
+    expect(cards[2].innerHTML).toContain("pending");
+  });
+
+  it("renders file lists when props provided", () => {
+    const mockInputFiles = [{ name: "input.json" }];
+    const mockOutputFiles = [{ name: "output.json" }];
+
+    render(
+      <DAGGrid
+        items={mockItems}
+        activeIndex={1}
+        inputFilesForItem={() => mockInputFiles}
+        outputFilesForItem={() => mockOutputFiles}
+      />
+    );
+
+    // Open slide-over
+    const firstCard = screen.getAllByRole("listitem")[0];
+    fireEvent.click(firstCard);
+
+    // Check that file lists are rendered
+    expect(screen.getByText("input.json")).toBeTruthy();
+    expect(screen.getByText("output.json")).toBeTruthy();
+  });
+
+  it("displays file content when file is selected", () => {
+    const mockInputFiles = [{ name: "test.json" }];
+    const mockFileContent = '{"test": "content"}';
+
+    render(
+      <DAGGrid
+        items={mockItems}
+        activeIndex={1}
+        inputFilesForItem={() => mockInputFiles}
+        getFileContent={() => mockFileContent}
+      />
+    );
+
+    // Open slide-over
+    const firstCard = screen.getAllByRole("listitem")[0];
+    fireEvent.click(firstCard);
+
+    // Click on file to show content
+    const fileLink = screen.getByText("test.json");
+    fireEvent.click(fileLink);
+
+    // Check that file content is displayed
+    expect(screen.getByText("File Content: test.json")).toBeTruthy();
+    expect(screen.getByText(mockFileContent)).toBeTruthy();
+  });
+
+  it("closes file preview when close button is clicked", () => {
+    const mockInputFiles = [{ name: "test.json" }];
+
+    render(
+      <DAGGrid
+        items={mockItems}
+        activeIndex={1}
+        inputFilesForItem={() => mockInputFiles}
+      />
+    );
+
+    // Open slide-over and file
+    const firstCard = screen.getAllByRole("listitem")[0];
+    fireEvent.click(firstCard);
+
+    const fileLink = screen.getByText("test.json");
+    fireEvent.click(fileLink);
+
+    // Close file preview
+    const closeButton = screen.getByLabelText("Close file");
+    fireEvent.click(closeButton);
+
+    // File content should no longer be visible
+    expect(screen.queryByText("File Content: test.json")).toBeNull();
+  });
+
+  it("resets selected file when opening new card", () => {
+    const mockInputFiles = [{ name: "test.json" }];
+
+    render(
+      <DAGGrid
+        items={mockItems}
+        activeIndex={1}
+        inputFilesForItem={() => mockInputFiles}
+      />
+    );
+
+    // Open first card and select file
+    const firstCard = screen.getAllByRole("listitem")[0];
+    fireEvent.click(firstCard);
+
+    const fileLink = screen.getByText("test.json");
+    fireEvent.click(fileLink);
+
+    // Open second card
+    const secondCard = screen.getAllByRole("listitem")[1];
+    fireEvent.click(secondCard);
+
+    // File content should no longer be visible (selectedFile was reset)
+    expect(screen.queryByText("File Content: test.json")).toBeNull();
+  });
 });

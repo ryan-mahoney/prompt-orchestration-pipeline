@@ -13,14 +13,26 @@ import React, {
  * @param {number} props.cols - Number of columns for grid layout (default: 3)
  * @param {string} props.cardClass - Additional CSS classes for cards
  * @param {number} props.activeIndex - Index of the active item
+ * @param {Function} props.inputFilesForItem - Function to get input files for an item
+ * @param {Function} props.outputFilesForItem - Function to get output files for an item
+ * @param {Function} props.getFileContent - Function to get file content
  */
-function DAGGrid({ items, cols = 3, cardClass = "", activeIndex = 0 }) {
+function DAGGrid({
+  items,
+  cols = 3,
+  cardClass = "",
+  activeIndex = 0,
+  inputFilesForItem = () => [],
+  outputFilesForItem = () => [],
+  getFileContent = () => "",
+}) {
   const overlayRef = useRef(null);
   const gridRef = useRef(null);
   const nodeRefs = useRef([]);
   const [lines, setLines] = useState([]);
   const [effectiveCols, setEffectiveCols] = useState(cols);
   const [openIdx, setOpenIdx] = useState(null);
+  const [selectedFile, setSelectedFile] = useState(null);
 
   // Create refs for each node
   nodeRefs.current = useMemo(
@@ -179,10 +191,19 @@ function DAGGrid({ items, cols = 3, cardClass = "", activeIndex = 0 }) {
     };
   }, [items, effectiveCols, visualOrder]);
 
-  // Get status for a given item index
+  // Get status for a given item index with fallback to activeIndex
   const getStatus = (index) => {
     const item = items[index];
-    return item?.status || "pending";
+    const s = item?.status;
+    if (s === "error") return "error";
+    if (s === "succeeded") return "succeeded";
+    if (s === "active") return "active";
+    if (typeof activeIndex === "number") {
+      if (index < activeIndex) return "succeeded";
+      if (index === activeIndex) return "active";
+      return "pending";
+    }
+    return "pending";
   };
 
   // Get CSS classes for card header based on status
@@ -204,6 +225,7 @@ function DAGGrid({ items, cols = 3, cardClass = "", activeIndex = 0 }) {
     const handleKeyDown = (e) => {
       if (e.key === "Escape" && openIdx !== null) {
         setOpenIdx(null);
+        setSelectedFile(null);
       }
     };
 
@@ -286,11 +308,15 @@ function DAGGrid({ items, cols = 3, cardClass = "", activeIndex = 0 }) {
               role="listitem"
               aria-current={isActive ? "step" : undefined}
               tabIndex={0}
-              onClick={() => setOpenIdx(idx)}
+              onClick={() => {
+                setOpenIdx(idx);
+                setSelectedFile(null);
+              }}
               onKeyDown={(e) => {
                 if (e.key === "Enter" || e.key === " ") {
                   e.preventDefault();
                   setOpenIdx(idx);
+                  setSelectedFile(null);
                 }
               }}
               className={`cursor-pointer rounded-lg border border-gray-400 bg-white overflow-hidden flex flex-col transition outline outline-2 outline-transparent hover:outline-gray-400/70 focus-visible:outline-blue-500/60 ${cardClass}`}
@@ -348,7 +374,10 @@ function DAGGrid({ items, cols = 3, cardClass = "", activeIndex = 0 }) {
                 ref={closeButtonRef}
                 type="button"
                 aria-label="Close details"
-                onClick={() => setOpenIdx(null)}
+                onClick={() => {
+                  setOpenIdx(null);
+                  setSelectedFile(null);
+                }}
                 className="rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50 px-3 py-1.5 text-base"
               >
                 ×
@@ -356,45 +385,63 @@ function DAGGrid({ items, cols = 3, cardClass = "", activeIndex = 0 }) {
             </div>
             <div className="p-6 space-y-8 overflow-y-auto h-full">
               <section>
-                <h3 className="text-base font-semibold text-gray-900">
-                  Task Details
-                </h3>
-                <div className="mt-3 text-sm text-gray-700">
-                  <p>
-                    <strong>ID:</strong> {items[openIdx]?.id}
-                  </p>
-                  <p>
-                    <strong>Status:</strong> {getStatus(openIdx)}
-                  </p>
-                  {items[openIdx]?.subtitle && (
-                    <p>
-                      <strong>Description:</strong> {items[openIdx].subtitle}
-                    </p>
-                  )}
-                </div>
+                <h3 className="text-base font-semibold text-gray-900">Input</h3>
+                <ul className="mt-3 list-disc pl-6 text-sm text-gray-700 space-y-1">
+                  {inputFilesForItem(items[openIdx]).map((file) => (
+                    <li
+                      key={file.name}
+                      className="cursor-pointer hover:text-blue-600 transition-colors"
+                      onClick={() =>
+                        setSelectedFile({ name: file.name, type: "input" })
+                      }
+                    >
+                      {file.name}
+                    </li>
+                  ))}
+                </ul>
               </section>
-
               <section>
                 <h3 className="text-base font-semibold text-gray-900">
-                  Input Files
+                  Output
                 </h3>
                 <ul className="mt-3 list-disc pl-6 text-sm text-gray-700 space-y-1">
-                  <li>input-data.json</li>
-                  <li>schema.yaml</li>
-                  <li>source.csv</li>
+                  {outputFilesForItem(items[openIdx]).map((file) => (
+                    <li
+                      key={file.name}
+                      className="cursor-pointer hover:text-blue-600 transition-colors"
+                      onClick={() =>
+                        setSelectedFile({ name: file.name, type: "output" })
+                      }
+                    >
+                      {file.name}
+                    </li>
+                  ))}
                 </ul>
               </section>
 
-              <section>
-                <h3 className="text-base font-semibold text-gray-900">
-                  Output Files
-                </h3>
-                <ul className="mt-3 list-disc pl-6 text-sm text-gray-700 space-y-1">
-                  <li>output-data.json</li>
-                  <li>report.html</li>
-                  <li>metrics.ndjson</li>
-                </ul>
-              </section>
+              {/* File Display Area with Night Mode */}
+              {selectedFile && (
+                <section className="mt-6">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-base font-semibold text-gray-900">
+                      File Content: {selectedFile.name}
+                    </h3>
+                    <button
+                      type="button"
+                      aria-label="Close file"
+                      onClick={() => setSelectedFile(null)}
+                      className="rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50 px-3 py-1.5 text-sm"
+                    >
+                      ×
+                    </button>
+                  </div>
+                  <div className="bg-gray-900 rounded-lg p-4 overflow-auto max-h-96">
+                    <pre className="text-green-400 text-sm font-mono whitespace-pre-wrap">
+                      {getFileContent(selectedFile.name, items[openIdx])}
+                    </pre>
+                  </div>
+                </section>
+              )}
             </div>
           </>
         )}
