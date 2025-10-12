@@ -12,7 +12,7 @@ import { sortJobs } from "../../transformers/list-transformer.js";
  * - Queues events received before hydration completes and applies them after hydrate
  */
 function applyJobEvent(prev = [], event) {
-  // prev: Array of jobs
+  // prev: Array of jobs (treated immutably)
   // event: { type: string, payload: object }
   const list = Array.isArray(prev) ? prev.slice() : [];
 
@@ -24,11 +24,20 @@ function applyJobEvent(prev = [], event) {
       if (!p.id) return list;
       const idx = list.findIndex((j) => j.id === p.id);
       if (idx === -1) {
+        // New job: add and sort
         list.push(p);
+        return sortJobs(list);
       } else {
-        list[idx] = { ...list[idx], ...p };
+        // Merge with existing; if no effective change, return prev to avoid unnecessary updates
+        const merged = { ...list[idx], ...p };
+        try {
+          if (JSON.stringify(merged) === JSON.stringify(list[idx])) return prev;
+        } catch (e) {
+          // Fall back to returning merged result if JSON stringify fails
+        }
+        list[idx] = merged;
+        return sortJobs(list);
       }
-      return sortJobs(list);
     }
 
     case "job:updated": {
@@ -37,20 +46,38 @@ function applyJobEvent(prev = [], event) {
       if (idx === -1) {
         // If we don't have it yet, add it
         list.push(p);
+        return sortJobs(list);
       } else {
-        list[idx] = { ...list[idx], ...p };
+        const merged = { ...list[idx], ...p };
+        try {
+          if (JSON.stringify(merged) === JSON.stringify(list[idx])) return prev;
+        } catch (e) {
+          // ignore stringify errors
+        }
+        list[idx] = merged;
+        return sortJobs(list);
       }
-      return sortJobs(list);
     }
 
     case "job:removed": {
       if (!p.id) return list;
-      return list.filter((j) => j.id !== p.id);
+      const filtered = list.filter((j) => j.id !== p.id);
+      // If nothing removed, return prev
+      try {
+        if (JSON.stringify(filtered) === JSON.stringify(prev)) return prev;
+      } catch (e) {}
+      return filtered;
     }
 
     case "status:changed": {
       if (!p.id) return list;
-      return list.map((j) => (j.id === p.id ? { ...j, status: p.status } : j));
+      const mapped = list.map((j) =>
+        j.id === p.id ? { ...j, status: p.status } : j
+      );
+      try {
+        if (JSON.stringify(mapped) === JSON.stringify(prev)) return prev;
+      } catch (e) {}
+      return mapped;
     }
 
     default:
@@ -76,16 +103,45 @@ export function useJobListWithUpdates() {
     setLocalData(data || null);
 
     if (data && Array.isArray(data)) {
-      hydratedRef.current = true;
-
+      // Compute hydrated base from incoming data, then apply any queued events deterministically
+      const base = Array.isArray(data) ? data.slice() : [];
       if (eventQueue.current.length > 0) {
-        setLocalData((prev) => {
-          return eventQueue.current.reduce(
+        // eslint-disable-next-line no-console
+        console.debug(
+          "[useJobListWithUpdates] applying queued events to base:",
+          eventQueue.current.length
+        );
+        try {
+          const applied = eventQueue.current.reduce(
             (acc, ev) => applyJobEvent(acc, ev),
-            Array.isArray(prev) ? prev : []
+            base
           );
-        });
+          // Debug: show applied array content for test troubleshooting
+          // eslint-disable-next-line no-console
+          console.debug(
+            "[useJobListWithUpdates] applied jobs count:",
+            Array.isArray(applied) ? applied.length : 0,
+            "applied:",
+            applied
+          );
+          setLocalData(applied);
+        } catch (e) {
+          // eslint-disable-next-line no-console
+          console.error(
+            "[useJobListWithUpdates] failed applying queued events",
+            e
+          );
+          // Fallback: set base as localData
+          setLocalData(base);
+        }
         eventQueue.current = [];
+        hydratedRef.current = true;
+        // eslint-disable-next-line no-console
+        console.debug("[useJobListWithUpdates] queued events applied");
+      } else {
+        // No queued events: just hydrate to base
+        setLocalData(base);
+        hydratedRef.current = true;
       }
     } else {
       hydratedRef.current = false;
@@ -93,16 +149,13 @@ export function useJobListWithUpdates() {
   }, [data]);
 
   useEffect(() => {
-    if (!data || !Array.isArray(data) || data.length === 0) {
-      // Do not open SSE when no data (snapshot required)
+    // Only create one EventSource per mounted hook instance
+    if (esRef.current) {
       return undefined;
     }
 
-    // Create EventSource
-    try {
-      const es = new EventSource("/api/events");
-      esRef.current = es;
-
+    // Helper to attach listeners to a given EventSource instance
+    const attachListeners = (es) => {
       const onOpen = () => {
         setConnectionStatus("connected");
       };
@@ -136,8 +189,17 @@ export function useJobListWithUpdates() {
               } catch (e) {
                 // ignore
               }
-              esRef.current = new EventSource("/api/events");
-              // Effect cleanup/setup cycle will reattach listeners on next render if needed
+
+              // Create a fresh EventSource and attach the same listeners so reconnect works
+              const newEs = new EventSource("/api/events");
+              newEs.addEventListener("open", onOpen);
+              newEs.addEventListener("job:updated", onJobUpdated);
+              newEs.addEventListener("job:created", onJobCreated);
+              newEs.addEventListener("job:removed", onJobRemoved);
+              newEs.addEventListener("status:changed", onStatusChanged);
+              newEs.addEventListener("error", onError);
+
+              esRef.current = newEs;
             } catch (err) {
               // ignore
             }
@@ -151,12 +213,30 @@ export function useJobListWithUpdates() {
           const eventObj = { type, payload };
 
           if (!hydratedRef.current) {
-            // Queue events and apply after hydration to avoid race conditions
-            eventQueue.current.push(eventObj);
+            // Queue events functionally (avoid mutating existing array in place)
+            // eslint-disable-next-line no-console
+            console.debug(
+              "[useJobListWithUpdates] queueing event before hydration:",
+              type,
+              evt && evt.data
+            );
+            eventQueue.current = (eventQueue.current || []).concat(eventObj);
             return;
           }
 
-          setLocalData((prev) => applyJobEvent(prev, eventObj));
+          // Apply event using pure reducer. If reducer returns an unchanged value,
+          // return prev to avoid unnecessary re-renders.
+          setLocalData((prev) => {
+            const next = applyJobEvent(prev, eventObj);
+            try {
+              if (JSON.stringify(prev) === JSON.stringify(next)) {
+                return prev;
+              }
+            } catch (e) {
+              // If stringify fails, fall back to returning next
+            }
+            return next;
+          });
         } catch (err) {
           // Non-fatal: keep queue intact and continue
           // Logging for visibility in dev; tests should mock console if asserting logs
@@ -204,13 +284,22 @@ export function useJobListWithUpdates() {
         }
         esRef.current = null;
       };
+    };
+
+    // Create EventSource on mount regardless of base snapshot presence
+    try {
+      const es = new EventSource("/api/events");
+      esRef.current = es;
+
+      // attach listeners and return the cleanup function
+      return attachListeners(es);
     } catch (err) {
       // eslint-disable-next-line no-console
       console.error("Failed to create SSE connection:", err);
       setConnectionStatus("error");
       return undefined;
     }
-  }, [data]);
+  }, []);
 
   return {
     loading,
