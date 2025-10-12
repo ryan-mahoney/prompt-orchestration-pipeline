@@ -1,13 +1,5 @@
 import React, { useEffect, useState } from "react";
 import { Button } from "./ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "./ui/select";
-import { Card, CardHeader, CardTitle, CardContent } from "./ui/card";
 import { ChevronLeft } from "lucide-react";
 import { statusBadge } from "../utils/ui";
 import { fmtDuration, elapsedBetween } from "../utils/time";
@@ -200,64 +192,13 @@ required:
         </div>
       </header>
 
-      {job.status === "error" && (
-        <Card className="mx-4 my-2">
-          <CardContent className="p-3">
-            <div className="flex items-center gap-3 text-sm">
-              <span className="font-semibold whitespace-nowrap">
-                Resume from:
-              </span>
-              <Select value={resumeFrom} onValueChange={setResumeFrom}>
-                <SelectTrigger
-                  className="w-[220px]"
-                  aria-label="Resume from stage"
-                >
-                  <SelectValue placeholder="Select task" />
-                </SelectTrigger>
-                <SelectContent>
-                  {(pipeline?.tasks ?? []).map((t) => {
-                    const id = typeof t === "string" ? t : (t.id ?? t.name);
-                    const label = typeof t === "string" ? t : (t.name ?? id);
-                    return (
-                      <SelectItem key={id} value={id}>
-                        {label}
-                      </SelectItem>
-                    );
-                  })}
-                </SelectContent>
-              </Select>
-              <Button
-                onClick={() => onResume(resumeFrom)}
-                aria-label={`Resume from ${resumeFrom}`}
-              >
-                Resume from {resumeFrom}
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      <div className="flex-1 p-4">
-        <section
-          className="h-full overflow-y-auto"
-          aria-label="Pipeline visualization"
-        >
-          <Card className="h-full">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm">Pipeline</CardTitle>
-            </CardHeader>
-            <CardContent className="p-4">
-              <DAGGrid
-                items={dagItems}
-                activeIndex={activeIndex}
-                inputFilesForItem={inputFilesForItem}
-                outputFilesForItem={outputFilesForItem}
-                getFileContent={getFileContent}
-              />
-            </CardContent>
-          </Card>
-        </section>
-      </div>
+      <DAGGrid
+        items={dagItems}
+        activeIndex={activeIndex}
+        inputFilesForItem={inputFilesForItem}
+        outputFilesForItem={outputFilesForItem}
+        getFileContent={getFileContent}
+      />
     </div>
   );
 }
