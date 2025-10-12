@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { runPipeline } from "./task-runner.js";
+import { validatePipelineOrThrow } from "./validation.js";
 
 const ROOT = process.env.PO_ROOT || process.cwd();
 const DATA_DIR = path.join(ROOT, process.env.PO_DATA_DIR || "pipeline-data");
@@ -24,6 +25,10 @@ const workDir = path.join(CURRENT_DIR, name);
 const tasksStatusPath = path.join(workDir, "tasks-status.json");
 
 const pipeline = JSON.parse(await fs.readFile(PIPELINE_DEF_PATH, "utf8"));
+
+// Validate pipeline format early with a friendly error message
+validatePipelineOrThrow(pipeline, PIPELINE_DEF_PATH);
+
 // Add cache busting to force task registry reload
 const taskRegistryUrl = `${pathToFileURL(TASK_REGISTRY).href}?t=${Date.now()}`;
 const tasks = (await import(taskRegistryUrl)).default;

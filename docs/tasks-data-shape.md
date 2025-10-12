@@ -1,125 +1,104 @@
-# Unified Task Data Shape (Task[])
+# Pipeline data shape (canonical)
 
-This document describes the canonical tasks data shape the app will adopt and the incremental migration plan to move the codebase (demo data, adapters, endpoints, transformers, tests, docs, and optionally persisted storage) to a single array-based representation.
+This document describes the canonical format for pipeline configuration files used by this repository.
 
-## Canonical shape
+Goal
 
-- Task (array element)
-  - id: string (stable key; required)
-  - name: string (human label)
-  - state: "pending" | "running" | "done" | "error"
-  - startedAt?: string | null (ISO timestamp)
-  - endedAt?: string | null (ISO timestamp)
-  - attempts?: number
-  - executionTimeMs?: number
-  - refinementAttempts?: number
-  - artifacts?: Array<{ filename: string, content?: any }>
+- Use a single, well-defined canonical pipeline config format across demos, tests, and runtime.
+- Rules are enforced early by validation so runtime code does not encounter Node ERR_INVALID_ARG_TYPE.
 
-- Job (summary/detail)
-  - id / pipelineId: string
-  - name: string
-  - status: "pending" | "running" | "error" | "complete"
-  - progress: number (0-100)
-  - createdAt?: string | null
-  - updatedAt?: string | null
-  - current?: string (task id)
-  - tasks: Task[] <-- canonical tasks array
+Canonical shape (required)
 
-Rationale: arrays preserve ordering (pipeline-defined or natural order) and are simpler to render and compute progress/elapsed in the UI. Using task.id as the stable key prevents mismatch between pipeline definition and job status.
+- `tasks` is an ordered array of string task names (the order defines execution order).
+- `taskConfig` is an optional object mapping taskName -> config object for that task.
 
-## Backwards-compatibility policy (incremental)
+Minimal example:
 
-1. Phase A (current, conservative)
-   - Adapters and transformers accept both object (map) and array input, but always emit arrays to the UI.
-   - Components are defensive (use pipeline?.tasks ?? []) and treat job.tasks as array or object. Components prefer the emitted array.
-   - Add runtime deprecation warnings when adapters/transformers receive object-shaped tasks.
+```json
+{
+  "name": "demo-pipeline",
+  "version": "1.0.0",
+  "tasks": ["research", "analysis", "synthesis", "formatting"],
+  "taskConfig": {
+    "research": { "model": "gpt-5-nano", "temperature": 0.7 },
+    "analysis": { "model": "gpt-5-nano", "temperature": 0.6 },
+    "synthesis": { "model": "gpt-5-nano", "temperature": 0.8 },
+    "formatting": { "model": "gpt-5-nano", "temperature": 0.3 }
+  }
+}
+```
 
-2. Phase B (transition)
-   - Update all demo data, fixtures, and tests to use array-shaped tasks.
-   - Update endpoints to return arrays (normalize at endpoint boundary if storage is still object-based).
-   - Keep adapters tolerant for a short time, but surface warnings in CI logs.
+Key rules
 
-3. Phase C (final)
-   - Remove object/map branches from adapters/transformers/components.
-   - Optionally migrate persisted storage to arrays (and provide a migration script).
-   - Update docs and post a breaking-change notice if relevant.
+- `tasks` must be an array of strings. Each entry must be the canonical task identifier (string).
+- `taskConfig` keys (if present) should match task names in `tasks`. Missing entries are allowed and will be treated as empty config objects.
+- Additional top-level properties (e.g., `name`, `version`, `description`, `metadata`) are permitted.
+- Do not use the older object-style tasks like `[{ id: "research", config: {...} }, ...]`. Those are deprecated and validation will fail.
 
-## Migration checklist (developer steps)
+Migration (old → new)
 
-- Demo & fixtures
-  - [ ] Convert demo payloads to Task[] (done for src/data/demoData.js and demo/pipeline-config/pipeline.json)
-  - [ ] Update any example seeds that include tasks
+Before (old object-style tasks — deprecated):
 
-- Frontend
-  - [ ] Update adapters to emit arrays (warn on object input)
-  - [ ] Replace Object.values(job.tasks || {}) usages with Array-based code
-  - [ ] Build memoized lookup maps when indexing by id: Object.fromEntries(tasks.map(t=>[t.id, t]))
-  - [ ] Guard pipeline access with pipeline?.tasks (avoid TypeError when pipeline is null)
+```json
+{
+  "name": "demo-pipeline",
+  "tasks": [
+    {
+      "id": "research",
+      "name": "research",
+      "config": { "model": "gpt-5-nano", "temperature": 0.7 }
+    },
+    {
+      "id": "analysis",
+      "name": "analysis",
+      "config": { "model": "gpt-5-nano", "temperature": 0.6 }
+    }
+  ]
+}
+```
 
-- Backend / UI-server
-  - [ ] Normalize tasks to array in endpoints (job list & job detail endpoints)
-  - [ ] If internal code still writes map-shaped tasks, convert at endpoint boundary
+After (canonical):
 
-- Transformers / Readers
-  - [ ] transformTasks / normalizeTasks should return Task[] consistently
-  - [ ] job-reader should convert persisted object shape -> array at read-time
+```json
+{
+  "name": "demo-pipeline",
+  "tasks": ["research", "analysis"],
+  "taskConfig": {
+    "research": { "model": "gpt-5-nano", "temperature": 0.7 },
+    "analysis": { "model": "gpt-5-nano", "temperature": 0.6 }
+  }
+}
+```
 
-- Utilities & tests
-  - [ ] Update utils functions to expect arrays (or accept both for transitional period)
-  - [ ] Update tests/fixtures to array-shaped tasks
-  - [ ] Add tests that endpoints always return arrays
-  - [ ] Add adapter tests to assert object input logs a deprecation warning
+Validation
 
-- Optional: storage migration
-  - [ ] Provide a one-off migration script to convert persisted tasks-status.json maps -> arrays (preserve order by pipeline if possible)
-  - [ ] Plan a maintenance window if data migration will affect users
+- The repository provides `src/core/validation.js` with `validatePipeline(pipeline)` and `validatePipelineOrThrow(pipeline, pathHint)`.
+- The validation enforces:
+  - `tasks` exists and is an array of strings (minItems: 1).
+  - `taskConfig` (if present) is an object whose values are objects.
+- `src/core/pipeline-runner.js` calls `validatePipelineOrThrow(...)` immediately after parsing the pipeline file so invalid formats fail fast with a human-readable error.
 
-## Implementation notes & suggested code patterns
+Dev notes
 
-- Normalization (adapter)
-  - At the boundary (adapter or endpoint), coerce input to an array:
-    - if (Array.isArray(raw)) use it
-    - else if (raw && typeof raw === 'object') {
-      // map -> array preserving pipeline order when available
-      console.warn('DEPRECATED: object tasks shape encountered — converting to array');
-      tasks = Object.entries(raw).map(([k, v]) => ({ id: v.id ?? k, name: v.name ?? k, ...v }))
-      } else tasks = []
+- Runtime code reads per-task config as `pipeline.taskConfig?.[taskName] || {}`. Task modules should expect an object at `ctx.taskConfig`.
+- Demo pipeline config (demo/pipeline-config/pipeline.json) already follows the canonical format.
+- If you need to validate a pipeline file manually, use the provided validation function from `src/core/validation.js`. A small helper script can be created at `scripts/validate-pipeline.js` to call it.
 
-- Component usage
-  - Prefer array:
-    - const tasks = job.tasks ?? []
-    - const taskById = useMemo(() => Object.fromEntries(tasks.map(t => [t.id, t])), [tasks])
-  - Avoid referencing pipeline.tasks or job.tasks directly without optional chaining:
-    - const totalTasks = pipeline?.tasks?.length ?? tasks.length
+Acceptance checklist (for maintainers)
 
-- Compatibility with legacy "completed" state
-  - During transition adapters should normalize "completed" -> "done" or components/utils should treat both equivalently:
-    - const isDone = t.state === 'done' || t.state === 'completed'
+- [ ] pipeline.json uses `"tasks": ["a","b",...]` and `"taskConfig": { "a": {...}, "b": {...} }`
+- [ ] orchestrator + pipeline-runner read pipeline.json and do not throw ERR_INVALID_ARG_TYPE
+- [ ] Validation fails fast when pipeline.json uses object-style tasks (old format)
+- [ ] Demo runs without runtime errors and demo tasks read config from `ctx.taskConfig`
+- [ ] Tests pass (`npm -s test`)
 
-## Tests to add (examples)
+Quick migration steps
 
-- Adapter:
-  - Input: object-shaped tasks -> Output: tasks array + deprecation warning
-  - Input: array-shaped tasks -> Output unchanged
+1. Replace `tasks` array of objects with an array of task name strings.
+2. Collect per-task `config` objects and move them into `taskConfig` keyed by the task id/name.
+3. Run tests and the demo: `npm -s test && node demo/run-demo.js`
 
-- Endpoint:
-  - GET /api/jobs returns tasks: Array.isArray(tasks) === true
-  - GET /api/jobs/:id returns tasks: Array.isArray(tasks) === true (non-existent job returns 404-like structured response)
+Reference
 
-- Components:
-  - JobTable/JobDetail render when pipeline === null and job.tasks is array
-  - JobTable/JobDetail do not throw when job.tasks is missing (use default empty array)
-
-## PR Checklist (example)
-
-- [ ] Unit tests added/updated
-- [ ] Integration tests for endpoints added/updated
-- [ ] Demo data and fixture updates included
-- [ ] Migration steps documented
-- [ ] No remaining usages of Object.values(job.tasks || {}) in frontend components
-
-## Notes & cautions
-
-- Ensure `id` exists for tasks used as keys. If old payloads lack `id`, fall back to `name` but surface a warning in tests/CI.
-- Converting persisted storage to arrays is optional but recommended long-term.
-- Keep adapters tolerant during the rollout; removing legacy branches should be a separate PR after tests and external integrations are updated.
+- See `src/core/validation.js` for schema and validation helper functions.
+- See `src/core/pipeline-runner.js` for how `taskConfig` is accessed and how validation is invoked.
