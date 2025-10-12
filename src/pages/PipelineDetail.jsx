@@ -1,69 +1,41 @@
-import React, { useState, useEffect } from "react";
+import React from "react";
 import { useParams } from "react-router-dom";
 import JobDetail from "../components/JobDetail.jsx";
+import { useJobDetailWithUpdates } from "./hooks/useJobDetailWithUpdates.js";
 
 export default function PipelineDetail() {
   const { jobId } = useParams();
-  const [job, setJob] = useState(null);
-  const [pipeline, setPipeline] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const { data: job, loading, error } = useJobDetailWithUpdates(jobId);
 
-  useEffect(() => {
-    if (!jobId) {
-      setError("No job ID provided");
-      setLoading(false);
-      return;
-    }
+  // Derive pipeline if not provided in job data
+  const pipeline =
+    job?.pipeline ||
+    (() => {
+      if (!job?.tasks) return { tasks: [] };
 
-    const fetchJobDetail = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-
-        const response = await fetch(`/api/jobs/${jobId}`);
-
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}));
-          throw new Error(errorData.message || `HTTP ${response.status}`);
-        }
-
-        const result = await response.json();
-
-        if (!result.ok) {
-          throw new Error(result.message || "Failed to load job");
-        }
-
-        const jobData = result.data;
-        setJob(jobData);
-
-        // Derive pipeline if not provided
-        if (jobData.pipeline) {
-          setPipeline(jobData.pipeline);
-        } else {
-          // Derive pipeline tasks from job.tasks
-          let pipelineTasks = [];
-
-          if (Array.isArray(jobData.tasks)) {
-            // tasks is an array, extract names
-            pipelineTasks = jobData.tasks.map((task) => task.name);
-          } else if (jobData.tasks && typeof jobData.tasks === "object") {
-            // tasks is an object, extract keys
-            pipelineTasks = Object.keys(jobData.tasks);
-          }
-
-          setPipeline({ tasks: pipelineTasks });
-        }
-      } catch (err) {
-        console.error("Failed to fetch job detail:", err);
-        setError(err.message);
-      } finally {
-        setLoading(false);
+      let pipelineTasks = [];
+      if (Array.isArray(job.tasks)) {
+        // tasks is an array, extract names
+        pipelineTasks = job.tasks.map((task) => task.name);
+      } else if (job.tasks && typeof job.tasks === "object") {
+        // tasks is an object, extract keys
+        pipelineTasks = Object.keys(job.tasks);
       }
-    };
 
-    fetchJobDetail();
-  }, [jobId]);
+      return { tasks: pipelineTasks };
+    })();
+
+  if (!jobId) {
+    return (
+      <div className="p-8">
+        <div className="text-center">
+          <div className="text-lg font-medium text-red-600">
+            No job ID provided
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (loading) {
     return (
