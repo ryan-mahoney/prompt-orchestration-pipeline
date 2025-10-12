@@ -29,6 +29,9 @@ export function createSSEEnhancer({
   }
 
   const pending = new Map(); // jobId -> timeoutId
+  // Track jobIds we've already emitted a creation event for so we can
+  // emit "job:created" on first successful read, then "job:updated" thereafter.
+  const seen = new Set();
 
   async function runJobUpdate(jobId) {
     try {
@@ -39,7 +42,20 @@ export function createSSEEnhancer({
 
       // Build payload: reuse returned data as detail (readJob returns data/raw)
       const detail = res.data || {};
-      sseRegistry.broadcast({ type: "job:updated", data: detail });
+
+      // If this is the first successful read for this jobId, emit a
+      // "job:created" event so clients can observe new jobs immediately.
+      // Subsequent successful reads will emit "job:updated".
+      try {
+        const alreadySeen = seen.has(jobId);
+        const type = alreadySeen ? "job:updated" : "job:created";
+        sseRegistry.broadcast({ type, data: detail });
+        if (!alreadySeen) {
+          seen.add(jobId);
+        }
+      } catch (broadcastErr) {
+        // If broadcasting fails for any reason, swallow to avoid crashing the enhancer
+      }
     } catch (err) {
       // swallow errors - do not broadcast
       return;
