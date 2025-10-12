@@ -21,6 +21,7 @@ import {
 import * as configBridge from "../config-bridge.js";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { getJobPipelinePath } from "../../config/paths.js";
 
 /**
  * Return a list of job summaries suitable for the API.
@@ -181,45 +182,62 @@ export async function handleJobDetail(jobId) {
       );
     }
 
-    // Read pipeline config to include canonical task order
+    // Read pipeline snapshot from job directory to include canonical task order
     let pipelineConfig = null;
     try {
-      const paths =
-        (typeof configBridge.getPATHS === "function" &&
-          configBridge.getPATHS()) ||
-        configBridge.PATHS ||
-        (typeof configBridge.resolvePipelinePaths === "function" &&
-          (function () {
-            try {
-              return configBridge.resolvePipelinePaths();
-            } catch {
-              return null;
-            }
-          })()) ||
-        null;
+      // Try to read pipeline snapshot from job directory first
+      const jobPipelinePath = getJobPipelinePath(
+        process.env.PO_ROOT || process.cwd(),
+        jobId,
+        readRes.location
+      );
 
-      const pipelinePath =
-        (paths && paths.pipeline) ||
-        (typeof configBridge.resolvePipelinePaths === "function"
-          ? (function () {
+      const pipelineData = await fs.readFile(jobPipelinePath, "utf8");
+      pipelineConfig = JSON.parse(pipelineData);
+      console.log(`[JobEndpoints] Read pipeline snapshot from job ${jobId}`);
+    } catch (jobPipelineErr) {
+      // Fallback to global pipeline config if job snapshot doesn't exist
+      try {
+        const paths =
+          (typeof configBridge.getPATHS === "function" &&
+            configBridge.getPATHS()) ||
+          configBridge.PATHS ||
+          (typeof configBridge.resolvePipelinePaths === "function" &&
+            (function () {
               try {
-                return configBridge.resolvePipelinePaths().pipeline;
+                return configBridge.resolvePipelinePaths();
               } catch {
                 return null;
               }
-            })()
-          : null);
+            })()) ||
+          null;
 
-      if (pipelinePath) {
-        const pipelineData = await fs.readFile(pipelinePath, "utf8");
-        pipelineConfig = JSON.parse(pipelineData);
+        const pipelinePath =
+          (paths && paths.pipeline) ||
+          (typeof configBridge.resolvePipelinePaths === "function"
+            ? (function () {
+                try {
+                  return configBridge.resolvePipelinePaths().pipeline;
+                } catch {
+                  return null;
+                }
+              })()
+            : null);
+
+        if (pipelinePath) {
+          const pipelineData = await fs.readFile(pipelinePath, "utf8");
+          pipelineConfig = JSON.parse(pipelineData);
+          console.log(
+            `[JobEndpoints] Used fallback global pipeline config for job ${jobId}`
+          );
+        }
+      } catch (pipelineErr) {
+        // Log warning but don't fail the request
+        console.warn(
+          `[JobEndpoints] Failed to read pipeline config for job ${jobId}:`,
+          pipelineErr?.message
+        );
       }
-    } catch (pipelineErr) {
-      // Log warning but don't fail the request
-      console.warn(
-        `[JobEndpoints] Failed to read pipeline config for job ${jobId}:`,
-        pipelineErr?.message
-      );
     }
 
     // Add pipeline to job data if available

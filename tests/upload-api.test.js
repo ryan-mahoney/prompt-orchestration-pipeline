@@ -95,23 +95,22 @@ describe("Upload API (Step 2)", () => {
       }
 
       expect(response.status).toBe(200);
-      expect(result).toEqual({
-        success: true,
-        jobName: "test-job-1",
-        message: "Seed file uploaded successfully",
-      });
+      expect(result.success).toBe(true);
+      expect(result.jobName).toBe("test-job-1");
+      expect(result.jobId).toMatch(/^[A-Za-z0-9]{12}$/); // 12 char random ID
+      expect(result.message).toBe("Seed file uploaded successfully");
 
       // No need to wait - file should be written immediately
       console.log(
         "Skipping atomic write wait - file should be written immediately"
       );
 
-      // Verify file was written to pending directory
+      // Verify file was written to pending directory with jobId as filename
       const pendingPath = path.join(
         tempDir,
         "pipeline-data",
         "pending",
-        "test-job-1-seed.json"
+        `${result.jobId}-seed.json`
       );
       console.log("Checking file at:", pendingPath);
 
@@ -189,7 +188,7 @@ describe("Upload API (Step 2)", () => {
       expect(result.message).toBe("Required fields missing");
     });
 
-    it("should reject duplicate job names", async () => {
+    it("should allow duplicate job names with different job IDs", async () => {
       const seed = {
         name: "duplicate-job",
         data: { test: "data" },
@@ -219,10 +218,11 @@ describe("Upload API (Step 2)", () => {
       console.log("First fetch request completed, status:", response1.status);
       expect(response1.status).toBe(200);
 
-      // No need to wait - file should be written immediately
-      console.log("Skipping atomic write wait for duplicate test");
+      const result1 = await response1.json();
+      expect(result1.success).toBe(true);
+      expect(result1.jobId).toMatch(/^[A-Za-z0-9]{12}$/);
 
-      // Second upload should fail
+      // Second upload should also succeed with different ID
       console.log("Making second fetch request...");
       let response2;
       try {
@@ -242,10 +242,12 @@ describe("Upload API (Step 2)", () => {
         throw error;
       }
 
-      expect(response2.status).toBe(400);
-      const result = await response2.json();
-      expect(result.success).toBe(false);
-      expect(result.message).toContain("already exists");
+      expect(response2.status).toBe(200);
+      const result2 = await response2.json();
+      expect(result2.success).toBe(true);
+      expect(result2.jobId).toMatch(/^[A-Za-z0-9]{12}$/);
+      expect(result2.jobId).not.toBe(result1.jobId); // Different IDs
+      expect(result2.jobName).toBe(result1.jobName); // Same name
     }, 60000); // 60 second timeout
 
     it("should clean up partial files on validation failure", async () => {

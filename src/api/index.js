@@ -4,7 +4,14 @@ import fs from "node:fs/promises";
 import { validateSeedOrThrow } from "../core/validation.js";
 import { validateSeed } from "./validators/seed.js";
 import { atomicWrite, cleanupOnFailure } from "./files.js";
-import { getPendingSeedPath, resolvePipelinePaths } from "../config/paths.js";
+import {
+  getPendingSeedPath,
+  resolvePipelinePaths,
+  getJobDirectoryPath,
+  getJobMetadataPath,
+  getJobPipelinePath,
+} from "../config/paths.js";
+import { generateJobId } from "../utils/id-generator.js";
 
 // Pure functional utilities
 const createPaths = (config) => {
@@ -121,7 +128,7 @@ export const submitJob = async (state, seed) => {
  * @returns {Promise<Object>} Result object with success status
  */
 export const submitJobWithValidation = async ({ dataDir, seedObject }) => {
-  let partialFilePath = null;
+  let partialFiles = [];
 
   try {
     // Validate the seed object
@@ -130,28 +137,74 @@ export const submitJobWithValidation = async ({ dataDir, seedObject }) => {
       dataDir
     );
 
-    // Get the pending file path
-    const pendingPath = getPendingSeedPath(dataDir, validatedSeed.name);
-    partialFilePath = pendingPath;
+    // Generate a random job ID
+    const jobId = generateJobId();
 
-    // Ensure the pending directory exists
+    // Get the paths
     const paths = resolvePipelinePaths(dataDir);
-    await fs.mkdir(paths.pending, { recursive: true });
+    const pendingPath = getPendingSeedPath(dataDir, jobId);
+    const currentJobDir = getJobDirectoryPath(dataDir, jobId, "current");
+    const jobMetadataPath = getJobMetadataPath(dataDir, jobId, "current");
+    const jobPipelinePath = getJobPipelinePath(dataDir, jobId, "current");
 
-    // Write atomically to pending directory
+    // Ensure directories exist
+    await fs.mkdir(paths.pending, { recursive: true });
+    await fs.mkdir(currentJobDir, { recursive: true });
+
+    // Create job metadata
+    const jobMetadata = {
+      id: jobId,
+      name: validatedSeed.name,
+      pipelineName: validatedSeed.pipeline || "default",
+      createdAt: new Date().toISOString(),
+      status: "pending",
+    };
+
+    // Read pipeline configuration for snapshot
+    let pipelineSnapshot = null;
+    try {
+      const pipelineConfigPath = path.join(
+        dataDir,
+        "pipeline-config",
+        "pipeline.json"
+      );
+      const pipelineContent = await fs.readFile(pipelineConfigPath, "utf8");
+      pipelineSnapshot = JSON.parse(pipelineContent);
+    } catch (error) {
+      // If pipeline config doesn't exist, create a minimal snapshot
+      pipelineSnapshot = {
+        tasks: [],
+        name: validatedSeed.pipeline || "default",
+      };
+    }
+
+    // Write files atomically
+    partialFiles.push(pendingPath);
     await atomicWrite(pendingPath, JSON.stringify(validatedSeed, null, 2));
+
+    partialFiles.push(jobMetadataPath);
+    await atomicWrite(jobMetadataPath, JSON.stringify(jobMetadata, null, 2));
+
+    partialFiles.push(jobPipelinePath);
+    await atomicWrite(
+      jobPipelinePath,
+      JSON.stringify(pipelineSnapshot, null, 2)
+    );
 
     return {
       success: true,
+      jobId,
       jobName: validatedSeed.name,
       message: "Seed file uploaded successfully",
     };
   } catch (error) {
     // Clean up any partial files on failure
-    if (partialFilePath) {
+    for (const filePath of partialFiles) {
       try {
-        await cleanupOnFailure(partialFilePath);
-      } catch (error) {}
+        await cleanupOnFailure(filePath);
+      } catch (cleanupError) {
+        // Ignore cleanup errors
+      }
     }
 
     // Map validation errors to appropriate error messages
@@ -160,8 +213,6 @@ export const submitJobWithValidation = async ({ dataDir, seedObject }) => {
       errorMessage = "Invalid JSON";
     } else if (error.message.includes("required")) {
       errorMessage = "Required fields missing";
-    } else if (error.message.includes("already exists")) {
-      errorMessage = "Job with this name already exists";
     }
 
     return {
