@@ -104,12 +104,25 @@ export default function JobDetail({ job, pipeline, onClose, onResume }) {
 
     // Try to read from demo data files first (for demo environment)
     try {
-      // Construct path to demo data file
-      const demoDataPath = `demo/pipeline-data/current/${job.pipelineId}/tasks/${item.id}/${filename}`;
+      // Import fs dynamically to avoid issues in browser environment
+      const fs = await import("node:fs");
+      const path = await import("node:path");
 
-      // In a real implementation, this would fetch from the server
-      // For now, we'll return a placeholder that indicates the file would be read
-      return `# File: ${filename}\n# Task: ${item.id}\n# Pipeline: ${job.pipelineId}\n\nThis file would be read from: ${demoDataPath}\n\nIn a real implementation, this content would be fetched from the server or file system.`;
+      // Construct path to demo data file
+      const demoDataPath = path.join(
+        process.cwd(),
+        "demo",
+        "pipeline-data",
+        "current",
+        job.pipelineId,
+        "tasks",
+        item.id,
+        filename
+      );
+
+      // Try to read the actual file
+      const content = await fs.promises.readFile(demoDataPath, "utf8");
+      return content;
     } catch (error) {
       // Fallback to demo data or placeholder
       const demoContents = {
