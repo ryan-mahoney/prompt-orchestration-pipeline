@@ -15,6 +15,8 @@ import { statusBadge } from "../utils/ui";
 import { fmtDuration, elapsedBetween } from "../utils/time";
 import ReactJson from "react18-json-view";
 import "react18-json-view/src/style.css";
+import DAGGrid from "./DAGGrid.jsx";
+import { computeDagItems, computeActiveIndex } from "../utils/dag.js";
 
 export default function JobDetail({ job, pipeline, onClose, onResume }) {
   const [selectedArtifact, setSelectedArtifact] = useState(null);
@@ -48,6 +50,37 @@ export default function JobDetail({ job, pipeline, onClose, onResume }) {
         )
       )
     : job?.tasks || {};
+
+  // Compute DAG items and active index for visualization
+  const dagItems = computeDagItems(job, pipeline).map((item) => {
+    const task = taskById[item.id];
+    const taskConfig = task?.config || {};
+
+    // Build subtitle with useful metadata when available
+    const subtitleParts = [];
+    if (taskConfig?.model) subtitleParts.push(`model: ${taskConfig.model}`);
+    if (taskConfig?.temperature != null)
+      subtitleParts.push(`temp: ${taskConfig.temperature}`);
+    if (task?.attempts != null)
+      subtitleParts.push(`attempts: ${task.attempts}`);
+    if (task?.refinementAttempts != null)
+      subtitleParts.push(`refinements: ${task.refinementAttempts}`);
+    if (task?.startedAt) {
+      const execMs =
+        task?.executionTime ?? elapsedBetween(task.startedAt, task.endedAt);
+      if (execMs) subtitleParts.push(`time: ${fmtDuration(execMs)}`);
+    }
+
+    return {
+      ...item,
+      title:
+        typeof item.id === "string"
+          ? item.id
+          : item.id?.name || item.id?.id || `Task ${item.id}`,
+      subtitle: subtitleParts.length > 0 ? subtitleParts.join(" · ") : null,
+    };
+  });
+  const activeIndex = computeActiveIndex(dagItems);
 
   return (
     <div className="flex h-full flex-col">
@@ -117,84 +150,10 @@ export default function JobDetail({ job, pipeline, onClose, onResume }) {
         >
           <Card className="h-full">
             <CardHeader className="pb-3">
-              <CardTitle className="text-sm">Timeline</CardTitle>
+              <CardTitle className="text-sm">Pipeline</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
-              {(pipeline?.tasks ?? []).map((t) => {
-                const taskId = typeof t === "string" ? t : (t.id ?? t.name);
-                const taskLabel =
-                  typeof t === "string" ? t : (t.name ?? taskId);
-                const taskConfig =
-                  (typeof t === "string"
-                    ? pipeline?.taskConfig?.[taskId]
-                    : t.config) ||
-                  pipeline?.taskConfig?.[taskId] ||
-                  {};
-                const st = taskById[taskId];
-                const state = st?.state ?? "pending";
-                const execMs =
-                  st?.executionTime ??
-                  elapsedBetween(st?.startedAt, st?.endedAt);
-                const attempts = st?.attempts ?? 0;
-                const refine = st?.refinementAttempts ?? 0;
-
-                const allExec = (pipeline?.tasks ?? [])
-                  .map((pt) => taskById[typeof pt === "string" ? pt : pt.id])
-                  .map(
-                    (jt) =>
-                      jt?.executionTime ??
-                      elapsedBetween(jt?.startedAt, jt?.endedAt) ??
-                      0
-                  );
-                const maxExec = Math.max(1, ...allExec);
-                const pct = Math.min(
-                  100,
-                  Math.round(((execMs ?? 0) / maxExec) * 100)
-                );
-
-                return (
-                  <Card key={taskId} className="p-4">
-                    <div className="flex items-start justify-between gap-2 mb-2">
-                      <div className="text-sm font-semibold">{taskLabel}</div>
-                      <div className="text-xs text-slate-500 flex items-center gap-2">
-                        {state === "running" && <span>running</span>}
-                        {state === "error" && <span>error</span>}
-                        {execMs ? <span>{fmtDuration(execMs)}</span> : <span />}
-                      </div>
-                    </div>
-                    <div className="text-xs text-slate-500 mb-2">
-                      attempts {attempts} · refinements {refine}
-                    </div>
-                    <Progress value={pct} variant={state} className="mb-2" />
-                    <div className="text-xs text-slate-500">
-                      {taskConfig?.model ?? st?.config?.model ?? "—"} · temp{" "}
-                      {taskConfig?.temperature ??
-                        st?.config?.temperature ??
-                        "—"}
-                      {(taskConfig?.maxTokens ?? st?.config?.maxTokens) != null
-                        ? ` · maxTokens ${taskConfig?.maxTokens ?? st?.config?.maxTokens}`
-                        : ""}
-                    </div>
-
-                    {st?.artifacts && st.artifacts.length > 0 && (
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        {st.artifacts.map((a) => (
-                          <Button
-                            key={a.filename}
-                            variant="link"
-                            size="sm"
-                            className="px-0 text-slate-900 hover:text-slate-700"
-                            onClick={() => setSelectedArtifact(a)}
-                            aria-label={`Open artifact ${a.filename}`}
-                          >
-                            {a.filename}
-                          </Button>
-                        ))}
-                      </div>
-                    )}
-                  </Card>
-                );
-              })}
+            <CardContent className="p-4">
+              <DAGGrid items={dagItems} activeIndex={activeIndex} />
             </CardContent>
           </Card>
         </section>

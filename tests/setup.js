@@ -1,5 +1,5 @@
 // Global test setup file for Vitest
-import { vi, beforeEach, afterEach, afterAll } from "vitest";
+import { vi, beforeEach, afterEach, afterAll, expect } from "vitest";
 import {
   cleanupAllServers,
   getActiveServerCount,
