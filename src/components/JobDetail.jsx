@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from "react";
 import { Button } from "./ui/button";
-import { Separator } from "./ui/separator";
 import {
   Select,
   SelectContent,
@@ -9,17 +8,13 @@ import {
   SelectValue,
 } from "./ui/select";
 import { Card, CardHeader, CardTitle, CardContent } from "./ui/card";
-import { Progress } from "./ui/progress";
-import { ChevronLeft, X } from "lucide-react";
+import { ChevronLeft } from "lucide-react";
 import { statusBadge } from "../utils/ui";
 import { fmtDuration, elapsedBetween } from "../utils/time";
-import ReactJson from "react18-json-view";
-import "react18-json-view/src/style.css";
 import DAGGrid from "./DAGGrid.jsx";
 import { computeDagItems, computeActiveIndex } from "../utils/dag.js";
 
 export default function JobDetail({ job, pipeline, onClose, onResume }) {
-  const [selectedArtifact, setSelectedArtifact] = useState(null);
   const [resumeFrom, setResumeFrom] = useState(
     pipeline?.tasks?.[0]
       ? typeof pipeline.tasks[0] === "string"
@@ -29,7 +24,6 @@ export default function JobDetail({ job, pipeline, onClose, onResume }) {
   );
 
   useEffect(() => {
-    setSelectedArtifact(null);
     setResumeFrom(
       pipeline?.tasks?.[0]
         ? typeof pipeline.tasks[0] === "string"
@@ -81,6 +75,92 @@ export default function JobDetail({ job, pipeline, onClose, onResume }) {
     };
   });
   const activeIndex = computeActiveIndex(dagItems);
+
+  // File mapping functions for DAGGrid slide-over
+  const inputFilesForItem = (item) => {
+    const task = taskById[item.id];
+    if (!task?.inputFiles) return [];
+
+    return task.inputFiles.map((file, index) => ({
+      name: typeof file === "string" ? file : file.name || `input-${index}`,
+      ...file,
+    }));
+  };
+
+  const outputFilesForItem = (item) => {
+    const task = taskById[item.id];
+    if (!task?.outputFiles) return [];
+
+    return task.outputFiles.map((file, index) => ({
+      name: typeof file === "string" ? file : file.name || `output-${index}`,
+      ...file,
+    }));
+  };
+
+  const getFileContent = (filename, item) => {
+    const task = taskById[item.id];
+
+    // Check if task has file content
+    if (task?.files?.[filename]) {
+      return typeof task.files[filename] === "string"
+        ? task.files[filename]
+        : JSON.stringify(task.files[filename], null, 2);
+    }
+
+    // Check for output content
+    if (task?.output?.filename === filename) {
+      return typeof task.output.content === "string"
+        ? task.output.content
+        : JSON.stringify(task.output.content, null, 2);
+    }
+
+    // Fallback to demo data or placeholder
+    const demoContents = {
+      "input-data.json": JSON.stringify(
+        {
+          id: job.pipelineId,
+          name: job.name,
+          config: job.config || {},
+          timestamp: new Date().toISOString(),
+        },
+        null,
+        2
+      ),
+      "schema.yaml": `# Pipeline schema for ${job.name}
+type: object
+properties:
+  id:
+    type: string
+    description: Pipeline identifier
+  name:
+    type: string
+    description: Pipeline name
+  config:
+    type: object
+    description: Pipeline configuration
+required:
+  - id
+  - name`,
+      "output.json": JSON.stringify(
+        {
+          status: task?.status || "unknown",
+          result: task?.result || {},
+          metadata: {
+            taskId: item.id,
+            pipelineId: job.pipelineId,
+            completedAt: task?.endedAt || new Date().toISOString(),
+          },
+        },
+        null,
+        2
+      ),
+    };
+
+    return (
+      demoContents[filename] ||
+      `# Content of ${filename}\n\nFile content for ${filename} from task ${item.id} in pipeline ${job.name}.`
+    );
+  };
 
   return (
     <div className="flex h-full flex-col">
@@ -143,59 +223,23 @@ export default function JobDetail({ job, pipeline, onClose, onResume }) {
         </Card>
       )}
 
-      <div className="flex min-h-0 flex-1 gap-4 p-4">
+      <div className="flex-1 p-4">
         <section
-          className="flex-1 min-w-[320px] overflow-y-auto"
-          aria-label="Task timeline"
+          className="h-full overflow-y-auto"
+          aria-label="Pipeline visualization"
         >
           <Card className="h-full">
             <CardHeader className="pb-3">
               <CardTitle className="text-sm">Pipeline</CardTitle>
             </CardHeader>
             <CardContent className="p-4">
-              <DAGGrid items={dagItems} activeIndex={activeIndex} />
-            </CardContent>
-          </Card>
-        </section>
-
-        <Separator orientation="vertical" />
-
-        <section className="flex-1 overflow-y-auto" aria-label="Outputs">
-          <Card className="h-full">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm">Outputs</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {!selectedArtifact ? (
-                <div className="flex h-32 items-center justify-center rounded border border-dashed p-6 text-sm text-slate-500">
-                  Select an artifact to preview its JSON here.
-                </div>
-              ) : (
-                <Card>
-                  <CardHeader className="flex-row items-center justify-between gap-2 py-3">
-                    <CardTitle className="text-sm">
-                      {selectedArtifact.filename}
-                    </CardTitle>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => setSelectedArtifact(null)}
-                      aria-label="Close artifact"
-                    >
-                      <X className="h-4 w-4" />
-                    </Button>
-                  </CardHeader>
-                  <CardContent className="max-h-[62vh] overflow-auto p-2">
-                    <ReactJson
-                      src={selectedArtifact.content}
-                      collapsed={2}
-                      displayDataTypes={false}
-                      enableClipboard={false}
-                      name={false}
-                    />
-                  </CardContent>
-                </Card>
-              )}
+              <DAGGrid
+                items={dagItems}
+                activeIndex={activeIndex}
+                inputFilesForItem={inputFilesForItem}
+                outputFilesForItem={outputFilesForItem}
+                getFileContent={getFileContent}
+              />
             </CardContent>
           </Card>
         </section>
