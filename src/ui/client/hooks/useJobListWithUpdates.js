@@ -93,6 +93,9 @@ export function useJobListWithUpdates() {
   const [connectionStatus, setConnectionStatus] = useState("disconnected");
   const esRef = useRef(null);
   const reconnectTimer = useRef(null);
+  // Debounce timer for refetch triggered by seed uploads or state-level events
+  const refetchDebounceRef = useRef(null);
+  const REFETCH_DEBOUNCE_MS = 300;
 
   // Hydration guard and event queue for events that arrive before hydration completes.
   const hydratedRef = useRef(false);
@@ -255,11 +258,46 @@ export function useJobListWithUpdates() {
       const onStatusChanged = (evt) =>
         handleIncomingEvent("status:changed", evt);
 
+      const scheduleRefetch = () => {
+        if (refetchDebounceRef.current)
+          clearTimeout(refetchDebounceRef.current);
+        refetchDebounceRef.current = setTimeout(() => {
+          try {
+            if (typeof refetch === "function") {
+              refetch();
+            }
+          } catch (e) {
+            // ignore refetch failures
+          } finally {
+            refetchDebounceRef.current = null;
+          }
+        }, REFETCH_DEBOUNCE_MS);
+      };
+
+      const onSeedUploaded = (evt) => {
+        // Minimal parsing - we don't need payload for refetching
+        try {
+          // eslint-disable-next-line no-unused-vars
+          const payload = evt && evt.data ? JSON.parse(evt.data) : null;
+        } catch (e) {
+          // ignore parse errors
+        }
+        scheduleRefetch();
+      };
+
+      const onStateChange = (evt) => {
+        // Treat state-level changes as a hint to refetch the jobs list (debounced)
+        scheduleRefetch();
+      };
+
       es.addEventListener("open", onOpen);
       es.addEventListener("job:updated", onJobUpdated);
       es.addEventListener("job:created", onJobCreated);
       es.addEventListener("job:removed", onJobRemoved);
       es.addEventListener("status:changed", onStatusChanged);
+      es.addEventListener("seed:uploaded", onSeedUploaded);
+      es.addEventListener("state:change", onStateChange);
+      es.addEventListener("state:summary", onStateChange);
       es.addEventListener("error", onError);
 
       // Set connection status from readyState when possible
@@ -273,6 +311,9 @@ export function useJobListWithUpdates() {
           es.removeEventListener("job:created", onJobCreated);
           es.removeEventListener("job:removed", onJobRemoved);
           es.removeEventListener("status:changed", onStatusChanged);
+          es.removeEventListener("seed:uploaded", onSeedUploaded);
+          es.removeEventListener("state:change", onStateChange);
+          es.removeEventListener("state:summary", onStateChange);
           es.removeEventListener("error", onError);
           es.close();
         } catch (err) {

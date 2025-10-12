@@ -83,7 +83,7 @@ describe("SSE Enhancer", () => {
       // Should only broadcast once
       expect(mockSSERegistry.broadcast).toHaveBeenCalledTimes(1);
       expect(mockSSERegistry.broadcast).toHaveBeenCalledWith({
-        type: "job:updated",
+        type: "job:created",
         data: expect.objectContaining({
           id: "job-123",
           status: "running",
@@ -114,11 +114,11 @@ describe("SSE Enhancer", () => {
       // Should broadcast twice (once for each job)
       expect(mockSSERegistry.broadcast).toHaveBeenCalledTimes(2);
       expect(mockSSERegistry.broadcast).toHaveBeenCalledWith({
-        type: "job:updated",
+        type: "job:created",
         data: expect.objectContaining({ id: "job-123" }),
       });
       expect(mockSSERegistry.broadcast).toHaveBeenCalledWith({
-        type: "job:updated",
+        type: "job:created",
         data: expect.objectContaining({ id: "job-456" }),
       });
     });
