@@ -799,9 +799,15 @@ function createServer() {
 let watcher = null;
 
 function initializeWatcher() {
-  state.setWatchedPaths(WATCHED_PATHS);
+  // Resolve watched paths to absolute paths based on configured data directory (PO_ROOT or fallback)
+  const base = process.env.PO_ROOT || DATA_DIR;
+  const absolutePaths = WATCHED_PATHS.map((p) =>
+    path.isAbsolute(p) ? p : path.join(base, p)
+  );
 
-  watcher = startWatcher(WATCHED_PATHS, (changes) => {
+  state.setWatchedPaths(absolutePaths);
+
+  watcher = startWatcher(absolutePaths, (changes) => {
     // Update state for each change and capture the last returned state.
     // Prefer broadcasting the state returned by recordChange (if available)
     // to ensure tests and callers receive an up-to-date snapshot without

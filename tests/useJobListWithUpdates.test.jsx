@@ -215,4 +215,31 @@ describe("useJobListWithUpdates (SSE behavior)", () => {
       expect(screen.getByTestId("list").textContent).toContain("queued-1");
     });
   });
+
+  it("refetches on seed:uploaded and debounces multiple events", async () => {
+    // Prepare a hydrated base with a spyable refetch
+    baseReturn = { loading: false, data: [], error: null, refetch: vi.fn() };
+
+    render(<TestComp />);
+
+    const es = FakeEventSource.instances[FakeEventSource.instances.length - 1];
+
+    // Dispatch two rapid seed:uploaded events; debounce should coalesce to a single refetch
+    act(() => {
+      es.dispatchEvent("seed:uploaded", {
+        data: JSON.stringify({ name: "job-x" }),
+      });
+      es.dispatchEvent("seed:uploaded", {
+        data: JSON.stringify({ name: "job-y" }),
+      });
+    });
+
+    // Wait for the debounced refetch to be called once (allow up to 1s)
+    await waitFor(
+      () => {
+        expect(baseReturn.refetch).toHaveBeenCalledTimes(1);
+      },
+      { timeout: 1000 }
+    );
+  });
 });
