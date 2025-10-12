@@ -175,27 +175,30 @@ required:
 
   return (
     <div className="flex h-full flex-col">
-      <Card className="sticky top-0 z-10 rounded-none border-b-0 shadow-sm">
-        <CardHeader className="flex-row items-center justify-between gap-3 py-3">
-          <div className="flex items-center gap-2">
+      <header className="sticky top-0 z-10 bg-white border-b border-gray-200 px-6 py-4 mb-6">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
             <Button
               variant="ghost"
               size="sm"
               onClick={onClose}
               aria-label="Back to jobs"
+              className="text-gray-600 hover:text-gray-900"
             >
               <ChevronLeft className="h-4 w-4" /> Back
             </Button>
             <div>
-              <CardTitle className="text-xl">{job.name}</CardTitle>
-              <p className="text-xs text-slate-500">ID: {job.pipelineId}</p>
+              <h1 className="text-2xl font-semibold text-gray-900">
+                {job.name}
+              </h1>
+              <p className="text-sm text-gray-600 mt-1">ID: {job.pipelineId}</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
             {statusBadge(job.status)}
           </div>
-        </CardHeader>
-      </Card>
+        </div>
+      </header>
 
       {job.status === "error" && (
         <Card className="mx-4 my-2">
