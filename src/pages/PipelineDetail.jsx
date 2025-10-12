@@ -1,7 +1,7 @@
 import React from "react";
 import { useParams } from "react-router-dom";
 import JobDetail from "../components/JobDetail.jsx";
-import { useJobDetailWithUpdates } from "./hooks/useJobDetailWithUpdates.js";
+import { useJobDetailWithUpdates } from "../ui/client/hooks/useJobDetailWithUpdates.js";
 
 export default function PipelineDetail() {
   const { jobId } = useParams();
