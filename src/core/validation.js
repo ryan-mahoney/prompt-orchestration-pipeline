@@ -98,3 +98,117 @@ export function validateSeedOrThrow(seed) {
     throw new Error(formatValidationErrors(result.errors));
   }
 }
+
+/**
+ * Validate pipeline config object shape (canonical)
+ * Expected shape:
+ * {
+ *   name: string,
+ *   tasks: string[],
+ *   taskConfig?: { [taskName: string]: object }
+ * }
+ *
+ * @param {object} pipeline - pipeline object to validate
+ * @returns {{ valid: boolean, errors?: array }}
+ */
+export function validatePipeline(pipeline) {
+  if (!pipeline || typeof pipeline !== "object") {
+    return {
+      valid: false,
+      errors: [
+        {
+          message: "Pipeline must be a valid JSON object",
+          path: "",
+        },
+      ],
+    };
+  }
+
+  const pipelineSchema = {
+    type: "object",
+    required: ["name", "tasks"],
+    properties: {
+      name: { type: "string" },
+      tasks: {
+        type: "array",
+        items: { type: "string" },
+        minItems: 1,
+      },
+      taskConfig: {
+        type: "object",
+        additionalProperties: { type: "object" },
+      },
+    },
+    additionalProperties: true,
+  };
+
+  const validatePipelineSchema = ajv.compile(pipelineSchema);
+  const valid = validatePipelineSchema(pipeline);
+
+  if (!valid) {
+    return {
+      valid: false,
+      errors: validatePipelineSchema.errors.map((err) => ({
+        message: err.message,
+        path: err.instancePath || err.dataPath || "",
+        params: err.params,
+        keyword: err.keyword,
+      })),
+    };
+  }
+
+  // Additional check: ensure every task listed has either an entry in taskConfig or empty object is acceptable.
+  if (Array.isArray(pipeline.tasks)) {
+    for (const t of pipeline.tasks) {
+      if (typeof t !== "string") {
+        return {
+          valid: false,
+          errors: [
+            {
+              message: "Every task entry must be a string task name",
+              path: "tasks",
+            },
+          ],
+        };
+      }
+    }
+  }
+
+  return { valid: true };
+}
+
+/**
+ * Formats pipeline validation errors into a human-readable message
+ * @param {array} errors
+ * @returns {string}
+ */
+export function formatPipelineValidationErrors(errors) {
+  if (!errors || errors.length === 0) {
+    return "Unknown pipeline validation error";
+  }
+
+  const messages = errors.map((err) => {
+    const path = err.path ? `at '${err.path}'` : "";
+    return `  - ${err.message} ${path}`.trim();
+  });
+
+  return `Pipeline validation failed:\n${messages.join("\n")}`;
+}
+
+/**
+ * Validate pipeline object or throw an Error with friendly message.
+ * Accepts either a pipeline object or the path string to the pipeline file,
+ * in which case the caller should read and parse the file before calling.
+ *
+ * @param {object} pipeline - pipeline object to validate
+ * @param {string} [pathHint] - optional path for error messages
+ * @throws {Error} If validation fails
+ */
+export function validatePipelineOrThrow(pipeline, pathHint = "pipeline.json") {
+  const result = validatePipeline(pipeline);
+  if (!result.valid) {
+    const header = `Invalid pipeline definition (${pathHint}):`;
+    const body = formatPipelineValidationErrors(result.errors);
+    throw new Error(`${header}\n${body}`);
+  }
+}

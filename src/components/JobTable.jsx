@@ -42,7 +42,10 @@ export default function JobTable({
           {jobs.map((job) => {
             const taskById = Array.isArray(job.tasks)
               ? Object.fromEntries(
-                  (job.tasks || []).map((t) => [t.id ?? t.name, t])
+                  (job.tasks || []).map((t) => {
+                    if (typeof t === "string") return [t, { id: t, name: t }];
+                    return [t.id ?? t.name, t];
+                  })
                 )
               : job.tasks || {};
             const currentTask = job.current ? taskById[job.current] : undefined;
@@ -57,6 +60,13 @@ export default function JobTable({
                 : Object.keys(job.tasks || {}).length);
             const progress = totalProgressPct(job);
             const duration = overallElapsed(job);
+            const currentTaskName = currentTask
+              ? (currentTask.name ?? currentTask.id ?? job.current)
+              : undefined;
+            const currentTaskConfig =
+              (job.current &&
+                (currentTask?.config || pipeline?.taskConfig?.[job.current])) ||
+              {};
 
             return (
               <Table.Row
@@ -85,8 +95,8 @@ export default function JobTable({
                 <Table.Cell>
                   <Flex direction="column" gap="1">
                     <Text size="2" className="text-slate-700">
-                      {currentTask
-                        ? currentTask.name
+                      {currentTaskName
+                        ? currentTaskName
                         : job.status === "completed"
                           ? "—"
                           : (job.current ?? "—")}
@@ -98,6 +108,14 @@ export default function JobTable({
                           {fmtDuration(currentElapsed)}
                         </Text>
                       </Flex>
+                    )}
+                    {(currentTaskConfig?.model || currentTask?.model) && (
+                      <div className="text-slate-500">
+                        {currentTaskConfig?.model || currentTask?.model} · temp{" "}
+                        {currentTaskConfig?.temperature ??
+                          currentTask?.temperature ??
+                          "—"}
+                      </div>
                     )}
                   </Flex>
                 </Table.Cell>

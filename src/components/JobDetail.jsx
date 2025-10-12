@@ -18,15 +18,35 @@ import "react18-json-view/src/style.css";
 
 export default function JobDetail({ job, pipeline, onClose, onResume }) {
   const [selectedArtifact, setSelectedArtifact] = useState(null);
-  const [resumeFrom, setResumeFrom] = useState(pipeline?.tasks?.[0]?.id ?? "");
+  const [resumeFrom, setResumeFrom] = useState(
+    pipeline?.tasks?.[0]
+      ? typeof pipeline.tasks[0] === "string"
+        ? pipeline.tasks[0]
+        : (pipeline.tasks[0].id ?? pipeline.tasks[0].name ?? "")
+      : ""
+  );
 
   useEffect(() => {
     setSelectedArtifact(null);
-    setResumeFrom(pipeline?.tasks?.[0]?.id ?? "");
+    setResumeFrom(
+      pipeline?.tasks?.[0]
+        ? typeof pipeline.tasks[0] === "string"
+          ? pipeline.tasks[0]
+          : (pipeline.tasks[0].id ?? pipeline.tasks[0].name ?? "")
+        : ""
+    );
   }, [job.pipelineId, pipeline?.tasks?.length]);
 
+  // Normalize job.tasks into a lookup: id -> task object
+  // Support both array-of-strings, array-of-objects, and an object map.
   const taskById = Array.isArray(job?.tasks)
-    ? Object.fromEntries((job.tasks || []).map((x) => [x.id ?? x.name, x]))
+    ? Object.fromEntries(
+        (job.tasks || []).map((x) =>
+          typeof x === "string"
+            ? [x, { id: x, name: x, config: pipeline?.taskConfig?.[x] || {} }]
+            : [x.id ?? x.name, x]
+        )
+      )
     : job?.tasks || {};
 
   return (
@@ -68,11 +88,15 @@ export default function JobDetail({ job, pipeline, onClose, onResume }) {
                   <SelectValue placeholder="Select task" />
                 </SelectTrigger>
                 <SelectContent>
-                  {(pipeline?.tasks ?? []).map((t) => (
-                    <SelectItem key={t.id} value={t.id}>
-                      {t.name}
-                    </SelectItem>
-                  ))}
+                  {(pipeline?.tasks ?? []).map((t) => {
+                    const id = typeof t === "string" ? t : (t.id ?? t.name);
+                    const label = typeof t === "string" ? t : (t.name ?? id);
+                    return (
+                      <SelectItem key={id} value={id}>
+                        {label}
+                      </SelectItem>
+                    );
+                  })}
                 </SelectContent>
               </Select>
               <Button
@@ -97,7 +121,16 @@ export default function JobDetail({ job, pipeline, onClose, onResume }) {
             </CardHeader>
             <CardContent className="space-y-4">
               {(pipeline?.tasks ?? []).map((t) => {
-                const st = taskById[t.id];
+                const taskId = typeof t === "string" ? t : (t.id ?? t.name);
+                const taskLabel =
+                  typeof t === "string" ? t : (t.name ?? taskId);
+                const taskConfig =
+                  (typeof t === "string"
+                    ? pipeline?.taskConfig?.[taskId]
+                    : t.config) ||
+                  pipeline?.taskConfig?.[taskId] ||
+                  {};
+                const st = taskById[taskId];
                 const state = st?.state ?? "pending";
                 const execMs =
                   st?.executionTime ??
@@ -106,7 +139,7 @@ export default function JobDetail({ job, pipeline, onClose, onResume }) {
                 const refine = st?.refinementAttempts ?? 0;
 
                 const allExec = (pipeline?.tasks ?? [])
-                  .map((pt) => taskById[pt.id])
+                  .map((pt) => taskById[typeof pt === "string" ? pt : pt.id])
                   .map(
                     (jt) =>
                       jt?.executionTime ??
@@ -120,9 +153,9 @@ export default function JobDetail({ job, pipeline, onClose, onResume }) {
                 );
 
                 return (
-                  <Card key={t.id} className="p-4">
+                  <Card key={taskId} className="p-4">
                     <div className="flex items-start justify-between gap-2 mb-2">
-                      <div className="text-sm font-semibold">{t.name}</div>
+                      <div className="text-sm font-semibold">{taskLabel}</div>
                       <div className="text-xs text-slate-500 flex items-center gap-2">
                         {state === "running" && <span>running</span>}
                         {state === "error" && <span>error</span>}
@@ -134,9 +167,12 @@ export default function JobDetail({ job, pipeline, onClose, onResume }) {
                     </div>
                     <Progress value={pct} variant={state} className="mb-2" />
                     <div className="text-xs text-slate-500">
-                      {t.config.model} · temp {t.config.temperature}
-                      {t.config.maxTokens != null
-                        ? ` · maxTokens ${t.config.maxTokens}`
+                      {taskConfig?.model ?? st?.config?.model ?? "—"} · temp{" "}
+                      {taskConfig?.temperature ??
+                        st?.config?.temperature ??
+                        "—"}
+                      {(taskConfig?.maxTokens ?? st?.config?.maxTokens) != null
+                        ? ` · maxTokens ${taskConfig?.maxTokens ?? st?.config?.maxTokens}`
                         : ""}
                     </div>
 
