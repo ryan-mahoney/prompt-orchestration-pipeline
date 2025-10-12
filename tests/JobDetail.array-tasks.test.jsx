@@ -1,7 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import React from "react";
-import { render, screen } from "@testing-library/react";
-import JobDetail from "../src/components/JobDetail.jsx";
 
 // Mock the DAGGrid component to focus on JobDetail logic
 vi.mock("../src/components/DAGGrid.jsx", () => ({
@@ -13,10 +11,18 @@ vi.mock("../src/components/DAGGrid.jsx", () => ({
   ),
 }));
 
-// Mock the computeDagItems to spy on it
+// Mock the computeDagItems and computeActiveIndex to spy on them
+vi.mock("../src/utils/dag.js", () => ({
+  computeDagItems: vi.fn(),
+  computeActiveIndex: vi.fn(),
+}));
+
+import { render, screen } from "@testing-library/react";
+import JobDetail from "../src/components/JobDetail.jsx";
 import * as dagUtils from "../src/utils/dag.js";
-const computeDagItemsSpy = vi.spyOn(dagUtils, "computeDagItems");
-const computeActiveIndexSpy = vi.spyOn(dagUtils, "computeActiveIndex");
+
+const computeDagItemsSpy = vi.mocked(dagUtils.computeDagItems);
+const computeActiveIndexSpy = vi.mocked(dagUtils.computeActiveIndex);
 
 describe("JobDetail - Array Tasks Support", () => {
   const mockOnClose = vi.fn();
@@ -24,6 +30,15 @@ describe("JobDetail - Array Tasks Support", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+
+    // Provide default mock implementations
+    computeDagItemsSpy.mockReturnValue([
+      { id: "research", status: "succeeded", source: "pipeline" },
+      { id: "analysis", status: "succeeded", source: "pipeline" },
+      { id: "synthesis", status: "active", source: "pipeline" },
+    ]);
+
+    computeActiveIndexSpy.mockReturnValue(2); // synthesis is active
   });
 
   afterEach(() => {
