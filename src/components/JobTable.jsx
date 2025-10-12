@@ -70,7 +70,7 @@ export default function JobTable({
 
             return (
               <Table.Row
-                key={job.pipelineId}
+                key={job.id || job.pipelineId}
                 className="group cursor-pointer hover:bg-slate-50/50 transition-colors"
                 onClick={() => onOpenJob(job)}
                 onKeyDown={(e) =>

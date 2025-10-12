@@ -1,6 +1,13 @@
 import React from "react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import {
+  render,
+  screen,
+  waitFor,
+  within,
+  cleanup,
+} from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import PromptPipelineDashboard from "../src/pages/PromptPipelineDashboard.jsx";
 
 /* Mock the hook used by the dashboard */
@@ -9,7 +16,7 @@ vi.mock("../src/ui/client/hooks/useJobListWithUpdates.js", () => ({
 }));
 
 /* Stub heavy child components to make tests deterministic:
-   - JobTable: render a simple list of job names (keys from pipelineId)
+   - JobTable: render a simple list of job names with click handlers for navigation
    - UploadSeed: simple button stub that reflects the disabled prop
 */
 vi.mock("../src/components/JobTable.jsx", () => ({
@@ -19,9 +26,20 @@ vi.mock("../src/components/JobTable.jsx", () => ({
       "div",
       null,
       Array.isArray(props.jobs)
-        ? props.jobs.map((j) =>
-            React.createElement("div", { key: j.pipelineId }, j.name)
-          )
+        ? props.jobs.map((j) => {
+            const jobId = j.id || j.pipelineId;
+            return React.createElement(
+              "div",
+              {
+                key: jobId,
+                "data-testid": "job-row",
+                "data-job-id": jobId,
+                onClick: () => props.onOpenJob && props.onOpenJob(j),
+                style: { cursor: "pointer" },
+              },
+              j.name
+            );
+          })
         : null
     );
   },
@@ -51,9 +69,26 @@ vi.mock("../src/components/UploadSeed.jsx", () => ({
 // Import the mocked hook to control its return values per test
 import { useJobListWithUpdates } from "../src/ui/client/hooks/useJobListWithUpdates.js";
 
+// Mock react-router-dom at the top level
+const mockNavigate = vi.fn();
+vi.mock("react-router-dom", async () => {
+  const actual = await vi.importActual("react-router-dom");
+  return {
+    ...actual,
+    useNavigate: () => mockNavigate,
+  };
+});
+
 describe("PromptPipelineDashboard (integration-ish)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockNavigate.mockClear();
+    useJobListWithUpdates.mockReset();
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
   });
 
   it("renders job list when API hook returns jobs", async () => {
@@ -137,5 +172,153 @@ describe("PromptPipelineDashboard (integration-ish)", () => {
     // Upload should remain enabled even when API reports an error.
     const buttons = screen.getAllByTestId("upload-seed-button");
     expect(buttons.some((b) => b && b.disabled === false)).toBe(true);
+  });
+
+  describe("Navigation functionality", () => {
+    it("should navigate to /pipeline/:jobId when job row is clicked", async () => {
+      const mockJobs = [
+        {
+          id: "job-123",
+          name: "Test Job 123",
+          status: "running",
+          progress: 50,
+          createdAt: "2024-01-01T00:00:00Z",
+          location: "current",
+          tasks: [{ name: "task-1", state: "running" }],
+          pipelineId: "job-123",
+        },
+      ];
+
+      useJobListWithUpdates.mockReturnValue({
+        loading: false,
+        data: mockJobs,
+        error: null,
+        refetch: vi.fn(),
+        connectionStatus: "connected",
+      });
+
+      render(
+        <MemoryRouter>
+          <PromptPipelineDashboard />
+        </MemoryRouter>
+      );
+
+      // Find the job row and click it
+      const jobRow = screen.getByTestId("job-row");
+      expect(jobRow).toBeTruthy();
+      expect(jobRow.getAttribute("data-job-id")).toBe("job-123");
+
+      jobRow.click();
+
+      // Should navigate to the job detail page
+      expect(mockNavigate).toHaveBeenCalledWith("/pipeline/job-123");
+    });
+
+    it("should use job.id for navigation when available", async () => {
+      const mockJobs = [
+        {
+          id: "unique-job-id",
+          name: "Job with unique ID",
+          status: "running",
+          progress: 100,
+          createdAt: "2024-01-01T00:00:00Z",
+          location: "current",
+          tasks: [{ name: "task-1", state: "done" }],
+          pipelineId: "legacy-id",
+        },
+      ];
+
+      useJobListWithUpdates.mockReturnValue({
+        loading: false,
+        data: mockJobs,
+        error: null,
+        refetch: vi.fn(),
+        connectionStatus: "connected",
+      });
+
+      render(
+        <MemoryRouter>
+          <PromptPipelineDashboard />
+        </MemoryRouter>
+      );
+
+      const jobRow = screen.getByTestId("job-row");
+      expect(jobRow.getAttribute("data-job-id")).toBe("unique-job-id");
+
+      jobRow.click();
+
+      expect(mockNavigate).toHaveBeenCalledWith("/pipeline/unique-job-id");
+    });
+
+    it("should use job name as fallback when no proper ID is provided", async () => {
+      const mockJobs = [
+        {
+          // No id field - adapter will fall back to name
+          name: "Legacy Job",
+          status: "running",
+          progress: 25,
+          createdAt: "2024-01-01T00:00:00Z",
+          location: "current",
+          tasks: [{ name: "task-1", state: "running" }],
+        },
+      ];
+
+      useJobListWithUpdates.mockReturnValue({
+        loading: false,
+        data: mockJobs,
+        error: null,
+        refetch: vi.fn(),
+        connectionStatus: "connected",
+      });
+
+      render(
+        <MemoryRouter>
+          <PromptPipelineDashboard />
+        </MemoryRouter>
+      );
+
+      const jobRow = screen.getByTestId("job-row");
+      // The adapter will use the job name as the ID when no proper ID is provided
+      expect(jobRow.getAttribute("data-job-id")).toBe("Legacy Job");
+
+      jobRow.click();
+
+      expect(mockNavigate).toHaveBeenCalledWith("/pipeline/Legacy Job");
+    });
+
+    it("should not render inline JobDetail component", async () => {
+      const mockJobs = [
+        {
+          id: "job-456",
+          name: "Test Job 456",
+          status: "running",
+          progress: 50,
+          createdAt: "2024-01-01T00:00:00Z",
+          location: "current",
+          tasks: [{ name: "task-1", state: "running" }],
+          pipelineId: "job-456",
+        },
+      ];
+
+      useJobListWithUpdates.mockReturnValue({
+        loading: false,
+        data: mockJobs,
+        error: null,
+        refetch: vi.fn(),
+        connectionStatus: "connected",
+      });
+
+      render(
+        <MemoryRouter>
+          <PromptPipelineDashboard />
+        </MemoryRouter>
+      );
+
+      // JobDetail component should not be rendered
+      expect(screen.queryByTestId("job-detail")).toBeNull();
+
+      // Should still show the job table
+      expect(screen.getByTestId("job-row")).toBeTruthy();
+    });
   });
 });
