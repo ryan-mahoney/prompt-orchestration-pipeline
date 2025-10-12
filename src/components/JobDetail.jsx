@@ -34,16 +34,8 @@ export default function JobDetail({ job, pipeline, onClose, onResume }) {
   }, [job.pipelineId, pipeline?.tasks?.length]);
 
   // Normalize job.tasks into a lookup: id -> task object
-  // Support both array-of-strings, array-of-objects, and an object map.
-  const taskById = Array.isArray(job?.tasks)
-    ? Object.fromEntries(
-        (job.tasks || []).map((x) =>
-          typeof x === "string"
-            ? [x, { id: x, name: x, config: pipeline?.taskConfig?.[x] || {} }]
-            : [x.id ?? x.name, x]
-        )
-      )
-    : job?.tasks || {};
+  // The job.tasks is already an object map from the job data structure
+  const taskById = job?.tasks || {};
 
   // Compute DAG items and active index for visualization
   const dagItems = computeDagItems(job, pipeline).map((item) => {
@@ -79,54 +71,59 @@ export default function JobDetail({ job, pipeline, onClose, onResume }) {
   // File mapping functions for DAGGrid slide-over
   const inputFilesForItem = (item) => {
     const task = taskById[item.id];
-    if (!task?.inputFiles) return [];
+    if (!task?.artifacts) return [];
 
-    return task.inputFiles.map((file, index) => ({
-      name: typeof file === "string" ? file : file.name || `input-${index}`,
-      ...file,
-    }));
+    // Map artifacts to input files (filter for common input patterns)
+    return task.artifacts
+      .filter(
+        (file) =>
+          typeof file === "string" &&
+          (file.includes("input") ||
+            file.includes("config") ||
+            file.includes("schema"))
+      )
+      .map((file, index) => ({
+        name: file,
+        type: "input",
+      }));
   };
 
   const outputFilesForItem = (item) => {
     const task = taskById[item.id];
-    if (!task?.outputFiles) return [];
+    if (!task?.artifacts) return [];
 
-    return task.outputFiles.map((file, index) => ({
+    // Map artifacts to output files
+    return task.artifacts.map((file, index) => ({
       name: typeof file === "string" ? file : file.name || `output-${index}`,
-      ...file,
+      type: "output",
     }));
   };
 
-  const getFileContent = (filename, item) => {
+  const getFileContent = async (filename, item) => {
     const task = taskById[item.id];
 
-    // Check if task has file content
-    if (task?.files?.[filename]) {
-      return typeof task.files[filename] === "string"
-        ? task.files[filename]
-        : JSON.stringify(task.files[filename], null, 2);
-    }
+    // Try to read from demo data files first (for demo environment)
+    try {
+      // Construct path to demo data file
+      const demoDataPath = `demo/pipeline-data/current/${job.pipelineId}/tasks/${item.id}/${filename}`;
 
-    // Check for output content
-    if (task?.output?.filename === filename) {
-      return typeof task.output.content === "string"
-        ? task.output.content
-        : JSON.stringify(task.output.content, null, 2);
-    }
-
-    // Fallback to demo data or placeholder
-    const demoContents = {
-      "input-data.json": JSON.stringify(
-        {
-          id: job.pipelineId,
-          name: job.name,
-          config: job.config || {},
-          timestamp: new Date().toISOString(),
-        },
-        null,
-        2
-      ),
-      "schema.yaml": `# Pipeline schema for ${job.name}
+      // In a real implementation, this would fetch from the server
+      // For now, we'll return a placeholder that indicates the file would be read
+      return `# File: ${filename}\n# Task: ${item.id}\n# Pipeline: ${job.pipelineId}\n\nThis file would be read from: ${demoDataPath}\n\nIn a real implementation, this content would be fetched from the server or file system.`;
+    } catch (error) {
+      // Fallback to demo data or placeholder
+      const demoContents = {
+        "input-data.json": JSON.stringify(
+          {
+            id: job.pipelineId,
+            name: job.name,
+            config: job.config || {},
+            timestamp: new Date().toISOString(),
+          },
+          null,
+          2
+        ),
+        "schema.yaml": `# Pipeline schema for ${job.name}
 type: object
 properties:
   id:
@@ -141,25 +138,26 @@ properties:
 required:
   - id
   - name`,
-      "output.json": JSON.stringify(
-        {
-          status: task?.status || "unknown",
-          result: task?.result || {},
-          metadata: {
-            taskId: item.id,
-            pipelineId: job.pipelineId,
-            completedAt: task?.endedAt || new Date().toISOString(),
+        "output.json": JSON.stringify(
+          {
+            status: task?.state || "unknown",
+            result: task?.result || {},
+            metadata: {
+              taskId: item.id,
+              pipelineId: job.pipelineId,
+              completedAt: task?.endedAt || new Date().toISOString(),
+            },
           },
-        },
-        null,
-        2
-      ),
-    };
+          null,
+          2
+        ),
+      };
 
-    return (
-      demoContents[filename] ||
-      `# Content of ${filename}\n\nFile content for ${filename} from task ${item.id} in pipeline ${job.name}.`
-    );
+      return (
+        demoContents[filename] ||
+        `# Content of ${filename}\n\nFile content for ${filename} from task ${item.id} in pipeline ${job.name}.`
+      );
+    }
   };
 
   return (
