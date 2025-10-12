@@ -1,4 +1,4 @@
-# Workflow: Plan → Do → Check → Commit
+# Workflow: Plan → Do → Check
 
 A tiny loop to keep tasks predictable, test-first, and reviewable.
 
@@ -24,17 +24,3 @@ A tiny loop to keep tasks predictable, test-first, and reviewable.
   - Print & inspect open handles/timers.
   - Ensure lock/retry tests have a deterministic exit and proper teardown.
 - (Optional) lint/typecheck before commit.
-
-## COMMIT
-
-- Conventional Commit **subject** (≤ 50 chars, imperative).
-- **Body** (~72 wrap): why, what changed, notable how, risks/mitigations.
-- Use a precise **scope** from `scopes.md` (`core`, `api`, `ui`, `cli`, `tests`, etc.).
-- Include a short **changed-files** list with one-line purpose each.
-
-### Example closing checklist for the task
-
-- [ ] Tests fail for the intended reason before code.
-- [ ] Guardrails satisfied (see `testing-guardrails.md`).
-- [ ] `test` command passes locally.
-- [ ] Conventional Commit prepared; validation performed.
