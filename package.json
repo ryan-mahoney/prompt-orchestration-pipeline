@@ -44,7 +44,6 @@
     "openai": "^5.23.1",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
-    "react18-json-view": "^0.2.9",
     "tslib": "^2.8.1"
   },
   "devDependencies": {
