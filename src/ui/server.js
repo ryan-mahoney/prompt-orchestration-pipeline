@@ -805,7 +805,8 @@ function initializeWatcher() {
     path.isAbsolute(p) ? p : path.join(base, p)
   );
 
-  state.setWatchedPaths(absolutePaths);
+  // Keep original WATCHED_PATHS in state for display/tests; watcher receives absolute paths.
+  state.setWatchedPaths(WATCHED_PATHS);
 
   watcher = startWatcher(absolutePaths, (changes) => {
     // Update state for each change and capture the last returned state.
