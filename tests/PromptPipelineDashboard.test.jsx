@@ -35,6 +35,7 @@ vi.mock("../src/components/JobTable.jsx", () => ({
                 key: jobId,
                 "data-testid": "job-row",
                 "data-job-id": jobId,
+                "data-job-status": j.status,
                 onClick: () => props.onOpenJob && props.onOpenJob(j),
                 style: { cursor: "pointer" },
               },
@@ -321,6 +322,131 @@ describe("PromptPipelineDashboard (integration-ish)", () => {
 
       // Should still show the job table
       expect(screen.getByTestId("job-row")).toBeTruthy();
+    });
+  });
+
+  describe("Tab counts and filtering", () => {
+    it("renders tab counts from initial data", async () => {
+      const mockJobs = [
+        {
+          id: "job-1",
+          name: "Running Job 1",
+          status: "running",
+          progress: 50,
+          createdAt: "2024-01-01T00:00:00Z",
+          location: "current",
+          tasks: [{ name: "task-1", state: "running" }],
+          pipelineId: "job-1",
+        },
+        {
+          id: "job-2",
+          name: "Running Job 2",
+          status: "running",
+          progress: 25,
+          createdAt: "2024-01-01T00:00:00Z",
+          location: "current",
+          tasks: [{ name: "task-2", state: "running" }],
+          pipelineId: "job-2",
+        },
+        {
+          id: "job-3",
+          name: "Error Job",
+          status: "error",
+          progress: 0,
+          createdAt: "2024-01-01T00:00:00Z",
+          location: "rejected",
+          tasks: [{ name: "task-3", state: "failed" }],
+          pipelineId: "job-3",
+        },
+        {
+          id: "job-4",
+          name: "Completed Job",
+          status: "complete",
+          progress: 100,
+          createdAt: "2024-01-01T00:00:00Z",
+          location: "complete",
+          tasks: [{ name: "task-4", state: "done" }],
+          pipelineId: "job-4",
+        },
+      ];
+
+      useJobListWithUpdates.mockReturnValue({
+        loading: false,
+        data: mockJobs,
+        error: null,
+        refetch: vi.fn(),
+        connectionStatus: "connected",
+      });
+
+      render(<PromptPipelineDashboard />);
+
+      // Assert tab buttons exist with correct counts
+      expect(screen.getByRole("tab", { name: /Current \(2\)/i })).toBeTruthy();
+      expect(screen.getByRole("tab", { name: /Errors \(1\)/i })).toBeTruthy();
+      expect(
+        screen.getByRole("tab", { name: /Completed \(1\)/i })
+      ).toBeTruthy();
+    });
+
+    it("switches between tabs successfully", async () => {
+      const mockJobs = [
+        {
+          id: "job-1",
+          name: "Running Job",
+          status: "running",
+          progress: 50,
+          createdAt: "2024-01-01T00:00:00Z",
+          location: "current",
+          tasks: [{ name: "task-1", state: "running" }],
+          pipelineId: "job-1",
+        },
+        {
+          id: "job-2",
+          name: "Error Job",
+          status: "error",
+          progress: 0,
+          createdAt: "2024-01-01T00:00:00Z",
+          location: "rejected",
+          tasks: [{ name: "task-2", state: "failed" }],
+          pipelineId: "job-2",
+        },
+        {
+          id: "job-3",
+          name: "Completed Job",
+          status: "complete",
+          progress: 100,
+          createdAt: "2024-01-01T00:00:00Z",
+          location: "complete",
+          tasks: [{ name: "task-3", state: "done" }],
+          pipelineId: "job-3",
+        },
+      ];
+
+      useJobListWithUpdates.mockReturnValue({
+        loading: false,
+        data: mockJobs,
+        error: null,
+        refetch: vi.fn(),
+        connectionStatus: "connected",
+      });
+
+      render(<PromptPipelineDashboard />);
+
+      // All tabs should be present and clickable
+      const currentTab = screen.getByRole("tab", { name: /Current \(1\)/i });
+      const errorsTab = screen.getByRole("tab", { name: /Errors \(1\)/i });
+      const completedTab = screen.getByRole("tab", {
+        name: /Completed \(1\)/i,
+      });
+
+      expect(currentTab).toBeTruthy();
+      expect(errorsTab).toBeTruthy();
+      expect(completedTab).toBeTruthy();
+
+      // Click tabs - should not throw errors
+      errorsTab.click();
+      completedTab.click();
+      currentTab.click();
     });
   });
 });
