@@ -279,6 +279,234 @@ describe("Job Endpoints Integration", () => {
     });
   });
 
+  describe("handleJobDetail - Slug Resolution", () => {
+    it("should resolve valid job ID successfully", async () => {
+      // Arrange
+      const mockJobId = "valid-job-id";
+
+      vi.spyOn(configBridge, "validateJobId").mockReturnValue(true);
+
+      const mockReadJob = vi.fn().mockResolvedValue({
+        ok: true,
+        data: {
+          id: mockJobId,
+          name: "Valid Job",
+          status: "running",
+          progress: 50,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          tasks: [],
+        },
+        location: "current",
+      });
+
+      const jobReaderModule = await import("../src/ui/job-reader.js");
+      vi.spyOn(jobReaderModule, "readJob").mockImplementation(mockReadJob);
+
+      // Act
+      const result = await handleJobDetail(mockJobId);
+
+      // Assert
+      expect(result.ok).toBe(true);
+      expect(result.data.id).toBe(mockJobId);
+      expect(mockReadJob).toHaveBeenCalledWith(mockJobId);
+    });
+
+    it("should resolve pipeline slug to latest job when ID lookup fails", async () => {
+      // Arrange
+      const pipelineSlug = "content-generation";
+      const mockJobId = "Q2OBNuRpmsJ2";
+
+      // Mock validateJobId to return false for slug, true for ID
+      vi.spyOn(configBridge, "validateJobId").mockImplementation(
+        (id) => id === mockJobId
+      );
+
+      // Mock readJob to fail for slug lookup, succeed for ID lookup
+      const mockReadJob = vi.fn();
+
+      // Set up the mock to handle any call
+      mockReadJob.mockImplementation(async (jobId) => {
+        if (jobId === pipelineSlug) {
+          // First call (slug) fails
+          return {
+            ok: false,
+            code: "job_not_found",
+            message: "Job not found",
+          };
+        } else if (jobId === mockJobId) {
+          // Second call (resolved ID) succeeds
+          return {
+            ok: true,
+            data: {
+              id: mockJobId,
+              name: "Content Generation Job",
+              status: "running",
+              progress: 75,
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+              tasks: [],
+            },
+            location: "current",
+          };
+        }
+        // Default: not found
+        return {
+          ok: false,
+          code: "job_not_found",
+          message: "Job not found",
+        };
+      });
+
+      const jobReaderModule = await import("../src/ui/job-reader.js");
+      vi.spyOn(jobReaderModule, "readJob").mockImplementation(mockReadJob);
+
+      // Mock job index for slug resolution
+      const mockResolveSlugToJobId = vi.fn().mockResolvedValue(mockJobId);
+      const jobIndexModule = await import("../src/ui/job-index.js");
+      vi.spyOn(jobIndexModule, "resolveSlugToLatestJobId").mockImplementation(
+        mockResolveSlugToJobId
+      );
+
+      // Act
+      const result = await handleJobDetail(pipelineSlug);
+
+      // Assert
+      expect(result.ok).toBe(true);
+      expect(result.data.id).toBe(mockJobId);
+      expect(mockResolveSlugToJobId).toHaveBeenCalledWith(pipelineSlug);
+      expect(mockReadJob).toHaveBeenCalledWith(mockJobId);
+    });
+
+    it("should return 404 for unknown slug", async () => {
+      // Arrange
+      const unknownSlug = "unknown-pipeline";
+
+      // Mock validateJobId to return false for slug
+      vi.spyOn(configBridge, "validateJobId").mockReturnValue(false);
+
+      // Mock readJob to fail for slug lookup
+      const mockReadJob = vi.fn().mockResolvedValue({
+        ok: false,
+        code: "job_not_found",
+        message: "Job not found",
+      });
+
+      const jobReaderModule = await import("../src/ui/job-reader.js");
+      vi.spyOn(jobReaderModule, "readJob").mockImplementation(mockReadJob);
+
+      // Mock job index to return null (no resolution)
+      const mockResolveSlugToJobId = vi.fn().mockResolvedValue(null);
+      const jobIndexModule = await import("../src/ui/job-index.js");
+      vi.spyOn(jobIndexModule, "resolveSlugToLatestJobId").mockImplementation(
+        mockResolveSlugToJobId
+      );
+
+      // Act
+      const result = await handleJobDetail(unknownSlug);
+
+      // Assert
+      expect(result.ok).toBe(false);
+      expect(result.code).toBe("job_not_found");
+      expect(result.message).toContain("Job not found");
+      expect(mockResolveSlugToJobId).toHaveBeenCalledWith(unknownSlug);
+    });
+
+    it("should return 400 for invalid slug format", async () => {
+      // Arrange
+      const invalidSlug = "invalid@slug#format";
+
+      // Mock validateJobId to return false for invalid format
+      vi.spyOn(configBridge, "validateJobId").mockReturnValue(false);
+
+      // Mock job index to return null (invalid format)
+      const mockResolveSlugToJobId = vi.fn().mockResolvedValue(null);
+      const jobIndexModule = await import("../src/ui/job-index.js");
+      vi.spyOn(jobIndexModule, "resolveSlugToLatestJobId").mockImplementation(
+        mockResolveSlugToJobId
+      );
+
+      // Act
+      const result = await handleJobDetail(invalidSlug);
+
+      // Assert
+      expect(result.ok).toBe(false);
+      expect(result.code).toBe("bad_request");
+      expect(result.message).toContain("Invalid job ID format");
+    });
+
+    it("should prefer ID lookup over slug when both exist", async () => {
+      // Arrange
+      const jobIdAndSlug = "content-generation"; // This could be both a valid ID and slug
+
+      // Mock validateJobId to return true (treat as ID)
+      vi.spyOn(configBridge, "validateJobId").mockReturnValue(true);
+
+      const mockReadJob = vi.fn().mockResolvedValue({
+        ok: true,
+        data: {
+          id: jobIdAndSlug,
+          name: "Job by ID",
+          status: "running",
+          progress: 50,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          tasks: [],
+        },
+        location: "current",
+      });
+
+      const jobReaderModule = await import("../src/ui/job-reader.js");
+      vi.spyOn(jobReaderModule, "readJob").mockImplementation(mockReadJob);
+
+      // Act
+      const result = await handleJobDetail(jobIdAndSlug);
+
+      // Assert
+      expect(result.ok).toBe(true);
+      expect(result.data.id).toBe(jobIdAndSlug);
+      expect(result.data.name).toBe("Job by ID");
+      expect(mockReadJob).toHaveBeenCalledWith(jobIdAndSlug);
+      // Should NOT attempt slug resolution
+      expect(mockReadJob).toHaveBeenCalledTimes(1);
+    });
+
+    it("should handle slug resolution errors gracefully", async () => {
+      // Arrange
+      const pipelineSlug = "error-pipeline";
+
+      // Mock validateJobId to return false for slug
+      vi.spyOn(configBridge, "validateJobId").mockReturnValue(false);
+
+      // Mock readJob to fail for slug lookup
+      const mockReadJob = vi.fn().mockResolvedValue({
+        ok: false,
+        code: "job_not_found",
+        message: "Job not found",
+      });
+
+      const jobReaderModule = await import("../src/ui/job-reader.js");
+      vi.spyOn(jobReaderModule, "readJob").mockImplementation(mockReadJob);
+
+      // Mock job index to throw error
+      const mockResolveSlugToJobId = vi
+        .fn()
+        .mockRejectedValue(new Error("Index error"));
+      const jobIndexModule = await import("../src/ui/job-index.js");
+      vi.spyOn(jobIndexModule, "resolveSlugToLatestJobId").mockImplementation(
+        mockResolveSlugToJobId
+      );
+
+      // Act
+      const result = await handleJobDetail(pipelineSlug);
+
+      // Assert
+      expect(result.ok).toBe(false);
+      expect(result.code).toBe("job_not_found");
+      expect(result.message).toContain("Job not found");
+    });
+  });
+
   describe("getEndpointStats", () => {
     it("should calculate statistics correctly", () => {
       // Arrange
