@@ -209,5 +209,35 @@ describe("ID-only storage behavior", () => {
       expect(result.code).toBe("bad_request");
       expect(result.message).toContain("Invalid job ID format");
     });
+
+    it("should return job_not_found when slug directories exist but valid ID is requested", async () => {
+      // Create slug-based directories that should be ignored
+      await fs.mkdir(path.join(currentDir, "content-generation"), {
+        recursive: true,
+      });
+      await fs.mkdir(path.join(completeDir, "data-processing"), {
+        recursive: true,
+      });
+
+      // Add valid job data to slug directories (should be ignored)
+      const slugJobData = {
+        id: "content-generation",
+        name: "Content Generation",
+        createdAt: "2024-01-01T00:00:00Z",
+        tasks: { analysis: { state: "done" } },
+      };
+
+      await fs.writeFile(
+        path.join(currentDir, "content-generation", "tasks-status.json"),
+        JSON.stringify(slugJobData, null, 2)
+      );
+
+      // Try to read a valid format ID that doesn't exist
+      const result = await readJob("ValidJob123");
+
+      expect(result.ok).toBe(false);
+      expect(result.code).toBe("job_not_found");
+      expect(result.message).toContain("Job not found");
+    });
   });
 });
