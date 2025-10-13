@@ -16,7 +16,7 @@ import { render, screen, cleanup } from "@testing-library/react";
 // Mock react-router-dom with internal mutable state and a public setter.
 vi.mock("react-router-dom", async (importOriginal) => {
   const actual = await importOriginal();
-  let __params = { jobId: "test-job-123" };
+  let __params = { jobId: "testjob123" };
   return {
     ...actual,
     __setParams: (p) => {
@@ -106,7 +106,7 @@ describe("PipelineDetail", () => {
       error: null,
     });
 
-    __setParams({ jobId: "test-job-123" });
+    __setParams({ jobId: "testjob123" });
 
     render(
       <MemoryRouter>
@@ -137,7 +137,7 @@ describe("PipelineDetail", () => {
       error: "Network error",
     });
 
-    __setParams({ jobId: "test-job-123" });
+    __setParams({ jobId: "testjob123" });
 
     render(
       <MemoryRouter>
@@ -151,7 +151,7 @@ describe("PipelineDetail", () => {
 
   it("renders job detail when hook returns data", () => {
     const mockJob = {
-      id: "test-job-123",
+      id: "testjob123",
       name: "Test Job",
       status: "pending",
       tasks: [
@@ -170,7 +170,7 @@ describe("PipelineDetail", () => {
       error: null,
     });
 
-    __setParams({ jobId: "test-job-123" });
+    __setParams({ jobId: "testjob123" });
 
     render(
       <MemoryRouter>
@@ -186,7 +186,7 @@ describe("PipelineDetail", () => {
 
   it("derives pipeline from job.tasks object when no pipeline provided", () => {
     const mockJob = {
-      id: "test-job-123",
+      id: "testjob123",
       name: "Test Job",
       status: "pending",
       tasks: {
@@ -203,7 +203,7 @@ describe("PipelineDetail", () => {
       error: null,
     });
 
-    __setParams({ jobId: "test-job-123" });
+    __setParams({ jobId: "testjob123" });
 
     render(
       <MemoryRouter>
@@ -214,5 +214,90 @@ describe("PipelineDetail", () => {
     expect(screen.getByTestId("pipeline-tasks").textContent).toBe(
       "research, analysis, writing"
     );
+  });
+
+  it("renders invalid job ID error for malformed IDs", () => {
+    __setParams({ jobId: "invalid-id-with-special-chars!" });
+
+    render(
+      <MemoryRouter>
+        <PipelineDetail />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText(/Invalid job ID/i)).toBeDefined();
+    expect(
+      screen.getByText(
+        /Job IDs must be alphanumeric strings \(6-30 characters\)/i
+      )
+    ).toBeDefined();
+  });
+
+  it("renders invalid job ID error for short IDs", () => {
+    __setParams({ jobId: "short" });
+
+    render(
+      <MemoryRouter>
+        <PipelineDetail />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText(/Invalid job ID/i)).toBeDefined();
+  });
+
+  it("renders invalid job ID error for long IDs", () => {
+    __setParams({ jobId: "very-long-job-id-that-exceeds-maximum-length" });
+
+    render(
+      <MemoryRouter>
+        <PipelineDetail />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText(/Invalid job ID/i)).toBeDefined();
+  });
+
+  it("renders invalid job ID error for empty string", () => {
+    __setParams({ jobId: "" });
+
+    render(
+      <MemoryRouter>
+        <PipelineDetail />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText(/Invalid job ID/i)).toBeDefined();
+  });
+
+  it("does not call useJobDetailWithUpdates for invalid job IDs", () => {
+    __setParams({ jobId: "invalid@id" });
+
+    render(
+      <MemoryRouter>
+        <PipelineDetail />
+      </MemoryRouter>
+    );
+
+    // Hook should not be called for invalid IDs
+    expect(useJobDetailWithUpdates).not.toHaveBeenCalled();
+  });
+
+  it("calls useJobDetailWithUpdates for valid job IDs", () => {
+    vi.mocked(useJobDetailWithUpdates).mockReturnValue({
+      data: null,
+      loading: true,
+      error: null,
+    });
+
+    __setParams({ jobId: "validjobid123" });
+
+    render(
+      <MemoryRouter>
+        <PipelineDetail />
+      </MemoryRouter>
+    );
+
+    // Hook should be called for valid IDs
+    expect(useJobDetailWithUpdates).toHaveBeenCalledWith("validjobid123");
   });
 });
