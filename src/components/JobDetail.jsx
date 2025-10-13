@@ -26,11 +26,51 @@ export default function JobDetail({ job, pipeline, onClose, onResume }) {
   }, [job.pipelineId, pipeline?.tasks?.length]);
 
   // Normalize job.tasks into a lookup: id -> task object
-  // The job.tasks is already an object map from the job data structure
-  const taskById = job?.tasks || {};
+  // Handle both array and object formats
+  const taskById = React.useMemo(() => {
+    const tasks = job?.tasks;
+    if (!tasks) return {};
+
+    if (Array.isArray(tasks)) {
+      // Convert array to object lookup using name or id as key
+      const taskMap = {};
+      for (const task of tasks) {
+        const taskId = task?.name || task?.id;
+        if (taskId) {
+          taskMap[taskId] = task;
+        }
+      }
+      return taskMap;
+    }
+
+    // Already an object, return as-is
+    return tasks;
+  }, [job?.tasks]);
+
+  // Compute pipeline tasks from pipeline or derive from job tasks
+  const computedPipeline = React.useMemo(() => {
+    if (pipeline?.tasks) {
+      return pipeline;
+    }
+
+    // Derive pipeline tasks from job tasks
+    const jobTasks = job?.tasks;
+    if (!jobTasks) return { tasks: [] };
+
+    if (Array.isArray(jobTasks)) {
+      // Extract names from array tasks
+      const taskNames = jobTasks
+        .map((task) => task?.name || task?.id)
+        .filter(Boolean);
+      return { tasks: taskNames };
+    } else {
+      // Extract keys from object tasks
+      return { tasks: Object.keys(jobTasks) };
+    }
+  }, [pipeline, job?.tasks]);
 
   // Compute DAG items and active index for visualization
-  const dagItems = computeDagItems(job, pipeline).map((item) => {
+  const dagItems = computeDagItems(job, computedPipeline).map((item) => {
     const task = taskById[item.id];
     const taskConfig = task?.config || {};
 

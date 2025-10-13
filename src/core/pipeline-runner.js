@@ -18,10 +18,10 @@ const TASK_REGISTRY =
 const PIPELINE_DEF_PATH =
   process.env.PO_PIPELINE_PATH || path.join(CONFIG_DIR, "pipeline.json");
 
-const name = process.argv[2];
-if (!name) throw new Error("runner requires pipeline name");
+const jobId = process.argv[2];
+if (!jobId) throw new Error("runner requires jobId as argument");
 
-const workDir = path.join(CURRENT_DIR, name);
+const workDir = path.join(CURRENT_DIR, jobId);
 const tasksStatusPath = path.join(workDir, "tasks-status.json");
 
 const pipeline = JSON.parse(await fs.readFile(PIPELINE_DEF_PATH, "utf8"));
@@ -124,12 +124,12 @@ for (const taskName of pipeline.tasks) {
 }
 
 await fs.mkdir(COMPLETE_DIR, { recursive: true });
-const dest = path.join(COMPLETE_DIR, name);
+const dest = path.join(COMPLETE_DIR, jobId);
 await fs.rename(workDir, dest);
 await appendLine(
   path.join(COMPLETE_DIR, "runs.jsonl"),
   JSON.stringify({
-    name,
+    jobId,
     pipelineId: status.pipelineId,
     finishedAt: now(),
     tasks: Object.keys(status.tasks),

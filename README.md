@@ -38,7 +38,7 @@ The outer pipeline manages runs, state, and isolation. It is responsible for:
 
 - Assigning a pipeline run ID for each new submission.
 - Creating predictable directories for pending seeds, active runs, and completed runs.
-- Spawning isolated processes for each task (so one failure doesn’t crash others).
+- Spawning isolated processes for each task (so one failure doesn't crash others).
 - Tracking progress in a run‑scoped status file.
 - Promoting completed runs into a repository of results with audit metadata.
 
@@ -57,8 +57,8 @@ my-project/
 ```mermaid
 flowchart TD
   A["pipeline-data/pending/*-seed.json"] --> B[Orchestrator]
-  B --> C["create pipeline-data/current/<id>/seed.json"]
-  B --> D["init pipeline-data/current/<id>/tasks-status.json"]
+  B --> C["create pipeline-data/current/{jobId}/seed.json"]
+  B --> D["init pipeline-data/current/{jobId}/tasks-status.json"]
   B --> E[Read pipeline-config/pipeline.json]
   E --> F[Spawn task runner]
   F --> G["write tasks/<task>/letter.json"]
@@ -68,7 +68,7 @@ flowchart TD
   J --> K{More tasks?}
   K -->|yes| F
   K -->|no| L[Promote to complete]
-  L --> M["pipeline-data/complete/<id>/**"]
+  L --> M["pipeline-data/complete/{jobId}/**"]
   L --> N["append pipeline-data/complete/runs.jsonl"]
 ```
 
@@ -244,7 +244,68 @@ _(Keys and defaults may vary by version; prefer `--help` for authoritative optio
 2. **Define**: Edit `pipeline-config/pipeline.json` and implement tasks under `pipeline-config/tasks/`.
 3. **Run**: `npm run pipeline` (or `npm run pipeline:ui` for the UI).
 4. **Submit**: Add a seed JSON to `pipeline-data/pending/` or run `npm run pipeline:submit -- ./path/to/seed.json`.
-5. **Inspect**: Watch `pipeline-data/current/<runId>` for in‑progress artifacts and `pipeline-data/complete/<runId>` for results.
+5. **Inspect**: Watch `pipeline-data/current/{jobId}` for in‑progress artifacts and `pipeline-data/complete/{jobId}` for results.
+
+---
+
+## Section C — UI and JobId-Only Navigation
+
+This project includes a web UI for monitoring pipeline execution and inspecting results.
+
+### JobId-Only Policy
+
+**Important**: The UI uses JobId-only navigation. All pipeline detail pages use `/pipeline/:jobId` URLs with no slug-based fallbacks.
+
+#### Directory Structure
+
+The UI uses ID-based storage exclusively:
+
+```
+pipeline-data/
+├── pending/
+│   ├── {jobId}/
+│   │   ├── seed.json
+│   │   └── ...
+├── current/
+│   ├── {jobId}/
+│   │   ├── seed.json
+│   │   ├── tasks-status.json
+│   │   └── ...
+├── complete/
+│   ├── {jobId}/
+│   │   ├── seed.json
+│   │   ├── tasks-status.json
+│   │   └── ...
+└── rejected/
+    ├── {jobId}/
+    │   ├── seed.json
+    │   └── ...
+```
+
+#### Accessing Pipeline Details
+
+- **Valid**: `/pipeline/abc123def456` - Loads job with ID `abc123def456`
+- **Invalid**: `/pipeline/content-generation` - Shows "Invalid job ID" error
+
+#### Migration from Legacy Data
+
+If you have existing demo data with process-named folders (e.g., `content-generation`), run the migration script:
+
+```bash
+node scripts/migrate-demo-fs.js
+```
+
+This will:
+
+- Convert process-named folders to ID-based directories
+- Preserve all existing job data
+- Create manifests for traceability
+
+#### Error Handling
+
+- **Invalid job ID**: Shows "Invalid job ID" for malformed IDs
+- **Job not found**: Shows "Job not found" for valid IDs that don't exist
+- **Network errors**: Shows appropriate network error messages
 
 ---
 
@@ -254,6 +315,7 @@ _(Keys and defaults may vary by version; prefer `--help` for authoritative optio
 - **Isolation** – tasks run in separate processes when appropriate.
 - **Artifacts** – tasks write structured artifacts (e.g., `letter.json`, `output.json`) to their run directory.
 - **Status** – a `tasks-status.json` file tracks progress and outcomes across the pipeline.
+- **JobId-only** – all job identification and navigation uses unique job IDs, not pipeline names.
 
 ---
 
@@ -261,7 +323,8 @@ _(Keys and defaults may vary by version; prefer `--help` for authoritative optio
 
 - **Nothing happens when I submit a seed** → Ensure the orchestrator is running and watching `pipeline-data/pending/`.
 - **Task not found** → Confirm the task ID exists in `pipeline-config/tasks/index.js` and matches `pipeline.json`.
-- **UI doesn’t load** → Try `pipeline-orchestrator start --ui` and check for port conflicts.
+- **UI doesn't load** → Try `pipeline-orchestrator start --ui` and check for port conflicts.
+- **Invalid job ID error** → Ensure you're using a valid job ID from the job list, not a pipeline name.
 
 ---
 
@@ -281,6 +344,9 @@ npm run pipeline:ui
 
 # 4) Submit a seed (JSON file)
 npm run pipeline:submit -- ./seeds/example-seed.json
+
+# 5) Access UI (if running with --ui)
+# Navigate to job details using /pipeline/{jobId} URLs
 ```
 
 ---

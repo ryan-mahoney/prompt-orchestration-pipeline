@@ -1,5 +1,6 @@
 // PromptPipelineDashboard.jsx
 import React, { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 // Radix UI primitives
 import * as Tooltip from "@radix-ui/react-tooltip";
@@ -21,11 +22,10 @@ import { CONFIG as UI_CONFIG } from "../ui/config-bridge.browser.js";
 
 // Referenced components — leave these alone
 import JobTable from "../components/JobTable";
-import JobDetail from "../components/JobDetail";
 import UploadSeed from "../components/UploadSeed";
 
 export default function PromptPipelineDashboard({ isConnected }) {
-  const [pipeline, setPipeline] = useState(null);
+  const navigate = useNavigate();
   const {
     data: apiJobs,
     loading,
@@ -46,7 +46,6 @@ export default function PromptPipelineDashboard({ isConnected }) {
   }, [apiJobs, error]);
   const [seedName, setSeedName] = useState("content-generation");
   const [activeTab, setActiveTab] = useState("current");
-  const [selectedJob, setSelectedJob] = useState(null);
   const [seedUploadSuccess, setSeedUploadSuccess] = useState(null);
   const [seedUploadTimer, setSeedUploadTimer] = useState(null);
 
@@ -84,11 +83,9 @@ export default function PromptPipelineDashboard({ isConnected }) {
   }, [jobs, activeTab]);
 
   const totalProgressPct = (job) => {
-    const total =
-      pipeline?.tasks?.length ??
-      (Array.isArray(job.tasks)
-        ? job.tasks.length
-        : Object.keys(job.tasks || {}).length);
+    const total = Array.isArray(job.tasks)
+      ? job.tasks.length
+      : Object.keys(job.tasks || {}).length;
     if (!total) return 0;
     const taskList = Array.isArray(job.tasks)
       ? job.tasks
@@ -123,7 +120,16 @@ export default function PromptPipelineDashboard({ isConnected }) {
     return Math.round(sum / runningJobs.length);
   }, [runningJobs]);
 
-  const openJob = (job) => setSelectedJob(job);
+  const openJob = (job) => {
+    // Only navigate if job has a proper ID
+    if (job.id) {
+      navigate(`/pipeline/${job.id}`);
+    } else {
+      // Show console warning for jobs without valid ID
+      console.warn(`Cannot open job "${job.name}" - no valid job ID available`);
+      // TODO: Show user-facing toast or notification for better UX
+    }
+  };
 
   // Handle seed upload success
   const handleSeedUploadSuccess = ({ jobName }) => {
@@ -174,11 +180,6 @@ export default function PromptPipelineDashboard({ isConnected }) {
               <Heading size="5" weight="medium" className="text-gray-12">
                 Prompt Pipeline
               </Heading>
-              {pipeline?.name && (
-                <RadixBadge variant="soft" color="gray">
-                  {pipeline.name}
-                </RadixBadge>
-              )}
             </Flex>
 
             <Flex align="center" gap="3">
@@ -200,89 +201,69 @@ export default function PromptPipelineDashboard({ isConnected }) {
 
         {/* Main Content */}
         <Box className="mx-auto max-w-6xl px-6 py-6">
-          {/* Upload Seed File Section - Only show when no job is selected */}
-          {!selectedJob && (
-            <Card className="mb-6">
-              <Flex direction="column" gap="3">
-                <Heading size="4" weight="medium" className="text-gray-12">
-                  Upload Seed File
-                </Heading>
+          {/* Upload Seed File Section */}
+          <Card className="mb-6">
+            <Flex direction="column" gap="3">
+              <Heading size="4" weight="medium" className="text-gray-12">
+                Upload Seed File
+              </Heading>
 
-                {/* Success Message */}
-                {seedUploadSuccess && (
-                  <Box className="rounded-md bg-green-50 p-3 border border-green-200">
-                    <Text size="2" className="text-green-800">
-                      Job <strong>{seedUploadSuccess}</strong> created
-                      successfully
-                    </Text>
-                  </Box>
-                )}
-
-                <UploadSeed onUploadSuccess={handleSeedUploadSuccess} />
-              </Flex>
-            </Card>
-          )}
-
-          {selectedJob ? (
-            <JobDetail
-              job={selectedJob}
-              pipeline={pipeline}
-              onClose={() => setSelectedJob(null)}
-              onResume={(taskId) =>
-                alert(
-                  "Resuming " +
-                    (selectedJob?.pipelineId ?? "") +
-                    " from " +
-                    taskId
-                )
-              }
-            />
-          ) : (
-            <>
-              {error && (
-                <Box className="mb-4 rounded-md bg-yellow-50 p-3 border border-yellow-200">
-                  <Text size="2" className="text-yellow-800">
-                    Unable to load jobs from the server
+              {/* Success Message */}
+              {seedUploadSuccess && (
+                <Box className="rounded-md bg-green-50 p-3 border border-green-200">
+                  <Text size="2" className="text-green-800">
+                    Job <strong>{seedUploadSuccess}</strong> created
+                    successfully
                   </Text>
                 </Box>
               )}
-              <Tabs.Root value={activeTab} onValueChange={setActiveTab}>
-                <Tabs.List aria-label="Job filters">
-                  <Tabs.Trigger value="current">Current</Tabs.Trigger>
-                  <Tabs.Trigger value="errors">Errors</Tabs.Trigger>
-                  <Tabs.Trigger value="complete">Completed</Tabs.Trigger>
-                </Tabs.List>
 
-                <Tabs.Content value="current">
-                  <JobTable
-                    jobs={filteredJobs}
-                    pipeline={pipeline}
-                    onOpenJob={openJob}
-                    totalProgressPct={totalProgressPct}
-                    overallElapsed={overallElapsed}
-                  />
-                </Tabs.Content>
-                <Tabs.Content value="errors">
-                  <JobTable
-                    jobs={filteredJobs}
-                    pipeline={pipeline}
-                    onOpenJob={openJob}
-                    totalProgressPct={totalProgressPct}
-                    overallElapsed={overallElapsed}
-                  />
-                </Tabs.Content>
-                <Tabs.Content value="complete">
-                  <JobTable
-                    jobs={filteredJobs}
-                    pipeline={pipeline}
-                    onOpenJob={openJob}
-                    totalProgressPct={totalProgressPct}
-                    overallElapsed={overallElapsed}
-                  />
-                </Tabs.Content>
-              </Tabs.Root>
-            </>
+              <UploadSeed onUploadSuccess={handleSeedUploadSuccess} />
+            </Flex>
+          </Card>
+
+          {error && (
+            <Box className="mb-4 rounded-md bg-yellow-50 p-3 border border-yellow-200">
+              <Text size="2" className="text-yellow-800">
+                Unable to load jobs from the server
+              </Text>
+            </Box>
           )}
+          <Tabs.Root value={activeTab} onValueChange={setActiveTab}>
+            <Tabs.List aria-label="Job filters">
+              <Tabs.Trigger value="current">Current</Tabs.Trigger>
+              <Tabs.Trigger value="errors">Errors</Tabs.Trigger>
+              <Tabs.Trigger value="complete">Completed</Tabs.Trigger>
+            </Tabs.List>
+
+            <Tabs.Content value="current">
+              <JobTable
+                jobs={filteredJobs}
+                pipeline={null}
+                onOpenJob={openJob}
+                totalProgressPct={totalProgressPct}
+                overallElapsed={overallElapsed}
+              />
+            </Tabs.Content>
+            <Tabs.Content value="errors">
+              <JobTable
+                jobs={filteredJobs}
+                pipeline={null}
+                onOpenJob={openJob}
+                totalProgressPct={totalProgressPct}
+                overallElapsed={overallElapsed}
+              />
+            </Tabs.Content>
+            <Tabs.Content value="complete">
+              <JobTable
+                jobs={filteredJobs}
+                pipeline={null}
+                onOpenJob={openJob}
+                totalProgressPct={totalProgressPct}
+                overallElapsed={overallElapsed}
+              />
+            </Tabs.Content>
+          </Tabs.Root>
         </Box>
       </Box>
     </Tooltip.Provider>

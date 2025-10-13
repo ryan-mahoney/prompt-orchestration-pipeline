@@ -47,18 +47,17 @@ describe("Upload Handler (Step 2)", () => {
         seedObject: validSeed,
       });
 
-      expect(result).toEqual({
-        success: true,
-        jobName: "test-job-1",
-        message: "Seed file uploaded successfully",
-      });
+      expect(result.success).toBe(true);
+      expect(result.jobName).toBe("test-job-1");
+      expect(result.jobId).toMatch(/^[A-Za-z0-9]{12}$/); // 12 char random ID
+      expect(result.message).toBe("Seed file uploaded successfully");
 
-      // Verify file was written to pending directory
+      // Verify file was written to pending directory with jobId as filename
       const pendingPath = path.join(
         tempDir,
         "pipeline-data",
         "pending",
-        "test-job-1-seed.json"
+        `${result.jobId}-seed.json`
       );
       const fileContent = await fs.readFile(pendingPath, "utf8");
       expect(JSON.parse(fileContent)).toEqual(validSeed);
@@ -89,7 +88,7 @@ describe("Upload Handler (Step 2)", () => {
       expect(result.message).toBe("Required fields missing");
     });
 
-    it("should reject duplicate job names", async () => {
+    it("should allow duplicate job names with different job IDs", async () => {
       const seed = {
         name: "duplicate-job",
         data: { test: "data" },
@@ -101,15 +100,18 @@ describe("Upload Handler (Step 2)", () => {
         seedObject: seed,
       });
       expect(result1.success).toBe(true);
+      expect(result1.jobId).toMatch(/^[A-Za-z0-9]{12}$/);
 
-      // Second upload should fail
+      // Second upload should also succeed with different ID
       const result2 = await submitJobWithValidation({
         dataDir: tempDir,
         seedObject: seed,
       });
 
-      expect(result2.success).toBe(false);
-      expect(result2.message).toContain("already exists");
+      expect(result2.success).toBe(true);
+      expect(result2.jobId).toMatch(/^[A-Za-z0-9]{12}$/);
+      expect(result2.jobId).not.toBe(result1.jobId); // Different IDs
+      expect(result2.jobName).toBe(result1.jobName); // Same name
     });
 
     it("should clean up partial files on validation failure", async () => {

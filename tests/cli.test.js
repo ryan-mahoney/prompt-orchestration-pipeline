@@ -115,39 +115,50 @@ describe("CLI", () => {
       expect(process.on).toHaveBeenCalledWith("SIGINT", expect.any(Function));
     });
 
-    it("should handle submit command job submission", async () => {
+    it("should handle submit command job submission using submitJobWithValidation", async () => {
       // Arrange
       const mockFs = {
         readFile: vi.fn().mockResolvedValue(JSON.stringify({ data: "test" })),
       };
 
-      const mockOrchestrator = {
-        initialize: vi.fn().mockResolvedValue(),
-        submitJob: vi.fn().mockResolvedValue({ name: "test-job" }),
-      };
+      const mockSubmitJobWithValidation = vi.fn().mockResolvedValue({
+        success: true,
+        jobId: "job-123",
+        jobName: "test-job",
+        message: "Seed file uploaded successfully",
+      });
 
       vi.doMock("node:fs/promises", () => mockFs);
       vi.doMock("../src/api/index.js", () => ({
-        PipelineOrchestrator: vi.fn(() => mockOrchestrator),
+        submitJobWithValidation: mockSubmitJobWithValidation,
       }));
 
       // Act - Test the submit command logic directly
       const submitHandler = async (seedFile) => {
-        const { PipelineOrchestrator } = await import("../src/api/index.js");
+        const { submitJobWithValidation } = await import("../src/api/index.js");
         const seed = JSON.parse(await mockFs.readFile(seedFile, "utf8"));
-        const orchestrator = new PipelineOrchestrator({ autoStart: false });
-        await orchestrator.initialize();
-        const job = await orchestrator.submitJob(seed);
-        console.log(`Job submitted: ${job.name}`);
+        const result = await submitJobWithValidation({
+          dataDir: process.cwd(),
+          seedObject: seed,
+        });
+        if (result.success) {
+          console.log(`Job submitted: ${result.jobId} (${result.jobName})`);
+        } else {
+          console.error(`Failed to submit job: ${result.message}`);
+        }
       };
 
       await submitHandler("seed.json");
 
       // Assert
       expect(mockFs.readFile).toHaveBeenCalledWith("seed.json", "utf8");
-      expect(mockOrchestrator.initialize).toHaveBeenCalled();
-      expect(mockOrchestrator.submitJob).toHaveBeenCalledWith({ data: "test" });
-      expect(console.log).toHaveBeenCalledWith("Job submitted: test-job");
+      expect(mockSubmitJobWithValidation).toHaveBeenCalledWith({
+        dataDir: process.cwd(),
+        seedObject: { data: "test" },
+      });
+      expect(console.log).toHaveBeenCalledWith(
+        "Job submitted: job-123 (test-job)"
+      );
     });
 
     it("should handle status command job listing", async () => {
@@ -311,24 +322,31 @@ describe("CLI", () => {
         readFile: vi.fn().mockResolvedValue("invalid json"),
       };
 
-      const mockOrchestrator = {
-        initialize: vi.fn().mockResolvedValue(),
-        submitJob: vi.fn().mockResolvedValue({ name: "test-job" }),
-      };
+      const mockSubmitJobWithValidation = vi.fn().mockResolvedValue({
+        success: true,
+        jobId: "job-123",
+        jobName: "test-job",
+        message: "Seed file uploaded successfully",
+      });
 
       vi.doMock("node:fs/promises", () => mockFs);
       vi.doMock("../src/api/index.js", () => ({
-        PipelineOrchestrator: vi.fn(() => mockOrchestrator),
+        submitJobWithValidation: mockSubmitJobWithValidation,
       }));
 
       // Act & Assert
       const submitHandler = async (seedFile) => {
-        const { PipelineOrchestrator } = await import("../src/api/index.js");
+        const { submitJobWithValidation } = await import("../src/api/index.js");
         const seed = JSON.parse(await mockFs.readFile(seedFile, "utf8"));
-        const orchestrator = new PipelineOrchestrator({ autoStart: false });
-        await orchestrator.initialize();
-        const job = await orchestrator.submitJob(seed);
-        console.log(`Job submitted: ${job.name}`);
+        const result = await submitJobWithValidation({
+          dataDir: process.cwd(),
+          seedObject: seed,
+        });
+        if (result.success) {
+          console.log(`Job submitted: ${result.jobId} (${result.jobName})`);
+        } else {
+          console.error(`Failed to submit job: ${result.message}`);
+        }
       };
 
       await expect(submitHandler("seed.json")).rejects.toThrow();

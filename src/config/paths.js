@@ -19,36 +19,72 @@ function resolvePipelinePaths(baseDir) {
 }
 
 /**
- * Get the exact pending filename for a given job name
+ * Get the exact pending filename for a given job ID
  * @param {string} baseDir - Base data directory
- * @param {string} jobName - Job name
+ * @param {string} jobId - Job ID
  * @returns {string} Full path to pending seed file
  */
-function getPendingSeedPath(baseDir, jobName) {
+function getPendingSeedPath(baseDir, jobId) {
   const paths = resolvePipelinePaths(baseDir);
-  return path.join(paths.pending, `${jobName}-seed.json`);
+  return path.join(paths.pending, `${jobId}-seed.json`);
 }
 
 /**
- * Get the current seed file path for a given job name
+ * Get the current seed file path for a given job ID
  * @param {string} baseDir - Base data directory
- * @param {string} jobName - Job name
+ * @param {string} jobId - Job ID
  * @returns {string} Full path to current seed file
  */
-function getCurrentSeedPath(baseDir, jobName) {
+function getCurrentSeedPath(baseDir, jobId) {
   const paths = resolvePipelinePaths(baseDir);
-  return path.join(paths.current, jobName, "seed.json");
+  return path.join(paths.current, jobId, "seed.json");
 }
 
 /**
- * Get the complete seed file path for a given job name
+ * Get the complete seed file path for a given job ID
  * @param {string} baseDir - Base data directory
- * @param {string} jobName - Job name
+ * @param {string} jobId - Job ID
  * @returns {string} Full path to complete seed file
  */
-function getCompleteSeedPath(baseDir, jobName) {
+function getCompleteSeedPath(baseDir, jobId) {
   const paths = resolvePipelinePaths(baseDir);
-  return path.join(paths.complete, jobName, "seed.json");
+  return path.join(paths.complete, jobId, "seed.json");
+}
+
+/**
+ * Get the job directory path for a given job ID and location
+ * @param {string} baseDir - Base data directory
+ * @param {string} jobId - Job ID
+ * @param {string} location - Job location ('current', 'complete', 'pending')
+ * @returns {string} Full path to job directory
+ */
+function getJobDirectoryPath(baseDir, jobId, location) {
+  const paths = resolvePipelinePaths(baseDir);
+  return path.join(paths[location], jobId);
+}
+
+/**
+ * Get the job metadata file path for a given job ID
+ * @param {string} baseDir - Base data directory
+ * @param {string} jobId - Job ID
+ * @param {string} location - Job location ('current', 'complete')
+ * @returns {string} Full path to job metadata file
+ */
+function getJobMetadataPath(baseDir, jobId, location = "current") {
+  const jobDir = getJobDirectoryPath(baseDir, jobId, location);
+  return path.join(jobDir, "job.json");
+}
+
+/**
+ * Get the pipeline snapshot file path for a given job ID
+ * @param {string} baseDir - Base data directory
+ * @param {string} jobId - Job ID
+ * @param {string} location - Job location ('current', 'complete')
+ * @returns {string} Full path to pipeline snapshot file
+ */
+function getJobPipelinePath(baseDir, jobId, location = "current") {
+  const jobDir = getJobDirectoryPath(baseDir, jobId, location);
+  return path.join(jobDir, "pipeline.json");
 }
 
 export {
@@ -56,4 +92,7 @@ export {
   getPendingSeedPath,
   getCurrentSeedPath,
   getCompleteSeedPath,
+  getJobDirectoryPath,
+  getJobMetadataPath,
+  getJobPipelinePath,
 };

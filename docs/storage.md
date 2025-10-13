@@ -34,9 +34,9 @@ demo/
 ```
 pipeline-data/
 ├── pending/
-│   └── {job-name}-seed.json        # Seed files awaiting processing
+│   └── {jobId}-seed.json           # Seed files awaiting processing
 ├── current/
-│   └── {job-name}/                 # Active pipeline directory
+│   └── {jobId}/                    # Active pipeline directory
 │       ├── seed.json               # Original seed data
 │       ├── tasks-status.json       # Execution status tracking
 │       └── tasks/                  # Task execution directories
@@ -45,7 +45,7 @@ pipeline-data/
 │               ├── letter.json     # Task metadata
 │               └── execution-logs.json # Execution logs
 ├── complete/
-│   └── {job-name}/                 # Completed pipeline directory
+│   └── {jobId}/                    # Completed pipeline directory
 │       ├── seed.json
 │       ├── tasks-status.json
 │       └── tasks/
@@ -389,13 +389,13 @@ export default {
 ### 1. Job Submission
 
 - User creates seed file in `seeds/` directory
-- System copies seed to `pending/{name}-seed.json`
+- System copies seed to `pending/{jobId}-seed.json`
 
 ### 2. Job Processing
 
 - Orchestrator detects new pending seed
-- Creates directory in `current/{name}/`
-- Copies seed to `current/{name}/seed.json`
+- Creates directory in `current/{jobId}/`
+- Copies seed to `current/{jobId}/seed.json`
 - Creates initial `tasks-status.json`
 - Spawns pipeline-runner process
 
@@ -413,7 +413,7 @@ export default {
 ### 4. Job Completion
 
 - All tasks complete successfully
-- Moves `current/{name}/` to `complete/{name}/`
+- Moves `current/{jobId}/` to `complete/{jobId}/`
 - Appends completion record to `runs.jsonl`
 
 ### 5. Job Failure
@@ -424,8 +424,8 @@ export default {
 
 ## File Naming Conventions
 
-- **Seed files**: `{job-name}.json` (in seeds/) → `{job-name}-seed.json` (in pending/)
-- **Job directories**: `{job-name}/` (in current/ and complete/)
+- **Seed files**: `{job-name}.json` (in seeds/) → `{jobId}-seed.json` (in pending/)
+- **Job directories**: `{jobId}/` (in current/ and complete/)
 - **Task directories**: `{task-name}/` (within job directories)
 - **Pipeline IDs**: `pl-{timestamp}-{random-suffix}` format
 

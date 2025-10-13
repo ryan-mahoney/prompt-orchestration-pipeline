@@ -29,40 +29,17 @@ class FakeEventSource {
     if (!this._listeners[name]) this._listeners[name] = [];
     this._listeners[name].push(cb);
     // Debug: track listener registration count
-    // eslint-disable-next-line no-console
-    console.debug(
-      "[FakeEventSource] addEventListener",
-      name,
-      this._listeners[name].length
-    );
   }
   removeEventListener(name, cb) {
     if (!this._listeners[name]) return;
     this._listeners[name] = this._listeners[name].filter((f) => f !== cb);
-    // eslint-disable-next-line no-console
-    console.debug(
-      "[FakeEventSource] removeEventListener",
-      name,
-      this._listeners[name]?.length || 0
-    );
   }
   close() {
     this.readyState = 2;
-    // eslint-disable-next-line no-console
-    console.debug("[FakeEventSource] close");
   }
   dispatchEvent(name, evt = {}) {
     const list = this._listeners[name] || [];
     // Debug: log dispatch and listener count
-    // eslint-disable-next-line no-console
-    console.debug(
-      "[FakeEventSource] dispatchEvent",
-      name,
-      "listeners=",
-      list.length,
-      "evt=",
-      evt
-    );
     // Call listeners synchronously for deterministic behavior in tests
     list.forEach((fn) => {
       try {

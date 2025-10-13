@@ -12,8 +12,15 @@ import * as state from "./state.js";
 // Import orchestrator-related functions only in non-test mode
 let submitJobWithValidation;
 import { sseRegistry } from "./sse.js";
-import { getPendingSeedPath, resolvePipelinePaths } from "../config/paths.js";
+import {
+  getPendingSeedPath,
+  resolvePipelinePaths,
+  getJobDirectoryPath,
+  getJobMetadataPath,
+  getJobPipelinePath,
+} from "../config/paths.js";
 import { handleJobList, handleJobDetail } from "./endpoints/job-endpoints.js";
+import { generateJobId } from "../utils/id-generator.js";
 
 // Get __dirname equivalent in ES modules
 const __filename = fileURLToPath(import.meta.url);
@@ -52,7 +59,7 @@ function hasValidPayload(seed) {
  * @returns {Promise<Object>} Result object
  */
 async function handleSeedUploadDirect(seedObject, dataDir) {
-  let partialFilePath = null;
+  let partialFiles = [];
 
   try {
     // Basic validation
@@ -81,46 +88,80 @@ async function handleSeedUploadDirect(seedObject, dataDir) {
       };
     }
 
-    // Get the pending file path
-    const pendingPath = getPendingSeedPath(dataDir, seedObject.name);
-    partialFilePath = pendingPath;
+    // Generate a random job ID
+    const jobId = generateJobId();
 
-    // Ensure the pending directory exists
+    // Get the paths
     const paths = resolvePipelinePaths(dataDir);
-    await fs.promises.mkdir(paths.pending, { recursive: true });
+    const pendingPath = getPendingSeedPath(dataDir, jobId);
+    const currentJobDir = getJobDirectoryPath(dataDir, jobId, "current");
+    const jobMetadataPath = getJobMetadataPath(dataDir, jobId, "current");
+    const jobPipelinePath = getJobPipelinePath(dataDir, jobId, "current");
 
-    // Check for duplicates
+    // Ensure directories exist
+    await fs.promises.mkdir(paths.pending, { recursive: true });
+    await fs.promises.mkdir(currentJobDir, { recursive: true });
+
+    // Create job metadata
+    const jobMetadata = {
+      id: jobId,
+      name: seedObject.name,
+      pipelineName: seedObject.pipeline || "default",
+      createdAt: new Date().toISOString(),
+      status: "pending",
+    };
+
+    // Read pipeline configuration for snapshot
+    let pipelineSnapshot = null;
     try {
-      await fs.promises.access(pendingPath);
-      if (partialFilePath) {
-        try {
-          await fs.promises.unlink(partialFilePath);
-        } catch {}
-      }
-      return {
-        success: false,
-        message: "Job with this name already exists",
-      };
+      const pipelineConfigPath = path.join(
+        dataDir,
+        "pipeline-config",
+        "pipeline.json"
+      );
+      const pipelineContent = await fs.promises.readFile(
+        pipelineConfigPath,
+        "utf8"
+      );
+      pipelineSnapshot = JSON.parse(pipelineContent);
     } catch (error) {
-      // File doesn't exist, continue
+      // If pipeline config doesn't exist, create a minimal snapshot
+      pipelineSnapshot = {
+        tasks: [],
+        name: seedObject.pipeline || "default",
+      };
     }
 
-    // Write to pending directory
+    // Write files atomically
+    partialFiles.push(pendingPath);
     await fs.promises.writeFile(
       pendingPath,
       JSON.stringify(seedObject, null, 2)
     );
 
+    partialFiles.push(jobMetadataPath);
+    await fs.promises.writeFile(
+      jobMetadataPath,
+      JSON.stringify(jobMetadata, null, 2)
+    );
+
+    partialFiles.push(jobPipelinePath);
+    await fs.promises.writeFile(
+      jobPipelinePath,
+      JSON.stringify(pipelineSnapshot, null, 2)
+    );
+
     return {
       success: true,
+      jobId,
       jobName: seedObject.name,
       message: "Seed file uploaded successfully",
     };
   } catch (error) {
     // Clean up any partial files on failure
-    if (partialFilePath) {
+    for (const filePath of partialFiles) {
       try {
-        await fs.promises.unlink(partialFilePath);
+        await fs.promises.unlink(filePath);
       } catch (cleanupError) {
         // Ignore cleanup errors
       }
@@ -617,6 +658,9 @@ function createServer() {
       (pathname === "/api/events" || pathname === "/api/sse") &&
       req.method === "GET"
     ) {
+      // Parse jobId from query parameters for filtering
+      const jobId = searchParams.get("jobId");
+
       // Set SSE headers
       res.writeHead(200, {
         "Content-Type": "text/event-stream",
@@ -634,8 +678,8 @@ function createServer() {
       // Keep headers flushed; sseRegistry.addClient will optionally send an initial ping.
       // (Previously sent full state here; removed to reduce SSE payloads.)
 
-      // Add to SSE registry
-      sseRegistry.addClient(res);
+      // Add to SSE registry with jobId metadata for filtering
+      sseRegistry.addClient(res, { jobId });
 
       // Start heartbeat for this connection
       const heartbeatInterval = setInterval(() => {
