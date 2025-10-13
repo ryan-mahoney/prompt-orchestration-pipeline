@@ -62,7 +62,7 @@ Pragmatic Step-by-Step Plan
 - Keep a single source of truth: jobsById.
 - Ensure performance remains fine (demo data small). Cache index per run.
 
-7. Update docs and remove deprecated code paths
+7. Update docs and remove deprecated code paths ✅
 
 - Files: docs/plans/…, docs/demo-simplify-implemented.md, docs/project-simplify-demo.md
 - Document JobId-only policy, directory layout, and migration script.
