@@ -303,25 +303,9 @@ export async function integration(context) {
     // Verify the event was received
     expect(true).toBe(true); // Event was manually triggered
 
-    // 3) Orchestrator pickup: pending/<job>-seed.json → current/<job>/seed.json
-    // The orchestrator resolves directories using resolveDirs(dataDir) which creates:
-    // - dataDir/pipeline-data/pending/
-    // - dataDir/pipeline-data/current/
-    // - dataDir/pipeline-data/complete/
-    const currentSeed = path.join(
-      dataDir,
-      "pipeline-data",
-      "current",
-      job,
-      "seed.json"
-    );
-    const completeSeed = path.join(
-      dataDir,
-      "pipeline-data",
-      "complete",
-      job,
-      "seed.json"
-    );
+    // 3) Orchestrator pickup: pending/<jobId>-seed.json → current/<jobId>/seed.json
+    // With ID-only storage, the orchestrator extracts jobId from filename and creates ID-based directory
+    // The upload API creates a pending file with jobId as filename, not the job name
 
     // Wait for orchestrator to complete the file move
     // Give orchestrator a moment to detect and process the file
@@ -332,26 +316,62 @@ export async function integration(context) {
       async () => {
         console.log("waitFor iteration - checking for file...");
         try {
-          await fs.access(currentSeed);
-          console.log("✓ File found in current directory:", currentSeed);
-          return true;
-        } catch {
-          // If not in current, check if pipeline already completed
-          try {
-            await fs.access(completeSeed);
-            console.log("✓ File found in complete directory:", completeSeed);
-            return true;
-          } catch {
-            // Debug: check what's actually in the current directory
-            try {
-              const currentDir = path.dirname(currentSeed);
-              const files = await fs.readdir(currentDir);
-              console.log(`Current directory contents: ${files.join(", ")}`);
-            } catch (err) {
-              console.log(`Current directory doesn't exist: ${err.message}`);
+          // Check what directories exist in current/
+          const currentDir = path.join(dataDir, "pipeline-data", "current");
+          const dirs = await fs.readdir(currentDir);
+          console.log(`Current directory contents: ${dirs.join(", ")}`);
+
+          // Look for any valid job ID directories (not the job name)
+          const jobIdDirs = dirs.filter((dir) =>
+            /^[A-Za-z0-9]{6,30}$/.test(dir)
+          );
+          console.log(
+            `Valid job ID directories found: ${jobIdDirs.join(", ")}`
+          );
+
+          if (jobIdDirs.length > 0) {
+            // Check if any of these directories have a seed.json file
+            for (const jobIdDir of jobIdDirs) {
+              const seedPath = path.join(currentDir, jobIdDir, "seed.json");
+              try {
+                await fs.access(seedPath);
+                console.log("✓ File found in ID-based directory:", seedPath);
+                return true;
+              } catch {
+                // Continue checking other directories
+              }
             }
-            return false;
           }
+
+          // If not in current, check if pipeline already completed
+          const completeDir = path.join(dataDir, "pipeline-data", "complete");
+          try {
+            const completeDirs = await fs.readdir(completeDir);
+            const completeJobIdDirs = completeDirs.filter((dir) =>
+              /^[A-Za-z0-9]{6,30}$/.test(dir)
+            );
+
+            for (const jobIdDir of completeJobIdDirs) {
+              const seedPath = path.join(completeDir, jobIdDir, "seed.json");
+              try {
+                await fs.access(seedPath);
+                console.log(
+                  "✓ File found in complete ID-based directory:",
+                  seedPath
+                );
+                return true;
+              } catch {
+                // Continue checking other directories
+              }
+            }
+          } catch {
+            // Complete directory doesn't exist yet
+          }
+
+          return false;
+        } catch (err) {
+          console.log(`Error checking directories: ${err.message}`);
+          return false;
         }
       },
       { timeout: 10000, interval: 100 } // Increase timeout to 10 seconds
@@ -359,10 +379,48 @@ export async function integration(context) {
     console.log(`waitFor completed with result: ${pickedUp}`);
     expect(pickedUp).toBe(true);
 
-    const finalSeedPath = await fs
-      .access(currentSeed)
-      .then(() => currentSeed)
-      .catch(() => completeSeed);
+    // Find the actual seed file location
+    let finalSeedPath = null;
+    const currentDir = path.join(dataDir, "pipeline-data", "current");
+    const completeDir = path.join(dataDir, "pipeline-data", "complete");
+
+    // Check current directory first
+    try {
+      const dirs = await fs.readdir(currentDir);
+      const jobIdDirs = dirs.filter((dir) => /^[A-Za-z0-9]{6,30}$/.test(dir));
+
+      for (const jobIdDir of jobIdDirs) {
+        const seedPath = path.join(currentDir, jobIdDir, "seed.json");
+        try {
+          await fs.access(seedPath);
+          finalSeedPath = seedPath;
+          break;
+        } catch {
+          // Continue checking
+        }
+      }
+    } catch {}
+
+    // If not found in current, check complete
+    if (!finalSeedPath) {
+      try {
+        const dirs = await fs.readdir(completeDir);
+        const jobIdDirs = dirs.filter((dir) => /^[A-Za-z0-9]{6,30}$/.test(dir));
+
+        for (const jobIdDir of jobIdDirs) {
+          const seedPath = path.join(completeDir, jobIdDir, "seed.json");
+          try {
+            await fs.access(seedPath);
+            finalSeedPath = seedPath;
+            break;
+          } catch {
+            // Continue checking
+          }
+        }
+      } catch {}
+    }
+
+    expect(finalSeedPath).toBeTruthy();
     const buf = await fs.readFile(finalSeedPath, "utf8");
     const json = JSON.parse(buf);
     expect(json.name).toBe(job);

@@ -149,6 +149,15 @@ describe("ID-only storage behavior", () => {
           return path.join(paths[location], jobId, "tasks-status.json");
         }
       );
+
+      // Mock the file locking mechanism to avoid lock file issues in tests
+      // Add the functions to the configBridge object if they don't exist
+      if (!configBridge.acquireLock) {
+        configBridge.acquireLock = vi.fn().mockResolvedValue(true);
+      }
+      if (!configBridge.releaseLock) {
+        configBridge.releaseLock = vi.fn().mockResolvedValue(true);
+      }
     });
 
     it("should read jobs from ID-based directories only", async () => {
@@ -242,6 +251,39 @@ describe("ID-only storage behavior", () => {
   });
 
   describe("Step 6: No name-based folders after upload", () => {
+    beforeEach(async () => {
+      // Ensure the mocks are properly set up for these tests
+      vi.spyOn(configBridge, "resolvePipelinePaths").mockReturnValue({
+        current: currentDir,
+        complete: completeDir,
+        pending: path.join(tempDir, "pipeline-data", "pending"),
+        rejected: path.join(tempDir, "pipeline-data", "rejected"),
+      });
+
+      vi.spyOn(configBridge, "getJobPath").mockImplementation(
+        (jobId, location = "current") => {
+          const paths = configBridge.resolvePipelinePaths();
+          return path.join(paths[location], jobId);
+        }
+      );
+
+      vi.spyOn(configBridge, "getTasksStatusPath").mockImplementation(
+        (jobId, location = "current") => {
+          const paths = configBridge.resolvePipelinePaths();
+          return path.join(paths[location], jobId, "tasks-status.json");
+        }
+      );
+
+      // Mock the file locking mechanism to avoid lock file issues in tests
+      // Add the functions to the configBridge object if they don't exist
+      if (!configBridge.acquireLock) {
+        configBridge.acquireLock = vi.fn().mockResolvedValue(true);
+      }
+      if (!configBridge.releaseLock) {
+        configBridge.releaseLock = vi.fn().mockResolvedValue(true);
+      }
+    });
+
     it("should ignore name-based directories when listing jobs after upload simulation", async () => {
       // Simulate the scenario where an upload creates both ID-based and name-based directories
       // The system should only recognize the ID-based ones
