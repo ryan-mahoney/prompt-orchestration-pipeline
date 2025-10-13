@@ -19,7 +19,6 @@ import {
   transformJobListForAPI,
 } from "../transformers/list-transformer.js";
 import * as configBridge from "../config-bridge.js";
-import { resolveSlugToLatestJobId } from "../job-index.js";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { getJobPipelinePath } from "../../config/paths.js";
@@ -143,112 +142,45 @@ export async function handleJobList() {
 }
 
 /**
- * Return detailed job info for a single jobId with slug resolution fallback.
+ * Return detailed job info for a single jobId.
  * Behavior:
- *  1. Try exact job ID lookup first (validateJobId + readJob)
- *  2. If ID lookup fails and input looks like a pipeline slug, resolve to latest job ID
- *  3. Try job lookup again with resolved ID
- *  4. Return appropriate error responses for different failure scenarios
- *  5. Include pipeline config when available
+ *  1. Validate job ID format
+ *  2. Lookup job by exact ID only (no slug resolution)
+ *  3. Return appropriate error responses for different failure scenarios
+ *  4. Include pipeline config when available
  */
-export async function handleJobDetail(jobIdOrSlug) {
-  console.log(`[JobEndpoints] GET /api/jobs/${jobIdOrSlug} called`);
+export async function handleJobDetail(jobId) {
+  console.log(`[JobEndpoints] GET /api/jobs/${jobId} called`);
 
-  // Step 1: Try exact job ID lookup first
-  if (configBridge.validateJobId(jobIdOrSlug)) {
-    console.log(`[JobEndpoints] Treating as job ID: ${jobIdOrSlug}`);
-    const result = await handleJobDetailById(jobIdOrSlug);
-
-    // If successful, return immediately
-    if (result.ok) {
-      return result;
-    }
-
-    // If job not found, continue to slug resolution (might be both valid ID and slug)
-    if (result.code !== "job_not_found") {
-      return result; // Return other errors immediately
-    }
-
-    console.log(
-      `[JobEndpoints] Job ID lookup failed, trying slug resolution: ${jobIdOrSlug}`
-    );
-  } else {
-    console.log(
-      `[JobEndpoints] Not a valid job ID format, trying slug resolution: ${jobIdOrSlug}`
+  // Step 1: Validate job ID format
+  if (!configBridge.validateJobId(jobId)) {
+    console.warn("[JobEndpoints] Invalid job ID format");
+    return configBridge.createErrorResponse(
+      configBridge.Constants.ERROR_CODES.BAD_REQUEST,
+      "Invalid job ID format",
+      jobId
     );
   }
 
-  // Step 2: Try slug resolution
-  try {
-    const resolvedJobId = await resolveSlugToLatestJobId(jobIdOrSlug);
+  console.log(`[JobEndpoints] Treating as job ID: ${jobId}`);
 
-    if (!resolvedJobId) {
-      // Slug resolution failed - return appropriate error
-      console.log(`[JobEndpoints] Slug resolution failed for: ${jobIdOrSlug}`);
+  // Step 2: Try exact job ID lookup only
+  const result = await handleJobDetailById(jobId);
 
-      // If we started with a valid job ID that wasn't found, return job_not_found
-      // This maintains backward compatibility with existing tests
-      if (configBridge.validateJobId(jobIdOrSlug)) {
-        return configBridge.createErrorResponse(
-          configBridge.Constants.ERROR_CODES.JOB_NOT_FOUND,
-          "Job not found",
-          jobIdOrSlug
-        );
-      }
+  if (result.ok) {
+    return result;
+  }
 
-      // For non-ID inputs that failed slug resolution, check if it's invalid format
-      const isValidSlugFormat =
-        /^[a-z][a-z0-9-]*[a-z0-9]$/.test(jobIdOrSlug) &&
-        jobIdOrSlug.length <= 50 &&
-        !/[A-Z]/.test(jobIdOrSlug) &&
-        !/\d{3,}/.test(jobIdOrSlug);
-
-      if (!isValidSlugFormat) {
-        console.warn("[JobEndpoints] Invalid job ID format");
-        return configBridge.createErrorResponse(
-          configBridge.Constants.ERROR_CODES.BAD_REQUEST,
-          "Invalid job ID format",
-          jobIdOrSlug
-        );
-      }
-
-      return configBridge.createErrorResponse(
-        configBridge.Constants.ERROR_CODES.JOB_NOT_FOUND,
-        "Job not found",
-        jobIdOrSlug
-      );
-    }
-
-    console.log(
-      `[JobEndpoints] Resolved slug '${jobIdOrSlug}' to job ID '${resolvedJobId}'`
-    );
-
-    // Step 3: Try job lookup with resolved ID
-    const result = await handleJobDetailById(resolvedJobId);
-
-    if (result.ok) {
-      return result;
-    } else {
-      console.log(
-        `[JobEndpoints] Failed to read resolved job ${resolvedJobId} for slug ${jobIdOrSlug}`
-      );
-      return configBridge.createErrorResponse(
-        configBridge.Constants.ERROR_CODES.JOB_NOT_FOUND,
-        "Job not found",
-        jobIdOrSlug
-      );
-    }
-  } catch (error) {
-    console.error(
-      `[JobEndpoints] Error during slug resolution for '${jobIdOrSlug}':`,
-      error
-    );
+  // Step 3: Return appropriate error (no slug resolution fallback)
+  if (result.code === "job_not_found") {
     return configBridge.createErrorResponse(
       configBridge.Constants.ERROR_CODES.JOB_NOT_FOUND,
       "Job not found",
-      jobIdOrSlug
+      jobId
     );
   }
+
+  return result; // Return other errors as-is
 }
 
 /**
