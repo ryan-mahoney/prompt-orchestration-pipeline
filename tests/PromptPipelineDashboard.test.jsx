@@ -27,7 +27,8 @@ vi.mock("../src/components/JobTable.jsx", () => ({
       null,
       Array.isArray(props.jobs)
         ? props.jobs.map((j) => {
-            const jobId = j.id || j.pipelineId;
+            // Only use job.id for the data attribute, fallback to name for display
+            const jobId = j.id || j.name;
             return React.createElement(
               "div",
               {
@@ -250,11 +251,11 @@ describe("PromptPipelineDashboard (integration-ish)", () => {
       expect(mockNavigate).toHaveBeenCalledWith("/pipeline/unique-job-id");
     });
 
-    it("should use job name as fallback when no proper ID is provided", async () => {
+    it("should not navigate when job lacks proper ID", async () => {
       const mockJobs = [
         {
-          // No id field - adapter will fall back to name
-          name: "Legacy Job",
+          // No id field and empty name - should not navigate
+          name: "",
           status: "running",
           progress: 25,
           createdAt: "2024-01-01T00:00:00Z",
@@ -278,12 +279,13 @@ describe("PromptPipelineDashboard (integration-ish)", () => {
       );
 
       const jobRow = screen.getByTestId("job-row");
-      // The adapter will use the job name as the ID when no proper ID is provided
-      expect(jobRow.getAttribute("data-job-id")).toBe("Legacy Job");
+      // The adapter will use empty string as ID when name is empty
+      expect(jobRow.getAttribute("data-job-id")).toBe("");
 
       jobRow.click();
 
-      expect(mockNavigate).toHaveBeenCalledWith("/pipeline/Legacy Job");
+      // Should not navigate since job lacks proper ID
+      expect(mockNavigate).not.toHaveBeenCalled();
     });
 
     it("should not render inline JobDetail component", async () => {

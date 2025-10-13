@@ -121,10 +121,12 @@ export default function PromptPipelineDashboard({ isConnected }) {
   }, [runningJobs]);
 
   const openJob = (job) => {
-    const jobId = job.id || job.pipelineId;
-    if (jobId) {
-      navigate(`/pipeline/${jobId}`);
+    // Only navigate if job has a proper ID
+    if (job.id) {
+      navigate(`/pipeline/${job.id}`);
     }
+    // TODO: Show user feedback for jobs without proper ID
+    // This handles legacy demo data that lacks job.id
   };
 
   // Handle seed upload success
