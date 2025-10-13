@@ -130,11 +130,6 @@ export function useJobDetailWithUpdates(jobId) {
         // Apply any queued events to the fresh data
         let finalData = jobData;
         if (eventQueue.current.length > 0) {
-          // eslint-disable-next-line no-console
-          console.debug(
-            "[useJobDetailWithUpdates] applying queued events to job:",
-            eventQueue.current.length
-          );
           try {
             finalData = eventQueue.current.reduce(
               (acc, ev) => applyJobEvent(acc, ev),
@@ -253,12 +248,6 @@ export function useJobDetailWithUpdates(jobId) {
 
           if (!hydratedRef.current) {
             // Queue events until hydration completes
-            // eslint-disable-next-line no-console
-            console.debug(
-              "[useJobDetailWithUpdates] queueing event before hydration:",
-              type,
-              evt && evt.data
-            );
             eventQueue.current = (eventQueue.current || []).concat(eventObj);
             return;
           }
