@@ -746,7 +746,7 @@ function createServer() {
         const result = await handleJobDetail(jobId);
 
         if (result.ok) {
-          sendJson(res, 200, result.data);
+          sendJson(res, 200, result);
         } else {
           switch (result.code) {
             case "job_not_found":
