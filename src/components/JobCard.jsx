@@ -18,15 +18,31 @@ export default function JobCard({
     ? elapsedBetween(currentTask.startedAt, currentTask.endedAt)
     : 0;
   const totalCompleted = countCompleted(job);
+  const hasValidId = Boolean(job.id);
 
   return (
     <Card
       role="button"
-      tabIndex={0}
-      aria-label={`Open ${job.name}`}
-      onClick={onClick}
-      onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && onClick()}
-      className="group transition-colors cursor-pointer hover:bg-slate-100/40 hover:shadow-sm focus-visible:ring-2 rounded-xl border border-slate-200"
+      tabIndex={hasValidId ? 0 : -1}
+      aria-label={
+        hasValidId
+          ? `Open ${job.name}`
+          : `${job.name} - No valid job ID, cannot open details`
+      }
+      onClick={() => hasValidId && onClick()}
+      onKeyDown={(e) =>
+        hasValidId && (e.key === "Enter" || e.key === " ") && onClick()
+      }
+      className={`group transition-colors rounded-xl border border-slate-200 ${
+        hasValidId
+          ? "cursor-pointer hover:bg-slate-100/40 hover:shadow-sm focus-visible:ring-2"
+          : "cursor-not-allowed opacity-60"
+      }`}
+      title={
+        hasValidId
+          ? undefined
+          : "This job cannot be opened because it lacks a valid ID"
+      }
     >
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between gap-2">

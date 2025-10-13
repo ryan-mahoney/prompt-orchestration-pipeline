@@ -66,8 +66,7 @@ describe("Job Navigation", () => {
     it("should not navigate when job.id is missing", () => {
       const mockJob = { name: "Legacy Job", pipelineId: "legacy-slug" };
 
-      // This test will fail with current implementation since it falls back to pipelineId
-      // We'll need to modify the component to handle this case
+      // This should not navigate since job.id is missing
       expect(mockNavigate).not.toHaveBeenCalled();
     });
   });
@@ -123,7 +122,7 @@ describe("Job Navigation", () => {
       expect(mockOnOpenJob).toHaveBeenCalledWith(jobs[0]);
     });
 
-    it("should handle jobs without proper ID gracefully", () => {
+    it("should not call onOpenJob for jobs without valid ID", () => {
       const jobs = [
         {
           name: "Legacy Job",
@@ -145,9 +144,39 @@ describe("Job Navigation", () => {
 
       const jobRow = screen.getByText("Legacy Job").closest("tr");
 
-      // Should still be clickable but onOpenJob should receive the job without proper ID
+      // Should not call onOpenJob since job.id is missing
       fireEvent.click(jobRow);
-      expect(mockOnOpenJob).toHaveBeenCalledWith(jobs[0]);
+      expect(mockOnOpenJob).not.toHaveBeenCalled();
+    });
+
+    it("should show disabled styling for jobs without valid ID", () => {
+      const jobs = [
+        {
+          name: "Legacy Job",
+          pipelineId: "legacy-slug",
+          status: "running",
+          tasks: {},
+        },
+      ];
+
+      const { container } = render(
+        <JobTable
+          jobs={jobs}
+          pipeline={mockPipeline}
+          onOpenJob={mockOnOpenJob}
+          totalProgressPct={() => 50}
+          overallElapsed={() => 1000}
+        />
+      );
+
+      const jobRow = container.querySelector(
+        'tr[title="This job cannot be opened because it lacks a valid ID"]'
+      );
+
+      // Should have disabled styling
+      expect(jobRow.className).toContain("cursor-not-allowed");
+      expect(jobRow.className).toContain("opacity-60");
+      expect(jobRow.getAttribute("tabIndex")).toBe("-1");
     });
   });
 
@@ -205,7 +234,7 @@ describe("Job Navigation", () => {
       expect(mockOnClick).toHaveBeenCalledTimes(1);
     });
 
-    it("should handle jobs without proper ID gracefully", () => {
+    it("should not call onClick for jobs without valid ID", () => {
       const job = {
         name: "Legacy Card Job",
         pipelineId: "legacy-slug",
@@ -224,11 +253,39 @@ describe("Job Navigation", () => {
       );
 
       const card = screen.getByRole("button", {
-        name: /Open Legacy Card Job/i,
+        name: /Legacy Card Job - No valid job ID, cannot open details/i,
       });
       fireEvent.click(card);
 
-      expect(mockOnClick).toHaveBeenCalledTimes(1);
+      expect(mockOnClick).not.toHaveBeenCalled();
+    });
+
+    it("should show disabled styling for jobs without valid ID", () => {
+      const job = {
+        name: "Legacy Card Job",
+        pipelineId: "legacy-slug",
+        status: "running",
+        tasks: {},
+      };
+
+      const { container } = render(
+        <JobCard
+          job={job}
+          pipeline={mockPipeline}
+          onClick={mockOnClick}
+          progressPct={50}
+          overallElapsedMs={1000}
+        />
+      );
+
+      const card = container.querySelector(
+        '[role="button"][title="This job cannot be opened because it lacks a valid ID"]'
+      );
+
+      // Should have disabled styling
+      expect(card.className).toContain("cursor-not-allowed");
+      expect(card.className).toContain("opacity-60");
+      expect(card.getAttribute("tabIndex")).toBe("-1");
     });
   });
 });

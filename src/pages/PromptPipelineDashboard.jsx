@@ -124,9 +124,11 @@ export default function PromptPipelineDashboard({ isConnected }) {
     // Only navigate if job has a proper ID
     if (job.id) {
       navigate(`/pipeline/${job.id}`);
+    } else {
+      // Show console warning for jobs without valid ID
+      console.warn(`Cannot open job "${job.name}" - no valid job ID available`);
+      // TODO: Show user-facing toast or notification for better UX
     }
-    // TODO: Show user feedback for jobs without proper ID
-    // This handles legacy demo data that lacks job.id
   };
 
   // Handle seed upload success
