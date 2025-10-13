@@ -57,8 +57,8 @@ my-project/
 ```mermaid
 flowchart TD
   A["pipeline-data/pending/*-seed.json"] --> B[Orchestrator]
-  B --> C["create pipeline-data/current/<id>/seed.json"]
-  B --> D["init pipeline-data/current/<id>/tasks-status.json"]
+  B --> C["create pipeline-data/current/{jobId}/seed.json"]
+  B --> D["init pipeline-data/current/{jobId}/tasks-status.json"]
   B --> E[Read pipeline-config/pipeline.json]
   E --> F[Spawn task runner]
   F --> G["write tasks/<task>/letter.json"]
@@ -68,7 +68,7 @@ flowchart TD
   J --> K{More tasks?}
   K -->|yes| F
   K -->|no| L[Promote to complete]
-  L --> M["pipeline-data/complete/<id>/**"]
+  L --> M["pipeline-data/complete/{jobId}/**"]
   L --> N["append pipeline-data/complete/runs.jsonl"]
 ```
 
@@ -244,7 +244,7 @@ _(Keys and defaults may vary by version; prefer `--help` for authoritative optio
 2. **Define**: Edit `pipeline-config/pipeline.json` and implement tasks under `pipeline-config/tasks/`.
 3. **Run**: `npm run pipeline` (or `npm run pipeline:ui` for the UI).
 4. **Submit**: Add a seed JSON to `pipeline-data/pending/` or run `npm run pipeline:submit -- ./path/to/seed.json`.
-5. **Inspect**: Watch `pipeline-data/current/<runId>` for in‑progress artifacts and `pipeline-data/complete/<runId>` for results.
+5. **Inspect**: Watch `pipeline-data/current/{jobId}` for in‑progress artifacts and `pipeline-data/complete/{jobId}` for results.
 
 ---
 
