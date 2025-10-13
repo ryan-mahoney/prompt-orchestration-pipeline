@@ -111,13 +111,9 @@ export const createPipelineOrchestrator = async (options = {}) => {
 
 // Job management functions
 export const submitJob = async (state, seed) => {
-  // Validate seed structure before submitting
-  validateSeedOrThrow(seed);
-
-  const name = seed.name;
-  const seedPath = path.join(state.paths.pending, `${name}-seed.json`);
-  await fs.writeFile(seedPath, JSON.stringify(seed, null, 2));
-  return { name, seedPath };
+  throw new Error(
+    "submitJob is deprecated. Use submitJobWithValidation instead for ID-only job submission."
+  );
 };
 
 /**
