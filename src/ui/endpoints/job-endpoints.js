@@ -13,6 +13,7 @@
 
 import { listJobs } from "../job-scanner.js";
 import { readJob } from "../job-reader.js";
+import { getJobIndex } from "../job-index.js";
 import { transformMultipleJobs } from "../transformers/status-transformer.js";
 import {
   aggregateAndSortJobs,
@@ -145,9 +146,10 @@ export async function handleJobList() {
  * Return detailed job info for a single jobId.
  * Behavior:
  *  1. Validate job ID format
- *  2. Lookup job by exact ID only (no slug resolution)
- *  3. Return appropriate error responses for different failure scenarios
- *  4. Include pipeline config when available
+ *  2. Try cache lookup first via job-index
+ *  3. Fallback to direct file lookup if cache miss
+ *  4. Return appropriate error responses for different failure scenarios
+ *  5. Include pipeline config when available
  */
 export async function handleJobDetail(jobId) {
   console.log(`[JobEndpoints] GET /api/jobs/${jobId} called`);
@@ -164,14 +166,73 @@ export async function handleJobDetail(jobId) {
 
   console.log(`[JobEndpoints] Treating as job ID: ${jobId}`);
 
-  // Step 2: Try exact job ID lookup only
+  // Step 2: Try cache lookup first
+  try {
+    const jobIndex = getJobIndex();
+    const cachedJob = jobIndex.getJob(jobId);
+
+    if (cachedJob) {
+      console.log(`[JobEndpoints] Cache hit for job ${jobId}`);
+
+      // Read pipeline snapshot from job directory to include canonical task order
+      let pipelineConfig = null;
+      try {
+        const jobPipelinePath = getJobPipelinePath(
+          process.env.PO_ROOT || process.cwd(),
+          jobId,
+          cachedJob.location
+        );
+
+        const pipelineData = await fs.readFile(jobPipelinePath, "utf8");
+        pipelineConfig = JSON.parse(pipelineData);
+        console.log(`[JobEndpoints] Read pipeline snapshot from job ${jobId}`);
+      } catch (jobPipelineErr) {
+        // Log warning but don't fail the request - pipeline config is optional
+        console.warn(
+          `[JobEndpoints] Failed to read pipeline config from job directory ${jobId}:`,
+          jobPipelineErr?.message
+        );
+      }
+
+      // Add pipeline to job data if available
+      const jobWithPipeline = pipelineConfig
+        ? {
+            ...cachedJob,
+            pipeline: {
+              tasks: pipelineConfig.tasks || [],
+            },
+          }
+        : cachedJob;
+
+      return { ok: true, data: jobWithPipeline };
+    }
+
+    console.log(
+      `[JobEndpoints] Cache miss for job ${jobId}, falling back to direct read`
+    );
+  } catch (indexErr) {
+    console.warn(
+      `[JobEndpoints] Failed to access job index: ${indexErr?.message}`
+    );
+  }
+
+  // Step 3: Fallback to direct file lookup
   const result = await handleJobDetailById(jobId);
 
   if (result.ok) {
+    // Update cache for future requests
+    try {
+      const jobIndex = getJobIndex();
+      jobIndex.updateJob(jobId, result.data, result.location, result.path);
+    } catch (cacheUpdateErr) {
+      console.warn(
+        `[JobEndpoints] Failed to update cache: ${cacheUpdateErr?.message}`
+      );
+    }
     return result;
   }
 
-  // Step 3: Return appropriate error (no slug resolution fallback)
+  // Step 4: Return appropriate error (no slug resolution fallback)
   if (result.code === "job_not_found") {
     return configBridge.createErrorResponse(
       configBridge.Constants.ERROR_CODES.JOB_NOT_FOUND,
