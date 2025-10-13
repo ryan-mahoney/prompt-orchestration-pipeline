@@ -57,7 +57,7 @@ async function moveFile(src, dest) {
  * Start the orchestrator.
  * - Ensures pipeline dirs
  * - Watches pending/*.json seeds
- * - On add: move to current/<name>/seed.json and spawn runner
+ * - On add: move to current/{jobId}/seed.json and spawn runner
  *
  * @param {{ dataDir: string, spawn?: typeof defaultSpawn, watcherFactory?: Function, testMode?: boolean }} opts
  * @returns {Promise<{ stop: () => Promise<void> }>}
@@ -89,6 +89,15 @@ export async function startOrchestrator(opts) {
   async function handleSeedAdd(filePath) {
     if (!filePath || !filePath.endsWith(".json")) return;
 
+    // Extract jobId from filename pattern: ^([A-Za-z0-9-_]+)-seed\.json$
+    const base = path.basename(filePath);
+    const match = base.match(/^([A-Za-z0-9-_]+)-seed\.json$/);
+    if (!match) {
+      console.warn("Rejecting non-id seed file:", base);
+      return;
+    }
+    const jobId = match[1];
+
     let seed;
     try {
       const text = await fs.readFile(filePath, "utf8");
@@ -98,22 +107,16 @@ export async function startOrchestrator(opts) {
       return;
     }
 
-    const name = (seed && (seed.name || seed.job || seed.jobName)) ?? undefined;
-    if (!name) {
-      // If no name, ignore
-      return;
-    }
-
     // If already running or already moved to current, skip (idempotent)
-    if (isJobActive(name)) return;
-    const dest = currentSeedPath(name);
+    if (isJobActive(jobId)) return;
+    const dest = currentSeedPath(jobId);
     try {
       await fs.access(dest);
       // Already picked up
       return;
     } catch {}
 
-    // Move seed to current/<name>/seed.json
+    // Move seed to current/{jobId}/seed.json
     console.log(`[Orchestrator] Moving file from ${filePath} to ${dest}`);
     try {
       await moveFile(filePath, dest);
@@ -134,7 +137,8 @@ export async function startOrchestrator(opts) {
     } catch {
       const pipelineId = "pl-" + Math.random().toString(36).slice(2, 10);
       const status = {
-        name,
+        id: jobId,
+        name: seed?.name ?? jobId,
         pipelineId,
         createdAt: new Date().toISOString(),
         state: "pending",
@@ -143,7 +147,7 @@ export async function startOrchestrator(opts) {
       await fs.writeFile(statusPath, JSON.stringify(status, null, 2));
     }
     // Spawn runner for this job
-    const child = spawnRunner(name, dirs, running, spawn, testMode);
+    const child = spawnRunner(jobId, dirs, running, spawn, testMode);
     // child registered inside spawnRunner
     return child;
   }
@@ -208,13 +212,13 @@ export async function startOrchestrator(opts) {
  * Spawn a pipeline runner. In testMode we still call spawn() so tests can assert,
  * but we resolve immediately and let tests drive the lifecycle (emit 'exit', etc.).
  *
- * @param {string} name
+ * @param {string} jobId
  * @param {{dataDir:string,pending:string,current:string,complete:string}} dirs
  * @param {Map<string, import('node:child_process').ChildProcess>} running
  * @param {typeof defaultSpawn} spawn
  * @param {boolean} testMode
  */
-function spawnRunner(name, dirs, running, spawn, testMode) {
+function spawnRunner(jobId, dirs, running, spawn, testMode) {
   const runnerPath = path.join(
     process.cwd(),
     "src",
@@ -240,19 +244,19 @@ function spawnRunner(name, dirs, running, spawn, testMode) {
   };
 
   // Always call spawn so tests can capture it
-  const child = spawn(process.execPath, [runnerPath, name], {
+  const child = spawn(process.execPath, [runnerPath, jobId], {
     stdio: ["ignore", "inherit", "inherit"],
     env,
     cwd: process.cwd(),
   });
 
-  running.set(name, child);
+  running.set(jobId, child);
 
   child.on("exit", () => {
-    running.delete(name);
+    running.delete(jobId);
   });
   child.on("error", () => {
-    running.delete(name);
+    running.delete(jobId);
   });
 
   // In test mode: return immediately; in real mode you might await readiness

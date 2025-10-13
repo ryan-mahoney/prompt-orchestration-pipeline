@@ -19,6 +19,7 @@
   "scripts": {
     "test": "vitest run",
     "lint": "eslint . --ext .js,.jsx",
+    "check:paths": "bash scripts/check-name-based-paths.sh",
     "dev": "NODE_ENV=development nodemon src/ui/server.js",
     "ui": "nodemon src/ui/server.js",
     "ui:dev": "vite",
@@ -44,6 +45,7 @@
     "openai": "^5.23.1",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
+    "react-router-dom": "^7.9.4",
     "tslib": "^2.8.1"
   },
   "devDependencies": {

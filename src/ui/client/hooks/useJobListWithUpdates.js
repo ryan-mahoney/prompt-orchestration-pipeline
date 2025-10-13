@@ -109,24 +109,12 @@ export function useJobListWithUpdates() {
       // Compute hydrated base from incoming data, then apply any queued events deterministically
       const base = Array.isArray(data) ? data.slice() : [];
       if (eventQueue.current.length > 0) {
-        // eslint-disable-next-line no-console
-        console.debug(
-          "[useJobListWithUpdates] applying queued events to base:",
-          eventQueue.current.length
-        );
         try {
           const applied = eventQueue.current.reduce(
             (acc, ev) => applyJobEvent(acc, ev),
             base
           );
           // Debug: show applied array content for test troubleshooting
-          // eslint-disable-next-line no-console
-          console.debug(
-            "[useJobListWithUpdates] applied jobs count:",
-            Array.isArray(applied) ? applied.length : 0,
-            "applied:",
-            applied
-          );
           setLocalData(applied);
         } catch (e) {
           // eslint-disable-next-line no-console
@@ -139,8 +127,6 @@ export function useJobListWithUpdates() {
         }
         eventQueue.current = [];
         hydratedRef.current = true;
-        // eslint-disable-next-line no-console
-        console.debug("[useJobListWithUpdates] queued events applied");
       } else {
         // No queued events: just hydrate to base
         setLocalData(base);
@@ -217,12 +203,6 @@ export function useJobListWithUpdates() {
 
           if (!hydratedRef.current) {
             // Queue events functionally (avoid mutating existing array in place)
-            // eslint-disable-next-line no-console
-            console.debug(
-              "[useJobListWithUpdates] queueing event before hydration:",
-              type,
-              evt && evt.data
-            );
             eventQueue.current = (eventQueue.current || []).concat(eventObj);
             return;
           }

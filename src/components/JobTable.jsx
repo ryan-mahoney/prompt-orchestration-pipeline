@@ -68,16 +68,32 @@ export default function JobTable({
                 (currentTask?.config || pipeline?.taskConfig?.[job.current])) ||
               {};
 
+            const hasValidId = Boolean(job.id);
             return (
               <Table.Row
-                key={job.pipelineId}
-                className="group cursor-pointer hover:bg-slate-50/50 transition-colors"
-                onClick={() => onOpenJob(job)}
+                key={job.id || job.pipelineId}
+                className={`group transition-colors ${
+                  hasValidId
+                    ? "cursor-pointer hover:bg-slate-50/50"
+                    : "cursor-not-allowed opacity-60"
+                }`}
+                onClick={() => hasValidId && onOpenJob(job)}
                 onKeyDown={(e) =>
-                  (e.key === "Enter" || e.key === " ") && onOpenJob(job)
+                  hasValidId &&
+                  (e.key === "Enter" || e.key === " ") &&
+                  onOpenJob(job)
                 }
-                tabIndex={0}
-                aria-label={`Open ${job.name}`}
+                tabIndex={hasValidId ? 0 : -1}
+                aria-label={
+                  hasValidId
+                    ? `Open ${job.name}`
+                    : `${job.name} - No valid job ID, cannot open details`
+                }
+                title={
+                  hasValidId
+                    ? undefined
+                    : "This job cannot be opened because it lacks a valid ID"
+                }
               >
                 <Table.Cell>
                   <Flex direction="column" gap="1">

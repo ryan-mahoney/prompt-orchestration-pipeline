@@ -139,3 +139,113 @@ describe("Dev routing behavior with Vite middleware (step 1 tests)", () => {
     }
   });
 });
+
+describe("SSE endpoint with jobId filtering", () => {
+  let serverModule;
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    vi.resetModules();
+
+    process.env.NODE_ENV = "development";
+    serverModule = await import("../src/ui/server.js");
+  });
+
+  afterEach(async () => {
+    // Close any sse clients
+    if (serverModule && serverModule.sseRegistry) {
+      serverModule.sseRegistry.closeAll();
+    }
+
+    vi.resetModules();
+    vi.useRealTimers();
+    delete process.env.NODE_ENV;
+  });
+
+  it("should accept SSE connections with jobId query parameter", async () => {
+    const srv = await serverModule.startServer({ port: 0 });
+
+    try {
+      const response = await fetch(srv.url + "/api/events?jobId=job-123", {
+        headers: {
+          Accept: "text/event-stream",
+          "Cache-Control": "no-cache",
+        },
+      });
+
+      expect(response.status).toBe(200);
+      expect(response.headers.get("content-type")).toBe("text/event-stream");
+      expect(response.headers.get("cache-control")).toBe("no-cache");
+      expect(response.headers.get("connection")).toBe("keep-alive");
+
+      // Should have added client to registry with jobId
+      expect(serverModule.sseRegistry.getClientCount()).toBe(1);
+    } finally {
+      await srv.close();
+    }
+  });
+
+  it("should accept SSE connections without jobId for backward compatibility", async () => {
+    const srv = await serverModule.startServer({ port: 0 });
+
+    try {
+      const response = await fetch(srv.url + "/api/events", {
+        headers: {
+          Accept: "text/event-stream",
+          "Cache-Control": "no-cache",
+        },
+      });
+
+      expect(response.status).toBe(200);
+      expect(response.headers.get("content-type")).toBe("text/event-stream");
+
+      // Should have added client to registry without jobId
+      expect(serverModule.sseRegistry.getClientCount()).toBe(1);
+    } finally {
+      await srv.close();
+    }
+  });
+
+  it("should parse jobId from query string correctly", async () => {
+    const srv = await serverModule.startServer({ port: 0 });
+
+    try {
+      const response = await fetch(
+        srv.url + "/api/events?jobId=test-job-456&other=value",
+        {
+          headers: {
+            Accept: "text/event-stream",
+            "Cache-Control": "no-cache",
+          },
+        }
+      );
+
+      expect(response.status).toBe(200);
+      expect(serverModule.sseRegistry.getClientCount()).toBe(1);
+
+      // The registry should have stored the client with the correct jobId
+      // This is tested indirectly through the SSE filtering functionality
+      // which is covered in sse-filtering.test.js
+    } finally {
+      await srv.close();
+    }
+  });
+
+  it("should handle malformed query parameters gracefully", async () => {
+    const srv = await serverModule.startServer({ port: 0 });
+
+    try {
+      const response = await fetch(srv.url + "/api/events?invalid-query", {
+        headers: {
+          Accept: "text/event-stream",
+          "Cache-Control": "no-cache",
+        },
+      });
+
+      expect(response.status).toBe(200);
+      expect(serverModule.sseRegistry.getClientCount()).toBe(1);
+    } finally {
+      await srv.close();
+    }
+  });
+});

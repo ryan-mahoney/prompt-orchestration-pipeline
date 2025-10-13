@@ -192,7 +192,7 @@ state = {
 };
 ```
 
-**Backward Compatibility**: Provides `PipelineOrchestrator` class-like API wrapper
+**API Wrapper**: Provides `PipelineOrchestrator` class-like API wrapper
 
 ### 3. Orchestrator (`src/core/orchestrator.js`)
 
@@ -210,14 +210,14 @@ state = {
 ```
 pipeline-data/
 ├── pending/        # Seed files awaiting processing
-│   └── {name}-seed.json
+│   └── {jobId}-seed.json
 ├── current/        # Active pipeline executions
-│   └── {name}/
+│   └── {jobId}/
 │       ├── seed.json
 │       ├── tasks-status.json
 │       └── tasks/
 └── complete/       # Finished pipelines
-    └── {name}/
+    └── {jobId}/
         └── (same structure as current)
 ```
 
@@ -478,13 +478,13 @@ Events:
 ```
 1. User submits seed file
    ↓
-2. API writes to pending/{name}-seed.json
+2. API writes to pending/{jobId}-seed.json
    ↓
 3. Orchestrator detects new file (chokidar)
    ↓
 4. Orchestrator creates lock file
    ↓
-5. Orchestrator creates current/{name}/ directory
+5. Orchestrator creates current/{jobId}/ directory
    ↓
 6. Orchestrator writes seed.json and tasks-status.json
    ↓
@@ -498,7 +498,7 @@ Events:
    c. Save output.json
    d. Update status to "done"
    ↓
-10. Move current/{name}/ to complete/{name}/
+10. Move current/{jobId}/ to complete/{jobId}/
     ↓
 11. Append to runs.jsonl
 ```

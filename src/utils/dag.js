@@ -30,13 +30,37 @@ function mapJobStateToDagState(jobState) {
 }
 
 /**
+ * Normalizes job tasks to a lookup object regardless of input format
+ * @param {Object|Array|null} tasks - Job tasks as object map or array
+ * @returns {Object} Tasks normalized to object lookup by id/name
+ */
+function normalizeJobTasks(tasks) {
+  if (!tasks) return {};
+
+  if (Array.isArray(tasks)) {
+    // Convert array to object lookup using name or id as key
+    const taskMap = {};
+    for (const task of tasks) {
+      const taskId = task?.name || task?.id;
+      if (taskId) {
+        taskMap[taskId] = task;
+      }
+    }
+    return taskMap;
+  }
+
+  // Already an object, return as-is
+  return tasks;
+}
+
+/**
  * Computes DAG items from job and pipeline data with deterministic ordering
  * @param {Object|null} job - Job object containing tasks
  * @param {Object|null} pipeline - Pipeline object containing canonical task order
  * @returns {Array} Array of DAG items with id, status, and source metadata
  */
 export function computeDagItems(job, pipeline) {
-  const jobTasks = job?.tasks || {};
+  const jobTasks = normalizeJobTasks(job?.tasks);
   const pipelineTasks = pipeline?.tasks || [];
 
   // Start with pipeline tasks (canonical order)

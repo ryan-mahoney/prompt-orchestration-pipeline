@@ -370,4 +370,279 @@ describe("orchestrator", () => {
     // Both runners should have been started
     expect(spawnMock).toHaveBeenCalledTimes(2);
   });
+
+  describe("ID-only storage (Step 1)", () => {
+    it("extracts jobId from valid filename pattern", async () => {
+      const seedPath = path.join(
+        tmpDir,
+        "pipeline-data",
+        "pending",
+        "abc123-seed.json"
+      );
+      await fs.mkdir(path.dirname(seedPath), { recursive: true });
+      await fs.writeFile(
+        seedPath,
+        JSON.stringify({ name: "Test Job", data: { foo: "bar" } }),
+        "utf8"
+      );
+
+      const add = getAddHandler();
+      await add(seedPath);
+
+      // Verify directory created with jobId, not name
+      const workDir = path.join(tmpDir, "pipeline-data", "current", "abc123");
+      await fs.access(workDir);
+
+      const seedCopy = JSON.parse(
+        await fs.readFile(path.join(workDir, "seed.json"), "utf8")
+      );
+      expect(seedCopy).toEqual({ name: "Test Job", data: { foo: "bar" } });
+
+      // Verify tasks-status.json has correct structure
+      const status = JSON.parse(
+        await fs.readFile(path.join(workDir, "tasks-status.json"), "utf8")
+      );
+      expect(status.id).toBe("abc123");
+      expect(status.name).toBe("Test Job");
+      expect(status.pipelineId).toMatch(/^pl-/);
+      expect(status.state).toBe("pending");
+      expect(status.tasks).toEqual({});
+
+      // Verify runner spawned with jobId
+      expect(spawnMock).toHaveBeenCalledTimes(1);
+      const [execPath, args] = spawnMock.mock.calls[0];
+      expect(args[1]).toBe("abc123");
+    });
+
+    it("rejects non-matching filename pattern", async () => {
+      const consoleSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+      const seedPath = path.join(
+        tmpDir,
+        "pipeline-data",
+        "pending",
+        "invalid-filename.json"
+      );
+      await fs.mkdir(path.dirname(seedPath), { recursive: true });
+      await fs.writeFile(
+        seedPath,
+        JSON.stringify({ name: "Invalid Filename", data: {} }),
+        "utf8"
+      );
+
+      const add = getAddHandler();
+      await add(seedPath);
+
+      // Verify warning logged
+      expect(consoleSpy).toHaveBeenCalledWith(
+        "Rejecting non-id seed file:",
+        "invalid-filename.json"
+      );
+
+      // Verify no directory created
+      const workDir = path.join(
+        tmpDir,
+        "pipeline-data",
+        "current",
+        "invalid-filename"
+      );
+      await expect(fs.access(workDir)).rejects.toThrow();
+
+      // Verify no runner spawned
+      expect(spawnMock).not.toHaveBeenCalled();
+
+      // Verify pending file still exists (not moved)
+      await fs.access(seedPath);
+
+      consoleSpy.mockRestore();
+    });
+
+    it("rejects invalid filename patterns with spaces and special chars (Step 5 verification)", async () => {
+      const consoleSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+      const seedPath = path.join(
+        tmpDir,
+        "pipeline-data",
+        "pending",
+        "content generation-seed.json"
+      );
+      await fs.mkdir(path.dirname(seedPath), { recursive: true });
+      await fs.writeFile(
+        seedPath,
+        JSON.stringify({ name: "Content Generation", data: {} }),
+        "utf8"
+      );
+
+      const add = getAddHandler();
+      await add(seedPath);
+
+      // Verify warning logged
+      expect(consoleSpy).toHaveBeenCalledWith(
+        "Rejecting non-id seed file:",
+        "content generation-seed.json"
+      );
+
+      // Verify no directory created under current/
+      const workDir = path.join(
+        tmpDir,
+        "pipeline-data",
+        "current",
+        "content generation"
+      );
+      await expect(fs.access(workDir)).rejects.toThrow();
+
+      // Verify no runner spawned
+      expect(spawnMock).not.toHaveBeenCalled();
+
+      // Verify pending file still exists (not moved)
+      await fs.access(seedPath);
+
+      consoleSpy.mockRestore();
+    });
+
+    it("creates tasks-status.json with fallback name when seed has no name", async () => {
+      const seedPath = path.join(
+        tmpDir,
+        "pipeline-data",
+        "pending",
+        "xyz789-seed.json"
+      );
+      await fs.mkdir(path.dirname(seedPath), { recursive: true });
+      await fs.writeFile(
+        seedPath,
+        JSON.stringify({ data: { test: "data" } }), // No name field
+        "utf8"
+      );
+
+      const add = getAddHandler();
+      await add(seedPath);
+
+      const workDir = path.join(tmpDir, "pipeline-data", "current", "xyz789");
+      const status = JSON.parse(
+        await fs.readFile(path.join(workDir, "tasks-status.json"), "utf8")
+      );
+
+      expect(status.id).toBe("xyz789");
+      expect(status.name).toBe("xyz789"); // Fallback to jobId
+    });
+
+    it("handles complex valid job IDs", async () => {
+      const seedPath = path.join(
+        tmpDir,
+        "pipeline-data",
+        "pending",
+        "job_ABC-123_456-seed.json"
+      );
+      await fs.mkdir(path.dirname(seedPath), { recursive: true });
+      await fs.writeFile(
+        seedPath,
+        JSON.stringify({ name: "Complex Job", data: {} }),
+        "utf8"
+      );
+
+      const add = getAddHandler();
+      await add(seedPath);
+
+      const workDir = path.join(
+        tmpDir,
+        "pipeline-data",
+        "current",
+        "job_ABC-123_456"
+      );
+      await fs.access(workDir);
+
+      // Verify runner spawned with correct jobId
+      const [execPath, args] = spawnMock.mock.calls[0];
+      expect(args[1]).toBe("job_ABC-123_456");
+    });
+  });
+
+  describe("Step 3: Runner argument is jobId", () => {
+    it("spawnRunner passes jobId as CLI argument", async () => {
+      const seedPath = path.join(
+        tmpDir,
+        "pipeline-data",
+        "pending",
+        "step3-test-seed.json"
+      );
+      await fs.mkdir(path.dirname(seedPath), { recursive: true });
+      await fs.writeFile(
+        seedPath,
+        JSON.stringify({ name: "Step 3 Test", data: { test: "step3" } }),
+        "utf8"
+      );
+
+      const add = getAddHandler();
+      await add(seedPath);
+
+      // Verify runner spawned with jobId as argument
+      expect(spawnMock).toHaveBeenCalledTimes(1);
+      const [execPath, args] = spawnMock.mock.calls[0];
+      expect(execPath).toBe(process.execPath);
+      expect(args[0]).toMatch(/pipeline-runner\.js$/);
+      expect(args[1]).toBe("step3-test"); // jobId from filename
+    });
+
+    it("runner uses jobId for work directory path", async () => {
+      const seedPath = path.join(
+        tmpDir,
+        "pipeline-data",
+        "pending",
+        "workdir-test-seed.json"
+      );
+      await fs.mkdir(path.dirname(seedPath), { recursive: true });
+      await fs.writeFile(
+        seedPath,
+        JSON.stringify({ name: "WorkDir Test", data: {} }),
+        "utf8"
+      );
+
+      const add = getAddHandler();
+      await add(seedPath);
+
+      // Verify work directory created with jobId
+      const workDir = path.join(
+        tmpDir,
+        "pipeline-data",
+        "current",
+        "workdir-test"
+      );
+      await fs.access(workDir);
+
+      // Verify seed file is in correct location
+      const seedCopy = JSON.parse(
+        await fs.readFile(path.join(workDir, "seed.json"), "utf8")
+      );
+      expect(seedCopy.name).toBe("WorkDir Test");
+    });
+
+    it("running processes tracked by jobId not name", async () => {
+      const seedPath = path.join(
+        tmpDir,
+        "pipeline-data",
+        "pending",
+        "tracking-test-seed.json"
+      );
+      await fs.mkdir(path.dirname(seedPath), { recursive: true });
+      await fs.writeFile(
+        seedPath,
+        JSON.stringify({ name: "Tracking Test", data: {} }),
+        "utf8"
+      );
+
+      const add = getAddHandler();
+      await add(seedPath);
+
+      // Verify process is tracked by jobId
+      expect(spawnMock).toHaveBeenCalledTimes(1);
+      const child = children[children.length - 1];
+
+      // The running map should use jobId as key
+      // This is verified indirectly by checking the child was created and tracked
+      expect(child).toBeDefined();
+
+      // Trigger exit to verify cleanup works with jobId
+      child._emit("exit", 0, null);
+    });
+  });
 });

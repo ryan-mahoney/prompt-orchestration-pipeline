@@ -3,7 +3,9 @@ import "./style.css"; // optional overrides LAST
 
 import React from "react";
 import ReactDOM from "react-dom/client";
+import { BrowserRouter, Routes, Route } from "react-router-dom";
 import PromptPipelineDashboard from "@/pages/PromptPipelineDashboard.jsx";
+import PipelineDetail from "@/pages/PipelineDetail.jsx";
 import { Theme } from "@radix-ui/themes";
 
 ReactDOM.createRoot(document.getElementById("root")).render(
@@ -15,7 +17,12 @@ ReactDOM.createRoot(document.getElementById("root")).render(
       scaling="100%"
       radius="full"
     >
-      <PromptPipelineDashboard />
+      <BrowserRouter>
+        <Routes>
+          <Route path="/" element={<PromptPipelineDashboard />} />
+          <Route path="/pipeline/:jobId" element={<PipelineDetail />} />
+        </Routes>
+      </BrowserRouter>
     </Theme>
   </React.StrictMode>
 );

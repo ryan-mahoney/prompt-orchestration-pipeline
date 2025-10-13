@@ -19,13 +19,14 @@ export function createSSERegistry({
   heartbeatMs = 15000,
   sendInitialPing = false,
 } = {}) {
-  const clients = new Set(); // Set<http.ServerResponse | {write:Function, end?:Function, on?:Function}>
+  const clients = new Set(); // Set<{res: http.ServerResponse | {write:Function, end?:Function, on?:Function}, jobId?: string}>
   let heartbeatTimer = null;
 
   function _startHeartbeat() {
     if (!heartbeatMs || heartbeatTimer) return;
     heartbeatTimer = nodeSetInterval(() => {
-      for (const res of clients) {
+      for (const client of clients) {
+        const res = client.res || client;
         try {
           if (typeof res.write === "function") {
             // Comment line per SSE spec; keeps proxies from buffering/closing.
@@ -36,7 +37,7 @@ export function createSSERegistry({
           try {
             typeof res.end === "function" && res.end();
           } catch {}
-          clients.delete(res);
+          clients.delete(client);
         }
       }
     }, heartbeatMs);
@@ -46,8 +47,11 @@ export function createSSERegistry({
    * Add a client response to the registry and send headers if possible.
    * Accepts real http.ServerResponse or a test mock {write(), [writeHead], [end], [on]}.
    * @param {any} res
+   * @param {Object} [metadata] - Optional metadata for the client (e.g., { jobId })
    */
-  function addClient(res) {
+  function addClient(res, metadata = {}) {
+    const client = { res, ...metadata };
+
     try {
       if (typeof res.writeHead === "function") {
         res.writeHead(200, {
@@ -65,12 +69,12 @@ export function createSSERegistry({
       // If headers or initial write fail, avoid crashing tests—still register client
     }
 
-    clients.add(res);
+    clients.add(client);
     _startHeartbeat();
 
     if (res && typeof res.on === "function") {
       res.on("close", () => {
-        clients.delete(res);
+        clients.delete(client);
         if (clients.size === 0 && heartbeatTimer) {
           nodeClearInterval(heartbeatTimer);
           heartbeatTimer = null;
@@ -84,11 +88,23 @@ export function createSSERegistry({
    * @param {any} res
    */
   function removeClient(res) {
-    if (!clients.has(res)) return;
+    // Find client by response object (handle both old and new structure)
+    let clientToRemove = null;
+    for (const client of clients) {
+      const clientRes = client.res || client;
+      if (clientRes === res) {
+        clientToRemove = client;
+        break;
+      }
+    }
+
+    if (!clientToRemove) return;
+
+    const clientRes = clientToRemove.res || clientToRemove;
     try {
-      typeof res.end === "function" && res.end();
+      typeof clientRes.end === "function" && clientRes.end();
     } catch {}
-    clients.delete(res);
+    clients.delete(clientToRemove);
     if (clients.size === 0 && heartbeatTimer) {
       nodeClearInterval(heartbeatTimer);
       heartbeatTimer = null;
@@ -126,10 +142,19 @@ export function createSSERegistry({
       typeof data === "string" ? data : JSON.stringify(data ?? {});
     const dead = [];
 
-    for (const res of clients) {
+    for (const client of clients) {
+      const res = client.res || client;
+
+      // Apply jobId filtering: if data has an id and client has a jobId, only send if they match
+      if (data && data.id && client.jobId) {
+        if (data.id !== client.jobId) {
+          continue; // Skip this client - event is for a different job
+        }
+      }
+
       try {
         if (typeof res.write !== "function") {
-          dead.push(res);
+          dead.push(client);
           continue;
         }
         if (type) {
@@ -137,16 +162,17 @@ export function createSSERegistry({
         }
         res.write(`data: ${payload}\n\n`);
       } catch {
-        dead.push(res);
+        dead.push(client);
       }
     }
 
     // Clean up dead clients
-    for (const res of dead) {
+    for (const client of dead) {
+      const clientRes = client.res || client;
       try {
-        typeof res.end === "function" && res.end();
+        typeof clientRes.end === "function" && clientRes.end();
       } catch {}
-      clients.delete(res);
+      clients.delete(client);
     }
   }
 
@@ -155,7 +181,8 @@ export function createSSERegistry({
   }
 
   function closeAll() {
-    for (const res of clients) {
+    for (const client of clients) {
+      const res = client.res || client;
       try {
         typeof res.end === "function" && res.end();
       } catch {}

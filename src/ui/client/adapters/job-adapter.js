@@ -249,6 +249,8 @@ export function adaptJobDetail(apiDetail = {}) {
     ...summaryLike,
     // Ensure tasks exist as array of normalized task objects
     tasks,
+    // Preserve pipeline property if present in API response
+    ...(apiDetail.pipeline && { pipeline: apiDetail.pipeline }),
     // Include any metadata or original fields the UI may use (do not include raw artifacts content)
     raw: undefined, // intentional placeholder to indicate raw content is not included
   };

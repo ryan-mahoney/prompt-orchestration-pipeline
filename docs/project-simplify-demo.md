@@ -2,11 +2,11 @@
 
 # Goal
 
-Make the demo behave exactly like production with one and only one difference: the root directory used is `demo/`. Remove all demo-specific branching, “scenario” or seed-loading special cases, and any bespoke CLI parsing that causes divergent behavior. The demo should start the same server and pipeline that production uses; seeds (if present) should be processed the same way as in production (pending folder or upload API).
+Make the demo behave exactly like production with one and only one difference: the root directory used is `demo/`. Remove all demo-specific branching, "scenario" or seed-loading special cases, and any bespoke CLI parsing that causes divergent behavior. The demo should start the same server and pipeline that production uses; seeds (if present) should be processed the same way as in production (pending folder or upload API).
 
 # Why
 
-Current run-demo logic treats positional arguments as “scenarios” and manually loads seed files. That creates surprising edge-cases (e.g. `--root=demo` being interpreted as a scenario) and maintenance burden. We want a minimal change surface that restores parity with production.
+Current run-demo logic treats positional arguments as "scenarios" and manually loads seed files. That creates surprising edge-cases (e.g. `--root=demo` being interpreted as a scenario) and maintenance burden. We want a minimal change surface that restores parity with production.
 
 # High-level plan (minimal, safe)
 
@@ -73,7 +73,25 @@ Task 5 — Clean-up and optional deletions
     console.warn('run-demo.js is deprecated; using PO_ROOT environment variable is the supported demo path.');
     process.env.PO_ROOT = process.env.PO_ROOT || path.join(\_\_dirname);
     require('../src/ui/server.js'); // with appropriate import/require style
-- Remove references to “scenarios” from README and docs.
+- Remove references to "scenarios" from README and docs.
+
+# JobId-Only Policy
+
+**Implementation Status**: ✅ Complete
+
+The demo now follows a strict JobId-only policy:
+
+- **Navigation**: All pipeline detail pages use `/pipeline/:jobId` URLs
+- **API Endpoints**: `GET /api/jobs/:jobId` resolves by ID only, no slug fallback
+- **Storage**: Directory structure uses `demo/pipeline-data/{stage}/{jobId}/` format
+- **Migration**: `scripts/migrate-demo-fs.js` converts legacy process-named folders
+- **Error Handling**: Clear distinction between invalid IDs, not found, and network errors
+
+**Legacy Compatibility**:
+
+- Process-named folders (e.g., `content-generation`) are ignored at runtime
+- No slug-to-ID resolution is performed
+- Use the migration script to convert existing legacy data
 
 # Acceptance Criteria
 
@@ -82,6 +100,7 @@ Task 5 — Clean-up and optional deletions
 - Seeds are processed the same as in production (pending folder or via API).
 - docs/project-simplify-demo.md exists and documents the minimal steps (this file).
 - Optionally: `demo/run-demo.js` is removed or locked behind a deprecation message.
+- **JobId-only policy enforced**: All routes, storage, and API calls use job IDs exclusively.
 
 # Verification commands
 
@@ -93,6 +112,10 @@ Task 5 — Clean-up and optional deletions
   npm run demo:prod
 
 - Check logs for orchestrator start and ensure it does not error trying to open demo/seeds/--root=demo.json.
+
+- Verify JobId-only behavior:
+  - Navigate to `/pipeline/{jobId}` - should load successfully
+  - Navigate to `/pipeline/content-generation` - should show "Invalid job ID" error
 
 # Rollback plan
 
@@ -107,6 +130,7 @@ Task 5 — Clean-up and optional deletions
 - Do not introduce new CLI parsing libraries. The goal is parity with production.
 - If `src/ui/server.js` does not currently honor `PO_ROOT`, add a one-line support to check process.env.PO_ROOT before defaulting to the repository root.
 - Keep demo/seeds as examples in the repository; they should not be automatically loaded.
+- **JobId-only enforcement**: Do not add back any slug-based resolution or compatibility layers.
 
 # Files to change (short list)
 

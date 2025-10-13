@@ -123,42 +123,17 @@ describe("API Module", () => {
   });
 
   describe("submitJob", () => {
-    it("should submit job with custom name", async () => {
+    it("should throw error directing to submitJobWithValidation", async () => {
       // Arrange
-      vi.spyOn(fs, "writeFile").mockResolvedValue();
-
-      const state = {
-        paths: { pending: "/test/pending" },
-      };
-      const seed = { name: "custom-job", data: { test: "value" } };
-
-      // Act
-      const result = await apiModule.submitJob(state, seed);
-
-      // Assert
-      expect(result.name).toBe("custom-job");
-      expect(result.seedPath).toBe("/test/pending/custom-job-seed.json");
-      expect(fs.writeFile).toHaveBeenCalledWith(
-        "/test/pending/custom-job-seed.json",
-        JSON.stringify(seed, null, 2)
-      );
-    });
-
-    it("should submit job with provided name", async () => {
-      // Arrange
-      vi.spyOn(fs, "writeFile").mockResolvedValue();
-
       const state = {
         paths: { pending: "/test/pending" },
       };
       const seed = { name: "test-job", data: { test: "value" } };
 
-      // Act
-      const result = await apiModule.submitJob(state, seed);
-
-      // Assert
-      expect(result.name).toBe("test-job");
-      expect(result.seedPath).toBe("/test/pending/test-job-seed.json");
+      // Act & Assert
+      await expect(apiModule.submitJob(state, seed)).rejects.toThrow(
+        "submitJob is deprecated. Use submitJobWithValidation instead for ID-only job submission."
+      );
     });
   });
 
@@ -439,7 +414,6 @@ describe("API Module", () => {
           .mockResolvedValueOnce(JSON.stringify({ tasks: ["test-task"] })) // Pipeline config
           .mockRejectedValueOnce(new Error("Not found")) // Current directory status
           .mockRejectedValueOnce(new Error("Not found")); // Complete directory status
-        vi.spyOn(fs, "writeFile").mockResolvedValue();
         vi.spyOn(fs, "readdir").mockResolvedValue([]); // Empty job list
 
         // Act
@@ -447,10 +421,17 @@ describe("API Module", () => {
 
         // Call multiple methods to verify state is maintained
         await instance.start();
-        const jobResult = await instance.submitJob({
-          name: "test-job",
-          data: { test: "value" },
-        });
+
+        // submitJob should now throw an error
+        await expect(
+          instance.submitJob({
+            name: "test-job",
+            data: { test: "value" },
+          })
+        ).rejects.toThrow(
+          "submitJob is deprecated. Use submitJobWithValidation instead for ID-only job submission."
+        );
+
         const status = await instance.getStatus("test-job");
         const jobs = await instance.listJobs();
         await instance.stop();
@@ -458,7 +439,6 @@ describe("API Module", () => {
         // Assert
         expect(instance.config).toBeDefined();
         expect(instance.paths).toBeDefined();
-        expect(jobResult.name).toBe("test-job");
         expect(status).toBeNull(); // Job not actually running in test
         expect(jobs).toEqual([]); // No jobs in test
       });

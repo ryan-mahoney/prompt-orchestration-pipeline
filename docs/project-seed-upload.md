@@ -13,14 +13,14 @@
 - **Base data dir:** Resolved once and passed into server/orchestrator in tests.
 - **Directories:**
   - `pipeline-data/pending/`
-  - `pipeline-data/current/{name}/`
+  - `pipeline-data/current/{jobId}/`
   - `pipeline-data/complete/` (if used by your orchestrator; not required by tests)
 
 - **File names:**
-  - **Pending file:** `pipeline-data/pending/{name}-seed.json`
-  - **Current seed:** `pipeline-data/current/{name}/seed.json`
+  - **Pending file:** `pipeline-data/pending/{jobId}-seed.json`
+  - **Current seed:** `pipeline-data/current/{jobId}/seed.json`
 
-- **Atomic write:** Write to a temp file in `pending/`, then rename to `{name}-seed.json` to avoid partials.
+- **Atomic write:** Write to a temp file in `pending/`, then rename to `{jobId}-seed.json` to avoid partials.
 - **Cleanup on failure:** If any error occurs after a partial write, remove the partial and leave no orphaned files.
 
 ## API Contracts
@@ -184,17 +184,17 @@
 **Do**
 
 - Ensure the orchestrator:
-  - Watches `pending/` and, upon detecting `{name}-seed.json`, creates `current/{name}/` and writes `seed.json` there.
-  - Removes the original `pending` file once `current/{name}/seed.json` exists.
-  - Handles multiple distinct names concurrently without races producing duplicates.
+  - Watches `pending/` and, upon detecting `{jobId}-seed.json`, creates `current/{jobId}/` and writes `seed.json` there.
+  - Removes the original `pending` file once `current/{jobId}/seed.json` exists.
+  - Handles multiple distinct jobIds concurrently without races producing duplicates.
 
 - Export **`startOrchestrator({ dataDir, autoStart? }) -> { stop }`**.
 
 **Test**
 
 - Orchestrator integration tests:
-  - After uploading, assert `current/{name}/seed.json` exists with expected content and the `pending` file is gone.
-  - Upload several distinct names concurrently and verify each proceeds independently.
+  - After uploading, assert `current/{jobId}/seed.json` exists with expected content and the `pending` file is gone.
+  - Upload several distinct jobIds concurrently and verify each proceeds independently.
 
 ---
 
@@ -341,7 +341,7 @@
 - [ ] **Exact timeouts**: success message clears after **5000 ms** with fake timers supported.
 - [ ] **Exact endpoints**: `POST /api/upload/seed`, `GET /api/events`.
 - [ ] **Exact event shape**: `{ type: "seed:uploaded", data: { jobName } }`.
-- [ ] **Exact filenames/paths**: `pending/{name}-seed.json`, `current/{name}/seed.json`.
+- [ ] **Exact filenames/paths**: `pending/{jobId}-seed.json`, `current/{jobId}/seed.json`.
 - [ ] **Exports**:
   - `startServer({ dataDir, port? }) -> { url, close }`
   - `startOrchestrator({ dataDir, autoStart? }) -> { stop }`
