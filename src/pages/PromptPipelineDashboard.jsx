@@ -231,9 +231,13 @@ export default function PromptPipelineDashboard({ isConnected }) {
           )}
           <Tabs.Root value={activeTab} onValueChange={setActiveTab}>
             <Tabs.List aria-label="Job filters">
-              <Tabs.Trigger value="current">Current</Tabs.Trigger>
-              <Tabs.Trigger value="errors">Errors</Tabs.Trigger>
-              <Tabs.Trigger value="complete">Completed</Tabs.Trigger>
+              <Tabs.Trigger value="current">
+                Current ({currentCount})
+              </Tabs.Trigger>
+              <Tabs.Trigger value="errors">Errors ({errorCount})</Tabs.Trigger>
+              <Tabs.Trigger value="complete">
+                Completed ({completedCount})
+              </Tabs.Trigger>
             </Tabs.List>
 
             <Tabs.Content value="current">
