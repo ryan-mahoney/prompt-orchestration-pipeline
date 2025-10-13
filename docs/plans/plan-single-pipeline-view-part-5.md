@@ -6,7 +6,7 @@ Non-negotiable invariants after changes
 - tasks-status.json, job.json, pipeline.json reside under current/{jobId}/.
 - Runner receives jobId (not name) as its identifier.
 - Readers/scanners accept only IDs that match the configured regex; slug/name folders are ignored.
-- No code path may create or rely on current/{name}/…; no back-compat fallback.
+- No code path may create or rely on current/{jobId}/…; no back-compat fallback.
 
 Step 1: Orchestrator uses jobId only (strict)
 
@@ -21,12 +21,12 @@ Step 1: Orchestrator uses jobId only (strict)
   - Set tasks-status.json fields: { id: jobId, name: seed?.name ?? jobId, pipelineId, createdAt, state: "pending", tasks: {} }.
   - Spawn runner with jobId (spawnRunner(jobId, …)).
 - Verification:
-  - Upload a seed → expect only current/{jobId}/… created; no current/{name}/ exists.
+  - Upload a seed → expect only current/{jobId}/… created; no current/{jobId}/ exists.
 
 Step 2: Remove legacy name-based submit
 
 - Changes (src/api/index.js):
-  - Delete or hard-error legacy submitJob(state, seed) that writes pending/{name}-seed.json.
+  - Delete or hard-error legacy submitJob(state, seed) that writes pending/{jobId}-seed.json.
   - If retained, make it throw with a clear message to use submitJobWithValidation (id-only).
 - Verification:
   - Search repo: no call sites rely on name-based submit. Tests updated to call submitJobWithValidation.
@@ -57,24 +57,24 @@ Step 5: Reject non-id pending files (no fallback)
 Step 6: Tests updated and added
 
 - Changes:
-  - New orchestrator test: pending/abc123-seed.json → current/abc123/seed.json; no current/{name}/.
+  - New orchestrator test: pending/abc123-seed.json → current/abc123/seed.json; no current/{jobId}/.
   - Update tests/upload-api.test.js and tests/e2e-upload.test.js to assert absence of current/{jobName}/ and presence of current/{jobId}/.
-  - Extend tests/id-only-storage.test.js with “no name-based folders after upload”.
+  - Extend tests/id-only-storage.test.js with "no name-based folders after upload".
 - Verification:
   - npm -s test: all green.
 
 Step 7: Documentation purge of name-based paths
 
 - Changes:
-  - README.md, docs/storage.md, docs/project-seed-upload.md, docs/architecture.md: replace current/{name} with current/{id}.
+  - README.md, docs/storage.md, docs/project-seed-upload.md, docs/architecture.md: replace current/{jobId} with current/{id}.
   - Remove any mention of backwards compatibility/migration at runtime.
 - Verification:
-  - Repo-wide grep finds no “current/{name}” or “current/<name>” references.
+  - Repo-wide grep finds no "current/{jobId}" or "current/<jobId>" references.
 
 Step 8: Hard guard to prevent regressions
 
 - Changes:
-  - Optional CI check or script: grep -R "current/\{name\}|current/<name>|-seed\.json.\*name" to fail CI on reintroduction.
+  - Optional CI check or script: grep -R "current/\{jobId\}|current/<jobId>|jobName.\*-seed\.json" to fail CI on reintroduction.
 - Verification:
   - CI fails if someone re-adds name-based logic.
 
@@ -88,4 +88,4 @@ Step 9: Manual acceptance
 Step 10: Migration note (no runtime back-compat)
 
 - Stance:
-  - Runtime does not support legacy name-based data. If needed, provide a one-off external script to consolidate legacy current/{name}/ into current/{id}/; not shipped or invoked by the app.
+  - Runtime does not support legacy name-based data. If needed, provide a one-off external script to consolidate legacy current/{jobId}/ into current/{id}/; not shipped or invoked by the app.

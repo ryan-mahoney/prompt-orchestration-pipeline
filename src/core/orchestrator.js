@@ -57,7 +57,7 @@ async function moveFile(src, dest) {
  * Start the orchestrator.
  * - Ensures pipeline dirs
  * - Watches pending/*.json seeds
- * - On add: move to current/<name>/seed.json and spawn runner
+ * - On add: move to current/{jobId}/seed.json and spawn runner
  *
  * @param {{ dataDir: string, spawn?: typeof defaultSpawn, watcherFactory?: Function, testMode?: boolean }} opts
  * @returns {Promise<{ stop: () => Promise<void> }>}

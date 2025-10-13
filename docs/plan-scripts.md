@@ -89,7 +89,7 @@ Testing steps
   1. Build and run demo:all: npm run demo:all
      - Verify `ui:build` completes and both processes start.
      - Upload or drop seed into demo/pipeline-data/pending.
-     - Confirm orchestrator moves the seed to demo/pipeline-data/current/<name>/seed.json and a runner is spawned.
+     - Confirm orchestrator moves the seed to demo/pipeline-data/current/{jobId}/seed.json and a runner is spawned.
   2. Run `npm run demo:orchestrator` in isolation and verify it starts watching `demo/pipeline-data/pending`.
   3. Run only `npm run demo:run` to verify server-only behavior.
 - CI: Add a smoke-test script that runs orchestrator in testMode or uses existing test utilities (not part of this plan; recommended follow-up).
