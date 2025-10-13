@@ -89,6 +89,15 @@ export async function startOrchestrator(opts) {
   async function handleSeedAdd(filePath) {
     if (!filePath || !filePath.endsWith(".json")) return;
 
+    // Extract jobId from filename pattern: ^([A-Za-z0-9-_]+)-seed\.json$
+    const base = path.basename(filePath);
+    const match = base.match(/^([A-Za-z0-9-_]+)-seed\.json$/);
+    if (!match) {
+      console.warn("Rejecting non-id seed file:", base);
+      return;
+    }
+    const jobId = match[1];
+
     let seed;
     try {
       const text = await fs.readFile(filePath, "utf8");
@@ -98,22 +107,16 @@ export async function startOrchestrator(opts) {
       return;
     }
 
-    const name = (seed && (seed.name || seed.job || seed.jobName)) ?? undefined;
-    if (!name) {
-      // If no name, ignore
-      return;
-    }
-
     // If already running or already moved to current, skip (idempotent)
-    if (isJobActive(name)) return;
-    const dest = currentSeedPath(name);
+    if (isJobActive(jobId)) return;
+    const dest = currentSeedPath(jobId);
     try {
       await fs.access(dest);
       // Already picked up
       return;
     } catch {}
 
-    // Move seed to current/<name>/seed.json
+    // Move seed to current/{jobId}/seed.json
     console.log(`[Orchestrator] Moving file from ${filePath} to ${dest}`);
     try {
       await moveFile(filePath, dest);
@@ -134,7 +137,8 @@ export async function startOrchestrator(opts) {
     } catch {
       const pipelineId = "pl-" + Math.random().toString(36).slice(2, 10);
       const status = {
-        name,
+        id: jobId,
+        name: seed?.name ?? jobId,
         pipelineId,
         createdAt: new Date().toISOString(),
         state: "pending",
@@ -143,7 +147,7 @@ export async function startOrchestrator(opts) {
       await fs.writeFile(statusPath, JSON.stringify(status, null, 2));
     }
     // Spawn runner for this job
-    const child = spawnRunner(name, dirs, running, spawn, testMode);
+    const child = spawnRunner(jobId, dirs, running, spawn, testMode);
     // child registered inside spawnRunner
     return child;
   }
