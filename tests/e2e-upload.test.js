@@ -366,5 +366,35 @@ export async function integration(context) {
     const buf = await fs.readFile(finalSeedPath, "utf8");
     const json = JSON.parse(buf);
     expect(json.name).toBe(job);
+
+    // CRITICAL: Verify no name-based directory was created in current/
+    // The job should be processed using only the jobId, not the name
+    const nameBasedDir = path.join(dataDir, "pipeline-data", "current", job);
+    try {
+      await fs.access(nameBasedDir);
+      expect.fail("Name-based directory should not be created");
+    } catch (error) {
+      expect(error.code).toBe("ENOENT");
+    }
+
+    // Verify no name-based directory in complete either
+    const nameBasedCompleteDir = path.join(
+      dataDir,
+      "pipeline-data",
+      "complete",
+      job
+    );
+    try {
+      await fs.access(nameBasedCompleteDir);
+      expect.fail("Name-based complete directory should not be created");
+    } catch (error) {
+      expect(error.code).toBe("ENOENT");
+    }
+
+    // The final seed should be in an ID-based directory, not name-based
+    const finalDir = path.dirname(finalSeedPath);
+    const finalDirName = path.basename(finalDir);
+    expect(finalDirName).toMatch(/^[A-Za-z0-9]{6,30}$/); // Should be a valid job ID format
+    expect(finalDirName).not.toBe(job); // Should not be the job name
   });
 });

@@ -240,4 +240,138 @@ describe("ID-only storage behavior", () => {
       expect(result.message).toContain("Job not found");
     });
   });
+
+  describe("Step 6: No name-based folders after upload", () => {
+    it("should ignore name-based directories when listing jobs after upload simulation", async () => {
+      // Simulate the scenario where an upload creates both ID-based and name-based directories
+      // The system should only recognize the ID-based ones
+
+      // Create valid ID-based directories (as created by orchestrator)
+      await fs.mkdir(path.join(currentDir, "JobId123"), { recursive: true });
+      await fs.mkdir(path.join(currentDir, "JobId456"), { recursive: true });
+      await fs.mkdir(path.join(completeDir, "JobId789"), { recursive: true });
+
+      // Simulate legacy name-based directories that might exist from old uploads
+      // These should be completely ignored by the system
+      await fs.mkdir(path.join(currentDir, "content-generation"), {
+        recursive: true,
+      });
+      await fs.mkdir(path.join(currentDir, "data-processing"), {
+        recursive: true,
+      });
+      await fs.mkdir(path.join(completeDir, "market-analysis"), {
+        recursive: true,
+      });
+
+      // Add valid job data to both ID and name-based directories
+      const validJobData = {
+        id: "JobId123",
+        name: "Content Generation Job",
+        createdAt: "2024-01-01T00:00:00Z",
+        tasks: { analysis: { state: "done" } },
+      };
+
+      await fs.writeFile(
+        path.join(currentDir, "JobId123", "tasks-status.json"),
+        JSON.stringify(validJobData, null, 2)
+      );
+
+      const invalidJobData = {
+        id: "content-generation",
+        name: "Content Generation",
+        createdAt: "2024-01-01T00:00:00Z",
+        tasks: { analysis: { state: "done" } },
+      };
+
+      await fs.writeFile(
+        path.join(currentDir, "content-generation", "tasks-status.json"),
+        JSON.stringify(invalidJobData, null, 2)
+      );
+
+      // List jobs - should only return ID-based ones
+      const currentJobs = await listJobs("current");
+      const allJobs = await listAllJobs();
+
+      // Verify only ID-based directories are recognized
+      expect(currentJobs).toContain("JobId123");
+      expect(currentJobs).toContain("JobId456");
+      expect(currentJobs).not.toContain("content-generation");
+      expect(currentJobs).not.toContain("data-processing");
+
+      expect(allJobs.current).toEqual(["JobId123", "JobId456"]);
+      expect(allJobs.complete).toEqual(["JobId789"]);
+
+      // Verify reading by ID works
+      const readResult = await readJob("JobId123");
+      expect(readResult.ok).toBe(true);
+      expect(readResult.data.id).toBe("JobId123");
+
+      // Verify reading by slug fails
+      const slugReadResult = await readJob("content-generation");
+      expect(slugReadResult.ok).toBe(false);
+      expect(slugReadResult.code).toBe("bad_request"); // Invalid format
+    });
+
+    it("should handle mixed upload scenarios with only ID-based recognition", async () => {
+      // Simulate a scenario where uploads might create directories with different naming patterns
+      // The system should only recognize and work with valid ID-based patterns
+
+      // Valid ID-based directories (created by proper ID-only uploads)
+      await fs.mkdir(path.join(currentDir, "Upload123"), { recursive: true });
+      await fs.mkdir(path.join(currentDir, "Upload456"), { recursive: true });
+
+      // Invalid patterns that should be ignored
+      await fs.mkdir(path.join(currentDir, "upload_with_spaces"), {
+        recursive: true,
+      });
+      await fs.mkdir(
+        path.join(currentDir, "upload-with-dashes-and-special-chars!"),
+        {
+          recursive: true,
+        }
+      );
+      await fs.mkdir(path.join(currentDir, "short"), { recursive: true }); // Too short
+      await fs.mkdir(
+        path.join(
+          currentDir,
+          "very-long-directory-name-that-exceeds-thirty-characters-limit"
+        ),
+        {
+          recursive: true,
+        }
+      ); // Too long
+
+      // Add job data to all directories
+      const validData = {
+        id: "Upload123",
+        name: "Valid Upload",
+        createdAt: "2024-01-01T00:00:00Z",
+        tasks: {},
+      };
+
+      await fs.writeFile(
+        path.join(currentDir, "Upload123", "tasks-status.json"),
+        JSON.stringify(validData, null, 2)
+      );
+
+      // Verify only valid ID directories are listed
+      const jobs = await listJobs("current");
+      expect(jobs).toContain("Upload123");
+      expect(jobs).toContain("Upload456");
+      expect(jobs).not.toContain("upload_with_spaces");
+      expect(jobs).not.toContain("upload-with-dashes-and-special-chars!");
+      expect(jobs).not.toContain("short");
+      expect(jobs).not.toContain(
+        "very-long-directory-name-that-exceeds-thirty-characters-limit"
+      );
+
+      // Verify reading works only for valid IDs
+      const validRead = await readJob("Upload123");
+      expect(validRead.ok).toBe(true);
+
+      const invalidRead = await readJob("upload_with_spaces");
+      expect(invalidRead.ok).toBe(false);
+      expect(invalidRead.code).toBe("bad_request");
+    });
+  });
 });

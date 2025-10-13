@@ -10,7 +10,7 @@
  *  - getJobIndex() -> singleton JobIndex instance
  */
 
-import { listJobs } from "./job-scanner.js";
+import { listAllJobs } from "./job-scanner.js";
 import { readJob } from "./job-reader.js";
 import * as configBridge from "./config-bridge.js";
 
@@ -42,7 +42,7 @@ export class JobIndex {
       this.jobsById.clear();
 
       // Get all job IDs from all locations
-      const { current, complete } = await listJobs();
+      const { current, complete } = await listAllJobs();
       const currentIds = current || [];
       const completeIds = complete || [];
       const allJobIds = [...new Set([...currentIds, ...completeIds])];
@@ -50,8 +50,18 @@ export class JobIndex {
       // Read all jobs and populate index
       const readPromises = allJobIds.map(async (jobId) => {
         try {
-          const result = await readJob(jobId);
-          if (result.ok) {
+          // Try each location until we find the job
+          let result = null;
+          const locations = ["current", "complete", "pending", "rejected"];
+
+          for (const location of locations) {
+            result = await readJob(jobId, location);
+            if (result.ok) {
+              break;
+            }
+          }
+
+          if (result && result.ok) {
             this.jobsById.set(jobId, {
               ...result.data,
               location: result.location,

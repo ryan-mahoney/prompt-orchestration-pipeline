@@ -212,13 +212,13 @@ export async function startOrchestrator(opts) {
  * Spawn a pipeline runner. In testMode we still call spawn() so tests can assert,
  * but we resolve immediately and let tests drive the lifecycle (emit 'exit', etc.).
  *
- * @param {string} name
+ * @param {string} jobId
  * @param {{dataDir:string,pending:string,current:string,complete:string}} dirs
  * @param {Map<string, import('node:child_process').ChildProcess>} running
  * @param {typeof defaultSpawn} spawn
  * @param {boolean} testMode
  */
-function spawnRunner(name, dirs, running, spawn, testMode) {
+function spawnRunner(jobId, dirs, running, spawn, testMode) {
   const runnerPath = path.join(
     process.cwd(),
     "src",
@@ -244,19 +244,19 @@ function spawnRunner(name, dirs, running, spawn, testMode) {
   };
 
   // Always call spawn so tests can capture it
-  const child = spawn(process.execPath, [runnerPath, name], {
+  const child = spawn(process.execPath, [runnerPath, jobId], {
     stdio: ["ignore", "inherit", "inherit"],
     env,
     cwd: process.cwd(),
   });
 
-  running.set(name, child);
+  running.set(jobId, child);
 
   child.on("exit", () => {
-    running.delete(name);
+    running.delete(jobId);
   });
   child.on("error", () => {
-    running.delete(name);
+    running.delete(jobId);
   });
 
   // In test mode: return immediately; in real mode you might await readiness

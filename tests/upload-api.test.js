@@ -294,5 +294,95 @@ describe("Upload API (Step 2)", () => {
         expect(error.code).toBe("ENOENT");
       }
     });
+
+    it("should create only ID-based folders after upload (Step 6 verification)", async () => {
+      const validSeed = {
+        name: "test-job-id-only",
+        data: { test: "id-only-verification" },
+      };
+
+      // Create multipart form data manually (Node.js compatible)
+      const boundary = "WebKitFormBoundary7MA4YWxkTrZu0gW";
+      const body = [
+        `--${boundary}`,
+        'Content-Disposition: form-data; name="file"; filename="seed.json"',
+        "Content-Type: application/json",
+        "",
+        JSON.stringify(validSeed),
+        `--${boundary}--`,
+        "",
+      ].join("\r\n");
+
+      console.log("Making fetch request for ID-only verification...");
+      const response = await fetchWithTimeout(`${baseUrl}/api/upload/seed`, {
+        method: "POST",
+        headers: {
+          "Content-Type": `multipart/form-data; boundary=${boundary}`,
+        },
+        body,
+      });
+      console.log("Fetch request completed, status:", response.status);
+
+      const responseText = await response.text();
+      let result;
+      try {
+        result = JSON.parse(responseText);
+      } catch (error) {
+        console.error("Failed to parse JSON:", error);
+        throw error;
+      }
+
+      expect(response.status).toBe(200);
+      expect(result.success).toBe(true);
+      expect(result.jobName).toBe("test-job-id-only");
+      expect(result.jobId).toMatch(/^[A-Za-z0-9]{12}$/);
+
+      // Verify file was written to pending directory with jobId as filename
+      const pendingPath = path.join(
+        tempDir,
+        "pipeline-data",
+        "pending",
+        `${result.jobId}-seed.json`
+      );
+      await fs.access(pendingPath);
+
+      // CRITICAL: Verify no name-based directory was created in current/
+      const nameBasedDir = path.join(
+        tempDir,
+        "pipeline-data",
+        "current",
+        "test-job-id-only"
+      );
+      try {
+        await fs.access(nameBasedDir);
+        expect.fail("Name-based directory should not be created");
+      } catch (error) {
+        expect(error.code).toBe("ENOENT");
+      }
+
+      // Verify no other name-based directories exist
+      const currentDirContents = await fs.readdir(
+        path.join(tempDir, "pipeline-data", "current")
+      );
+      expect(currentDirContents).not.toContain("test-job-id-only");
+
+      // Verify the pending file uses the jobId, not the name
+      const nameBasedPendingFile = path.join(
+        tempDir,
+        "pipeline-data",
+        "pending",
+        "test-job-id-only-seed.json"
+      );
+      try {
+        await fs.access(nameBasedPendingFile);
+        expect.fail("Name-based pending file should not exist");
+      } catch (error) {
+        expect(error.code).toBe("ENOENT");
+      }
+
+      // Verify only the jobId-based pending file exists
+      const fileContent = await fs.readFile(pendingPath, "utf8");
+      expect(JSON.parse(fileContent)).toEqual(validSeed);
+    }, 60000);
   });
 });
