@@ -113,7 +113,7 @@ describe("Layout", () => {
   it("applies correct container width classes", () => {
     render(
       <MemoryRouter>
-        <Layout title="Test Page" maxWidth="6xl">
+        <Layout title="Test Page" maxWidth="max-w-6xl">
           <div>Test content</div>
         </Layout>
       </MemoryRouter>

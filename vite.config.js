@@ -13,6 +13,7 @@ export default defineConfig({
     emptyOutDir: true,
     assetsDir: "assets",
     cssCodeSplit: false, // Ensure CSS is bundled properly
+    minify: false, // Disable minification for better debugging
   },
   resolve: {
     alias: {

@@ -16,7 +16,7 @@ export default function Layout({
   actions,
   showBackButton = false,
   backTo = "/",
-  maxWidth = "7xl",
+  maxWidth = "max-w-7xl",
 }) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -52,14 +52,14 @@ export default function Layout({
           <Flex
             align="center"
             justify="between"
-            className={`mx-auto w-full max-w-${maxWidth} px-4 sm:px-6 lg:px-8 py-4`}
+            className={`mx-auto w-full ${maxWidth} px-4 sm:px-6 lg:px-8 py-4`}
             gap="4"
           >
             {/* Left side: Navigation and title */}
             <Flex align="center" gap="3" className="min-w-0 flex-1">
               {/* Back button (conditional) */}
               {showBackButton && (
-                <Tooltip delayDuration={200}>
+                <Tooltip.Root delayDuration={200}>
                   <Tooltip.Trigger asChild>
                     <Button
                       variant="ghost"
@@ -74,7 +74,7 @@ export default function Layout({
                   <Tooltip.Content side="bottom" sideOffset={5}>
                     <Text size="2">Go back</Text>
                   </Tooltip.Content>
-                </Tooltip>
+                </Tooltip.Root>
               )}
 
               {/* App title */}
@@ -124,7 +124,7 @@ export default function Layout({
         <main
           id="main-content"
           role="main"
-          className={`mx-auto w-full max-w-${maxWidth} px-4 sm:px-6 lg:px-8 py-6`}
+          className={`mx-auto w-full ${maxWidth} px-4 sm:px-6 lg:px-8 py-6`}
         >
           {children}
         </main>
