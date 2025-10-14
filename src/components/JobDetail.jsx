@@ -89,6 +89,10 @@ export default function JobDetail({ job, pipeline, onClose, onResume }) {
       if (execMs) subtitleParts.push(`time: ${fmtDuration(execMs)}`);
     }
 
+    // Include error message in body when task status is error
+    const errorMsg = task?.error?.message;
+    const body = item.status === "error" && errorMsg ? errorMsg : null;
+
     return {
       ...item,
       title:
@@ -96,6 +100,7 @@ export default function JobDetail({ job, pipeline, onClose, onResume }) {
           ? item.id
           : item.id?.name || item.id?.id || `Task ${item.id}`,
       subtitle: subtitleParts.length > 0 ? subtitleParts.join(" · ") : null,
+      body,
     };
   });
   const activeIndex = computeActiveIndex(dagItems);

@@ -295,4 +295,85 @@ describe("JobDetail - Detail-Shaped Job with Pipeline from API", () => {
     expect(screen.getByText("Edge Cases Test Job")).toBeDefined();
     expect(computeDagItemsSpy).toHaveBeenCalled();
   });
+
+  it("passes error message as item.body for failed task", () => {
+    const errorMessage =
+      "analysis failed after 2 attempts: Validation failed after all refinement attempts";
+
+    // Mock computeDagItems to return items with error status and body
+    computeDagItemsSpy.mockReturnValue([
+      { id: "research", status: "succeeded", source: "pipeline" },
+      {
+        id: "analysis",
+        status: "error",
+        source: "pipeline",
+        body: errorMessage,
+      },
+      { id: "synthesis", status: "pending", source: "pipeline" },
+    ]);
+
+    computeActiveIndexSpy.mockReturnValue(1); // analysis is active (first error)
+
+    const detailShapedJob = {
+      id: "test-job-with-error",
+      pipelineId: "test-job-with-error",
+      name: "Test Job with Error",
+      status: "failed",
+      tasks: [
+        {
+          name: "research",
+          state: "done",
+          startedAt: "2025-10-13T22:10:09.101Z",
+          endedAt: "2025-10-13T22:10:09.107Z",
+          attempts: 1,
+        },
+        {
+          name: "analysis",
+          state: "failed",
+          startedAt: "2025-10-13T22:10:09.107Z",
+          endedAt: "2025-10-13T22:10:09.109Z",
+          attempts: 1,
+          error: {
+            message: errorMessage,
+          },
+        },
+        {
+          name: "synthesis",
+          state: "pending",
+        },
+      ],
+      pipeline: {
+        tasks: ["research", "analysis", "synthesis"],
+      },
+    };
+
+    render(
+      <JobDetail
+        job={detailShapedJob}
+        pipeline={detailShapedJob.pipeline}
+        onClose={mockOnClose}
+        onResume={mockOnResume}
+      />
+    );
+
+    // Verify the component rendered
+    expect(screen.getByText("Test Job with Error")).toBeDefined();
+
+    // Get the DAG items from the mocked DAGGrid component (use the last one since multiple tests may have rendered)
+    const dagItemsElements = screen.getAllByTestId("dag-items");
+    const dagItemsElement = dagItemsElements[dagItemsElements.length - 1];
+    const dagItems = JSON.parse(dagItemsElement.textContent);
+
+    // Find the analysis item and verify it has the error message as body
+    const analysisItem = dagItems.find((item) => item.id === "analysis");
+    expect(analysisItem).toBeDefined();
+    expect(analysisItem.status).toBe("error");
+    expect(analysisItem.body).toBe(errorMessage);
+
+    // Verify computeDagItems was called with the job containing the error
+    expect(computeDagItemsSpy).toHaveBeenCalledWith(
+      detailShapedJob,
+      detailShapedJob.pipeline
+    );
+  });
 });
