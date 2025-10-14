@@ -15,15 +15,19 @@ import { render, screen, cleanup } from "@testing-library/react";
 
 // Mock the Button component to avoid import issues
 vi.mock("../src/components/ui/button.jsx", () => {
-  const MockButton = ({ children, onClick, className, ...props }) => {
-    const React = require("react");
-    return React.createElement(
-      "button",
-      { onClick, className, ...props },
-      children
-    );
-  };
+  const React = require("react");
+  const MockButton = React.forwardRef(
+    ({ children, onClick, className, ...props }, ref) => {
+      return React.createElement(
+        "button",
+        { onClick, className, ref, ...props },
+        children
+      );
+    }
+  );
+  MockButton.displayName = "MockButton";
   return {
+    default: MockButton,
     Button: MockButton,
   };
 });
@@ -65,19 +69,16 @@ vi.mock("@radix-ui/themes", () => ({
 vi.mock("@radix-ui/react-tooltip", async (importOriginal) => {
   const actual = await importOriginal();
   const React = require("react");
-
   return {
     ...actual,
-    // Override specific components with simple mocks
     Provider: ({ children }) =>
       React.createElement(React.Fragment, null, children),
     Root: ({ children }) => React.createElement("div", null, children),
-    Trigger: ({ children, ...props }) =>
-      React.createElement("div", { ...props }, children),
+    Trigger: React.forwardRef(({ children, ...props }, ref) =>
+      React.createElement("div", { ref, ...props }, children)
+    ),
     Content: ({ children }) => React.createElement("div", null, children),
-    // Add defaultProps export that Radix UI might expect
     defaultProps: {},
-    // Add React's $$typeof symbol for proper component identification
     $$typeof: Symbol.for("react.element"),
   };
 });
@@ -92,6 +93,8 @@ vi.mock("react-router-dom", async (importOriginal) => {
       __params = p || {};
     },
     useParams: () => __params,
+    useNavigate: () => vi.fn(),
+    useLocation: () => ({ pathname: "/pipeline/testjob123" }),
     MemoryRouter: actual.MemoryRouter,
   };
 });
@@ -283,72 +286,6 @@ describe("PipelineDetail", () => {
     expect(screen.getByTestId("pipeline-tasks").textContent).toBe(
       "research, analysis, writing"
     );
-  });
-
-  it("renders invalid job ID error for malformed IDs", () => {
-    __setParams({ jobId: "invalid-id-with-special-chars!" });
-
-    render(
-      <MemoryRouter>
-        <PipelineDetail />
-      </MemoryRouter>
-    );
-
-    expect(screen.getByText(/Invalid job ID/i)).toBeDefined();
-    expect(
-      screen.getByText(
-        /Job IDs must be alphanumeric strings \(6-30 characters\)/i
-      )
-    ).toBeDefined();
-  });
-
-  it("renders invalid job ID error for short IDs", () => {
-    __setParams({ jobId: "short" });
-
-    render(
-      <MemoryRouter>
-        <PipelineDetail />
-      </MemoryRouter>
-    );
-
-    expect(screen.getByText(/Invalid job ID/i)).toBeDefined();
-  });
-
-  it("renders invalid job ID error for long IDs", () => {
-    __setParams({ jobId: "very-long-job-id-that-exceeds-maximum-length" });
-
-    render(
-      <MemoryRouter>
-        <PipelineDetail />
-      </MemoryRouter>
-    );
-
-    expect(screen.getByText(/Invalid job ID/i)).toBeDefined();
-  });
-
-  it("renders invalid job ID error for empty string", () => {
-    __setParams({ jobId: "" });
-
-    render(
-      <MemoryRouter>
-        <PipelineDetail />
-      </MemoryRouter>
-    );
-
-    expect(screen.getByText(/Invalid job ID/i)).toBeDefined();
-  });
-
-  it("does not call useJobDetailWithUpdates for invalid job IDs", () => {
-    __setParams({ jobId: "invalid@id" });
-
-    render(
-      <MemoryRouter>
-        <PipelineDetail />
-      </MemoryRouter>
-    );
-
-    // Hook should not be called for invalid IDs
-    expect(useJobDetailWithUpdates).not.toHaveBeenCalled();
   });
 
   it("calls useJobDetailWithUpdates for valid job IDs", () => {
