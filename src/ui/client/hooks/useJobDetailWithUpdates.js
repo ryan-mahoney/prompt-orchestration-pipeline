@@ -33,15 +33,20 @@ async function fetchJobDetail(jobId, { signal } = {}) {
  *
  * @param {Object} prev - Previous job state
  * @param {Object} event - SSE event with type and payload
+ * @param {string} jobId - Current job ID for filtering
+ * @param {Object} refs - Refs object for side effects
  * @returns {Object} Updated job state
  */
-function applyJobEvent(prev = null, event) {
+function applyJobEvent(prev = null, event, jobId, refs = {}) {
   // prev: Single job object or null
   // event: { type: string, payload: object }
+  // jobId: Current job ID for filtering
+  // refs: { needsRefetchRef } for side effects
 
   if (!event || !event.type) return prev;
 
   const p = event.payload || {};
+  const { needsRefetchRef } = refs;
 
   // If this event is for a different job, return unchanged
   if (p.id && prev && p.id !== prev.id) {
@@ -93,6 +98,39 @@ function applyJobEvent(prev = null, event) {
         if (JSON.stringify(updated) === JSON.stringify(prev)) return prev;
       } catch (e) {}
       return updated;
+    }
+
+    case "state:change": {
+      // Handle state:change events with dual-path logic
+      const data = p.data || p;
+
+      // Direct apply: payload.id matches current jobId
+      if (data.id && data.id === jobId) {
+        if (!prev || prev.id !== data.id) {
+          return prev;
+        }
+        const merged = { ...prev, ...data };
+        try {
+          if (JSON.stringify(merged) === JSON.stringify(prev)) return prev;
+        } catch (e) {
+          // ignore stringify errors
+        }
+        return merged;
+      }
+
+      // Path-only: check if path contains our job's tasks-status.json
+      if (data.path && typeof data.path === "string") {
+        const jobPathPattern = new RegExp(
+          `/pipeline-data/(current|complete|pending|rejected)/${jobId}/tasks-status\\.json$`
+        );
+        if (jobPathPattern.test(data.path)) {
+          // Schedule debounced refetch via needsRefetchRef flag
+          needsRefetchRef.current = true;
+          // The actual debounced fetch will be handled by the debounced refetch logic
+        }
+      }
+
+      return prev;
     }
 
     default:
@@ -149,7 +187,7 @@ export function useJobDetailWithUpdates(jobId) {
         if (eventQueue.current.length > 0) {
           try {
             finalData = eventQueue.current.reduce(
-              (acc, ev) => applyJobEvent(acc, ev),
+              (acc, ev) => applyJobEvent(acc, ev, jobId, { needsRefetchRef }),
               jobData
             );
           } catch (e) {
@@ -272,7 +310,9 @@ export function useJobDetailWithUpdates(jobId) {
 
           // Apply event using pure reducer
           setData((prev) => {
-            const next = applyJobEvent(prev, eventObj);
+            const next = applyJobEvent(prev, eventObj, jobId, {
+              needsRefetchRef,
+            });
             try {
               if (JSON.stringify(prev) === JSON.stringify(next)) {
                 return prev;
@@ -350,6 +390,53 @@ export function useJobDetailWithUpdates(jobId) {
       return undefined;
     }
   }, [jobId]);
+
+  // Debounced refetch logic for path-only state:change events
+  useEffect(() => {
+    if (!jobId || !mountedRef.current || !hydratedRef.current) {
+      return;
+    }
+
+    const scheduleRefetch = () => {
+      if (refetchTimerRef.current) {
+        clearTimeout(refetchTimerRef.current);
+      }
+
+      refetchTimerRef.current = setTimeout(async () => {
+        if (!mountedRef.current || !hydratedRef.current) {
+          return;
+        }
+
+        try {
+          const jobData = await fetchJobDetail(jobId);
+          if (mountedRef.current) {
+            setData(jobData);
+            setError(null);
+          }
+        } catch (err) {
+          // eslint-disable-next-line no-console
+          console.error("Failed to refetch job detail:", err);
+          if (mountedRef.current) {
+            setError(err.message);
+          }
+        } finally {
+          needsRefetchRef.current = false;
+          refetchTimerRef.current = null;
+        }
+      }, REFRESH_DEBOUNCE_MS);
+    };
+
+    if (needsRefetchRef.current) {
+      scheduleRefetch();
+    }
+
+    return () => {
+      if (refetchTimerRef.current) {
+        clearTimeout(refetchTimerRef.current);
+        refetchTimerRef.current = null;
+      }
+    };
+  }, [jobId, needsRefetchRef.current, hydratedRef.current]);
 
   // Cleanup on unmount
   useEffect(() => {
