@@ -5,6 +5,7 @@ import React, {
   useState,
   createRef,
 } from "react";
+import { Callout } from "@radix-ui/themes";
 
 /**
  * DAGGrid component for visualizing pipeline tasks with connectors and slide-over details
@@ -384,6 +385,16 @@ function DAGGrid({
               </button>
             </div>
             <div className="p-6 space-y-8 overflow-y-auto h-full">
+              {/* Error Callout - shown when task has error status and body */}
+              {items[openIdx]?.status === "error" && items[openIdx]?.body && (
+                <section aria-label="Error">
+                  <Callout.Root color="red" role="alert" aria-live="assertive">
+                    <Callout.Text className="whitespace-pre-wrap break-words">
+                      {items[openIdx].body}
+                    </Callout.Text>
+                  </Callout.Root>
+                </section>
+              )}
               <section>
                 <h3 className="text-base font-semibold text-gray-900">Input</h3>
                 <ul className="mt-3 list-disc pl-6 text-sm text-gray-700 space-y-1">

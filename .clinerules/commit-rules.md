@@ -18,9 +18,3 @@ feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert
 - Wrap ~72 chars per line
 - Explain **why** the change was needed
 - Call out tradeoffs, alternatives, perf/security notes
-
-## Footer (as needed)
-
-- Issue refs: `Closes #123`, `Related to #456`
-- Breaking changes: Use a `BREAKING CHANGE:` footer to describe the impact and migration steps.
-  Example:
