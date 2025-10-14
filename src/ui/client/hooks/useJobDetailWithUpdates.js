@@ -397,7 +397,7 @@ export function useJobDetailWithUpdates(jobId) {
       return;
     }
 
-    const scheduleRefetch = () => {
+    if (needsRefetchRef.current) {
       if (refetchTimerRef.current) {
         clearTimeout(refetchTimerRef.current);
       }
@@ -424,10 +424,6 @@ export function useJobDetailWithUpdates(jobId) {
           refetchTimerRef.current = null;
         }
       }, REFRESH_DEBOUNCE_MS);
-    };
-
-    if (needsRefetchRef.current) {
-      scheduleRefetch();
     }
 
     return () => {
@@ -436,7 +432,7 @@ export function useJobDetailWithUpdates(jobId) {
         refetchTimerRef.current = null;
       }
     };
-  }, [jobId, needsRefetchRef.current, hydratedRef.current]);
+  }, [jobId, hydratedRef.current]); // Remove needsRefetchRef.current from deps to prevent infinite loop
 
   // Cleanup on unmount
   useEffect(() => {
