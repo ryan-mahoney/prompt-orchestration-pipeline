@@ -243,6 +243,7 @@ export function useJobDetailWithUpdates(jobId) {
               newEs.addEventListener("job:created", onJobCreated);
               newEs.addEventListener("job:removed", onJobRemoved);
               newEs.addEventListener("status:changed", onStatusChanged);
+              newEs.addEventListener("state:change", onStateChange);
               newEs.addEventListener("error", onError);
 
               esRef.current = newEs;
@@ -293,12 +294,14 @@ export function useJobDetailWithUpdates(jobId) {
       const onJobRemoved = (evt) => handleIncomingEvent("job:removed", evt);
       const onStatusChanged = (evt) =>
         handleIncomingEvent("status:changed", evt);
+      const onStateChange = (evt) => handleIncomingEvent("state:change", evt);
 
       es.addEventListener("open", onOpen);
       es.addEventListener("job:updated", onJobUpdated);
       es.addEventListener("job:created", onJobCreated);
       es.addEventListener("job:removed", onJobRemoved);
       es.addEventListener("status:changed", onStatusChanged);
+      es.addEventListener("state:change", onStateChange);
       es.addEventListener("error", onError);
 
       // Set connection status from readyState when possible
@@ -315,6 +318,7 @@ export function useJobDetailWithUpdates(jobId) {
           es.removeEventListener("job:created", onJobCreated);
           es.removeEventListener("job:removed", onJobRemoved);
           es.removeEventListener("status:changed", onStatusChanged);
+          es.removeEventListener("state:change", onStateChange);
           es.removeEventListener("error", onError);
           es.close();
         } catch (err) {
