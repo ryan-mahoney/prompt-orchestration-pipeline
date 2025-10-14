@@ -53,7 +53,7 @@ export async function getJobDetailHandler(req, res) {
       tasks: tasksArray,
     };
 
-    return res.status(200).json(payload);
+    return res.status(200).json({ ok: true, data: payload });
   } catch (err) {
     console.error("Error in getJobDetailHandler:", err);
     return res.status(500).json({
