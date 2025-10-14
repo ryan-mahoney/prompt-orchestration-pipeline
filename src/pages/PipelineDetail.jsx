@@ -25,6 +25,12 @@ export default function PipelineDetail() {
 
   const { data: job, loading, error } = useJobDetailWithUpdates(jobId);
 
+  // Debug logging
+  console.log(
+    `[PipelineDetail] jobId: ${jobId}, loading: ${loading}, error: ${error}, job:`,
+    job
+  );
+
   // Derive pipeline if not provided in job data
   const pipeline =
     job?.pipeline ||
@@ -44,6 +50,7 @@ export default function PipelineDetail() {
     })();
 
   if (loading) {
+    console.log(`[PipelineDetail] Showing loading state for jobId: ${jobId}`);
     return (
       <Layout title="Pipeline Details" showBackButton={true}>
         <Flex align="center" justify="center" className="min-h-64">

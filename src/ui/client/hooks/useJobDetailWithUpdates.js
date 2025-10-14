@@ -177,10 +177,17 @@ export function useJobDetailWithUpdates(jobId) {
 
     const doFetch = async () => {
       try {
+        console.log(
+          `[useJobDetailWithUpdates] Starting fetch for jobId: ${jobId}`
+        );
         setLoading(true);
         setError(null);
 
         const jobData = await fetchJobDetail(jobId);
+        console.log(
+          `[useJobDetailWithUpdates] Successfully fetched job data:`,
+          jobData
+        );
 
         // Apply any queued events to the fresh data
         let finalData = jobData;
@@ -201,9 +208,16 @@ export function useJobDetailWithUpdates(jobId) {
         }
 
         if (mountedRef.current) {
+          console.log(
+            `[useJobDetailWithUpdates] Setting data for jobId: ${jobId}`,
+            finalData
+          );
           setData(finalData);
           setError(null);
           hydratedRef.current = true;
+          console.log(
+            `[useJobDetailWithUpdates] Set hydratedRef to true, loading should be false`
+          );
         }
       } catch (err) {
         // eslint-disable-next-line no-console
@@ -214,6 +228,9 @@ export function useJobDetailWithUpdates(jobId) {
         }
       } finally {
         if (mountedRef.current) {
+          console.log(
+            `[useJobDetailWithUpdates] Finally block - setting loading to false for jobId: ${jobId}`
+          );
           setLoading(false);
         }
       }
