@@ -10,6 +10,21 @@ import {
 import { MemoryRouter } from "react-router-dom";
 import PromptPipelineDashboard from "../src/pages/PromptPipelineDashboard.jsx";
 
+// Mock the Button component to avoid import issues
+vi.mock("../src/components/ui/button.jsx", () => {
+  const MockButton = ({ children, onClick, className, ...props }) => {
+    const React = require("react");
+    return React.createElement(
+      "button",
+      { onClick, className, ...props },
+      children
+    );
+  };
+  return {
+    Button: MockButton,
+  };
+});
+
 /* Mock the hook used by the dashboard */
 vi.mock("../src/ui/client/hooks/useJobListWithUpdates.js", () => ({
   useJobListWithUpdates: vi.fn(),
@@ -115,7 +130,11 @@ describe("PromptPipelineDashboard (integration-ish)", () => {
       connectionStatus: "connected",
     });
 
-    render(<PromptPipelineDashboard />);
+    render(
+      <MemoryRouter>
+        <PromptPipelineDashboard />
+      </MemoryRouter>
+    );
 
     // The JobTable should render the job name synchronously (hook is mocked)
     expect(screen.getByText("Test Job 1")).toBeTruthy();
@@ -130,7 +149,11 @@ describe("PromptPipelineDashboard (integration-ish)", () => {
       connectionStatus: "disconnected",
     });
 
-    render(<PromptPipelineDashboard />);
+    render(
+      <MemoryRouter>
+        <PromptPipelineDashboard />
+      </MemoryRouter>
+    );
 
     // Banner text should show a neutral error and NOT render demo jobs
     expect(
@@ -151,7 +174,11 @@ describe("PromptPipelineDashboard (integration-ish)", () => {
       connectionStatus: "disconnected",
     });
 
-    render(<PromptPipelineDashboard />);
+    render(
+      <MemoryRouter>
+        <PromptPipelineDashboard />
+      </MemoryRouter>
+    );
 
     // Our UploadSeed stub renders a button; it should NOT be disabled when error == null
     // There may be multiple mount instances during StrictMode double-render;
@@ -169,7 +196,11 @@ describe("PromptPipelineDashboard (integration-ish)", () => {
       connectionStatus: "disconnected",
     });
 
-    render(<PromptPipelineDashboard />);
+    render(
+      <MemoryRouter>
+        <PromptPipelineDashboard />
+      </MemoryRouter>
+    );
 
     // Upload should remain enabled even when API reports an error.
     const buttons = screen.getAllByTestId("upload-seed-button");
@@ -378,7 +409,11 @@ describe("PromptPipelineDashboard (integration-ish)", () => {
         connectionStatus: "connected",
       });
 
-      render(<PromptPipelineDashboard />);
+      render(
+        <MemoryRouter>
+          <PromptPipelineDashboard />
+        </MemoryRouter>
+      );
 
       // Assert tab buttons exist with correct counts
       expect(screen.getByRole("tab", { name: /Current \(2\)/i })).toBeTruthy();
@@ -430,7 +465,11 @@ describe("PromptPipelineDashboard (integration-ish)", () => {
         connectionStatus: "connected",
       });
 
-      render(<PromptPipelineDashboard />);
+      render(
+        <MemoryRouter>
+          <PromptPipelineDashboard />
+        </MemoryRouter>
+      );
 
       // All tabs should be present and clickable
       const currentTab = screen.getByRole("tab", { name: /Current \(1\)/i });

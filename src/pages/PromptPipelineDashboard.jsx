@@ -23,6 +23,7 @@ import { CONFIG as UI_CONFIG } from "../ui/config-bridge.browser.js";
 // Referenced components — leave these alone
 import JobTable from "../components/JobTable";
 import UploadSeed from "../components/UploadSeed";
+import Layout from "../components/Layout.jsx";
 
 export default function PromptPipelineDashboard({ isConnected }) {
   const navigate = useNavigate();
@@ -165,111 +166,85 @@ export default function PromptPipelineDashboard({ isConnected }) {
   const connectionState =
     isConnected !== undefined ? isConnected : connectionStatus === "connected";
 
+  // Header actions for the Layout
+  const headerActions = runningJobs.length > 0 && (
+    <Flex align="center" gap="2" className="text-gray-11">
+      <Text size="1" weight="medium">
+        Overall Progress
+      </Text>
+      <Progress value={aggregateProgress} className="w-20" />
+      <Text size="1" className="text-gray-9">
+        {aggregateProgress}%
+      </Text>
+    </Flex>
+  );
+
   return (
-    <Tooltip.Provider delayDuration={200}>
-      <Box className="min-h-screen bg-gray-1">
-        {/* Header */}
-        <Box className="sticky top-0 z-20 border-b border-gray-300 bg-gray-1/80 backdrop-blur supports-[backdrop-filter]:bg-gray-1/60">
-          <Flex
-            align="center"
-            justify="between"
-            className="mx-auto max-w-6xl px-6 py-4"
-            gap="4"
-          >
-            <Flex align="center" gap="3">
-              <Heading size="5" weight="medium" className="text-gray-12">
-                Prompt Pipeline
-              </Heading>
-            </Flex>
+    <Layout title="Prompt Pipeline" actions={headerActions}>
+      {/* Upload Seed File Section */}
+      <Card className="mb-6">
+        <Flex direction="column" gap="3">
+          <Heading size="4" weight="medium" className="text-gray-12">
+            Upload Seed File
+          </Heading>
 
-            <Flex align="center" gap="3">
-              {/* Overall Progress Indicator */}
-              {runningJobs.length > 0 && (
-                <Flex align="center" gap="2" className="text-gray-11">
-                  <Text size="1" weight="medium">
-                    Overall Progress
-                  </Text>
-                  <Progress value={aggregateProgress} className="w-20" />
-                  <Text size="1" className="text-gray-9">
-                    {aggregateProgress}%
-                  </Text>
-                </Flex>
-              )}
-            </Flex>
-          </Flex>
-        </Box>
-
-        {/* Main Content */}
-        <Box className="mx-auto max-w-6xl px-6 py-6">
-          {/* Upload Seed File Section */}
-          <Card className="mb-6">
-            <Flex direction="column" gap="3">
-              <Heading size="4" weight="medium" className="text-gray-12">
-                Upload Seed File
-              </Heading>
-
-              {/* Success Message */}
-              {seedUploadSuccess && (
-                <Box className="rounded-md bg-green-50 p-3 border border-green-200">
-                  <Text size="2" className="text-green-800">
-                    Job <strong>{seedUploadSuccess}</strong> created
-                    successfully
-                  </Text>
-                </Box>
-              )}
-
-              <UploadSeed onUploadSuccess={handleSeedUploadSuccess} />
-            </Flex>
-          </Card>
-
-          {error && (
-            <Box className="mb-4 rounded-md bg-yellow-50 p-3 border border-yellow-200">
-              <Text size="2" className="text-yellow-800">
-                Unable to load jobs from the server
+          {/* Success Message */}
+          {seedUploadSuccess && (
+            <Box className="rounded-md bg-green-50 p-3 border border-green-200">
+              <Text size="2" className="text-green-800">
+                Job <strong>{seedUploadSuccess}</strong> created successfully
               </Text>
             </Box>
           )}
-          <Tabs.Root value={activeTab} onValueChange={setActiveTab}>
-            <Tabs.List aria-label="Job filters">
-              <Tabs.Trigger value="current">
-                Current ({currentCount})
-              </Tabs.Trigger>
-              <Tabs.Trigger value="errors">Errors ({errorCount})</Tabs.Trigger>
-              <Tabs.Trigger value="complete">
-                Completed ({completedCount})
-              </Tabs.Trigger>
-            </Tabs.List>
 
-            <Tabs.Content value="current">
-              <JobTable
-                jobs={filteredJobs}
-                pipeline={null}
-                onOpenJob={openJob}
-                totalProgressPct={totalProgressPct}
-                overallElapsed={overallElapsed}
-              />
-            </Tabs.Content>
-            <Tabs.Content value="errors">
-              <JobTable
-                jobs={filteredJobs}
-                pipeline={null}
-                onOpenJob={openJob}
-                totalProgressPct={totalProgressPct}
-                overallElapsed={overallElapsed}
-              />
-            </Tabs.Content>
-            <Tabs.Content value="complete">
-              <JobTable
-                jobs={filteredJobs}
-                pipeline={null}
-                onOpenJob={openJob}
-                totalProgressPct={totalProgressPct}
-                overallElapsed={overallElapsed}
-              />
-            </Tabs.Content>
-          </Tabs.Root>
+          <UploadSeed onUploadSuccess={handleSeedUploadSuccess} />
+        </Flex>
+      </Card>
+
+      {error && (
+        <Box className="mb-4 rounded-md bg-yellow-50 p-3 border border-yellow-200">
+          <Text size="2" className="text-yellow-800">
+            Unable to load jobs from the server
+          </Text>
         </Box>
-      </Box>
-    </Tooltip.Provider>
+      )}
+      <Tabs.Root value={activeTab} onValueChange={setActiveTab}>
+        <Tabs.List aria-label="Job filters">
+          <Tabs.Trigger value="current">Current ({currentCount})</Tabs.Trigger>
+          <Tabs.Trigger value="errors">Errors ({errorCount})</Tabs.Trigger>
+          <Tabs.Trigger value="complete">
+            Completed ({completedCount})
+          </Tabs.Trigger>
+        </Tabs.List>
+
+        <Tabs.Content value="current">
+          <JobTable
+            jobs={filteredJobs}
+            pipeline={null}
+            onOpenJob={openJob}
+            totalProgressPct={totalProgressPct}
+            overallElapsed={overallElapsed}
+          />
+        </Tabs.Content>
+        <Tabs.Content value="errors">
+          <JobTable
+            jobs={filteredJobs}
+            pipeline={null}
+            onOpenJob={openJob}
+            totalProgressPct={totalProgressPct}
+            overallElapsed={overallElapsed}
+          />
+        </Tabs.Content>
+        <Tabs.Content value="complete">
+          <JobTable
+            jobs={filteredJobs}
+            pipeline={null}
+            onOpenJob={openJob}
+            totalProgressPct={totalProgressPct}
+            overallElapsed={overallElapsed}
+          />
+        </Tabs.Content>
+      </Tabs.Root>
+    </Layout>
   );
 }
