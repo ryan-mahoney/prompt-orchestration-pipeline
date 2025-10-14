@@ -4,6 +4,7 @@ import * as Tooltip from "@radix-ui/react-tooltip";
 import { Box, Flex, Text, Heading, Link as RadixLink } from "@radix-ui/themes";
 import { Button } from "./ui/button.jsx";
 import { ArrowLeft, Home } from "lucide-react";
+import "./ui/focus-styles.css";
 
 /**
  * Shared Layout component that provides consistent header, navigation,
