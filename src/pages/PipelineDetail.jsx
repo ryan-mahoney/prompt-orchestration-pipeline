@@ -1,7 +1,9 @@
 import React from "react";
 import { useParams } from "react-router-dom";
+import { Box, Flex, Text, Heading } from "@radix-ui/themes";
 import JobDetail from "../components/JobDetail.jsx";
 import { useJobDetailWithUpdates } from "../ui/client/hooks/useJobDetailWithUpdates.js";
+import Layout from "../components/Layout.jsx";
 
 /**
  * Validate job ID format based on id-generator output
@@ -26,27 +28,33 @@ export default function PipelineDetail() {
   // Handle missing job ID (undefined/null)
   if (jobId === undefined || jobId === null) {
     return (
-      <div className="p-8">
-        <div className="text-center">
-          <div className="text-lg font-medium text-red-600">
-            No job ID provided
-          </div>
-        </div>
-      </div>
+      <Layout title="Pipeline Details" showBackButton={true}>
+        <Flex align="center" justify="center" className="min-h-64">
+          <Box className="text-center">
+            <Text size="5" weight="medium" color="red" className="mb-2">
+              No job ID provided
+            </Text>
+          </Box>
+        </Flex>
+      </Layout>
     );
   }
 
   // Validate job ID format before making API calls
   if (!isValidJobId(jobId)) {
     return (
-      <div className="p-8">
-        <div className="text-center">
-          <div className="text-lg font-medium text-red-600">Invalid job ID</div>
-          <div className="text-sm text-gray-600 mt-2">
-            Job IDs must be alphanumeric strings (6-30 characters)
-          </div>
-        </div>
-      </div>
+      <Layout title="Pipeline Details" showBackButton={true}>
+        <Flex align="center" justify="center" className="min-h-64">
+          <Box className="text-center">
+            <Text size="5" weight="medium" color="red" className="mb-2">
+              Invalid job ID
+            </Text>
+            <Text size="2" color="gray" className="mt-2">
+              Job IDs must be alphanumeric strings (6-30 characters)
+            </Text>
+          </Box>
+        </Flex>
+      </Layout>
     );
   }
 
@@ -72,40 +80,52 @@ export default function PipelineDetail() {
 
   if (loading) {
     return (
-      <div className="p-8">
-        <div className="text-center">
-          <div className="text-lg font-medium">Loading job details...</div>
-        </div>
-      </div>
+      <Layout title="Pipeline Details" showBackButton={true}>
+        <Flex align="center" justify="center" className="min-h-64">
+          <Box className="text-center">
+            <Text size="5" weight="medium" className="mb-2">
+              Loading job details...
+            </Text>
+          </Box>
+        </Flex>
+      </Layout>
     );
   }
 
   if (error) {
     return (
-      <div className="p-8">
-        <div className="text-center">
-          <div className="text-lg font-medium text-red-600">
-            Failed to load job details
-          </div>
-          <div className="text-sm text-gray-600 mt-2">{error}</div>
-        </div>
-      </div>
+      <Layout title="Pipeline Details" showBackButton={true}>
+        <Flex align="center" justify="center" className="min-h-64">
+          <Box className="text-center">
+            <Text size="5" weight="medium" color="red" className="mb-2">
+              Failed to load job details
+            </Text>
+            <Text size="2" color="gray" className="mt-2">
+              {error}
+            </Text>
+          </Box>
+        </Flex>
+      </Layout>
     );
   }
 
   if (!job) {
     return (
-      <div className="p-8">
-        <div className="text-center">
-          <div className="text-lg font-medium">Job not found</div>
-        </div>
-      </div>
+      <Layout title="Pipeline Details" showBackButton={true}>
+        <Flex align="center" justify="center" className="min-h-64">
+          <Box className="text-center">
+            <Text size="5" weight="medium" className="mb-2">
+              Job not found
+            </Text>
+          </Box>
+        </Flex>
+      </Layout>
     );
   }
 
   return (
-    <div className="p-8">
+    <Layout title={job.name || "Pipeline Details"} showBackButton={true}>
       <JobDetail job={job} pipeline={pipeline} />
-    </div>
+    </Layout>
   );
 }

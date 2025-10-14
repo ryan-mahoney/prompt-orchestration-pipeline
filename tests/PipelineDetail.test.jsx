@@ -13,6 +13,75 @@ import { render, screen, cleanup } from "@testing-library/react";
 
 // --- SAFE MOCKS (no top-level variable references inside factories) ---
 
+// Mock the Button component to avoid import issues
+vi.mock("../src/components/ui/button.jsx", () => {
+  const MockButton = ({ children, onClick, className, ...props }) => {
+    const React = require("react");
+    return React.createElement(
+      "button",
+      { onClick, className, ...props },
+      children
+    );
+  };
+  return {
+    Button: MockButton,
+  };
+});
+
+// Mock Radix UI components used in PipelineDetail and Layout
+vi.mock("@radix-ui/themes", () => ({
+  Box: ({ children, className, ...props }) => {
+    const React = require("react");
+    return React.createElement("div", { className, ...props }, children);
+  },
+  Flex: ({ children, className, ...props }) => {
+    const React = require("react");
+    return React.createElement("div", { className, ...props }, children);
+  },
+  Text: ({ children, className, ...props }) => {
+    const React = require("react");
+    return React.createElement("span", { className, ...props }, children);
+  },
+  Heading: ({ children, className, ...props }) => {
+    const React = require("react");
+    return React.createElement("h1", { className, ...props }, children);
+  },
+  Link: ({ children, className, ...props }) => {
+    const React = require("react");
+    return React.createElement("a", { className, ...props }, children);
+  },
+  // Add other Radix components that Layout might use
+  Container: ({ children, className, ...props }) => {
+    const React = require("react");
+    return React.createElement("div", { className, ...props }, children);
+  },
+  Section: ({ children, className, ...props }) => {
+    const React = require("react");
+    return React.createElement("section", { className, ...props }, children);
+  },
+}));
+
+// Mock @radix-ui/react-tooltip components used in Layout
+vi.mock("@radix-ui/react-tooltip", async (importOriginal) => {
+  const actual = await importOriginal();
+  const React = require("react");
+
+  return {
+    ...actual,
+    // Override specific components with simple mocks
+    Provider: ({ children }) =>
+      React.createElement(React.Fragment, null, children),
+    Root: ({ children }) => React.createElement("div", null, children),
+    Trigger: ({ children, ...props }) =>
+      React.createElement("div", { ...props }, children),
+    Content: ({ children }) => React.createElement("div", null, children),
+    // Add defaultProps export that Radix UI might expect
+    defaultProps: {},
+    // Add React's $$typeof symbol for proper component identification
+    $$typeof: Symbol.for("react.element"),
+  };
+});
+
 // Mock react-router-dom with internal mutable state and a public setter.
 vi.mock("react-router-dom", async (importOriginal) => {
   const actual = await importOriginal();
