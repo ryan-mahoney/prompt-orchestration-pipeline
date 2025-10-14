@@ -25,32 +25,7 @@ export default function PipelineDetail() {
 
   const { data: job, loading, error } = useJobDetailWithUpdates(jobId);
 
-  // Debug logging
-  console.log(
-    `[PipelineDetail] jobId: ${jobId}, loading: ${loading}, error: ${error}, job:`,
-    job
-  );
-
-  // Derive pipeline if not provided in job data
-  const pipeline =
-    job?.pipeline ||
-    (() => {
-      if (!job?.tasks) return { tasks: [] };
-
-      let pipelineTasks = [];
-      if (Array.isArray(job.tasks)) {
-        // tasks is an array, extract names
-        pipelineTasks = job.tasks.map((task) => task.name);
-      } else if (job.tasks && typeof job.tasks === "object") {
-        // tasks is an object, extract keys
-        pipelineTasks = Object.keys(job.tasks);
-      }
-
-      return { tasks: pipelineTasks };
-    })();
-
   if (loading) {
-    console.log(`[PipelineDetail] Showing loading state for jobId: ${jobId}`);
     return (
       <Layout title="Pipeline Details" showBackButton={true}>
         <Flex align="center" justify="center" className="min-h-64">
@@ -94,6 +69,24 @@ export default function PipelineDetail() {
       </Layout>
     );
   }
+
+  // Derive pipeline if not provided in job data
+  const pipeline =
+    job?.pipeline ||
+    (() => {
+      if (!job?.tasks) return { tasks: [] };
+
+      let pipelineTasks = [];
+      if (Array.isArray(job.tasks)) {
+        // tasks is an array, extract names
+        pipelineTasks = job.tasks.map((task) => task.name);
+      } else if (job.tasks && typeof job.tasks === "object") {
+        // tasks is an object, extract keys
+        pipelineTasks = Object.keys(job.tasks);
+      }
+
+      return { tasks: pipelineTasks };
+    })();
 
   return (
     <Layout title={job.name || "Pipeline Details"} showBackButton={true}>
