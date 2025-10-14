@@ -1,5 +1,33 @@
 import { useState, useEffect, useRef } from "react";
 
+// Export debounce constant for tests
+export const REFRESH_DEBOUNCE_MS = 200;
+
+/**
+ * fetchJobDetail - Extracted fetch logic for job details
+ *
+ * @param {string} jobId - The job ID to fetch
+ * @param {Object} options - Options object
+ * @param {AbortSignal} options.signal - Optional abort signal
+ * @returns {Promise<Object>} Job data
+ */
+async function fetchJobDetail(jobId, { signal } = {}) {
+  const response = await fetch(`/api/jobs/${jobId}`, { signal });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.message || `HTTP ${response.status}`);
+  }
+
+  const result = await response.json();
+
+  if (!result.ok) {
+    throw new Error(result.message || "Failed to load job");
+  }
+
+  return result.data;
+}
+
 /**
  * applyJobEvent - Reducer function to apply SSE events to a single job
  *
@@ -92,6 +120,8 @@ export function useJobDetailWithUpdates(jobId) {
   const hydratedRef = useRef(false);
   const eventQueue = useRef([]);
   const mountedRef = useRef(true);
+  const refetchTimerRef = useRef(null);
+  const needsRefetchRef = useRef(false);
 
   // Reset state when jobId changes
   useEffect(() => {
@@ -107,25 +137,12 @@ export function useJobDetailWithUpdates(jobId) {
   useEffect(() => {
     if (!jobId || !mountedRef.current) return;
 
-    const fetchJobDetail = async () => {
+    const doFetch = async () => {
       try {
         setLoading(true);
         setError(null);
 
-        const response = await fetch(`/api/jobs/${jobId}`);
-
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}));
-          throw new Error(errorData.message || `HTTP ${response.status}`);
-        }
-
-        const result = await response.json();
-
-        if (!result.ok) {
-          throw new Error(result.message || "Failed to load job");
-        }
-
-        const jobData = result.data;
+        const jobData = await fetchJobDetail(jobId);
 
         // Apply any queued events to the fresh data
         let finalData = jobData;
@@ -164,7 +181,7 @@ export function useJobDetailWithUpdates(jobId) {
       }
     };
 
-    fetchJobDetail();
+    doFetch();
   }, [jobId]);
 
   // Set up SSE connection
@@ -337,6 +354,10 @@ export function useJobDetailWithUpdates(jobId) {
       if (reconnectTimer.current) {
         clearTimeout(reconnectTimer.current);
         reconnectTimer.current = null;
+      }
+      if (refetchTimerRef.current) {
+        clearTimeout(refetchTimerRef.current);
+        refetchTimerRef.current = null;
       }
       if (esRef.current) {
         try {

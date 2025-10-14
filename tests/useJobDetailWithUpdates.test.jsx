@@ -118,7 +118,9 @@ describe("useJobDetailWithUpdates", () => {
     });
 
     // Should have fetched the job
-    expect(mockFetch).toHaveBeenCalledWith("/api/jobs/test-job-1");
+    expect(mockFetch).toHaveBeenCalledWith("/api/jobs/test-job-1", {
+      signal: undefined,
+    });
     expect(screen.getByTestId("job-id").textContent).toBe("test-job-1");
     expect(screen.getByTestId("job-status").textContent).toBe("pending");
   });
