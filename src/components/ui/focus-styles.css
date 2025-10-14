@@ -1,0 +1,60 @@
+/* Focus styles for accessibility */
+.focus-visible:focus {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+
+/* High contrast focus for better visibility */
+.focus-visible:focus-visible {
+  outline: 2px solid #1d4ed8;
+  outline-offset: 2px;
+}
+
+/* Skip link styles */
+.skip-link {
+  position: absolute;
+  top: -40px;
+  left: 6px;
+  background: #2563eb;
+  color: white;
+  padding: 8px;
+  text-decoration: none;
+  border-radius: 4px;
+  z-index: 1000;
+  transition: top 0.3s;
+}
+
+.skip-link:focus {
+  top: 6px;
+}
+
+/* Ensure good contrast for interactive elements */
+.interactive-element {
+  min-height: 44px;
+  min-width: 44px;
+}
+
+/* Header navigation focus styles */
+.nav-link:focus {
+  background-color: #f3f4f6;
+  border-radius: 4px;
+  outline: 2px solid #2563eb;
+  outline-offset: -2px;
+}
+
+/* Button focus styles */
+button:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+
+/* Link hover and focus states */
+a:hover {
+  text-decoration: underline;
+}
+
+a:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+  border-radius: 2px;
+}
