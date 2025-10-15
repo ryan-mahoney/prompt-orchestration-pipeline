@@ -454,19 +454,19 @@ describe("JobDetail - Detail-Shaped Job with Pipeline from API", () => {
 
     // Find each task and verify duration policy application
     const completedTask = dagItems.find((item) => item.id === "completed-task");
-    expect(completedTask.subtitle).toContain("model: gpt-4");
+    expect(completedTask.subtitle).toContain("gpt-4");
     expect(completedTask.subtitle).toContain("4m 10s"); // executionTime preferred
 
     const runningTask = dagItems.find((item) => item.id === "running-task");
-    expect(runningTask.subtitle).toContain("temp: 0.7");
+    expect(runningTask.subtitle).toContain("temp 0.7");
     expect(runningTask.subtitle).toContain("5m 0s"); // running for 5 minutes
 
     const pendingTask = dagItems.find((item) => item.id === "pending-task");
-    expect(pendingTask.subtitle).toContain("model: gpt-3.5");
+    expect(pendingTask.subtitle).toContain("gpt-3.5");
     expect(pendingTask.subtitle).not.toContain("0s"); // pending tasks should not show duration
 
     const rejectedTask = dagItems.find((item) => item.id === "rejected-task");
-    expect(rejectedTask.subtitle).toContain("temp: 0.5");
+    expect(rejectedTask.subtitle).toContain("temp 0.5");
     expect(rejectedTask.subtitle).not.toContain("0s"); // rejected tasks should not show duration
 
     vi.useRealTimers();
@@ -510,7 +510,7 @@ describe("JobDetail - Detail-Shaped Job with Pipeline from API", () => {
     const dagItems = JSON.parse(dagItemsElement.textContent);
 
     const noStartTask = dagItems.find((item) => item.id === "no-start-task");
-    expect(noStartTask.subtitle).toContain("model: gpt-4");
+    expect(noStartTask.subtitle).toContain("gpt-4");
     expect(noStartTask.subtitle).not.toContain("0s"); // Should not show duration without startedAt
   });
 
@@ -555,7 +555,7 @@ describe("JobDetail - Detail-Shaped Job with Pipeline from API", () => {
     let dagItems = JSON.parse(dagItemsElement.textContent);
 
     const runningTask = dagItems.find((item) => item.id === "running-task");
-    expect(runningTask.subtitle).toContain("model: gpt-4");
+    expect(runningTask.subtitle).toContain("gpt-4");
     expect(runningTask.subtitle).toContain("5m 0s"); // Initial duration
 
     // Advance time by 2 minutes
@@ -582,7 +582,7 @@ describe("JobDetail - Detail-Shaped Job with Pipeline from API", () => {
     const updatedRunningTask = dagItems.find(
       (item) => item.id === "running-task"
     );
-    expect(updatedRunningTask.subtitle).toContain("model: gpt-4");
+    expect(updatedRunningTask.subtitle).toContain("gpt-4");
     expect(updatedRunningTask.subtitle).toContain("7m 0s"); // Updated duration
 
     vi.useRealTimers();

@@ -67,17 +67,9 @@ export default function JobCard({
                 ? "—"
                 : (job.current ?? "—")}
           </div>
-          {currentTask && (
+          {currentTask && currentElapsedMs > 0 && (
             <div className="text-slate-500">
-              {[
-                currentTask.config?.model,
-                currentTask.config?.temperature != null
-                  ? `temp ${currentTask.config.temperature}`
-                  : null,
-                currentElapsedMs > 0 ? fmtDuration(currentElapsedMs) : null,
-              ]
-                .filter(Boolean)
-                .join(" · ")}
+              {fmtDuration(currentElapsedMs)}
             </div>
           )}
         </div>

@@ -1,10 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import React from "react";
 import { render, screen, act, cleanup } from "@testing-library/react";
-import JobCard from "./src/components/JobCard.jsx";
+import JobCard from "../src/components/JobCard.jsx";
 
 // Mock the utilities to focus on duration logic
-vi.mock("./src/utils/jobs.js", () => ({
+vi.mock("../src/utils/jobs.js", () => ({
   countCompleted: vi.fn((job) => {
     const tasks = Array.isArray(job.tasks)
       ? job.tasks
@@ -15,7 +15,7 @@ vi.mock("./src/utils/jobs.js", () => ({
   }),
 }));
 
-vi.mock("./src/utils/ui.js", () => ({
+vi.mock("../src/utils/ui.js", () => ({
   statusBadge: vi.fn((status) => (
     <span data-testid={`status-${status}`}>{status}</span>
   )),
@@ -23,7 +23,7 @@ vi.mock("./src/utils/ui.js", () => ({
 }));
 
 // Mock the ticker to return a fixed time
-vi.mock("./src/ui/client/hooks/useTicker.js", () => ({
+vi.mock("../src/ui/client/hooks/useTicker.js", () => ({
   useTicker: vi.fn(() => new Date("2025-10-06T00:30:00Z").getTime()),
 }));
 
