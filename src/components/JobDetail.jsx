@@ -2,7 +2,8 @@ import React, { useEffect, useState } from "react";
 import { Button } from "./ui/button";
 import { ChevronLeft } from "lucide-react";
 import { statusBadge } from "../utils/ui";
-import { fmtDuration, elapsedBetween } from "../utils/time";
+import { fmtDuration } from "../utils/duration.js";
+import { normalizeState, taskDisplayDurationMs } from "../utils/duration.js";
 import DAGGrid from "./DAGGrid.jsx";
 import { computeDagItems, computeActiveIndex } from "../utils/dag.js";
 
@@ -84,9 +85,8 @@ export default function JobDetail({ job, pipeline, onClose, onResume }) {
     if (task?.refinementAttempts != null)
       subtitleParts.push(`refinements: ${task.refinementAttempts}`);
     if (task?.startedAt) {
-      const execMs =
-        task?.executionTime ?? elapsedBetween(task.startedAt, task.endedAt);
-      if (execMs) subtitleParts.push(`time: ${fmtDuration(execMs)}`);
+      const durationMs = taskDisplayDurationMs(task);
+      if (durationMs > 0) subtitleParts.push(`${fmtDuration(durationMs)}`);
     }
 
     // Include error message in body when task status is error

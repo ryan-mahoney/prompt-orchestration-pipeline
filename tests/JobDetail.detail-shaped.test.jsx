@@ -381,4 +381,136 @@ describe("JobDetail - Detail-Shaped Job with Pipeline from API", () => {
       detailShapedJob.pipeline
     );
   });
+
+  it("applies duration policy to task subtitles", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2025-10-06T00:30:00Z"));
+
+    const detailShapedJob = {
+      id: "test-job-durations",
+      pipelineId: "test-job-durations",
+      name: "Duration Policy Test Job",
+      status: "running",
+      tasks: [
+        {
+          name: "completed-task",
+          state: "done",
+          startedAt: "2025-10-06T00:05:00Z",
+          endedAt: "2025-10-06T00:10:00Z",
+          executionTime: 250000, // 4m 10s - should be preferred
+          config: { model: "gpt-4" },
+        },
+        {
+          name: "running-task",
+          state: "running",
+          startedAt: "2025-10-06T00:25:00Z",
+          config: { temperature: 0.7 },
+        },
+        {
+          name: "pending-task",
+          state: "pending",
+          startedAt: "2025-10-06T00:20:00Z",
+          config: { model: "gpt-3.5" },
+        },
+        {
+          name: "rejected-task",
+          state: "rejected",
+          startedAt: "2025-10-06T00:15:00Z",
+          endedAt: "2025-10-06T00:16:00Z",
+          config: { temperature: 0.5 },
+        },
+      ],
+      pipeline: {
+        tasks: [
+          "completed-task",
+          "running-task",
+          "pending-task",
+          "rejected-task",
+        ],
+      },
+    };
+
+    // Mock computeDagItems to return basic items
+    computeDagItemsSpy.mockReturnValue([
+      { id: "completed-task", status: "succeeded", source: "pipeline" },
+      { id: "running-task", status: "active", source: "pipeline" },
+      { id: "pending-task", status: "pending", source: "pipeline" },
+      { id: "rejected-task", status: "failed", source: "pipeline" },
+    ]);
+
+    render(
+      <JobDetail
+        job={detailShapedJob}
+        pipeline={detailShapedJob.pipeline}
+        onClose={mockOnClose}
+        onResume={mockOnResume}
+      />
+    );
+
+    // Get the DAG items from the mocked DAGGrid component
+    const dagItemsElements = screen.getAllByTestId("dag-items");
+    const dagItemsElement = dagItemsElements[dagItemsElements.length - 1];
+    const dagItems = JSON.parse(dagItemsElement.textContent);
+
+    // Find each task and verify duration policy application
+    const completedTask = dagItems.find((item) => item.id === "completed-task");
+    expect(completedTask.subtitle).toContain("model: gpt-4");
+    expect(completedTask.subtitle).toContain("4m 10s"); // executionTime preferred
+
+    const runningTask = dagItems.find((item) => item.id === "running-task");
+    expect(runningTask.subtitle).toContain("temp: 0.7");
+    expect(runningTask.subtitle).toContain("5m 0s"); // running for 5 minutes
+
+    const pendingTask = dagItems.find((item) => item.id === "pending-task");
+    expect(pendingTask.subtitle).toContain("model: gpt-3.5");
+    expect(pendingTask.subtitle).not.toContain("0s"); // pending tasks should not show duration
+
+    const rejectedTask = dagItems.find((item) => item.id === "rejected-task");
+    expect(rejectedTask.subtitle).toContain("temp: 0.5");
+    expect(rejectedTask.subtitle).not.toContain("0s"); // rejected tasks should not show duration
+
+    vi.useRealTimers();
+  });
+
+  it("handles tasks without startedAt gracefully", () => {
+    const detailShapedJob = {
+      id: "test-job-no-start-time",
+      pipelineId: "test-job-no-start-time",
+      name: "No Start Time Test Job",
+      status: "running",
+      tasks: [
+        {
+          name: "no-start-task",
+          state: "running",
+          // Missing startedAt
+          config: { model: "gpt-4" },
+        },
+      ],
+      pipeline: {
+        tasks: ["no-start-task"],
+      },
+    };
+
+    computeDagItemsSpy.mockReturnValue([
+      { id: "no-start-task", status: "active", source: "pipeline" },
+    ]);
+
+    render(
+      <JobDetail
+        job={detailShapedJob}
+        pipeline={detailShapedJob.pipeline}
+        onClose={mockOnClose}
+        onResume={mockOnResume}
+      />
+    );
+
+    // Get the DAG items from the mocked DAGGrid component
+    const dagItemsElements = screen.getAllByTestId("dag-items");
+    const dagItemsElement = dagItemsElements[dagItemsElements.length - 1];
+    const dagItems = JSON.parse(dagItemsElement.textContent);
+
+    const noStartTask = dagItems.find((item) => item.id === "no-start-task");
+    expect(noStartTask.subtitle).toContain("model: gpt-4");
+    expect(noStartTask.subtitle).not.toContain("0s"); // Should not show duration without startedAt
+  });
 });
