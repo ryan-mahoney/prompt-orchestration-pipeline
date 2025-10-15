@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 
 // Export debounce constant for tests
 export const REFRESH_DEBOUNCE_MS = 200;
@@ -30,23 +30,17 @@ async function fetchJobDetail(jobId, { signal } = {}) {
 
 /**
  * applyJobEvent - Reducer function to apply SSE events to a single job
+ * (pure, no side effects)
  *
  * @param {Object} prev - Previous job state
  * @param {Object} event - SSE event with type and payload
  * @param {string} jobId - Current job ID for filtering
- * @param {Object} refs - Refs object for side effects
  * @returns {Object} Updated job state
  */
-function applyJobEvent(prev = null, event, jobId, refs = {}) {
-  // prev: Single job object or null
-  // event: { type: string, payload: object }
-  // jobId: Current job ID for filtering
-  // refs: { needsRefetchRef } for side effects
-
+function applyJobEvent(prev = null, event, jobId) {
   if (!event || !event.type) return prev;
 
   const p = event.payload || {};
-  const { needsRefetchRef } = refs;
 
   // If this event is for a different job, return unchanged
   if (p.id && prev && p.id !== prev.id) {
@@ -72,9 +66,7 @@ function applyJobEvent(prev = null, event, jobId, refs = {}) {
       const merged = { ...prev, ...p };
       try {
         if (JSON.stringify(merged) === JSON.stringify(prev)) return prev;
-      } catch (e) {
-        // ignore stringify errors
-      }
+      } catch (e) {}
       return merged;
     }
 
@@ -89,10 +81,7 @@ function applyJobEvent(prev = null, event, jobId, refs = {}) {
 
     case "status:changed": {
       if (!p.id) return prev;
-      // Only update status if this matches our job
-      if (!prev || prev.id !== p.id) {
-        return prev;
-      }
+      if (!prev || prev.id !== p.id) return prev;
       const updated = { ...prev, status: p.status };
       try {
         if (JSON.stringify(updated) === JSON.stringify(prev)) return prev;
@@ -101,40 +90,31 @@ function applyJobEvent(prev = null, event, jobId, refs = {}) {
     }
 
     case "state:change": {
-      // Handle state:change events with dual-path logic
+      // Direct-apply only (id-present). Path-only handling is done by the event handler
       const data = p.data || p;
-
-      // Direct apply: payload.id matches current jobId
-      if (data.id && data.id === jobId) {
-        if (!prev || prev.id !== data.id) {
-          return prev;
-        }
+      if (data.id && data.id === jobId && prev && prev.id === data.id) {
         const merged = { ...prev, ...data };
         try {
           if (JSON.stringify(merged) === JSON.stringify(prev)) return prev;
-        } catch (e) {
-          // ignore stringify errors
-        }
+        } catch (e) {}
         return merged;
       }
-
-      // Path-only: check if path contains our job's tasks-status.json
-      if (data.path && typeof data.path === "string") {
-        const jobPathPattern = new RegExp(
-          `/pipeline-data/(current|complete|pending|rejected)/${jobId}/tasks-status\\.json$`
-        );
-        if (jobPathPattern.test(data.path)) {
-          // Schedule debounced refetch via needsRefetchRef flag
-          needsRefetchRef.current = true;
-          // The actual debounced fetch will be handled by the debounced refetch logic
-        }
-      }
-
       return prev;
     }
 
     default:
       return prev;
+  }
+}
+
+function matchesJobTasksStatusPath(path, jobId) {
+  try {
+    const re = new RegExp(
+      `/pipeline-data/(current|complete|pending|rejected)/${jobId}/tasks-status\\.json$`
+    );
+    return re.test(path);
+  } catch {
+    return false;
   }
 }
 
@@ -159,7 +139,27 @@ export function useJobDetailWithUpdates(jobId) {
   const eventQueue = useRef([]);
   const mountedRef = useRef(true);
   const refetchTimerRef = useRef(null);
-  const needsRefetchRef = useRef(false);
+
+  // Debounced refetch helper (called directly from handlers)
+  const scheduleDebouncedRefetch = useCallback(() => {
+    if (refetchTimerRef.current) clearTimeout(refetchTimerRef.current);
+    refetchTimerRef.current = setTimeout(async () => {
+      if (!mountedRef.current || !hydratedRef.current) return;
+      try {
+        const jobData = await fetchJobDetail(jobId);
+        if (mountedRef.current) {
+          setData(jobData);
+          setError(null);
+        }
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error("Failed to refetch job detail:", err);
+        if (mountedRef.current) setError(err.message);
+      } finally {
+        refetchTimerRef.current = null;
+      }
+    }, REFRESH_DEBOUNCE_MS);
+  }, [jobId]);
 
   // Reset state when jobId changes
   useEffect(() => {
@@ -169,6 +169,10 @@ export function useJobDetailWithUpdates(jobId) {
     setConnectionStatus("disconnected");
     hydratedRef.current = false;
     eventQueue.current = [];
+    if (refetchTimerRef.current) {
+      clearTimeout(refetchTimerRef.current);
+      refetchTimerRef.current = null;
+    }
   }, [jobId]);
 
   // Fetch job detail on mount and when jobId changes
@@ -177,47 +181,41 @@ export function useJobDetailWithUpdates(jobId) {
 
     const doFetch = async () => {
       try {
-        console.log(
-          `[useJobDetailWithUpdates] Starting fetch for jobId: ${jobId}`
-        );
         setLoading(true);
         setError(null);
 
         const jobData = await fetchJobDetail(jobId);
-        console.log(
-          `[useJobDetailWithUpdates] Successfully fetched job data:`,
-          jobData
-        );
 
-        // Apply any queued events to the fresh data
+        // Apply any queued events to the fresh data (purely), and detect if a refetch is needed
         let finalData = jobData;
+        let queuedNeedsRefetch = false;
         if (eventQueue.current.length > 0) {
-          try {
-            finalData = eventQueue.current.reduce(
-              (acc, ev) => applyJobEvent(acc, ev, jobId, { needsRefetchRef }),
-              jobData
-            );
-          } catch (e) {
-            // eslint-disable-next-line no-console
-            console.error(
-              "[useJobDetailWithUpdates] failed applying queued events",
-              e
-            );
+          for (const ev of eventQueue.current) {
+            if (ev.type === "state:change") {
+              const d = (ev.payload && (ev.payload.data || ev.payload)) || {};
+              if (
+                !d.id &&
+                typeof d.path === "string" &&
+                matchesJobTasksStatusPath(d.path, jobId)
+              ) {
+                queuedNeedsRefetch = true;
+                continue; // don’t apply to data
+              }
+            }
+            finalData = applyJobEvent(finalData, ev, jobId);
           }
           eventQueue.current = [];
         }
 
         if (mountedRef.current) {
-          console.log(
-            `[useJobDetailWithUpdates] Setting data for jobId: ${jobId}`,
-            finalData
-          );
           setData(finalData);
           setError(null);
           hydratedRef.current = true;
-          console.log(
-            `[useJobDetailWithUpdates] Set hydratedRef to true, loading should be false`
-          );
+
+          // Now that we're hydrated, if any queued path-only change was seen, schedule a refetch
+          if (queuedNeedsRefetch) {
+            scheduleDebouncedRefetch();
+          }
         }
       } catch (err) {
         // eslint-disable-next-line no-console
@@ -228,16 +226,13 @@ export function useJobDetailWithUpdates(jobId) {
         }
       } finally {
         if (mountedRef.current) {
-          console.log(
-            `[useJobDetailWithUpdates] Finally block - setting loading to false for jobId: ${jobId}`
-          );
           setLoading(false);
         }
       }
     };
 
     doFetch();
-  }, [jobId]);
+  }, [jobId, scheduleDebouncedRefetch]);
 
   // Set up SSE connection
   useEffect(() => {
@@ -284,9 +279,7 @@ export function useJobDetailWithUpdates(jobId) {
               // Close existing reference if any
               try {
                 esRef.current?.close();
-              } catch (e) {
-                // ignore
-              }
+              } catch (e) {}
 
               // Create a fresh EventSource and attach the same listeners
               const eventsUrl = jobId
@@ -314,7 +307,7 @@ export function useJobDetailWithUpdates(jobId) {
           const payload = evt && evt.data ? JSON.parse(evt.data) : null;
           const eventObj = { type, payload };
 
-          // Filter events by jobId - only process events for our job
+          // Filter events by jobId - only process events for our job when id is present
           if (payload && payload.id && payload.id !== jobId) {
             return; // Ignore events for other jobs
           }
@@ -325,18 +318,27 @@ export function useJobDetailWithUpdates(jobId) {
             return;
           }
 
-          // Apply event using pure reducer
+          // Path-only state:change → schedule debounced refetch
+          if (type === "state:change") {
+            const d = (payload && (payload.data || payload)) || {};
+            if (
+              !d.id &&
+              typeof d.path === "string" &&
+              matchesJobTasksStatusPath(d.path, jobId)
+            ) {
+              scheduleDebouncedRefetch();
+              return; // no direct setData
+            }
+          }
+
+          // Apply event using pure reducer (includes direct state:change with id)
           setData((prev) => {
-            const next = applyJobEvent(prev, eventObj, jobId, {
-              needsRefetchRef,
-            });
+            const next = applyJobEvent(prev, eventObj, jobId);
             try {
               if (JSON.stringify(prev) === JSON.stringify(next)) {
                 return prev;
               }
-            } catch (e) {
-              // If stringify fails, fall back to returning next
-            }
+            } catch (e) {}
             return next;
           });
         } catch (err) {
@@ -378,9 +380,7 @@ export function useJobDetailWithUpdates(jobId) {
           es.removeEventListener("state:change", onStateChange);
           es.removeEventListener("error", onError);
           es.close();
-        } catch (err) {
-          // ignore
-        }
+        } catch (err) {}
         if (reconnectTimer.current) {
           clearTimeout(reconnectTimer.current);
           reconnectTimer.current = null;
@@ -406,53 +406,11 @@ export function useJobDetailWithUpdates(jobId) {
       }
       return undefined;
     }
-  }, [jobId]);
+  }, [jobId, scheduleDebouncedRefetch]);
 
-  // Debounced refetch logic for path-only state:change events
+  // Mount/unmount lifecycle: ensure mountedRef is true on mount (StrictMode-safe)
   useEffect(() => {
-    if (!jobId || !mountedRef.current || !hydratedRef.current) {
-      return;
-    }
-
-    if (needsRefetchRef.current) {
-      if (refetchTimerRef.current) {
-        clearTimeout(refetchTimerRef.current);
-      }
-
-      refetchTimerRef.current = setTimeout(async () => {
-        if (!mountedRef.current || !hydratedRef.current) {
-          return;
-        }
-
-        try {
-          const jobData = await fetchJobDetail(jobId);
-          if (mountedRef.current) {
-            setData(jobData);
-            setError(null);
-          }
-        } catch (err) {
-          // eslint-disable-next-line no-console
-          console.error("Failed to refetch job detail:", err);
-          if (mountedRef.current) {
-            setError(err.message);
-          }
-        } finally {
-          needsRefetchRef.current = false;
-          refetchTimerRef.current = null;
-        }
-      }, REFRESH_DEBOUNCE_MS);
-    }
-
-    return () => {
-      if (refetchTimerRef.current) {
-        clearTimeout(refetchTimerRef.current);
-        refetchTimerRef.current = null;
-      }
-    };
-  }, [jobId, hydratedRef.current]); // Remove needsRefetchRef.current from deps to prevent infinite loop
-
-  // Cleanup on unmount
-  useEffect(() => {
+    mountedRef.current = true;
     return () => {
       mountedRef.current = false;
       if (reconnectTimer.current) {
@@ -466,9 +424,7 @@ export function useJobDetailWithUpdates(jobId) {
       if (esRef.current) {
         try {
           esRef.current.close();
-        } catch (e) {
-          // ignore
-        }
+        } catch (e) {}
         esRef.current = null;
       }
     };
