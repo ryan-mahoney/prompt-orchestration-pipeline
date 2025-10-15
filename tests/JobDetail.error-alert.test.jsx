@@ -44,8 +44,8 @@ describe("JobDetail Error Alert Integration", () => {
       name: "Test Pipeline Job",
       pipelineId: "test-pipeline-123",
       status: "running",
-      tasks: [
-        {
+      tasks: {
+        research: {
           name: "research",
           state: "succeeded",
           config: { model: "gpt-4", temperature: 0.7 },
@@ -54,7 +54,7 @@ describe("JobDetail Error Alert Integration", () => {
           endedAt: "2024-01-01T10:10:00Z",
           executionTime: 600000,
         },
-        {
+        analysis: {
           name: "analysis",
           state: "failed",
           error: {
@@ -67,12 +67,12 @@ describe("JobDetail Error Alert Integration", () => {
           endedAt: "2024-01-01T10:12:00Z",
           executionTime: 120000,
         },
-        {
+        synthesis: {
           name: "synthesis",
           state: "pending",
           config: { model: "gpt-4", temperature: 0.3 },
         },
-      ],
+      },
     };
 
     mockPipeline = {
@@ -122,15 +122,15 @@ describe("JobDetail Error Alert Integration", () => {
       name: "Test Job No Error",
       pipelineId: "test-job-no-error",
       status: "failed",
-      tasks: [
-        {
+      tasks: {
+        analysis: {
           name: "analysis",
           state: "failed",
           // Missing error.message
           config: { model: "gpt-4", temperature: 0.5 },
           attempts: 1,
         },
-      ],
+      },
     };
 
     const pipelineWithMissingError = {
@@ -171,8 +171,8 @@ describe("JobDetail Error Alert Integration", () => {
       name: "Test Job Long Error",
       pipelineId: "test-job-long-error",
       status: "failed",
-      tasks: [
-        {
+      tasks: {
+        analysis: {
           name: "analysis",
           state: "failed",
           error: {
@@ -181,7 +181,7 @@ describe("JobDetail Error Alert Integration", () => {
           config: { model: "gpt-4", temperature: 0.5 },
           attempts: 1,
         },
-      ],
+      },
     };
 
     const pipelineWithLongError = {
