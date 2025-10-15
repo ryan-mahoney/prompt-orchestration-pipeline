@@ -24,7 +24,7 @@ import * as dagUtils from "../src/utils/dag.js";
 const computeDagItemsSpy = vi.mocked(dagUtils.computeDagItems);
 const computeActiveIndexSpy = vi.mocked(dagUtils.computeActiveIndex);
 
-describe("JobDetail - Array Tasks Support", () => {
+describe("JobDetail - Object Tasks Support", () => {
   const mockOnClose = vi.fn();
   const mockOnResume = vi.fn();
 
@@ -45,17 +45,17 @@ describe("JobDetail - Array Tasks Support", () => {
     vi.restoreAllMocks();
   });
 
-  it("normalizes array tasks to lookup format", () => {
+  it("handles object-shaped tasks", () => {
     const job = {
       id: "test-job",
       name: "Test Job",
       pipelineId: "test-pipeline",
       status: "running",
-      tasks: [
-        { name: "research", state: "done", config: { model: "gpt-4" } },
-        { name: "analysis", state: "running", config: { temperature: 0.7 } },
-        { name: "synthesis", state: "pending", config: {} },
-      ],
+      tasks: {
+        research: { state: "done", config: { model: "gpt-4" } },
+        analysis: { state: "running", config: { temperature: 0.7 } },
+        synthesis: { state: "pending", config: {} },
+      },
     };
 
     const pipeline = {
@@ -71,48 +71,8 @@ describe("JobDetail - Array Tasks Support", () => {
       />
     );
 
-    // Check that the component rendered (job name is now in Layout header, not JobDetail)
     // Verify DAG computation works
     expect(computeDagItemsSpy).toHaveBeenCalledWith(job, pipeline);
-
-    // Verify computeDagItems was called with the job
-    expect(computeDagItemsSpy).toHaveBeenCalledWith(job, pipeline);
-  });
-
-  it("computes pipelineTasks from array tasks when no pipeline provided", () => {
-    const job = {
-      id: "test-job",
-      name: "Test Job",
-      pipelineId: "test-pipeline",
-      status: "running",
-      tasks: [
-        { name: "research", state: "done" },
-        { name: "analysis", state: "running" },
-        { name: "synthesis", state: "pending" },
-      ],
-    };
-
-    const pipeline = null;
-
-    render(
-      <JobDetail
-        job={job}
-        pipeline={pipeline}
-        onClose={mockOnClose}
-        onResume={mockOnResume}
-      />
-    );
-
-    // Should derive pipeline tasks from array task names
-    expect(computeDagItemsSpy).toHaveBeenCalledWith(job, expect.any(Object));
-
-    const callArgs = computeDagItemsSpy.mock.calls[0];
-    const derivedPipeline = callArgs[1];
-    expect(derivedPipeline.tasks).toEqual([
-      "research",
-      "analysis",
-      "synthesis",
-    ]);
   });
 
   it("computes pipelineTasks from object tasks when no pipeline provided", () => {
@@ -157,10 +117,10 @@ describe("JobDetail - Array Tasks Support", () => {
       name: "Test Job",
       pipelineId: "test-pipeline",
       status: "running",
-      tasks: [
-        { name: "research", state: "done" },
-        { name: "analysis", state: "running" },
-      ],
+      tasks: {
+        research: { state: "done" },
+        analysis: { state: "running" },
+      },
     };
 
     const pipeline = {
@@ -180,13 +140,13 @@ describe("JobDetail - Array Tasks Support", () => {
     expect(computeDagItemsSpy).toHaveBeenCalledWith(job, pipeline);
   });
 
-  it("handles empty array tasks", () => {
+  it("handles empty object tasks", () => {
     const job = {
       id: "test-job",
       name: "Test Job",
       pipelineId: "test-pipeline",
       status: "pending",
-      tasks: [],
+      tasks: {},
     };
 
     const pipeline = null;
@@ -263,49 +223,6 @@ describe("JobDetail - Duration Policy with Task Shape Variants", () => {
     cleanup(); // Clean up after each test
   });
 
-  it("renders JobDetail with array-shaped tasks without errors", () => {
-    const job = {
-      id: "test-job",
-      name: "Array Tasks Job",
-      pipelineId: "test-pipeline",
-      status: "running",
-      tasks: [
-        {
-          name: "research",
-          state: "done",
-          startedAt: "2025-10-06T00:20:00Z",
-          endedAt: "2025-10-06T00:22:00Z",
-          executionTime: 120000, // 2 minutes
-        },
-        {
-          name: "analysis",
-          state: "running",
-          startedAt: "2025-10-06T00:25:00Z", // 5 minutes ago
-        },
-        {
-          name: "synthesis",
-          state: "pending",
-        },
-      ],
-    };
-
-    const pipeline = { tasks: ["research", "analysis", "synthesis"] };
-
-    render(
-      <JobDetail
-        job={job}
-        pipeline={pipeline}
-        onClose={mockOnClose}
-        onResume={mockOnResume}
-      />
-    );
-
-    // Verify the component renders successfully
-    expect(screen.getByTestId("dag-grid")).toBeDefined();
-    expect(screen.getByTestId("dag-items")).toBeDefined();
-    expect(screen.getByTestId("active-index")).toBeDefined();
-  });
-
   it("renders JobDetail with object-shaped tasks without errors", () => {
     const job = {
       id: "test-job",
@@ -346,29 +263,26 @@ describe("JobDetail - Duration Policy with Task Shape Variants", () => {
     expect(screen.getByTestId("active-index")).toBeDefined();
   });
 
-  it("handles mixed status tasks in array shape", () => {
+  it("handles mixed status tasks in object shape", () => {
     const job = {
       id: "test-job",
-      name: "Mixed Status Array Job",
+      name: "Mixed Status Object Job",
       pipelineId: "test-pipeline",
       status: "running",
-      tasks: [
-        {
-          name: "research",
+      tasks: {
+        research: {
           state: "pending", // Should not show duration
         },
-        {
-          name: "analysis",
+        analysis: {
           state: "rejected",
           startedAt: "2025-10-06T00:25:00Z",
           endedAt: "2025-10-06T00:26:00Z",
         },
-        {
-          name: "synthesis",
+        synthesis: {
           state: "running",
           startedAt: "2025-10-06T00:24:00Z", // Should show duration
         },
-      ],
+      },
     };
 
     const pipeline = { tasks: ["research", "analysis", "synthesis"] };
@@ -393,13 +307,12 @@ describe("JobDetail - Duration Policy with Task Shape Variants", () => {
       name: "Live Update Job",
       pipelineId: "test-pipeline",
       status: "running",
-      tasks: [
-        {
-          name: "analysis",
+      tasks: {
+        analysis: {
           state: "running",
           startedAt: "2025-10-06T00:25:00Z", // 5 minutes ago initially
         },
-      ],
+      },
     };
 
     const pipeline = { tasks: ["analysis"] };
@@ -445,15 +358,14 @@ describe("JobDetail - Duration Policy with Task Shape Variants", () => {
       name: "Execution Time Job",
       pipelineId: "test-pipeline",
       status: "completed",
-      tasks: [
-        {
-          name: "analysis",
+      tasks: {
+        analysis: {
           state: "done",
           startedAt: "2025-10-06T00:20:00Z",
           endedAt: "2025-10-06T00:30:00Z", // 10 minutes wall clock
           executionTime: 240000, // 4 minutes (should be preferred)
         },
-      ],
+      },
     };
 
     const pipeline = { tasks: ["analysis"] };

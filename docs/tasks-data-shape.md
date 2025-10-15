@@ -98,7 +98,81 @@ Quick migration steps
 2. Collect per-task `config` objects and move them into `taskConfig` keyed by the task id/name.
 3. Run tests and the demo: `npm -s test && node demo/run-demo.js`
 
+## Job Tasks Data Shape
+
+This section describes the canonical format for job tasks data in runtime job objects and API responses.
+
+### Canonical Shape
+
+```json
+{
+  "tasks": {
+    "task-name": {
+      "name": "task-name",
+      "state": "pending|running|done|error",
+      "startedAt": "ISO-8601 timestamp",
+      "endedAt": "ISO-8601 timestamp",
+      "attempts": 1,
+      "executionTimeMs": 1234,
+      "artifacts": ["output.json", "logs.txt"],
+      "error": { "message": "error description" },
+      "config": { "model": "gpt-4", "temperature": 0.7 }
+    }
+  }
+}
+```
+
+### Key Rules
+
+- `tasks` is an object keyed by task name (not an array)
+- Each task object contains a `name` field that matches the key
+- Task states are normalized to: `pending`, `running`, `done`, `error`
+- All timestamp fields are ISO-8601 strings
+- `artifacts` is an array of file names/paths
+- `error` contains error details when `state` is `error`
+- `config` contains task-specific configuration
+
+### Migration from Array Shape
+
+Before (deprecated array shape):
+
+```json
+{
+  "tasks": [
+    { "name": "research", "state": "done", "config": { "model": "gpt-4" } },
+    { "name": "analysis", "state": "running", "config": { "temperature": 0.7 } }
+  ]
+}
+```
+
+After (canonical object shape):
+
+```json
+{
+  "tasks": {
+    "research": {
+      "name": "research",
+      "state": "done",
+      "config": { "model": "gpt-4" }
+    },
+    "analysis": {
+      "name": "analysis",
+      "state": "running",
+      "config": { "temperature": 0.7 }
+    }
+  }
+}
+```
+
+### Implementation Notes
+
+- The job adapter (`src/ui/client/adapters/job-adapter.js`) converts array-shaped tasks to objects for backward compatibility
+- UI components expect object-shaped tasks and access them via `job.tasks[taskName]`
+- Pipeline ordering is handled separately via `pipeline.tasks` array
+- Job task counts are computed from `Object.keys(job.tasks).length`
+
 Reference
 
 - See `src/core/validation.js` for schema and validation helper functions.
 - See `src/core/pipeline-runner.js` for how `taskConfig` is accessed and how validation is invoked.
+- See `src/ui/client/adapters/job-adapter.js` for task normalization logic.
