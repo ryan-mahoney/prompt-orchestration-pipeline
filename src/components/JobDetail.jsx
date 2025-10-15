@@ -77,18 +77,17 @@ export default function JobDetail({ job, pipeline, onClose, onResume }) {
     const task = taskById[item.id];
     const taskConfig = task?.config || {};
 
-    // Build subtitle with useful metadata when available
+    // Build subtitle with useful metadata when available (Tufte-inspired inline tokens)
     const subtitleParts = [];
-    if (taskConfig?.model) subtitleParts.push(`model: ${taskConfig.model}`);
+    if (taskConfig?.model) subtitleParts.push(taskConfig.model);
     if (taskConfig?.temperature != null)
-      subtitleParts.push(`temp: ${taskConfig.temperature}`);
-    if (task?.attempts != null)
-      subtitleParts.push(`attempts: ${task.attempts}`);
+      subtitleParts.push(`temp ${taskConfig.temperature}`);
+    if (task?.attempts != null) subtitleParts.push(`${task.attempts} attempts`);
     if (task?.refinementAttempts != null)
-      subtitleParts.push(`refinements: ${task.refinementAttempts}`);
+      subtitleParts.push(`${task.refinementAttempts} refinements`);
     if (task?.startedAt) {
       const durationMs = taskDisplayDurationMs(task, now);
-      if (durationMs > 0) subtitleParts.push(`${fmtDuration(durationMs)}`);
+      if (durationMs > 0) subtitleParts.push(fmtDuration(durationMs));
     }
 
     // Include error message in body when task status is error

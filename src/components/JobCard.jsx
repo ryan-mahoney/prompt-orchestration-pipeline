@@ -62,22 +62,23 @@ export default function JobCard({
       <CardContent className="pt-0">
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
           <div className="font-semibold">
-            Current:{" "}
             {currentTask
               ? currentTask.name
               : job.status === "completed"
                 ? "—"
                 : (job.current ?? "—")}
           </div>
-          {currentTask && currentElapsedMs > 0 && (
-            <div className="flex items-center gap-1 text-slate-500">
-              <Clock className="h-4 w-4" data-testid="clock-icon" />{" "}
-              {fmtDuration(currentElapsedMs)}
-            </div>
-          )}
-          {currentTask?.config && (
+          {currentTask && (
             <div className="text-slate-500">
-              {currentTask.config.model} · temp {currentTask.config.temperature}
+              {[
+                currentTask.config?.model,
+                currentTask.config?.temperature != null
+                  ? `temp ${currentTask.config.temperature}`
+                  : null,
+                currentElapsedMs > 0 ? fmtDuration(currentElapsedMs) : null,
+              ]
+                .filter(Boolean)
+                .join(" · ")}
             </div>
           )}
         </div>
@@ -90,9 +91,9 @@ export default function JobCard({
           />
           <div className="mt-2 flex flex-wrap items-center justify-between text-sm text-slate-500">
             <div>
-              {totalCompleted} of {pipeline.tasks.length} tasks complete
+              {totalCompleted} of {pipeline.tasks.length} tasks
             </div>
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1 text-right">
               <TimerReset className="h-4 w-4" /> {fmtDuration(overallElapsedMs)}
             </div>
           </div>

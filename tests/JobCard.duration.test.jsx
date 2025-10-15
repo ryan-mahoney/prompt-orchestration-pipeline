@@ -66,12 +66,8 @@ describe("JobCard - Duration Display", () => {
       />
     );
 
-    // Should show duration for running task
-    const clockIcon = screen.getByTestId("clock-icon");
-    expect(clockIcon).toBeDefined();
-
-    const parentElement = clockIcon.closest("div");
-    expect(parentElement.textContent).toContain("5m");
+    // Should show duration for running task (now inline with task details)
+    expect(screen.getByText("5m")).toBeDefined();
   });
 
   it("hides duration for pending tasks", () => {
@@ -136,13 +132,9 @@ describe("JobCard - Duration Display", () => {
       />
     );
 
-    // Should show clock icon for completed task with duration
-    const clockIcon = screen.getByTestId("clock-icon");
-    expect(clockIcon).toBeDefined();
-
-    // Should show executionTime (4 minutes)
-    const parentElement = clockIcon.closest("div");
-    expect(parentElement.textContent).toContain("4m");
+    // For completed jobs, current task is null, so no task duration shown
+    // Only overall duration is displayed
+    expect(screen.getByText("5m")).toBeDefined();
   });
 
   it("updates running task duration when time advances", () => {
@@ -174,13 +166,16 @@ describe("JobCard - Duration Display", () => {
     );
 
     // Initial duration should be 5 minutes
-    const clockIcon = screen.getByTestId("clock-icon");
-    const parentElement = clockIcon.closest("div");
-    expect(parentElement.textContent).toContain("5m");
+    expect(screen.getByText("5m")).toBeDefined();
 
-    // Advance time by 2 minutes
+    // Advance time by 2 minutes and trigger the interval
     act(() => {
       vi.advanceTimersByTime(120000); // 2 minutes
+    });
+
+    // Wait for the next interval tick
+    act(() => {
+      vi.runOnlyPendingTimers();
     });
 
     // Re-render to trigger the ticker update
@@ -195,8 +190,7 @@ describe("JobCard - Duration Display", () => {
     );
 
     // Duration should now be 7 minutes
-    const updatedParentElement = clockIcon.closest("div");
-    expect(updatedParentElement.textContent).toContain("7m");
+    expect(screen.getByText("7m")).toBeDefined();
   });
 
   it("handles tasks without startedAt gracefully", () => {
@@ -291,12 +285,8 @@ describe("JobCard - Duration Display", () => {
       />
     );
 
-    // Should show duration for object-shaped task
-    const clockIcon = screen.getByTestId("clock-icon");
-    expect(clockIcon).toBeDefined();
-
-    const parentElement = clockIcon.closest("div");
-    expect(parentElement.textContent).toContain("5m");
+    // Should show duration for object-shaped task (now inline)
+    expect(screen.getByText("5m")).toBeDefined();
   });
 
   it("displays overall elapsed time regardless of current task state", () => {

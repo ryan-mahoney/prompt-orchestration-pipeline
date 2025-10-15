@@ -66,14 +66,8 @@ describe("JobTable - Duration Display", () => {
       />
     );
 
-    // Should show duration for running task (look for clock icon + duration combination)
-    const clockIcons = screen.getAllByTestId("clock-icon");
-    expect(clockIcons).toHaveLength(1);
-
-    // Find the duration element next to the clock icon
-    const clockIcon = clockIcons[0];
-    const parentElement = clockIcon.closest("div");
-    expect(parentElement.textContent).toContain("5m 0s");
+    // Should show duration for running task (now inline with task details)
+    expect(screen.getByText("5m 0s")).toBeDefined();
   });
 
   it("hides duration for pending tasks", () => {
@@ -141,14 +135,8 @@ describe("JobTable - Duration Display", () => {
       />
     );
 
-    // Should show clock icon for completed task with duration
-    const clockIcons = screen.getAllByTestId("clock-icon");
-    expect(clockIcons).toHaveLength(1);
-
-    // Should show executionTime (4 minutes) in the task duration section
-    const clockIcon = clockIcons[0];
-    const parentElement = clockIcon.closest("div");
-    expect(parentElement.textContent).toContain("4m 0s");
+    // Should show executionTime (4 minutes) inline with task details
+    expect(screen.getByText("4m 0s")).toBeDefined();
 
     // Overall duration column should still show (from mock)
     expect(screen.getByText("5m 0s")).toBeDefined();
@@ -183,15 +171,16 @@ describe("JobTable - Duration Display", () => {
     );
 
     // Initial duration should be 5 minutes in task section
-    const clockIcons = screen.getAllByTestId("clock-icon");
-    expect(clockIcons).toHaveLength(1);
-    const clockIcon = clockIcons[0];
-    const parentElement = clockIcon.closest("div");
-    expect(parentElement.textContent).toContain("5m 0s");
+    expect(screen.getByText("5m 0s")).toBeDefined();
 
-    // Advance time by 2 minutes
+    // Advance time by 2 minutes and trigger the interval
     act(() => {
       vi.advanceTimersByTime(120000); // 2 minutes
+    });
+
+    // Wait for the next interval tick
+    act(() => {
+      vi.runOnlyPendingTimers();
     });
 
     // Re-render to trigger the ticker update
@@ -206,10 +195,7 @@ describe("JobTable - Duration Display", () => {
     );
 
     // Duration should now be 7 minutes in task section
-    const updatedClockIcons = screen.getAllByTestId("clock-icon");
-    const updatedClockIcon = updatedClockIcons[0];
-    const updatedParentElement = updatedClockIcon.closest("div");
-    expect(updatedParentElement.textContent).toContain("7m 0s");
+    expect(screen.getByText("7m 0s")).toBeDefined();
   });
 
   it("handles tasks without startedAt gracefully", () => {
@@ -310,11 +296,9 @@ describe("JobTable - Duration Display", () => {
       />
     );
 
-    // Should show duration for object-shaped task
-    const clockIcons = screen.getAllByTestId("clock-icon");
-    expect(clockIcons).toHaveLength(1);
-    const clockIcon = clockIcons[0];
-    const parentElement = clockIcon.closest("div");
-    expect(parentElement.textContent).toContain("5m 0s");
+    // Should show duration for object-shaped task (now inline in task details)
+    // Look for the task details section specifically
+    const taskDetails = screen.getByText("task-1").closest("div");
+    expect(taskDetails.textContent).toContain("5m 0s");
   });
 });

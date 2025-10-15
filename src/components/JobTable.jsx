@@ -120,24 +120,21 @@ export default function JobTable({
                           ? "—"
                           : (job.current ?? "—")}
                     </Text>
-                    {currentTask && currentElapsedMs > 0 && (
-                      <Flex align="center" gap="1">
-                        <Clock
-                          className="h-3 w-3 text-slate-500"
-                          data-testid="clock-icon"
-                        />
-                        <Text size="1" className="text-slate-500">
-                          {fmtDuration(currentElapsedMs)}
-                        </Text>
-                      </Flex>
-                    )}
-                    {(currentTaskConfig?.model || currentTask?.model) && (
-                      <div className="text-slate-500">
-                        {currentTaskConfig?.model || currentTask?.model} · temp{" "}
-                        {currentTaskConfig?.temperature ??
-                          currentTask?.temperature ??
-                          "—"}
-                      </div>
+                    {currentTask && (
+                      <Text size="1" className="text-slate-500">
+                        {[
+                          currentTaskConfig?.model || currentTask?.model,
+                          currentTaskConfig?.temperature != null ||
+                          currentTask?.temperature != null
+                            ? `temp ${currentTaskConfig?.temperature ?? currentTask?.temperature}`
+                            : null,
+                          currentElapsedMs > 0
+                            ? fmtDuration(currentElapsedMs)
+                            : null,
+                        ]
+                          .filter(Boolean)
+                          .join(" · ")}
+                      </Text>
                     )}
                   </Flex>
                 </Table.Cell>
