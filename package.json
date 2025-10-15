@@ -17,7 +17,7 @@
     "access": "public"
   },
   "scripts": {
-    "test": "vitest run",
+    "test": "vitest run --config ./vite.config.js --root .",
     "lint": "eslint . --ext .js,.jsx",
     "check:paths": "bash scripts/check-name-based-paths.sh",
     "dev": "NODE_ENV=development nodemon src/ui/server.js",
