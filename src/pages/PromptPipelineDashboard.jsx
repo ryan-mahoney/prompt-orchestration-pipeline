@@ -2,23 +2,11 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
-// Radix UI primitives
-import * as Tooltip from "@radix-ui/react-tooltip";
-
-import {
-  Box,
-  Flex,
-  Text,
-  Heading,
-  Badge as RadixBadge,
-  Tabs,
-  Card,
-} from "@radix-ui/themes";
+import { Box, Flex, Text, Heading, Tabs, Card } from "@radix-ui/themes";
 
 import { Progress } from "../components/ui/progress";
 import { useJobListWithUpdates } from "../ui/client/hooks/useJobListWithUpdates";
 import { adaptJobSummary } from "../ui/client/adapters/job-adapter";
-import { CONFIG as UI_CONFIG } from "../ui/config-bridge.browser.js";
 
 // Referenced components — leave these alone
 import JobTable from "../components/JobTable";
@@ -45,7 +33,6 @@ export default function PromptPipelineDashboard({ isConnected }) {
 
     return src.map(adaptJobSummary);
   }, [apiJobs, error]);
-  const [seedName, setSeedName] = useState("content-generation");
   const [activeTab, setActiveTab] = useState("current");
   const [seedUploadSuccess, setSeedUploadSuccess] = useState(null);
   const [seedUploadTimer, setSeedUploadTimer] = useState(null);
@@ -159,12 +146,6 @@ export default function PromptPipelineDashboard({ isConnected }) {
       }
     };
   }, [seedUploadTimer]);
-
-  console.log({ isConnected, connectionStatus });
-
-  // Determine connection state - prop overrides any hook value; otherwise use hook's status
-  const connectionState =
-    isConnected !== undefined ? isConnected : connectionStatus === "connected";
 
   // Header actions for the Layout
   const headerActions = runningJobs.length > 0 && (
