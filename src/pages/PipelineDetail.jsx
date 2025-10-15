@@ -4,6 +4,7 @@ import { Box, Flex, Text } from "@radix-ui/themes";
 import JobDetail from "../components/JobDetail.jsx";
 import { useJobDetailWithUpdates } from "../ui/client/hooks/useJobDetailWithUpdates.js";
 import Layout from "../components/Layout.jsx";
+import { statusBadge } from "../utils/ui.jsx";
 
 export default function PipelineDetail() {
   const { jobId } = useParams();
@@ -88,8 +89,22 @@ export default function PipelineDetail() {
       return { tasks: pipelineTasks };
     })();
 
+  // Header actions: job ID and status badge
+  const headerActions = (
+    <Flex align="center" gap="3" className="shrink-0">
+      <Text size="2" color="gray">
+        ID: {job.pipelineId || job.id || jobId}
+      </Text>
+      {statusBadge(job.status)}
+    </Flex>
+  );
+
   return (
-    <Layout title={job.name || "Pipeline Details"} showBackButton={true}>
+    <Layout
+      title={job.name || "Pipeline Details"}
+      showBackButton={true}
+      actions={headerActions}
+    >
       <JobDetail job={job} pipeline={pipeline} />
     </Layout>
   );

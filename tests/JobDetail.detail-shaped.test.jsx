@@ -98,9 +98,12 @@ describe("JobDetail - Detail-Shaped Job with Pipeline from API", () => {
       />
     );
 
-    // Check that the component rendered with correct job info
-    expect(screen.getByText("Test Pipeline Job")).toBeDefined();
-    expect(screen.getByText("ID: test-job-123")).toBeDefined();
+    // Check that the component rendered (job name and ID are now in Layout header, not JobDetail)
+    // Verify DAG computation still works
+    expect(computeDagItemsSpy).toHaveBeenCalledWith(
+      detailShapedJob,
+      detailShapedJob.pipeline
+    );
 
     // Verify computeDagItems was called with the detail-shaped job and pipeline
     expect(computeDagItemsSpy).toHaveBeenCalledWith(
@@ -171,8 +174,8 @@ describe("JobDetail - Detail-Shaped Job with Pipeline from API", () => {
       />
     );
 
-    // The component should render successfully without errors
-    expect(screen.getByText("Defensive Normalization Test")).toBeDefined();
+    // The component should render successfully without errors (job name is now in Layout header)
+    // Verify DAG computation works with the normalized data
 
     // DAG computation should work with the normalized data
     expect(computeDagItemsSpy).toHaveBeenCalled();
@@ -201,8 +204,9 @@ describe("JobDetail - Detail-Shaped Job with Pipeline from API", () => {
       />
     );
 
-    // Should still render successfully
-    expect(screen.getByText("Job Without Pipeline")).toBeDefined();
+    // Should still render successfully (job name is now in Layout header, not JobDetail)
+    // Verify DAG computation works
+    expect(computeDagItemsSpy).toHaveBeenCalled();
 
     // Should derive pipeline from job tasks
     expect(computeDagItemsSpy).toHaveBeenCalledWith(
@@ -245,8 +249,9 @@ describe("JobDetail - Detail-Shaped Job with Pipeline from API", () => {
       />
     );
 
-    // Should render successfully with all metadata preserved
-    expect(screen.getByText("Metadata Test Job")).toBeDefined();
+    // Should render successfully with all metadata preserved (job name is now in Layout header)
+    // Verify DAG computation works
+    expect(computeDagItemsSpy).toHaveBeenCalled();
 
     // DAG computation should have access to all task metadata
     expect(computeDagItemsSpy).toHaveBeenCalledWith(
@@ -292,7 +297,7 @@ describe("JobDetail - Detail-Shaped Job with Pipeline from API", () => {
     );
 
     // Should handle edge cases gracefully without crashing
-    expect(screen.getByText("Edge Cases Test Job")).toBeDefined();
+    // Job name is now in Layout header, not JobDetail component
     expect(computeDagItemsSpy).toHaveBeenCalled();
   });
 
@@ -356,8 +361,8 @@ describe("JobDetail - Detail-Shaped Job with Pipeline from API", () => {
       />
     );
 
-    // Verify the component rendered
-    expect(screen.getByText("Test Job with Error")).toBeDefined();
+    // Verify the component rendered (job name is now in Layout header, not JobDetail)
+    // DAG computation should work with error data
 
     // Get the DAG items from the mocked DAGGrid component (use the last one since multiple tests may have rendered)
     const dagItemsElements = screen.getAllByTestId("dag-items");
