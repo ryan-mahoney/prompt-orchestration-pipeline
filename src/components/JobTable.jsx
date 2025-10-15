@@ -4,7 +4,6 @@ import { Progress } from "./ui/progress";
 import { Clock, TimerReset, ChevronRight } from "lucide-react";
 import { fmtDuration } from "../utils/duration.js";
 import { taskDisplayDurationMs } from "../utils/duration.js";
-import { useTicker } from "../ui/client/hooks/useTicker.js";
 import { countCompleted } from "../utils/jobs";
 import { progressClasses, statusBadge } from "../utils/ui";
 
@@ -14,8 +13,8 @@ export default function JobTable({
   onOpenJob,
   totalProgressPct,
   overallElapsed,
+  now,
 }) {
-  const now = useTicker(1000);
   if (jobs.length === 0) {
     return (
       <Box className="border border-dashed border-slate-200 rounded-xl p-6 text-center">

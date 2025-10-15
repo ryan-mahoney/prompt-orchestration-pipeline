@@ -26,6 +26,7 @@ describe("JobTable - Duration Display", () => {
   const mockOnOpenJob = vi.fn();
   const mockTotalProgressPct = vi.fn(() => 50);
   const mockOverallElapsed = vi.fn(() => 300000); // 5 minutes
+  const mockNow = new Date("2025-10-06T00:30:00Z").getTime(); // Fixed timestamp
 
   beforeEach(() => {
     vi.useFakeTimers();
@@ -63,6 +64,7 @@ describe("JobTable - Duration Display", () => {
         onOpenJob={mockOnOpenJob}
         totalProgressPct={mockTotalProgressPct}
         overallElapsed={mockOverallElapsed}
+        now={mockNow}
       />
     );
 
@@ -97,6 +99,7 @@ describe("JobTable - Duration Display", () => {
         onOpenJob={mockOnOpenJob}
         totalProgressPct={mockTotalProgressPct}
         overallElapsed={mockOverallElapsed}
+        now={mockNow}
       />
     );
 
@@ -134,6 +137,7 @@ describe("JobTable - Duration Display", () => {
         onOpenJob={mockOnOpenJob}
         totalProgressPct={mockTotalProgressPct}
         overallElapsed={mockOverallElapsed}
+        now={mockNow}
       />
     );
 
@@ -169,6 +173,7 @@ describe("JobTable - Duration Display", () => {
         onOpenJob={mockOnOpenJob}
         totalProgressPct={mockTotalProgressPct}
         overallElapsed={mockOverallElapsed}
+        now={mockNow}
       />
     );
 
@@ -188,6 +193,7 @@ describe("JobTable - Duration Display", () => {
     });
 
     // Re-render to trigger the ticker update
+    const updatedNow = mockNow + 120000; // 2 minutes later
     rerender(
       <JobTable
         jobs={jobs}
@@ -195,12 +201,13 @@ describe("JobTable - Duration Display", () => {
         onOpenJob={mockOnOpenJob}
         totalProgressPct={mockTotalProgressPct}
         overallElapsed={mockOverallElapsed}
+        now={updatedNow}
       />
     );
 
-    // Duration should now be 7 minutes (plus 1 second due to timing)
+    // Duration should now be 7 minutes
     // Use getAllByText since there are multiple elements
-    const updatedDurationElements = screen.getAllByText("7m 1s");
+    const updatedDurationElements = screen.getAllByText("7m 0s");
     expect(updatedDurationElements.length).toBeGreaterThan(0);
   });
 
@@ -229,6 +236,7 @@ describe("JobTable - Duration Display", () => {
         onOpenJob={mockOnOpenJob}
         totalProgressPct={mockTotalProgressPct}
         overallElapsed={mockOverallElapsed}
+        now={mockNow}
       />
     );
 
@@ -265,6 +273,7 @@ describe("JobTable - Duration Display", () => {
         onOpenJob={mockOnOpenJob}
         totalProgressPct={mockTotalProgressPct}
         overallElapsed={mockOverallElapsed}
+        now={mockNow}
       />
     );
 
@@ -299,6 +308,7 @@ describe("JobTable - Duration Display", () => {
         onOpenJob={mockOnOpenJob}
         totalProgressPct={mockTotalProgressPct}
         overallElapsed={mockOverallElapsed}
+        now={mockNow}
       />
     );
 

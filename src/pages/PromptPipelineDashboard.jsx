@@ -192,6 +192,7 @@ export default function PromptPipelineDashboard({ isConnected }) {
             onOpenJob={openJob}
             totalProgressPct={totalProgressPct}
             overallElapsed={overallElapsed}
+            now={now}
           />
         </Tabs.Content>
         <Tabs.Content value="errors">
@@ -201,6 +202,7 @@ export default function PromptPipelineDashboard({ isConnected }) {
             onOpenJob={openJob}
             totalProgressPct={totalProgressPct}
             overallElapsed={overallElapsed}
+            now={now}
           />
         </Tabs.Content>
         <Tabs.Content value="complete">
@@ -210,6 +212,7 @@ export default function PromptPipelineDashboard({ isConnected }) {
             onOpenJob={openJob}
             totalProgressPct={totalProgressPct}
             overallElapsed={overallElapsed}
+            now={now}
           />
         </Tabs.Content>
       </Tabs.Root>
