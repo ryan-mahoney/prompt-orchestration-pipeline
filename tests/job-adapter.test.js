@@ -35,9 +35,10 @@ describe("job-adapter", () => {
     expect(out.location).toBe("current");
     expect(out.taskCount).toBe(2);
     expect(out.doneCount).toBe(1);
-    expect(Array.isArray(out.tasks)).toBe(true);
-    expect(out.tasks.find((t) => t.name === "t1").state).toBe("done");
-    expect(out.tasks.find((t) => t.name === "t2").state).toBe("running");
+    expect(typeof out.tasks).toBe("object");
+    expect(out.tasks).not.toBeNull();
+    expect(out.tasks.t1.state).toBe("done");
+    expect(out.tasks.t2.state).toBe("running");
   });
 
   it("adaptJobSummary - applies sensible defaults when optional fields missing", () => {
@@ -49,7 +50,8 @@ describe("job-adapter", () => {
     expect(out.progress).toBe(0);
     expect(out.taskCount).toBe(0);
     expect(out.doneCount).toBe(0);
-    expect(out.tasks).toEqual([]);
+    expect(typeof out.tasks).toBe("object");
+    expect(out.tasks).toEqual({});
     expect(out.__warnings).toBeDefined();
     expect(out.__warnings).toContain("missing_id");
   });
@@ -65,10 +67,10 @@ describe("job-adapter", () => {
 
     const out = adaptJobSummary(apiJob);
     expect(out.id).toBe("job-unknown-state");
-    // tasks normalized from object to array
-    const compile = out.tasks.find((t) => t.name === "compile");
-    expect(compile).toBeDefined();
-    expect(compile.state).toBe("pending");
+    // tasks normalized from object to object (no longer converted to array)
+    expect(typeof out.tasks).toBe("object");
+    expect(out.tasks.compile).toBeDefined();
+    expect(out.tasks.compile.state).toBe("pending");
     // warnings include the unknown state marker
     expect(
       out.__warnings &&
@@ -115,9 +117,9 @@ describe("job-adapter", () => {
     expect(out.id).toBe("detail1");
     expect(out.name).toBe("Detail Job");
     expect(out.taskCount).toBe(2);
-    expect(Array.isArray(out.tasks)).toBe(true);
-    expect(out.tasks[0].name).toBe("a");
-    expect(out.tasks[0].state).toBe("running");
+    expect(typeof out.tasks).toBe("object");
+    expect(out.tasks.a.name).toBe("a");
+    expect(out.tasks.a.state).toBe("running");
     expect(out.createdAt).toBe("2025-10-06T00:00:00Z");
   });
 });

@@ -2,11 +2,14 @@ import React, { useEffect, useState } from "react";
 import { Button } from "./ui/button";
 import { ChevronLeft } from "lucide-react";
 import { statusBadge } from "../utils/ui";
-import { fmtDuration, elapsedBetween } from "../utils/time";
+import { fmtDuration } from "../utils/duration.js";
+import { normalizeState, taskDisplayDurationMs } from "../utils/duration.js";
+import { useTicker } from "../ui/client/hooks/useTicker.js";
 import DAGGrid from "./DAGGrid.jsx";
 import { computeDagItems, computeActiveIndex } from "../utils/dag.js";
 
 export default function JobDetail({ job, pipeline, onClose, onResume }) {
+  const now = useTicker(1000);
   const [resumeFrom, setResumeFrom] = useState(
     pipeline?.tasks?.[0]
       ? typeof pipeline.tasks[0] === "string"
@@ -25,26 +28,10 @@ export default function JobDetail({ job, pipeline, onClose, onResume }) {
     );
   }, [job.pipelineId, pipeline?.tasks?.length]);
 
-  // Normalize job.tasks into a lookup: id -> task object
-  // Handle both array and object formats
+  // job.tasks is expected to be an object keyed by task name
   const taskById = React.useMemo(() => {
     const tasks = job?.tasks;
-    if (!tasks) return {};
-
-    if (Array.isArray(tasks)) {
-      // Convert array to object lookup using name or id as key
-      const taskMap = {};
-      for (const task of tasks) {
-        const taskId = task?.name || task?.id;
-        if (taskId) {
-          taskMap[taskId] = task;
-        }
-      }
-      return taskMap;
-    }
-
-    // Already an object, return as-is
-    return tasks;
+    return tasks || {};
   }, [job?.tasks]);
 
   // Compute pipeline tasks from pipeline or derive from job tasks
@@ -53,20 +40,11 @@ export default function JobDetail({ job, pipeline, onClose, onResume }) {
       return pipeline;
     }
 
-    // Derive pipeline tasks from job tasks
+    // Derive pipeline tasks from job tasks object keys
     const jobTasks = job?.tasks;
     if (!jobTasks) return { tasks: [] };
 
-    if (Array.isArray(jobTasks)) {
-      // Extract names from array tasks
-      const taskNames = jobTasks
-        .map((task) => task?.name || task?.id)
-        .filter(Boolean);
-      return { tasks: taskNames };
-    } else {
-      // Extract keys from object tasks
-      return { tasks: Object.keys(jobTasks) };
-    }
+    return { tasks: Object.keys(jobTasks) };
   }, [pipeline, job?.tasks]);
 
   // Compute DAG items and active index for visualization
@@ -74,19 +52,17 @@ export default function JobDetail({ job, pipeline, onClose, onResume }) {
     const task = taskById[item.id];
     const taskConfig = task?.config || {};
 
-    // Build subtitle with useful metadata when available
+    // Build subtitle with useful metadata when available (Tufte-inspired inline tokens)
     const subtitleParts = [];
-    if (taskConfig?.model) subtitleParts.push(`model: ${taskConfig.model}`);
+    if (taskConfig?.model) subtitleParts.push(taskConfig.model);
     if (taskConfig?.temperature != null)
-      subtitleParts.push(`temp: ${taskConfig.temperature}`);
-    if (task?.attempts != null)
-      subtitleParts.push(`attempts: ${task.attempts}`);
+      subtitleParts.push(`temp ${taskConfig.temperature}`);
+    if (task?.attempts != null) subtitleParts.push(`${task.attempts} attempts`);
     if (task?.refinementAttempts != null)
-      subtitleParts.push(`refinements: ${task.refinementAttempts}`);
+      subtitleParts.push(`${task.refinementAttempts} refinements`);
     if (task?.startedAt) {
-      const execMs =
-        task?.executionTime ?? elapsedBetween(task.startedAt, task.endedAt);
-      if (execMs) subtitleParts.push(`time: ${fmtDuration(execMs)}`);
+      const durationMs = taskDisplayDurationMs(task, now);
+      if (durationMs > 0) subtitleParts.push(fmtDuration(durationMs));
     }
 
     // Include error message in body when task status is error

@@ -17,7 +17,7 @@ vi.mock("../src/utils/dag.js", () => ({
   computeActiveIndex: vi.fn(),
 }));
 
-import { render, screen } from "@testing-library/react";
+import { render, screen, act } from "@testing-library/react";
 import JobDetail from "../src/components/JobDetail.jsx";
 import * as dagUtils from "../src/utils/dag.js";
 
@@ -45,7 +45,7 @@ describe("JobDetail - Detail-Shaped Job with Pipeline from API", () => {
     vi.restoreAllMocks();
   });
 
-  it("receives detail-shaped job with array tasks and pipeline from API", () => {
+  it("receives detail-shaped job with object tasks and pipeline from API", () => {
     const detailShapedJob = {
       id: "test-job-123",
       pipelineId: "test-job-123",
@@ -57,8 +57,8 @@ describe("JobDetail - Detail-Shaped Job with Pipeline from API", () => {
       location: "current",
       taskCount: 3,
       doneCount: 2,
-      tasks: [
-        {
+      tasks: {
+        research: {
           name: "research",
           state: "done",
           startedAt: "2025-10-06T00:05:00Z",
@@ -67,7 +67,7 @@ describe("JobDetail - Detail-Shaped Job with Pipeline from API", () => {
           executionTimeMs: 600000,
           config: { model: "gpt-4", temperature: 0.7 },
         },
-        {
+        analysis: {
           name: "analysis",
           state: "done",
           startedAt: "2025-10-06T00:15:00Z",
@@ -76,14 +76,14 @@ describe("JobDetail - Detail-Shaped Job with Pipeline from API", () => {
           executionTimeMs: 600000,
           config: { model: "gpt-4", temperature: 0.5 },
         },
-        {
+        synthesis: {
           name: "synthesis",
           state: "running",
           startedAt: "2025-10-06T00:25:00Z",
           attempts: 1,
           config: { model: "gpt-4", temperature: 0.3 },
         },
-      ],
+      },
       pipeline: {
         tasks: ["research", "analysis", "synthesis"],
       },
@@ -118,11 +118,11 @@ describe("JobDetail - Detail-Shaped Job with Pipeline from API", () => {
       pipelineId: "test-job-456",
       name: "Job with Different Order",
       status: "running",
-      tasks: [
-        { name: "synthesis", state: "running" },
-        { name: "research", state: "done" },
-        { name: "analysis", state: "done" },
-      ],
+      tasks: {
+        synthesis: { name: "synthesis", state: "running" },
+        research: { name: "research", state: "done" },
+        analysis: { name: "analysis", state: "done" },
+      },
       pipeline: {
         tasks: ["research", "analysis", "synthesis"], // Canonical order
       },
@@ -149,17 +149,21 @@ describe("JobDetail - Detail-Shaped Job with Pipeline from API", () => {
     expect(pipelineUsed.tasks).toEqual(["research", "analysis", "synthesis"]);
   });
 
-  it("defensively normalizes array tasks to lookup format internally", () => {
+  it("handles object tasks natively", () => {
     const detailShapedJob = {
       id: "test-job-789",
       pipelineId: "test-job-789",
-      name: "Defensive Normalization Test",
+      name: "Object Tasks Test",
       status: "running",
-      tasks: [
-        { name: "task1", state: "done", config: { model: "gpt-4" } },
-        { name: "task2", state: "running", config: { temperature: 0.7 } },
-        { name: "task3", state: "pending" },
-      ],
+      tasks: {
+        task1: { name: "task1", state: "done", config: { model: "gpt-4" } },
+        task2: {
+          name: "task2",
+          state: "running",
+          config: { temperature: 0.7 },
+        },
+        task3: { name: "task3", state: "pending" },
+      },
       pipeline: {
         tasks: ["task1", "task2", "task3"],
       },
@@ -188,10 +192,10 @@ describe("JobDetail - Detail-Shaped Job with Pipeline from API", () => {
       pipelineId: "test-job-no-pipeline",
       name: "Job Without Pipeline",
       status: "pending",
-      tasks: [
-        { name: "step1", state: "pending" },
-        { name: "step2", state: "pending" },
-      ],
+      tasks: {
+        step1: { name: "step1", state: "pending" },
+        step2: { name: "step2", state: "pending" },
+      },
       // No pipeline property
     };
 
@@ -223,8 +227,8 @@ describe("JobDetail - Detail-Shaped Job with Pipeline from API", () => {
       pipelineId: "test-job-metadata",
       name: "Metadata Test Job",
       status: "done",
-      tasks: [
-        {
+      tasks: {
+        "complex-task": {
           name: "complex-task",
           state: "done",
           startedAt: "2025-10-06T00:00:00Z",
@@ -234,7 +238,7 @@ describe("JobDetail - Detail-Shaped Job with Pipeline from API", () => {
           artifacts: ["output.json", "logs.txt", "report.pdf"],
           config: { model: "gpt-4", temperature: 0.7, max_tokens: 2000 },
         },
-      ],
+      },
       pipeline: {
         tasks: ["complex-task"],
       },
@@ -256,15 +260,15 @@ describe("JobDetail - Detail-Shaped Job with Pipeline from API", () => {
     // DAG computation should have access to all task metadata
     expect(computeDagItemsSpy).toHaveBeenCalledWith(
       expect.objectContaining({
-        tasks: expect.arrayContaining([
-          expect.objectContaining({
+        tasks: expect.objectContaining({
+          "complex-task": expect.objectContaining({
             name: "complex-task",
             state: "done",
             attempts: 3,
             executionTimeMs: 600000,
             artifacts: ["output.json", "logs.txt", "report.pdf"],
           }),
-        ]),
+        }),
       }),
       detailShapedJob.pipeline
     );
@@ -324,15 +328,15 @@ describe("JobDetail - Detail-Shaped Job with Pipeline from API", () => {
       pipelineId: "test-job-with-error",
       name: "Test Job with Error",
       status: "failed",
-      tasks: [
-        {
+      tasks: {
+        research: {
           name: "research",
           state: "done",
           startedAt: "2025-10-13T22:10:09.101Z",
           endedAt: "2025-10-13T22:10:09.107Z",
           attempts: 1,
         },
-        {
+        analysis: {
           name: "analysis",
           state: "failed",
           startedAt: "2025-10-13T22:10:09.107Z",
@@ -342,11 +346,11 @@ describe("JobDetail - Detail-Shaped Job with Pipeline from API", () => {
             message: errorMessage,
           },
         },
-        {
+        synthesis: {
           name: "synthesis",
           state: "pending",
         },
-      ],
+      },
       pipeline: {
         tasks: ["research", "analysis", "synthesis"],
       },
@@ -380,5 +384,211 @@ describe("JobDetail - Detail-Shaped Job with Pipeline from API", () => {
       detailShapedJob,
       detailShapedJob.pipeline
     );
+  });
+
+  it("applies duration policy to task subtitles", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2025-10-06T00:30:00Z"));
+
+    const detailShapedJob = {
+      id: "test-job-durations",
+      pipelineId: "test-job-durations",
+      name: "Duration Policy Test Job",
+      status: "running",
+      tasks: {
+        "completed-task": {
+          name: "completed-task",
+          state: "done",
+          startedAt: "2025-10-06T00:05:00Z",
+          endedAt: "2025-10-06T00:10:00Z",
+          executionTime: 250000, // 4m 10s - should be preferred
+          config: { model: "gpt-4" },
+        },
+        "running-task": {
+          name: "running-task",
+          state: "running",
+          startedAt: "2025-10-06T00:25:00Z",
+          config: { temperature: 0.7 },
+        },
+        "pending-task": {
+          name: "pending-task",
+          state: "pending",
+          startedAt: "2025-10-06T00:20:00Z",
+          config: { model: "gpt-3.5" },
+        },
+        "rejected-task": {
+          name: "rejected-task",
+          state: "rejected",
+          startedAt: "2025-10-06T00:15:00Z",
+          endedAt: "2025-10-06T00:16:00Z",
+          config: { temperature: 0.5 },
+        },
+      },
+      pipeline: {
+        tasks: [
+          "completed-task",
+          "running-task",
+          "pending-task",
+          "rejected-task",
+        ],
+      },
+    };
+
+    // Mock computeDagItems to return basic items
+    computeDagItemsSpy.mockReturnValue([
+      { id: "completed-task", status: "succeeded", source: "pipeline" },
+      { id: "running-task", status: "active", source: "pipeline" },
+      { id: "pending-task", status: "pending", source: "pipeline" },
+      { id: "rejected-task", status: "failed", source: "pipeline" },
+    ]);
+
+    render(
+      <JobDetail
+        job={detailShapedJob}
+        pipeline={detailShapedJob.pipeline}
+        onClose={mockOnClose}
+        onResume={mockOnResume}
+      />
+    );
+
+    // Get the DAG items from the mocked DAGGrid component
+    const dagItemsElements = screen.getAllByTestId("dag-items");
+    const dagItemsElement = dagItemsElements[dagItemsElements.length - 1];
+    const dagItems = JSON.parse(dagItemsElement.textContent);
+
+    // Find each task and verify duration policy application
+    const completedTask = dagItems.find((item) => item.id === "completed-task");
+    expect(completedTask.subtitle).toContain("gpt-4");
+    expect(completedTask.subtitle).toContain("4m 10s"); // executionTime preferred
+
+    const runningTask = dagItems.find((item) => item.id === "running-task");
+    expect(runningTask.subtitle).toContain("temp 0.7");
+    expect(runningTask.subtitle).toContain("5m 0s"); // running for 5 minutes
+
+    const pendingTask = dagItems.find((item) => item.id === "pending-task");
+    expect(pendingTask.subtitle).toContain("gpt-3.5");
+    expect(pendingTask.subtitle).not.toContain("0s"); // pending tasks should not show duration
+
+    const rejectedTask = dagItems.find((item) => item.id === "rejected-task");
+    expect(rejectedTask.subtitle).toContain("temp 0.5");
+    expect(rejectedTask.subtitle).not.toContain("0s"); // rejected tasks should not show duration
+
+    vi.useRealTimers();
+  });
+
+  it("handles tasks without startedAt gracefully", () => {
+    const detailShapedJob = {
+      id: "test-job-no-start-time",
+      pipelineId: "test-job-no-start-time",
+      name: "No Start Time Test Job",
+      status: "running",
+      tasks: {
+        "no-start-task": {
+          name: "no-start-task",
+          state: "running",
+          // Missing startedAt
+          config: { model: "gpt-4" },
+        },
+      },
+      pipeline: {
+        tasks: ["no-start-task"],
+      },
+    };
+
+    computeDagItemsSpy.mockReturnValue([
+      { id: "no-start-task", status: "active", source: "pipeline" },
+    ]);
+
+    render(
+      <JobDetail
+        job={detailShapedJob}
+        pipeline={detailShapedJob.pipeline}
+        onClose={mockOnClose}
+        onResume={mockOnResume}
+      />
+    );
+
+    // Get the DAG items from the mocked DAGGrid component
+    const dagItemsElements = screen.getAllByTestId("dag-items");
+    const dagItemsElement = dagItemsElements[dagItemsElements.length - 1];
+    const dagItems = JSON.parse(dagItemsElement.textContent);
+
+    const noStartTask = dagItems.find((item) => item.id === "no-start-task");
+    expect(noStartTask.subtitle).toContain("gpt-4");
+    expect(noStartTask.subtitle).not.toContain("0s"); // Should not show duration without startedAt
+  });
+
+  it("updates running task duration when time advances", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2025-10-06T00:30:00Z"));
+
+    const detailShapedJob = {
+      id: "test-job-live-update",
+      pipelineId: "test-job-live-update",
+      name: "Live Update Test Job",
+      status: "running",
+      tasks: {
+        "running-task": {
+          name: "running-task",
+          state: "running",
+          startedAt: "2025-10-06T00:25:00Z", // Started 5 minutes ago
+          config: { model: "gpt-4" },
+        },
+      },
+      pipeline: {
+        tasks: ["running-task"],
+      },
+    };
+
+    computeDagItemsSpy.mockReturnValue([
+      { id: "running-task", status: "active", source: "pipeline" },
+    ]);
+
+    const { rerender } = render(
+      <JobDetail
+        job={detailShapedJob}
+        pipeline={detailShapedJob.pipeline}
+        onClose={mockOnClose}
+        onResume={mockOnResume}
+      />
+    );
+
+    // Get initial DAG items
+    const dagItemsElements = screen.getAllByTestId("dag-items");
+    const dagItemsElement = dagItemsElements[dagItemsElements.length - 1];
+    let dagItems = JSON.parse(dagItemsElement.textContent);
+
+    const runningTask = dagItems.find((item) => item.id === "running-task");
+    expect(runningTask.subtitle).toContain("gpt-4");
+    expect(runningTask.subtitle).toContain("5m 0s"); // Initial duration
+
+    // Advance time by 2 minutes
+    act(() => {
+      vi.advanceTimersByTime(120000); // 2 minutes
+    });
+
+    // Re-render to trigger the ticker update
+    rerender(
+      <JobDetail
+        job={detailShapedJob}
+        pipeline={detailShapedJob.pipeline}
+        onClose={mockOnClose}
+        onResume={mockOnResume}
+      />
+    );
+
+    // Get updated DAG items
+    const updatedDagItemsElements = screen.getAllByTestId("dag-items");
+    const updatedDagItemsElement =
+      updatedDagItemsElements[updatedDagItemsElements.length - 1];
+    dagItems = JSON.parse(updatedDagItemsElement.textContent);
+
+    const updatedRunningTask = dagItems.find(
+      (item) => item.id === "running-task"
+    );
+    expect(updatedRunningTask.subtitle).toContain("gpt-4");
+    expect(updatedRunningTask.subtitle).toContain("7m 0s"); // Updated duration
+
+    vi.useRealTimers();
   });
 });

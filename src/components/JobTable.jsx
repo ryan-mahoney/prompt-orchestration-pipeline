@@ -2,7 +2,8 @@ import React from "react";
 import { Box, Flex, Table, Text, Button } from "@radix-ui/themes";
 import { Progress } from "./ui/progress";
 import { Clock, TimerReset, ChevronRight } from "lucide-react";
-import { fmtDuration, elapsedBetween } from "../utils/time";
+import { fmtDuration } from "../utils/duration.js";
+import { taskDisplayDurationMs } from "../utils/duration.js";
 import { countCompleted } from "../utils/jobs";
 import { progressClasses, statusBadge } from "../utils/ui";
 
@@ -12,6 +13,7 @@ export default function JobTable({
   onOpenJob,
   totalProgressPct,
   overallElapsed,
+  now,
 }) {
   if (jobs.length === 0) {
     return (
@@ -49,8 +51,8 @@ export default function JobTable({
                 )
               : job.tasks || {};
             const currentTask = job.current ? taskById[job.current] : undefined;
-            const currentElapsed = currentTask
-              ? elapsedBetween(currentTask.startedAt, currentTask.endedAt)
+            const currentElapsedMs = currentTask
+              ? taskDisplayDurationMs(currentTask, now)
               : 0;
             const totalCompleted = countCompleted(job);
             const totalTasks =
@@ -118,20 +120,20 @@ export default function JobTable({
                           : (job.current ?? "—")}
                     </Text>
                     {currentTask && (
-                      <Flex align="center" gap="1">
-                        <Clock className="h-3 w-3 text-slate-500" />
-                        <Text size="1" className="text-slate-500">
-                          {fmtDuration(currentElapsed)}
-                        </Text>
-                      </Flex>
-                    )}
-                    {(currentTaskConfig?.model || currentTask?.model) && (
-                      <div className="text-slate-500">
-                        {currentTaskConfig?.model || currentTask?.model} · temp{" "}
-                        {currentTaskConfig?.temperature ??
-                          currentTask?.temperature ??
-                          "—"}
-                      </div>
+                      <Text size="1" className="text-slate-500">
+                        {[
+                          currentTaskConfig?.model || currentTask?.model,
+                          currentTaskConfig?.temperature != null ||
+                          currentTask?.temperature != null
+                            ? `temp ${currentTaskConfig?.temperature ?? currentTask?.temperature}`
+                            : null,
+                          currentElapsedMs > 0
+                            ? fmtDuration(currentElapsedMs)
+                            : null,
+                        ]
+                          .filter(Boolean)
+                          .join(" · ")}
+                      </Text>
                     )}
                   </Flex>
                 </Table.Cell>

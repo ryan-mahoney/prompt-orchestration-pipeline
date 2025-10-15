@@ -287,11 +287,11 @@ function DAGGrid({
         ref={gridRef}
         className="grid grid-cols-1 lg:grid-cols-3 gap-16 relative z-0"
       >
-        {visualOrder.map((idx) => {
+        {visualOrder.map((idx, mapIndex) => {
           if (idx === -1) {
             return (
               <div
-                key={`ghost-${idx}`}
+                key={`ghost-${mapIndex}`}
                 className="invisible"
                 aria-hidden="true"
               />
