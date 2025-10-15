@@ -5,8 +5,8 @@ import {
   getActiveServerCount,
 } from "./utils/serverHelper.js";
 
-// Add testing library matchers
-import "@testing-library/jest-dom/matchers";
+// Add testing library matchers (Vitest-specific import)
+import "@testing-library/jest-dom/vitest";
 
 // Set NODE_ENV to 'test' for all tests
 process.env.NODE_ENV = "test";
