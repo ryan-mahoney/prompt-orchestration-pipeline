@@ -17,7 +17,7 @@ vi.mock("../src/utils/dag.js", () => ({
   computeActiveIndex: vi.fn(),
 }));
 
-import { render, screen } from "@testing-library/react";
+import { render, screen, act } from "@testing-library/react";
 import JobDetail from "../src/components/JobDetail.jsx";
 import * as dagUtils from "../src/utils/dag.js";
 
@@ -512,5 +512,79 @@ describe("JobDetail - Detail-Shaped Job with Pipeline from API", () => {
     const noStartTask = dagItems.find((item) => item.id === "no-start-task");
     expect(noStartTask.subtitle).toContain("model: gpt-4");
     expect(noStartTask.subtitle).not.toContain("0s"); // Should not show duration without startedAt
+  });
+
+  it("updates running task duration when time advances", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2025-10-06T00:30:00Z"));
+
+    const detailShapedJob = {
+      id: "test-job-live-update",
+      pipelineId: "test-job-live-update",
+      name: "Live Update Test Job",
+      status: "running",
+      tasks: [
+        {
+          name: "running-task",
+          state: "running",
+          startedAt: "2025-10-06T00:25:00Z", // Started 5 minutes ago
+          config: { model: "gpt-4" },
+        },
+      ],
+      pipeline: {
+        tasks: ["running-task"],
+      },
+    };
+
+    computeDagItemsSpy.mockReturnValue([
+      { id: "running-task", status: "active", source: "pipeline" },
+    ]);
+
+    const { rerender } = render(
+      <JobDetail
+        job={detailShapedJob}
+        pipeline={detailShapedJob.pipeline}
+        onClose={mockOnClose}
+        onResume={mockOnResume}
+      />
+    );
+
+    // Get initial DAG items
+    const dagItemsElements = screen.getAllByTestId("dag-items");
+    const dagItemsElement = dagItemsElements[dagItemsElements.length - 1];
+    let dagItems = JSON.parse(dagItemsElement.textContent);
+
+    const runningTask = dagItems.find((item) => item.id === "running-task");
+    expect(runningTask.subtitle).toContain("model: gpt-4");
+    expect(runningTask.subtitle).toContain("5m 0s"); // Initial duration
+
+    // Advance time by 2 minutes
+    act(() => {
+      vi.advanceTimersByTime(120000); // 2 minutes
+    });
+
+    // Re-render to trigger the ticker update
+    rerender(
+      <JobDetail
+        job={detailShapedJob}
+        pipeline={detailShapedJob.pipeline}
+        onClose={mockOnClose}
+        onResume={mockOnResume}
+      />
+    );
+
+    // Get updated DAG items
+    const updatedDagItemsElements = screen.getAllByTestId("dag-items");
+    const updatedDagItemsElement =
+      updatedDagItemsElements[updatedDagItemsElements.length - 1];
+    dagItems = JSON.parse(updatedDagItemsElement.textContent);
+
+    const updatedRunningTask = dagItems.find(
+      (item) => item.id === "running-task"
+    );
+    expect(updatedRunningTask.subtitle).toContain("model: gpt-4");
+    expect(updatedRunningTask.subtitle).toContain("7m 0s"); // Updated duration
+
+    vi.useRealTimers();
   });
 });

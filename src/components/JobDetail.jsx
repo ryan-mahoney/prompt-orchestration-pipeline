@@ -4,10 +4,12 @@ import { ChevronLeft } from "lucide-react";
 import { statusBadge } from "../utils/ui";
 import { fmtDuration } from "../utils/duration.js";
 import { normalizeState, taskDisplayDurationMs } from "../utils/duration.js";
+import { useTicker } from "../ui/client/hooks/useTicker.js";
 import DAGGrid from "./DAGGrid.jsx";
 import { computeDagItems, computeActiveIndex } from "../utils/dag.js";
 
 export default function JobDetail({ job, pipeline, onClose, onResume }) {
+  const now = useTicker(1000);
   const [resumeFrom, setResumeFrom] = useState(
     pipeline?.tasks?.[0]
       ? typeof pipeline.tasks[0] === "string"
@@ -85,7 +87,7 @@ export default function JobDetail({ job, pipeline, onClose, onResume }) {
     if (task?.refinementAttempts != null)
       subtitleParts.push(`refinements: ${task.refinementAttempts}`);
     if (task?.startedAt) {
-      const durationMs = taskDisplayDurationMs(task);
+      const durationMs = taskDisplayDurationMs(task, now);
       if (durationMs > 0) subtitleParts.push(`${fmtDuration(durationMs)}`);
     }
 
