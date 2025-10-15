@@ -2,9 +2,11 @@ import React from "react";
 import { Card, CardHeader, CardTitle, CardContent } from "./ui/card";
 import { Progress } from "./ui/progress";
 import { Clock, TimerReset, ChevronRight } from "lucide-react";
-import { fmtDuration, elapsedBetween } from "../utils/time";
+import { fmtDuration } from "../utils/time";
+import { taskDisplayDurationMs } from "../utils/duration";
 import { countCompleted } from "../utils/jobs";
 import { progressClasses, statusBadge } from "../utils/ui";
+import { useTicker } from "../ui/client/hooks/useTicker";
 
 export default function JobCard({
   job,
@@ -13,9 +15,10 @@ export default function JobCard({
   progressPct,
   overallElapsedMs,
 }) {
+  const now = useTicker(1000);
   const currentTask = job.current ? job.tasks[job.current] : undefined;
-  const currentElapsed = currentTask
-    ? elapsedBetween(currentTask.startedAt, currentTask.endedAt)
+  const currentElapsedMs = currentTask
+    ? taskDisplayDurationMs(currentTask, now)
     : 0;
   const totalCompleted = countCompleted(job);
   const hasValidId = Boolean(job.id);
@@ -66,9 +69,10 @@ export default function JobCard({
                 ? "—"
                 : (job.current ?? "—")}
           </div>
-          {currentTask && (
+          {currentTask && currentElapsedMs > 0 && (
             <div className="flex items-center gap-1 text-slate-500">
-              <Clock className="h-4 w-4" /> {fmtDuration(currentElapsed)}
+              <Clock className="h-4 w-4" data-testid="clock-icon" />{" "}
+              {fmtDuration(currentElapsedMs)}
             </div>
           )}
           {currentTask?.config && (
