@@ -1,16 +1,43 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
+
+// Export debounce constant for tests
+export const REFRESH_DEBOUNCE_MS = 200;
+
+/**
+ * fetchJobDetail - Extracted fetch logic for job details
+ *
+ * @param {string} jobId - The job ID to fetch
+ * @param {Object} options - Options object
+ * @param {AbortSignal} options.signal - Optional abort signal
+ * @returns {Promise<Object>} Job data
+ */
+async function fetchJobDetail(jobId, { signal } = {}) {
+  const response = await fetch(`/api/jobs/${jobId}`, { signal });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.message || `HTTP ${response.status}`);
+  }
+
+  const result = await response.json();
+
+  if (!result.ok) {
+    throw new Error(result.message || "Failed to load job");
+  }
+
+  return result.data;
+}
 
 /**
  * applyJobEvent - Reducer function to apply SSE events to a single job
+ * (pure, no side effects)
  *
  * @param {Object} prev - Previous job state
  * @param {Object} event - SSE event with type and payload
+ * @param {string} jobId - Current job ID for filtering
  * @returns {Object} Updated job state
  */
-function applyJobEvent(prev = null, event) {
-  // prev: Single job object or null
-  // event: { type: string, payload: object }
-
+function applyJobEvent(prev = null, event, jobId) {
   if (!event || !event.type) return prev;
 
   const p = event.payload || {};
@@ -39,9 +66,7 @@ function applyJobEvent(prev = null, event) {
       const merged = { ...prev, ...p };
       try {
         if (JSON.stringify(merged) === JSON.stringify(prev)) return prev;
-      } catch (e) {
-        // ignore stringify errors
-      }
+      } catch (e) {}
       return merged;
     }
 
@@ -56,10 +81,7 @@ function applyJobEvent(prev = null, event) {
 
     case "status:changed": {
       if (!p.id) return prev;
-      // Only update status if this matches our job
-      if (!prev || prev.id !== p.id) {
-        return prev;
-      }
+      if (!prev || prev.id !== p.id) return prev;
       const updated = { ...prev, status: p.status };
       try {
         if (JSON.stringify(updated) === JSON.stringify(prev)) return prev;
@@ -67,8 +89,32 @@ function applyJobEvent(prev = null, event) {
       return updated;
     }
 
+    case "state:change": {
+      // Direct-apply only (id-present). Path-only handling is done by the event handler
+      const data = p.data || p;
+      if (data.id && data.id === jobId && prev && prev.id === data.id) {
+        const merged = { ...prev, ...data };
+        try {
+          if (JSON.stringify(merged) === JSON.stringify(prev)) return prev;
+        } catch (e) {}
+        return merged;
+      }
+      return prev;
+    }
+
     default:
       return prev;
+  }
+}
+
+function matchesJobTasksStatusPath(path, jobId) {
+  try {
+    const re = new RegExp(
+      `/pipeline-data/(current|complete|pending|rejected)/${jobId}/tasks-status\\.json$`
+    );
+    return re.test(path);
+  } catch {
+    return false;
   }
 }
 
@@ -92,6 +138,28 @@ export function useJobDetailWithUpdates(jobId) {
   const hydratedRef = useRef(false);
   const eventQueue = useRef([]);
   const mountedRef = useRef(true);
+  const refetchTimerRef = useRef(null);
+
+  // Debounced refetch helper (called directly from handlers)
+  const scheduleDebouncedRefetch = useCallback(() => {
+    if (refetchTimerRef.current) clearTimeout(refetchTimerRef.current);
+    refetchTimerRef.current = setTimeout(async () => {
+      if (!mountedRef.current || !hydratedRef.current) return;
+      try {
+        const jobData = await fetchJobDetail(jobId);
+        if (mountedRef.current) {
+          setData(jobData);
+          setError(null);
+        }
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error("Failed to refetch job detail:", err);
+        if (mountedRef.current) setError(err.message);
+      } finally {
+        refetchTimerRef.current = null;
+      }
+    }, REFRESH_DEBOUNCE_MS);
+  }, [jobId]);
 
   // Reset state when jobId changes
   useEffect(() => {
@@ -101,46 +169,40 @@ export function useJobDetailWithUpdates(jobId) {
     setConnectionStatus("disconnected");
     hydratedRef.current = false;
     eventQueue.current = [];
+    if (refetchTimerRef.current) {
+      clearTimeout(refetchTimerRef.current);
+      refetchTimerRef.current = null;
+    }
   }, [jobId]);
 
   // Fetch job detail on mount and when jobId changes
   useEffect(() => {
     if (!jobId || !mountedRef.current) return;
 
-    const fetchJobDetail = async () => {
+    const doFetch = async () => {
       try {
         setLoading(true);
         setError(null);
 
-        const response = await fetch(`/api/jobs/${jobId}`);
+        const jobData = await fetchJobDetail(jobId);
 
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}));
-          throw new Error(errorData.message || `HTTP ${response.status}`);
-        }
-
-        const result = await response.json();
-
-        if (!result.ok) {
-          throw new Error(result.message || "Failed to load job");
-        }
-
-        const jobData = result.data;
-
-        // Apply any queued events to the fresh data
+        // Apply any queued events to the fresh data (purely), and detect if a refetch is needed
         let finalData = jobData;
+        let queuedNeedsRefetch = false;
         if (eventQueue.current.length > 0) {
-          try {
-            finalData = eventQueue.current.reduce(
-              (acc, ev) => applyJobEvent(acc, ev),
-              jobData
-            );
-          } catch (e) {
-            // eslint-disable-next-line no-console
-            console.error(
-              "[useJobDetailWithUpdates] failed applying queued events",
-              e
-            );
+          for (const ev of eventQueue.current) {
+            if (ev.type === "state:change") {
+              const d = (ev.payload && (ev.payload.data || ev.payload)) || {};
+              if (
+                !d.id &&
+                typeof d.path === "string" &&
+                matchesJobTasksStatusPath(d.path, jobId)
+              ) {
+                queuedNeedsRefetch = true;
+                continue; // don’t apply to data
+              }
+            }
+            finalData = applyJobEvent(finalData, ev, jobId);
           }
           eventQueue.current = [];
         }
@@ -149,6 +211,11 @@ export function useJobDetailWithUpdates(jobId) {
           setData(finalData);
           setError(null);
           hydratedRef.current = true;
+
+          // Now that we're hydrated, if any queued path-only change was seen, schedule a refetch
+          if (queuedNeedsRefetch) {
+            scheduleDebouncedRefetch();
+          }
         }
       } catch (err) {
         // eslint-disable-next-line no-console
@@ -164,8 +231,8 @@ export function useJobDetailWithUpdates(jobId) {
       }
     };
 
-    fetchJobDetail();
-  }, [jobId]);
+    doFetch();
+  }, [jobId, scheduleDebouncedRefetch]);
 
   // Set up SSE connection
   useEffect(() => {
@@ -212,9 +279,7 @@ export function useJobDetailWithUpdates(jobId) {
               // Close existing reference if any
               try {
                 esRef.current?.close();
-              } catch (e) {
-                // ignore
-              }
+              } catch (e) {}
 
               // Create a fresh EventSource and attach the same listeners
               const eventsUrl = jobId
@@ -226,6 +291,7 @@ export function useJobDetailWithUpdates(jobId) {
               newEs.addEventListener("job:created", onJobCreated);
               newEs.addEventListener("job:removed", onJobRemoved);
               newEs.addEventListener("status:changed", onStatusChanged);
+              newEs.addEventListener("state:change", onStateChange);
               newEs.addEventListener("error", onError);
 
               esRef.current = newEs;
@@ -241,7 +307,7 @@ export function useJobDetailWithUpdates(jobId) {
           const payload = evt && evt.data ? JSON.parse(evt.data) : null;
           const eventObj = { type, payload };
 
-          // Filter events by jobId - only process events for our job
+          // Filter events by jobId - only process events for our job when id is present
           if (payload && payload.id && payload.id !== jobId) {
             return; // Ignore events for other jobs
           }
@@ -252,16 +318,27 @@ export function useJobDetailWithUpdates(jobId) {
             return;
           }
 
-          // Apply event using pure reducer
+          // Path-only state:change → schedule debounced refetch
+          if (type === "state:change") {
+            const d = (payload && (payload.data || payload)) || {};
+            if (
+              !d.id &&
+              typeof d.path === "string" &&
+              matchesJobTasksStatusPath(d.path, jobId)
+            ) {
+              scheduleDebouncedRefetch();
+              return; // no direct setData
+            }
+          }
+
+          // Apply event using pure reducer (includes direct state:change with id)
           setData((prev) => {
-            const next = applyJobEvent(prev, eventObj);
+            const next = applyJobEvent(prev, eventObj, jobId);
             try {
               if (JSON.stringify(prev) === JSON.stringify(next)) {
                 return prev;
               }
-            } catch (e) {
-              // If stringify fails, fall back to returning next
-            }
+            } catch (e) {}
             return next;
           });
         } catch (err) {
@@ -276,12 +353,14 @@ export function useJobDetailWithUpdates(jobId) {
       const onJobRemoved = (evt) => handleIncomingEvent("job:removed", evt);
       const onStatusChanged = (evt) =>
         handleIncomingEvent("status:changed", evt);
+      const onStateChange = (evt) => handleIncomingEvent("state:change", evt);
 
       es.addEventListener("open", onOpen);
       es.addEventListener("job:updated", onJobUpdated);
       es.addEventListener("job:created", onJobCreated);
       es.addEventListener("job:removed", onJobRemoved);
       es.addEventListener("status:changed", onStatusChanged);
+      es.addEventListener("state:change", onStateChange);
       es.addEventListener("error", onError);
 
       // Set connection status from readyState when possible
@@ -298,11 +377,10 @@ export function useJobDetailWithUpdates(jobId) {
           es.removeEventListener("job:created", onJobCreated);
           es.removeEventListener("job:removed", onJobRemoved);
           es.removeEventListener("status:changed", onStatusChanged);
+          es.removeEventListener("state:change", onStateChange);
           es.removeEventListener("error", onError);
           es.close();
-        } catch (err) {
-          // ignore
-        }
+        } catch (err) {}
         if (reconnectTimer.current) {
           clearTimeout(reconnectTimer.current);
           reconnectTimer.current = null;
@@ -328,22 +406,25 @@ export function useJobDetailWithUpdates(jobId) {
       }
       return undefined;
     }
-  }, [jobId]);
+  }, [jobId, scheduleDebouncedRefetch]);
 
-  // Cleanup on unmount
+  // Mount/unmount lifecycle: ensure mountedRef is true on mount (StrictMode-safe)
   useEffect(() => {
+    mountedRef.current = true;
     return () => {
       mountedRef.current = false;
       if (reconnectTimer.current) {
         clearTimeout(reconnectTimer.current);
         reconnectTimer.current = null;
       }
+      if (refetchTimerRef.current) {
+        clearTimeout(refetchTimerRef.current);
+        refetchTimerRef.current = null;
+      }
       if (esRef.current) {
         try {
           esRef.current.close();
-        } catch (e) {
-          // ignore
-        }
+        } catch (e) {}
         esRef.current = null;
       }
     };

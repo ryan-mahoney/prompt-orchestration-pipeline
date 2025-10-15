@@ -141,3 +141,6 @@ vite.config.ts.timestamp-*
 # Apple cache files
 .DS_Store
 Thumbs.db
+
+# Temporary payload samples
+tmp-payload.json
