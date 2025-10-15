@@ -306,4 +306,41 @@ describe("PipelineDetail", () => {
     // Hook should be called for valid IDs
     expect(useJobDetailWithUpdates).toHaveBeenCalledWith("validjobid123");
   });
+
+  it("renders status badge and job ID in header when data is loaded", () => {
+    const mockJob = {
+      id: "testjob123",
+      pipelineId: "testjob123",
+      name: "Test Running Job",
+      status: "running",
+      tasks: [
+        { name: "research", status: "pending" },
+        { name: "analysis", status: "pending" },
+      ],
+      pipeline: {
+        tasks: ["research", "analysis"],
+      },
+    };
+
+    // Mock the hook to return data with running status
+    vi.mocked(useJobDetailWithUpdates).mockReturnValue({
+      data: mockJob,
+      loading: false,
+      error: null,
+    });
+
+    __setParams({ jobId: "testjob123" });
+
+    render(
+      <MemoryRouter>
+        <PipelineDetail />
+      </MemoryRouter>
+    );
+
+    // Check for job ID in header
+    expect(screen.getByText(/ID: testjob123/i)).toBeDefined();
+
+    // Check for status badge content "Running"
+    expect(screen.getByText("Running")).toBeDefined();
+  });
 });

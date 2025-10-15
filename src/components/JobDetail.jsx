@@ -212,31 +212,6 @@ required:
 
   return (
     <div className="flex h-full flex-col">
-      <header className="sticky top-0 z-10 bg-white border-b border-gray-200 px-6 py-4 mb-6">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={onClose}
-              aria-label="Back to jobs"
-              className="text-gray-600 hover:text-gray-900"
-            >
-              <ChevronLeft className="h-4 w-4" /> Back
-            </Button>
-            <div>
-              <h1 className="text-2xl font-semibold text-gray-900">
-                {job.name}
-              </h1>
-              <p className="text-sm text-gray-600 mt-1">ID: {job.pipelineId}</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            {statusBadge(job.status)}
-          </div>
-        </div>
-      </header>
-
       <DAGGrid
         items={dagItems}
         activeIndex={activeIndex}

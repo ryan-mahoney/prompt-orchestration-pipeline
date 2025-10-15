@@ -71,8 +71,9 @@ describe("JobDetail - Array Tasks Support", () => {
       />
     );
 
-    // Check that the component rendered
-    expect(screen.getByText("Test Job")).toBeDefined();
+    // Check that the component rendered (job name is now in Layout header, not JobDetail)
+    // Verify DAG computation works
+    expect(computeDagItemsSpy).toHaveBeenCalledWith(job, pipeline);
 
     // Verify computeDagItems was called with the job
     expect(computeDagItemsSpy).toHaveBeenCalledWith(job, pipeline);
