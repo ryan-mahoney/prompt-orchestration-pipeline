@@ -2,9 +2,10 @@ import React from "react";
 import { Card, CardHeader, CardTitle, CardContent } from "./ui/card";
 import { Progress } from "./ui/progress";
 import { Clock, TimerReset, ChevronRight } from "lucide-react";
-import { fmtDuration, elapsedBetween } from "../utils/time";
+import { fmtDuration, taskDisplayDurationMs } from "../utils/duration";
 import { countCompleted } from "../utils/jobs";
 import { progressClasses, statusBadge } from "../utils/ui";
+import { useTicker } from "../ui/client/hooks/useTicker";
 
 export default function JobCard({
   job,
@@ -13,9 +14,10 @@ export default function JobCard({
   progressPct,
   overallElapsedMs,
 }) {
+  const now = useTicker(1000);
   const currentTask = job.current ? job.tasks[job.current] : undefined;
-  const currentElapsed = currentTask
-    ? elapsedBetween(currentTask.startedAt, currentTask.endedAt)
+  const currentElapsedMs = currentTask
+    ? taskDisplayDurationMs(currentTask, now)
     : 0;
   const totalCompleted = countCompleted(job);
   const hasValidId = Boolean(job.id);
@@ -59,21 +61,15 @@ export default function JobCard({
       <CardContent className="pt-0">
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
           <div className="font-semibold">
-            Current:{" "}
             {currentTask
               ? currentTask.name
               : job.status === "completed"
                 ? "—"
                 : (job.current ?? "—")}
           </div>
-          {currentTask && (
-            <div className="flex items-center gap-1 text-slate-500">
-              <Clock className="h-4 w-4" /> {fmtDuration(currentElapsed)}
-            </div>
-          )}
-          {currentTask?.config && (
+          {currentTask && currentElapsedMs > 0 && (
             <div className="text-slate-500">
-              {currentTask.config.model} · temp {currentTask.config.temperature}
+              {fmtDuration(currentElapsedMs)}
             </div>
           )}
         </div>
@@ -86,9 +82,9 @@ export default function JobCard({
           />
           <div className="mt-2 flex flex-wrap items-center justify-between text-sm text-slate-500">
             <div>
-              {totalCompleted} of {pipeline.tasks.length} tasks complete
+              {totalCompleted} of {pipeline.tasks.length} tasks
             </div>
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1 text-right">
               <TimerReset className="h-4 w-4" /> {fmtDuration(overallElapsedMs)}
             </div>
           </div>

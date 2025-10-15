@@ -45,20 +45,48 @@ function normalizeTaskState(raw) {
 }
 
 /**
- * Convert tasks input into an array of normalized task objects.
+ * Convert tasks input into an object of normalized task objects keyed by task name.
  * Accepts:
- * - object keyed by taskName -> taskObj
- * - array of task objects (with optional name)
+ * - object keyed by taskName -> taskObj (preferred canonical shape)
+ * - array of task objects (with optional name) - converted to object
  */
 function normalizeTasks(rawTasks) {
-  if (!rawTasks) return { tasks: [], warnings: [] };
+  if (!rawTasks) return { tasks: {}, warnings: [] };
   const warnings = [];
+
+  if (typeof rawTasks === "object" && !Array.isArray(rawTasks)) {
+    // Object shape - canonical format
+    const tasks = {};
+    Object.entries(rawTasks).forEach(([name, t]) => {
+      const ns = normalizeTaskState(t && t.state);
+      if (ns.warning) warnings.push(`${name}:${ns.warning}`);
+      tasks[name] = {
+        name,
+        state: ns.state,
+        startedAt: t && t.startedAt ? String(t.startedAt) : null,
+        endedAt: t && t.endedAt ? String(t.endedAt) : null,
+        attempts:
+          typeof (t && t.attempts) === "number" ? t.attempts : undefined,
+        executionTimeMs:
+          typeof (t && t.executionTimeMs) === "number"
+            ? t.executionTimeMs
+            : undefined,
+        artifacts: Array.isArray(t && t.artifacts)
+          ? t.artifacts.slice()
+          : undefined,
+      };
+    });
+    return { tasks, warnings };
+  }
+
   if (Array.isArray(rawTasks)) {
-    const tasks = rawTasks.map((t, idx) => {
+    // Array shape - convert to object for backward compatibility
+    const tasks = {};
+    rawTasks.forEach((t, idx) => {
       const name = t && t.name ? String(t.name) : `task-${idx}`;
       const ns = normalizeTaskState(t && t.state);
       if (ns.warning) warnings.push(`${name}:${ns.warning}`);
-      return {
+      tasks[name] = {
         name,
         state: ns.state,
         startedAt: t && t.startedAt ? String(t.startedAt) : null,
@@ -77,30 +105,7 @@ function normalizeTasks(rawTasks) {
     return { tasks, warnings };
   }
 
-  if (typeof rawTasks === "object") {
-    const tasks = Object.entries(rawTasks).map(([name, t]) => {
-      const ns = normalizeTaskState(t && t.state);
-      if (ns.warning) warnings.push(`${name}:${ns.warning}`);
-      return {
-        name,
-        state: ns.state,
-        startedAt: t && t.startedAt ? String(t.startedAt) : null,
-        endedAt: t && t.endedAt ? String(t.endedAt) : null,
-        attempts:
-          typeof (t && t.attempts) === "number" ? t.attempts : undefined,
-        executionTimeMs:
-          typeof (t && t.executionTimeMs) === "number"
-            ? t.executionTimeMs
-            : undefined,
-        artifacts: Array.isArray(t && t.artifacts)
-          ? t.artifacts.slice()
-          : undefined,
-      };
-    });
-    return { tasks, warnings };
-  }
-
-  return { tasks: [], warnings: ["invalid_tasks_shape"] };
+  return { tasks: {}, warnings: ["invalid_tasks_shape"] };
 }
 
 /**
@@ -108,8 +113,12 @@ function normalizeTasks(rawTasks) {
  * Uses formula: round(100 * done_count / max(1, total_tasks))
  */
 function computeProgressFromTasks(tasks) {
-  const total = Math.max(1, tasks.length);
-  const done = tasks.reduce((acc, t) => acc + (t.state === "done" ? 1 : 0), 0);
+  const taskList = Object.values(tasks);
+  const total = Math.max(1, taskList.length);
+  const done = taskList.reduce(
+    (acc, t) => acc + (t.state === "done" ? 1 : 0),
+    0
+  );
   return Math.round((100 * done) / total);
 }
 
@@ -122,10 +131,11 @@ function computeProgressFromTasks(tasks) {
  * - pending otherwise
  */
 function deriveStatusFromTasks(tasks) {
-  if (!Array.isArray(tasks) || tasks.length === 0) return "pending";
-  if (tasks.some((t) => t.state === "error")) return "error";
-  if (tasks.some((t) => t.state === "running")) return "running";
-  if (tasks.every((t) => t.state === "done")) return "complete";
+  const taskList = Object.values(tasks);
+  if (!Array.isArray(taskList) || taskList.length === 0) return "pending";
+  if (taskList.some((t) => t.state === "error")) return "error";
+  if (taskList.some((t) => t.state === "running")) return "running";
+  if (taskList.every((t) => t.state === "done")) return "complete";
   return "pending";
 }
 
@@ -188,8 +198,9 @@ export function adaptJobSummary(apiJob = {}) {
   const location = apiJob.location === "complete" ? "complete" : "current";
 
   // Derived counts
-  const taskCount = tasks.length;
-  const doneCount = tasks.reduce(
+  const taskList = Object.values(tasks);
+  const taskCount = taskList.length;
+  const doneCount = taskList.reduce(
     (acc, t) => acc + (t.state === "done" ? 1 : 0),
     0
   );

@@ -1,29 +1,30 @@
 import { describe, it, expect } from "vitest";
 import { adaptJobDetail } from "../src/ui/client/adapters/job-adapter.js";
 
-describe("adaptJobDetail - Array Tasks Validation", () => {
-  it("returns tasks as array with names and valid states", () => {
+describe("adaptJobDetail - Object Tasks Validation", () => {
+  it("returns tasks as object with names and valid states", () => {
     const apiDetail = {
       id: "test-job",
       name: "Test Job",
-      tasks: [
-        { name: "research", state: "done", startedAt: "2025-10-06T00:00:00Z" },
-        {
-          name: "analysis",
+      tasks: {
+        research: { state: "done", startedAt: "2025-10-06T00:00:00Z" },
+        analysis: {
           state: "running",
           startedAt: "2025-10-06T00:05:00Z",
         },
-        { name: "synthesis", state: "pending" },
-      ],
+        synthesis: { state: "pending" },
+      },
     };
 
     const result = adaptJobDetail(apiDetail);
 
-    expect(Array.isArray(result.tasks)).toBe(true);
-    expect(result.tasks).toHaveLength(3);
+    expect(typeof result.tasks).toBe("object");
+    expect(result.tasks).not.toBeNull();
+    expect(Object.keys(result.tasks)).toHaveLength(3);
 
     // Check each task has required properties
-    result.tasks.forEach((task) => {
+    Object.entries(result.tasks).forEach(([taskName, task]) => {
+      expect(taskName).toBe(task.name); // Key should match task name
       expect(task).toHaveProperty("name");
       expect(task).toHaveProperty("state");
       expect(typeof task.name).toBe("string");
@@ -32,7 +33,7 @@ describe("adaptJobDetail - Array Tasks Validation", () => {
     });
 
     // Check specific tasks
-    expect(result.tasks[0]).toEqual({
+    expect(result.tasks.research).toEqual({
       name: "research",
       state: "done",
       startedAt: "2025-10-06T00:00:00Z",
@@ -42,7 +43,7 @@ describe("adaptJobDetail - Array Tasks Validation", () => {
       artifacts: undefined,
     });
 
-    expect(result.tasks[1]).toEqual({
+    expect(result.tasks.analysis).toEqual({
       name: "analysis",
       state: "running",
       startedAt: "2025-10-06T00:05:00Z",
@@ -52,7 +53,7 @@ describe("adaptJobDetail - Array Tasks Validation", () => {
       artifacts: undefined,
     });
 
-    expect(result.tasks[2]).toEqual({
+    expect(result.tasks.synthesis).toEqual({
       name: "synthesis",
       state: "pending",
       startedAt: null,
@@ -67,20 +68,20 @@ describe("adaptJobDetail - Array Tasks Validation", () => {
     const apiDetail = {
       id: "test-job",
       name: "Test Job",
-      tasks: [
-        { name: "task1", state: "invalid_state" },
-        { name: "task2", state: "" },
-        { name: "task3", state: null },
-        { name: "task4" }, // missing state
-      ],
+      tasks: {
+        task1: { state: "invalid_state" },
+        task2: { state: "" },
+        task3: { state: null },
+        task4: {}, // missing state
+      },
     };
 
     const result = adaptJobDetail(apiDetail);
 
-    expect(Array.isArray(result.tasks)).toBe(true);
-    expect(result.tasks).toHaveLength(4);
+    expect(typeof result.tasks).toBe("object");
+    expect(Object.keys(result.tasks)).toHaveLength(4);
 
-    result.tasks.forEach((task) => {
+    Object.values(result.tasks).forEach((task) => {
       expect(task.state).toBe("pending");
     });
 
@@ -90,37 +91,12 @@ describe("adaptJobDetail - Array Tasks Validation", () => {
     expect(result.__warnings).toContain("task2:missing_state");
   });
 
-  it("handles tasks with missing names by generating fallback names", () => {
-    const apiDetail = {
-      id: "test-job",
-      name: "Test Job",
-      tasks: [
-        { state: "done" }, // missing name
-        { name: "valid-task", state: "running" },
-        { name: null, state: "pending" }, // null name
-        { name: "", state: "error" }, // empty name
-      ],
-    };
-
-    const result = adaptJobDetail(apiDetail);
-
-    expect(Array.isArray(result.tasks)).toBe(true);
-    expect(result.tasks).toHaveLength(4);
-
-    // Check fallback names are generated
-    expect(result.tasks[0].name).toBe("task-0");
-    expect(result.tasks[1].name).toBe("valid-task");
-    expect(result.tasks[2].name).toBe("task-2");
-    expect(result.tasks[3].name).toBe("task-3");
-  });
-
   it("preserves additional task properties when present", () => {
     const apiDetail = {
       id: "test-job",
       name: "Test Job",
-      tasks: [
-        {
-          name: "complex-task",
+      tasks: {
+        "complex-task": {
           state: "done",
           startedAt: "2025-10-06T00:00:00Z",
           endedAt: "2025-10-06T00:05:00Z",
@@ -129,15 +105,15 @@ describe("adaptJobDetail - Array Tasks Validation", () => {
           artifacts: ["output.json", "logs.txt"],
           config: { model: "gpt-4", temperature: 0.7 },
         },
-      ],
+      },
     };
 
     const result = adaptJobDetail(apiDetail);
 
-    expect(Array.isArray(result.tasks)).toBe(true);
-    expect(result.tasks).toHaveLength(1);
+    expect(typeof result.tasks).toBe("object");
+    expect(Object.keys(result.tasks)).toHaveLength(1);
 
-    const task = result.tasks[0];
+    const task = result.tasks["complex-task"];
     expect(task.name).toBe("complex-task");
     expect(task.state).toBe("done");
     expect(task.startedAt).toBe("2025-10-06T00:00:00Z");
@@ -147,17 +123,17 @@ describe("adaptJobDetail - Array Tasks Validation", () => {
     expect(task.artifacts).toEqual(["output.json", "logs.txt"]);
   });
 
-  it("handles empty tasks array", () => {
+  it("handles empty tasks object", () => {
     const apiDetail = {
       id: "test-job",
       name: "Test Job",
-      tasks: [],
+      tasks: {},
     };
 
     const result = adaptJobDetail(apiDetail);
 
-    expect(Array.isArray(result.tasks)).toBe(true);
-    expect(result.tasks).toHaveLength(0);
+    expect(typeof result.tasks).toBe("object");
+    expect(Object.keys(result.tasks)).toHaveLength(0);
     expect(result.taskCount).toBe(0);
     expect(result.doneCount).toBe(0);
   });
@@ -171,8 +147,8 @@ describe("adaptJobDetail - Array Tasks Validation", () => {
 
     const result = adaptJobDetail(apiDetail);
 
-    expect(Array.isArray(result.tasks)).toBe(true);
-    expect(result.tasks).toHaveLength(0);
+    expect(typeof result.tasks).toBe("object");
+    expect(Object.keys(result.tasks)).toHaveLength(0);
     expect(result.taskCount).toBe(0);
     expect(result.doneCount).toBe(0);
   });
@@ -186,22 +162,22 @@ describe("adaptJobDetail - Array Tasks Validation", () => {
 
     const result = adaptJobDetail(apiDetail);
 
-    expect(Array.isArray(result.tasks)).toBe(true);
-    expect(result.tasks).toHaveLength(0);
+    expect(typeof result.tasks).toBe("object");
+    expect(Object.keys(result.tasks)).toHaveLength(0);
     expect(result.taskCount).toBe(0);
     expect(result.doneCount).toBe(0);
   });
 
-  it("computes progress and status from array tasks", () => {
+  it("computes progress and status from object tasks", () => {
     const apiDetail = {
       id: "test-job",
       name: "Test Job",
-      tasks: [
-        { name: "task1", state: "done" },
-        { name: "task2", state: "running" },
-        { name: "task3", state: "pending" },
-        { name: "task4", state: "error" },
-      ],
+      tasks: {
+        task1: { state: "done" },
+        task2: { state: "running" },
+        task3: { state: "pending" },
+        task4: { state: "error" },
+      },
     };
 
     const result = adaptJobDetail(apiDetail);
@@ -220,10 +196,10 @@ describe("adaptJobDetail - Array Tasks Validation", () => {
     const apiDetail = {
       id: "test-job",
       name: "Test Job",
-      tasks: [
-        { name: "task1", state: "done" },
-        { name: "task2", state: "pending" },
-      ],
+      tasks: {
+        task1: { state: "done" },
+        task2: { state: "pending" },
+      },
       pipeline: {
         tasks: ["task1", "task2"],
       },

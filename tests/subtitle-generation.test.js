@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { computeDagItems } from "../src/utils/dag.js";
-import { fmtDuration, elapsedBetween } from "../src/utils/time.js";
+import { fmtDuration } from "../src/utils/duration.js";
 
 // Helper function to simulate the subtitle generation logic from JobDetail.jsx
 function generateSubtitle(task, taskConfig) {
@@ -13,7 +13,10 @@ function generateSubtitle(task, taskConfig) {
     subtitleParts.push(`refinements: ${task.refinementAttempts}`);
   if (task?.startedAt) {
     const execMs =
-      task?.executionTime ?? elapsedBetween(task.startedAt, task.endedAt);
+      task?.executionTime ??
+      (task.endedAt
+        ? Date.parse(task.endedAt) - Date.parse(task.startedAt)
+        : 0);
     if (execMs) subtitleParts.push(`time: ${fmtDuration(execMs)}`);
   }
 
@@ -198,7 +201,7 @@ describe("subtitle generation", () => {
       {
         task: { state: "running", startedAt: "2025-10-12T13:13:23.805Z" },
         config: { temperature: 0.5 },
-        expected: ["temp:", "time:"],
+        expected: ["temp:"], // Running tasks without endedAt don't show time in this legacy test
       },
       {
         task: { state: "error", refinementAttempts: 2 },

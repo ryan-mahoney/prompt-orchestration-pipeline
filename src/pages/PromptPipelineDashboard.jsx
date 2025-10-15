@@ -7,6 +7,8 @@ import { Box, Flex, Text, Heading, Tabs, Card } from "@radix-ui/themes";
 import { Progress } from "../components/ui/progress";
 import { useJobListWithUpdates } from "../ui/client/hooks/useJobListWithUpdates";
 import { adaptJobSummary } from "../ui/client/adapters/job-adapter";
+import { jobCumulativeDurationMs } from "../utils/duration";
+import { useTicker } from "../ui/client/hooks/useTicker";
 
 // Referenced components — leave these alone
 import JobTable from "../components/JobTable";
@@ -37,12 +39,8 @@ export default function PromptPipelineDashboard({ isConnected }) {
   const [seedUploadSuccess, setSeedUploadSuccess] = useState(null);
   const [seedUploadTimer, setSeedUploadTimer] = useState(null);
 
-  // ticker (for any time-based UI in child components)
-  const [, setTick] = useState(0);
-  useEffect(() => {
-    const t = setInterval(() => setTick((v) => v + 1), 1000);
-    return () => clearInterval(t);
-  }, []);
+  // Shared ticker for live duration updates
+  const now = useTicker(1000);
 
   const errorCount = useMemo(
     () => jobs.filter((j) => j.status === "error").length,
@@ -84,18 +82,7 @@ export default function PromptPipelineDashboard({ isConnected }) {
     return Math.round((done / total) * 100);
   };
 
-  const overallElapsed = (job) => {
-    const start = new Date(job.createdAt).getTime();
-    const taskList = Array.isArray(job.tasks)
-      ? job.tasks
-      : Object.values(job.tasks || {});
-    const latestEnd = taskList
-      .map((t) => (t.endedAt ? new Date(t.endedAt).getTime() : undefined))
-      .filter(Boolean)
-      .reduce((acc, ts) => (ts && (!acc || ts > acc) ? ts : acc), undefined);
-    const end = job.status === "complete" && latestEnd ? latestEnd : Date.now();
-    return Math.max(0, end - start);
-  };
+  const overallElapsed = (job) => jobCumulativeDurationMs(job, now);
 
   // Aggregate progress for currently running jobs (for a subtle top progress bar)
   const runningJobs = useMemo(
@@ -205,6 +192,7 @@ export default function PromptPipelineDashboard({ isConnected }) {
             onOpenJob={openJob}
             totalProgressPct={totalProgressPct}
             overallElapsed={overallElapsed}
+            now={now}
           />
         </Tabs.Content>
         <Tabs.Content value="errors">
@@ -214,6 +202,7 @@ export default function PromptPipelineDashboard({ isConnected }) {
             onOpenJob={openJob}
             totalProgressPct={totalProgressPct}
             overallElapsed={overallElapsed}
+            now={now}
           />
         </Tabs.Content>
         <Tabs.Content value="complete">
@@ -223,6 +212,7 @@ export default function PromptPipelineDashboard({ isConnected }) {
             onOpenJob={openJob}
             totalProgressPct={totalProgressPct}
             overallElapsed={overallElapsed}
+            now={now}
           />
         </Tabs.Content>
       </Tabs.Root>
