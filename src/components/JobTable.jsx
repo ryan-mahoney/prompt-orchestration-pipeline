@@ -2,7 +2,9 @@ import React from "react";
 import { Box, Flex, Table, Text, Button } from "@radix-ui/themes";
 import { Progress } from "./ui/progress";
 import { Clock, TimerReset, ChevronRight } from "lucide-react";
-import { fmtDuration, elapsedBetween } from "../utils/time";
+import { fmtDuration } from "../utils/duration.js";
+import { taskDisplayDurationMs } from "../utils/duration.js";
+import { useTicker } from "../ui/client/hooks/useTicker.js";
 import { countCompleted } from "../utils/jobs";
 import { progressClasses, statusBadge } from "../utils/ui";
 
@@ -13,6 +15,7 @@ export default function JobTable({
   totalProgressPct,
   overallElapsed,
 }) {
+  const now = useTicker(1000);
   if (jobs.length === 0) {
     return (
       <Box className="border border-dashed border-slate-200 rounded-xl p-6 text-center">
@@ -49,8 +52,8 @@ export default function JobTable({
                 )
               : job.tasks || {};
             const currentTask = job.current ? taskById[job.current] : undefined;
-            const currentElapsed = currentTask
-              ? elapsedBetween(currentTask.startedAt, currentTask.endedAt)
+            const currentElapsedMs = currentTask
+              ? taskDisplayDurationMs(currentTask, now)
               : 0;
             const totalCompleted = countCompleted(job);
             const totalTasks =
@@ -117,11 +120,14 @@ export default function JobTable({
                           ? "—"
                           : (job.current ?? "—")}
                     </Text>
-                    {currentTask && (
+                    {currentTask && currentElapsedMs > 0 && (
                       <Flex align="center" gap="1">
-                        <Clock className="h-3 w-3 text-slate-500" />
+                        <Clock
+                          className="h-3 w-3 text-slate-500"
+                          data-testid="clock-icon"
+                        />
                         <Text size="1" className="text-slate-500">
-                          {fmtDuration(currentElapsed)}
+                          {fmtDuration(currentElapsedMs)}
                         </Text>
                       </Flex>
                     )}
