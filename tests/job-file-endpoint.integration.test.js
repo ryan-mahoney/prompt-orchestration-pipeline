@@ -154,8 +154,7 @@ describe("Job Task File Endpoint Integration", () => {
         size: expect.any(Number),
         mtime: expect.any(String),
         encoding: "base64",
-        content:
-          "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==",
+        content: "iVBORw0KGgo=",
       });
     });
 
@@ -225,7 +224,7 @@ describe("Job Task File Endpoint Integration", () => {
       expect(data).toEqual({
         ok: false,
         error: "forbidden",
-        message: expect.stringContaining("path"),
+        message: "Path traversal not allowed",
       });
     });
 
@@ -239,7 +238,7 @@ describe("Job Task File Endpoint Integration", () => {
       expect(data).toEqual({
         ok: false,
         error: "forbidden",
-        message: expect.stringContaining("path"),
+        message: "Absolute paths not allowed",
       });
     });
 
@@ -253,7 +252,7 @@ describe("Job Task File Endpoint Integration", () => {
       expect(data).toEqual({
         ok: false,
         error: "forbidden",
-        message: expect.stringContaining("path"),
+        message: "Absolute paths not allowed",
       });
     });
 
