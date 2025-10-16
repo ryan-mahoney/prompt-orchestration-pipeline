@@ -276,8 +276,8 @@ function buildProviderFunctions(models) {
           model: finalModel,
           ...options,
           metadata: {
-            alias,
             ...options.metadata,
+            alias,
           },
         });
       };
