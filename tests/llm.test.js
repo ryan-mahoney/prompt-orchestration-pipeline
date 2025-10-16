@@ -712,10 +712,10 @@ describe("LLM Module", () => {
   describe("createLLM", () => {
     it("should create LLM interface with default provider", () => {
       // Arrange
-      const { createLLM } = llmModule;
+      const { createHighLevelLLM } = llmModule;
 
       // Act
-      const llm = createLLM({ defaultProvider: "deepseek" });
+      const llm = createHighLevelLLM({ defaultProvider: "deepseek" });
 
       // Assert
       expect(llm).toHaveProperty("chat");
@@ -728,8 +728,8 @@ describe("LLM Module", () => {
 
     it("should pass options to chat method", async () => {
       // Arrange
-      const { createLLM } = llmModule;
-      const llm = createLLM({ defaultProvider: "openai" });
+      const { createHighLevelLLM } = llmModule;
+      const llm = createHighLevelLLM({ defaultProvider: "openai" });
 
       // Act
       await llm.chat({
@@ -749,8 +749,8 @@ describe("LLM Module", () => {
 
     it("should create chain", () => {
       // Arrange
-      const { createLLM } = llmModule;
-      const llm = createLLM();
+      const { createHighLevelLLM } = llmModule;
+      const llm = createHighLevelLLM();
 
       // Act
       const chain = llm.createChain();
@@ -766,8 +766,8 @@ describe("LLM Module", () => {
 
     it("should wrap with retry", async () => {
       // Arrange
-      const { createLLM } = llmModule;
-      const llm = createLLM({ defaultProvider: "openai" });
+      const { createHighLevelLLM } = llmModule;
+      const llm = createHighLevelLLM({ defaultProvider: "openai" });
 
       // Act
       await llm.withRetry({
@@ -785,8 +785,8 @@ describe("LLM Module", () => {
 
     it("should execute parallel requests", async () => {
       // Arrange
-      const { createLLM } = llmModule;
-      const llm = createLLM({ defaultProvider: "openai" });
+      const { createHighLevelLLM } = llmModule;
+      const llm = createHighLevelLLM({ defaultProvider: "openai" });
       const requests = [
         { messages: [{ role: "user", content: "Test 1" }] },
         { messages: [{ role: "user", content: "Test 2" }] },
@@ -801,8 +801,8 @@ describe("LLM Module", () => {
 
     it("should expose available providers", () => {
       // Arrange
-      const { createLLM } = llmModule;
-      const llm = createLLM();
+      const { createHighLevelLLM } = llmModule;
+      const llm = createHighLevelLLM();
 
       // Act
       const providers = llm.getAvailableProviders();

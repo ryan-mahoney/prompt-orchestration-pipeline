@@ -102,6 +102,29 @@
           "description": "Initial backoff time in milliseconds for retries",
           "minimum": 100,
           "default": 1000
+        },
+        "models": {
+          "type": "object",
+          "description": "Registry of named model aliases",
+          "patternProperties": {
+            "^[a-z]+:[a-zA-Z0-9-]+$": {
+              "type": "object",
+              "properties": {
+                "provider": {
+                  "type": "string",
+                  "description": "LLM provider",
+                  "enum": ["openai", "deepseek", "anthropic", "mock"]
+                },
+                "model": {
+                  "type": "string",
+                  "description": "Model identifier"
+                }
+              },
+              "required": ["provider", "model"],
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
         }
       }
     },
