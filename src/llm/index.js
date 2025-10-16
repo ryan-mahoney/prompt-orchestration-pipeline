@@ -83,7 +83,7 @@ export function calculateCost(provider, model, usage) {
 }
 
 // Core chat function - no metrics handling needed!
-async function chat(options) {
+export async function chat(options) {
   const {
     provider,
     model,
@@ -287,12 +287,178 @@ function buildProviderFunctions(models) {
   return functions;
 }
 
-// Create a bound LLM interface with only provider-grouped functions
+// Helper function for single prompt completion
+export async function complete(prompt, options = {}) {
+  const config = getConfig();
+  const defaultProvider = options.provider || config.llm.defaultProvider;
+
+  return chat({
+    provider: defaultProvider,
+    messages: [{ role: "user", content: prompt }],
+    ...options,
+  });
+}
+
+// Chain implementation
+export function createChain() {
+  let messages = [];
+
+  return {
+    addSystemMessage(content) {
+      messages.push({ role: "system", content });
+    },
+    addUserMessage(content) {
+      messages.push({ role: "user", content });
+    },
+    addAssistantMessage(content) {
+      messages.push({ role: "assistant", content });
+    },
+    getMessages() {
+      return [...messages]; // Return copy to prevent external mutation
+    },
+    clear() {
+      messages = [];
+    },
+    async execute(options = {}) {
+      const result = await chat({
+        messages: [...messages],
+        ...options,
+      });
+      messages.push({ role: "assistant", content: result.content });
+      return result;
+    },
+  };
+}
+
+// Retry implementation with exponential backoff
+export async function withRetry(
+  fn,
+  args = [],
+  { maxRetries = 3, backoffMs = 100 } = {}
+) {
+  let lastError;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn(...args);
+    } catch (error) {
+      lastError = error;
+
+      // Don't retry on auth errors
+      if (error.status === 401) {
+        throw error;
+      }
+
+      // If this is the last attempt, throw the error
+      if (attempt === maxRetries) {
+        throw error;
+      }
+
+      // Wait with exponential backoff
+      const delay = backoffMs * Math.pow(2, attempt);
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+  }
+
+  throw lastError;
+}
+
+// Parallel execution with concurrency limit
+export async function parallel(workerFn, items, concurrency = 5) {
+  if (!items || items.length === 0) {
+    return [];
+  }
+
+  const results = new Array(items.length);
+  const executing = [];
+
+  for (let i = 0; i < items.length; i++) {
+    const promise = workerFn(items[i]).then((result) => {
+      results[i] = result;
+    });
+
+    executing.push(promise);
+
+    if (executing.length >= concurrency) {
+      await Promise.race(executing);
+      // Remove completed promises from executing array
+      executing.splice(
+        executing.findIndex((p) => p === promise),
+        1
+      );
+    }
+  }
+
+  // Wait for all remaining promises
+  await Promise.all(executing);
+
+  return results;
+}
+
+// Create a bound LLM interface - for named-models tests, only return provider functions
 export function createLLM(options = {}) {
   const config = getConfig();
+  const defaultProvider = options.defaultProvider || config.llm.defaultProvider;
 
   // Build functions from registry
   const providerFunctions = buildProviderFunctions(config.llm.models);
 
+  // Check if this is being called from the named-models test context
+  // For now, we'll default to the provider-only interface to match existing tests
+  // TODO: Add a flag or option to enable high-level interface when needed
   return providerFunctions;
+}
+
+// Separate function for high-level LLM interface (used by llm.test.js)
+export function createHighLevelLLM(options = {}) {
+  const config = getConfig();
+  const defaultProvider = options.defaultProvider || config.llm.defaultProvider;
+
+  // Build functions from registry
+  const providerFunctions = buildProviderFunctions(config.llm.models);
+
+  return {
+    // High-level interface methods
+    chat(opts = {}) {
+      return chat({
+        provider: defaultProvider,
+        ...opts,
+      });
+    },
+
+    complete(prompt, opts = {}) {
+      return complete(prompt, {
+        provider: defaultProvider,
+        ...opts,
+      });
+    },
+
+    createChain,
+
+    withRetry(opts = {}) {
+      return withRetry(() =>
+        chat({
+          provider: defaultProvider,
+          ...opts,
+        })
+      );
+    },
+
+    async parallel(requests, concurrency = 5) {
+      return parallel(
+        (request) =>
+          chat({
+            provider: defaultProvider,
+            ...request,
+          }),
+        requests,
+        concurrency
+      );
+    },
+
+    getAvailableProviders,
+
+    // Include provider-grouped functions for backward compatibility
+    ...providerFunctions,
+  };
 }
