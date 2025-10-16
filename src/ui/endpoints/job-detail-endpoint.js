@@ -38,7 +38,11 @@ export async function getJobDetailHandler(req, res) {
             endedAt: t.endedAt,
             attempts: t.attempts,
             executionTimeMs: t.executionTimeMs,
-            artifacts: t.artifacts || [],
+            files: {
+              artifacts: t.files?.artifacts || [],
+              logs: t.files?.logs || [],
+              tmp: t.files?.tmp || [],
+            },
           }))
         : [];
 
