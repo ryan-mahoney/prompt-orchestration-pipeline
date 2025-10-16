@@ -27,17 +27,145 @@ src/
     └── anthropic.js      ← Anthropic implementation
 ```
 
-## Core Functions
+## Provider-Grouped Functions (Primary API)
+
+The LLM layer exposes provider-grouped functions that map to named models in the configuration registry. This is the recommended approach for task development.
+
+### `createLLM(options)`
+
+Factory function that creates an interface with only provider-grouped functions.
+
+```javascript
+import { createLLM } from "../llm/index.js";
+
+const llm = createLLM();
+
+// Provider-grouped functions available:
+await llm.openai.gpt4({ messages: [{ role: "user", content: "Hello!" }] });
+await llm.openai.gpt4Turbo({ messages: [{ role: "user", content: "Hello!" }] });
+await llm.openai.gpt5({ messages: [{ role: "user", content: "Hello!" }] });
+
+await llm.deepseek.reasoner({
+  messages: [{ role: "user", content: "Hello!" }],
+});
+await llm.deepseek.chat({ messages: [{ role: "user", content: "Hello!" }] });
+
+await llm.anthropic.opus({ messages: [{ role: "user", content: "Hello!" }] });
+await llm.anthropic.sonnet({ messages: [{ role: "user", content: "Hello!" }] });
+```
+
+### Task Context Usage
+
+In task modules, `context.llm` provides only provider-grouped functions:
+
+```javascript
+// In a task module:
+export default async function analysis(context) {
+  const response = await context.llm.openai.gpt4({
+    messages: [{ role: "user", content: "Analyze this data" }],
+    temperature: 0.7,
+  });
+
+  return { analysis: response.content };
+}
+```
+
+### Provider and Model Overrides
+
+You can override the default provider and model:
+
+```javascript
+// Use OpenAI provider with custom model
+await llm.deepseek.reasoner({
+  messages: [{ role: "user", content: "Hello!" }],
+  provider: "openai", // Override provider
+  model: "gpt-4-custom", // Override model
+});
+
+// All other options are passed through
+await llm.openai.gpt4({
+  messages: [{ role: "user", content: "Hello!" }],
+  temperature: 0.5,
+  maxTokens: 1000,
+  metadata: { taskId: "task-123" },
+});
+```
+
+### Event Metadata
+
+Provider-grouped functions automatically include alias metadata in events:
+
+```javascript
+import { getLLMEvents } from "../llm/index.js";
+
+const events = getLLMEvents();
+events.on("llm:request:complete", (data) => {
+  console.log(data.metadata.alias); // "openai:gpt-4"
+});
+```
+
+### Model Registry
+
+The provider-grouped functions are generated from the model registry in your configuration. The default registry includes:
+
+```json
+{
+  "llm": {
+    "models": {
+      "openai:gpt-4": { "provider": "openai", "model": "gpt-4" },
+      "openai:gpt-4-turbo": { "provider": "openai", "model": "gpt-4-turbo" },
+      "openai:gpt-5": { "provider": "openai", "model": "gpt-5-chat-latest" },
+      "deepseek:reasoner": {
+        "provider": "deepseek",
+        "model": "deepseek-reasoner"
+      },
+      "deepseek:chat": { "provider": "deepseek", "model": "deepseek-chat" },
+      "anthropic:opus": { "provider": "anthropic", "model": "claude-3-opus" },
+      "anthropic:sonnet": {
+        "provider": "anthropic",
+        "model": "claude-3-sonnet"
+      }
+    }
+  }
+}
+```
+
+**Function Naming:**
+
+- Registry aliases are converted to camelCase function names
+- `openai:gpt-4-turbo` → `gpt4Turbo()`
+- `deepseek:reasoner` → `reasoner()`
+
+**Custom Registry:**
+You can customize the registry in your `config.json`:
+
+```json
+{
+  "llm": {
+    "models": {
+      "openai:custom": { "provider": "openai", "model": "gpt-4-custom" },
+      "deepseek:fast": { "provider": "deepseek", "model": "deepseek-chat" }
+    }
+  }
+}
+```
+
+This will generate:
+
+- `llm.openai.custom()`
+- `llm.deepseek.fast()`
+
+## Legacy Functions (Deprecated)
+
+The following functions are still available but deprecated in favor of provider-grouped functions:
 
 ### `chat(options)`
-
-Main function for LLM interactions. Supports multiple providers and models.
 
 ```javascript
 import { chat } from "../llm/index.js";
 
 const response = await chat({
-  provider: "openai", // or "deepseek", "anthropic"
+  provider: "openai",
   model: "gpt-5-chat-latest",
   messages: [
     { role: "system", content: "You are a helpful assistant" },
@@ -45,16 +173,11 @@ const response = await chat({
   ],
   temperature: 0.7,
   maxTokens: 1000,
-  metadata: { taskId: "task-123" }, // Optional tracking data
+  metadata: { taskId: "task-123" },
 });
-
-console.log(response.content); // AI response text
-console.log(response.usage); // Token usage stats
 ```
 
 ### `complete(prompt, options)`
-
-Convenience function for simple single-turn completions.
 
 ```javascript
 import { complete } from "../llm/index.js";
@@ -63,29 +186,6 @@ const response = await complete("What is 2+2?", {
   provider: "openai",
   model: "gpt-5-chat-latest",
 });
-
-console.log(response.content); // "4"
-```
-
-### `createLLM(options)`
-
-Factory function to create a bound LLM interface with default settings.
-
-```javascript
-import { createLLM } from "../llm/index.js";
-
-const llm = createLLM({
-  defaultProvider: "openai",
-  defaultModel: "gpt-5-chat-latest",
-});
-
-// Use the bound interface
-const response = await llm.chat({
-  messages: [{ role: "user", content: "Hello!" }],
-});
-
-// Or use convenience methods
-const result = await llm.complete("What is AI?");
 ```
 
 ### `createChain()`

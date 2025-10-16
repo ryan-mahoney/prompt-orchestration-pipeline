@@ -330,27 +330,63 @@ context = {
 
 ### 7. LLM Integration Layer (`src/llm/index.js`)
 
-**Purpose**: Unified interface for multiple LLM providers
+**Purpose**: Unified interface for multiple LLM providers with provider-grouped functions
 
 **Key Features**:
 
-- Provider abstraction
+- Provider-grouped functions (primary API)
+- Model registry configuration
 - Event-based metrics collection
 - Token estimation
 - Cost calculation
 - Retry logic
 - Parallel execution support
 
+**Provider-Grouped Functions (Primary API)**:
+
+```javascript
+// createLLM() returns only provider-grouped functions
+const llm = createLLM();
+
+// Available functions (generated from model registry):
+await llm.openai.gpt4({ messages: [...] });
+await llm.openai.gpt4Turbo({ messages: [...] });
+await llm.openai.gpt5({ messages: [...] });
+await llm.deepseek.reasoner({ messages: [...] });
+await llm.deepseek.chat({ messages: [...] });
+await llm.anthropic.opus({ messages: [...] });
+await llm.anthropic.sonnet({ messages: [...] });
+```
+
+**Model Registry**:
+
+The provider-grouped functions are generated from the configuration registry:
+
+```json
+{
+  "llm": {
+    "models": {
+      "openai:gpt-4": { "provider": "openai", "model": "gpt-4" },
+      "openai:gpt-4-turbo": { "provider": "openai", "model": "gpt-4-turbo" },
+      "deepseek:reasoner": {
+        "provider": "deepseek",
+        "model": "deepseek-reasoner"
+      }
+    }
+  }
+}
+```
+
 **Event System**:
 
 ```javascript
 Events:
 - llm:request:start    // Request initiated
-- llm:request:complete // Request succeeded
+- llm:request:complete // Request succeeded (includes metadata.alias)
 - llm:request:error    // Request failed
 ```
 
-**API Functions**:
+**Legacy API Functions (Deprecated)**:
 
 - `chat(options)` - Main chat interface
 - `complete(prompt, options)` - Simple completion
@@ -358,6 +394,14 @@ Events:
 - `withRetry(fn, args, maxRetries)` - Retry wrapper
 - `parallel(fn, items, maxConcurrency)` - Parallel execution
 - `createLLM(options)` - Bound LLM interface
+
+**Breaking Changes**:
+
+- **Removed**: Flatmap approach (`llm.models["provider:model"]`)
+- **Removed**: Legacy helper functions (`getAvailableProviders`, `calculateCost`, etc.)
+- **Added**: Provider-grouped functions only
+- **Added**: Model registry configuration support
+- **Added**: Automatic alias metadata in events
 
 ### 8. Provider Implementations
 
