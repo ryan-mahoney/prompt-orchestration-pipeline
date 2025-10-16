@@ -106,6 +106,11 @@ This section describes the canonical format for job tasks data in runtime job ob
 
 ```json
 {
+  "files": {
+    "artifacts": ["file1.json", "file2.json"],
+    "logs": ["process.log", "debug.log"],
+    "tmp": ["temp-data.json"]
+  },
   "tasks": {
     "task-name": {
       "name": "task-name",
@@ -114,6 +119,11 @@ This section describes the canonical format for job tasks data in runtime job ob
       "endedAt": "ISO-8601 timestamp",
       "attempts": 1,
       "executionTimeMs": 1234,
+      "files": {
+        "artifacts": ["output.json", "result.json"],
+        "logs": ["execution.log"],
+        "tmp": ["temp-file.json"]
+      },
       "artifacts": ["output.json", "logs.txt"],
       "error": { "message": "error description" },
       "config": { "model": "gpt-4", "temperature": 0.7 }
@@ -128,9 +138,55 @@ This section describes the canonical format for job tasks data in runtime job ob
 - Each task object contains a `name` field that matches the key
 - Task states are normalized to: `pending`, `running`, `done`, `error`
 - All timestamp fields are ISO-8601 strings
-- `artifacts` is an array of file names/paths
+- `artifacts` is an array of file names/paths (legacy, deprecated)
+- `files` contains structured file tracking via `context.files` API
 - `error` contains error details when `state` is `error`
 - `config` contains task-specific configuration
+
+### New files.\* Schema
+
+The `files` object provides structured tracking of files created through the `context.files` API:
+
+**Job-level files object:**
+
+```json
+{
+  "files": {
+    "artifacts": ["file1.json", "file2.json"],
+    "logs": ["process.log", "debug.log"],
+    "tmp": ["temp-data.json"]
+  }
+}
+```
+
+**Task-level files object:**
+
+```json
+{
+  "tasks": {
+    "task-name": {
+      "files": {
+        "artifacts": ["output.json", "result.json"],
+        "logs": ["execution.log"],
+        "tmp": ["temp-file.json"]
+      }
+    }
+  }
+}
+```
+
+**File categories:**
+
+- **files.artifacts**: Output files created via `context.files.writeArtifact()`
+- **files.logs**: Log files created via `context.files.writeLog()`
+- **files.tmp**: Temporary files created via `context.files.writeTmp()`
+
+**Schema locations:**
+
+- Job level: `files` object contains all files across all tasks
+- Task level: `tasks.{taskName}.files` object contains files for that specific task
+
+**Legacy artifacts field:** The `artifacts` array is maintained for backward compatibility but is deprecated in favor of the structured `files` object.
 
 ### Migration from Array Shape
 
