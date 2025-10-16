@@ -56,6 +56,27 @@ describe("Configuration Module", () => {
       expect(defaultConfig.ui.port).toBe(3000);
       expect(defaultConfig.logging.level).toBe("info");
     });
+
+    it("should have llm.models registry with sample aliases", () => {
+      expect(defaultConfig.llm.models).toBeDefined();
+      expect(defaultConfig.llm.models).toHaveProperty("openai:gpt-4");
+      expect(defaultConfig.llm.models).toHaveProperty("openai:gpt-4-turbo");
+      expect(defaultConfig.llm.models).toHaveProperty("openai:gpt-5");
+      expect(defaultConfig.llm.models).toHaveProperty("deepseek:reasoner");
+      expect(defaultConfig.llm.models).toHaveProperty("deepseek:chat");
+      expect(defaultConfig.llm.models).toHaveProperty("anthropic:opus");
+      expect(defaultConfig.llm.models).toHaveProperty("anthropic:sonnet");
+
+      // Verify structure of model entries
+      expect(defaultConfig.llm.models["openai:gpt-4"]).toEqual({
+        provider: "openai",
+        model: "gpt-4",
+      });
+      expect(defaultConfig.llm.models["deepseek:reasoner"]).toEqual({
+        provider: "deepseek",
+        model: "deepseek-reasoner",
+      });
+    });
   });
 
   describe("getConfig", () => {

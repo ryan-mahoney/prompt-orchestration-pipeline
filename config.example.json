@@ -17,7 +17,37 @@
     "defaultModel": "gpt-5-chat-latest",
     "maxConcurrency": 5,
     "retryMaxAttempts": 3,
-    "retryBackoffMs": 1000
+    "retryBackoffMs": 1000,
+    "models": {
+      "openai:gpt-4": {
+        "provider": "openai",
+        "model": "gpt-4"
+      },
+      "openai:gpt-4-turbo": {
+        "provider": "openai",
+        "model": "gpt-4-turbo"
+      },
+      "openai:gpt-5": {
+        "provider": "openai",
+        "model": "gpt-5-chat-latest"
+      },
+      "deepseek:reasoner": {
+        "provider": "deepseek",
+        "model": "deepseek-reasoner"
+      },
+      "deepseek:chat": {
+        "provider": "deepseek",
+        "model": "deepseek-chat"
+      },
+      "anthropic:opus": {
+        "provider": "anthropic",
+        "model": "claude-3-opus"
+      },
+      "anthropic:sonnet": {
+        "provider": "anthropic",
+        "model": "claude-3-sonnet"
+      }
+    }
   },
   "ui": {
     "port": 3000,
