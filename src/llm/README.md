@@ -177,14 +177,23 @@ const response = await chat({
 });
 ```
 
-### `complete(prompt, options)`
+### `complete(prompt, options)` (Deprecated)
 
 ```javascript
+// DEPRECATED: Use provider-grouped functions instead
 import { complete } from "../llm/index.js";
 
 const response = await complete("What is 2+2?", {
   provider: "openai",
   model: "gpt-5-chat-latest",
+});
+
+// RECOMMENDED: Use provider-grouped function
+import { createLLM } from "../llm/index.js";
+
+const llm = createLLM();
+const response = await llm.openai.gpt5({
+  messages: [{ role: "user", content: "What is 2+2?" }],
 });
 ```
 
