@@ -12,6 +12,17 @@ export async function createTempDir() {
 }
 
 /**
+ * Cleans up a temporary directory
+ */
+export async function cleanupTempDir(tempDir) {
+  try {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  } catch (error) {
+    // Ignore cleanup errors
+  }
+}
+
+/**
  * Sets up a mock pipeline environment for testing
  */
 export async function setupMockPipeline(overrides = {}) {

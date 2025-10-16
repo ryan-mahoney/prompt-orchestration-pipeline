@@ -41,7 +41,13 @@ pipeline-data/
 │       ├── tasks-status.json       # Execution status tracking
 │       └── tasks/                  # Task execution directories
 │           └── {task-name}/
-│               ├── output.json     # Task results
+│               ├── artifacts/      # Task artifacts (output files)
+│               │   └── *.json      # Generated artifacts via context.files.writeArtifact
+│               ├── logs/           # Task log files
+│               │   └── *.log       # Log files via context.files.writeLog
+│               ├── tmp/            # Temporary files
+│               │   └── *           # Temporary files via context.files.writeTmp
+│               ├── output.json     # Legacy task results (deprecated)
 │               ├── letter.json     # Task metadata
 │               └── execution-logs.json # Execution logs
 ├── complete/
@@ -50,9 +56,12 @@ pipeline-data/
 │       ├── tasks-status.json
 │       └── tasks/
 │           └── {task-name}/
-│               ├── output.json
-│               ├── letter.json
-│               └── execution-logs.json
+│               ├── artifacts/      # Task artifacts
+│               ├── logs/           # Task log files
+│               ├── tmp/            # Temporary files
+│               ├── output.json     # Legacy task results (deprecated)
+│               ├── letter.json     # Task metadata
+│               └── execution-logs.json # Execution logs
 └── rejected/                       # Rejected pipelines
 ```
 
@@ -252,12 +261,22 @@ export default {
   "name": "job-name",
   "current": "current-task-name",
   "createdAt": "ISO-timestamp",
+  "files": {
+    "artifacts": ["file1.json", "file2.json"],
+    "logs": ["process.log", "debug.log"],
+    "tmp": ["temp-data.json"]
+  },
   "tasks": {
     "task-name": {
       "state": "pending|running|done|error",
       "startedAt": "ISO-timestamp",
       "attempts": 1,
       "endedAt": "ISO-timestamp",
+      "files": {
+        "artifacts": ["output.json", "result.json"],
+        "logs": ["execution.log"],
+        "tmp": ["temp-file.json"]
+      },
       "artifacts": ["output.json", "letter.json", "execution-logs.json"],
       "executionTime": 12345.67,
       "refinementAttempts": 0
@@ -274,12 +293,27 @@ export default {
   "name": "content-generation",
   "current": "formatting",
   "createdAt": "2025-10-02T06:37:29.984Z",
+  "files": {
+    "artifacts": [
+      "research-output.json",
+      "analysis-result.json",
+      "synthesis-draft.json",
+      "final-content.json"
+    ],
+    "logs": ["research.log", "analysis.log", "synthesis.log", "formatting.log"],
+    "tmp": ["temp-research.json", "temp-analysis.json"]
+  },
   "tasks": {
     "research": {
       "state": "done",
       "startedAt": "2025-10-02T06:37:30.061Z",
       "attempts": 1,
       "endedAt": "2025-10-02T06:37:48.245Z",
+      "files": {
+        "artifacts": ["research-output.json"],
+        "logs": ["research.log"],
+        "tmp": ["temp-research.json"]
+      },
       "artifacts": ["output.json", "letter.json", "execution-logs.json"],
       "executionTime": 18176.66,
       "refinementAttempts": 0
@@ -289,6 +323,11 @@ export default {
       "startedAt": "2025-10-02T06:37:48.245Z",
       "attempts": 1,
       "endedAt": "2025-10-02T06:38:00.160Z",
+      "files": {
+        "artifacts": ["analysis-result.json"],
+        "logs": ["analysis.log"],
+        "tmp": ["temp-analysis.json"]
+      },
       "artifacts": ["output.json", "letter.json", "execution-logs.json"],
       "executionTime": 11910.35,
       "refinementAttempts": 0
@@ -296,6 +335,21 @@ export default {
   }
 }
 ```
+
+**New files.\* Schema**:
+
+The `files` object provides structured tracking of files created through the `context.files` API:
+
+- **files.artifacts**: Array of artifact filenames created via `context.files.writeArtifact()`
+- **files.logs**: Array of log filenames created via `context.files.writeLog()`
+- **files.tmp**: Array of temporary filenames created via `context.files.writeTmp()`
+
+This schema exists at both:
+
+- **Job level**: `files` object contains all files across all tasks
+- **Task level**: `tasks.{taskName}.files` object contains files for that specific task
+
+**Legacy artifacts field**: The `artifacts` array is maintained for backward compatibility but is deprecated.
 
 ### 5. Task Output Files (`output.json`)
 

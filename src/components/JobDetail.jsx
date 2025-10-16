@@ -84,29 +84,66 @@ export default function JobDetail({ job, pipeline, onClose, onResume }) {
   // File mapping functions for DAGGrid slide-over
   const inputFilesForItem = (item) => {
     const task = taskById[item.id];
-    if (!task?.artifacts) return [];
 
-    // Map artifacts to input files (filter for common input patterns)
-    return task.artifacts
-      .filter(
-        (file) =>
-          typeof file === "string" &&
-          (file.includes("input") ||
-            file.includes("config") ||
-            file.includes("schema"))
-      )
-      .map((file, index) => ({
-        name: file,
-        type: "input",
-      }));
+    // Prefer new files.* schema, fallback to legacy artifacts
+    const allFiles = [];
+
+    // Add files from new schema
+    if (task?.files) {
+      if (Array.isArray(task.files.tmp)) {
+        allFiles.push(
+          ...task.files.tmp.filter(
+            (file) =>
+              typeof file === "string" &&
+              (file.includes("input") ||
+                file.includes("config") ||
+                file.includes("schema"))
+          )
+        );
+      }
+    }
+
+    // Fallback to legacy artifacts
+    if (task?.artifacts) {
+      allFiles.push(
+        ...task.artifacts.filter(
+          (file) =>
+            typeof file === "string" &&
+            (file.includes("input") ||
+              file.includes("config") ||
+              file.includes("schema"))
+        )
+      );
+    }
+
+    return allFiles.map((file, index) => ({
+      name: file,
+      type: "input",
+    }));
   };
 
   const outputFilesForItem = (item) => {
     const task = taskById[item.id];
-    if (!task?.artifacts) return [];
 
-    // Map artifacts to output files
-    return task.artifacts.map((file, index) => ({
+    // Prefer new files.* schema, fallback to legacy artifacts
+    const allFiles = [];
+
+    // Add files from new schema
+    if (task?.files) {
+      if (Array.isArray(task.files.artifacts)) {
+        allFiles.push(...task.files.artifacts);
+      }
+      if (Array.isArray(task.files.logs)) {
+        allFiles.push(...task.files.logs);
+      }
+    }
+
+    // Fallback to legacy artifacts
+    if (task?.artifacts) {
+      allFiles.push(...task.artifacts);
+    }
+
+    return allFiles.map((file, index) => ({
       name: typeof file === "string" ? file : file.name || `output-${index}`,
       type: "output",
     }));

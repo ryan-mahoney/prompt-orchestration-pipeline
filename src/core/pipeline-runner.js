@@ -71,6 +71,7 @@ for (const taskName of pipeline.tasks) {
       artifacts: pipelineArtifacts,
       taskName,
       taskConfig: pipeline.taskConfig?.[taskName] || {},
+      statusPath: tasksStatusPath,
     };
     const modulePath = tasks[taskName];
     if (!modulePath) throw new Error(`Task not registered: ${taskName}`);
@@ -88,13 +89,8 @@ for (const taskName of pipeline.tasks) {
       );
     }
 
-    if (result.context?.output) {
-      await atomicWrite(
-        path.join(taskDir, "output.json"),
-        JSON.stringify(result.context.output, null, 2)
-      );
-      pipelineArtifacts[taskName] = result.context.output;
-    }
+    // The file I/O system automatically handles writing outputs and updating tasks-status.json
+    // No need to manually write output.json or enumerate artifacts
 
     if (result.logs) {
       await atomicWrite(
@@ -103,11 +99,9 @@ for (const taskName of pipeline.tasks) {
       );
     }
 
-    const artifacts = await getArtifacts(taskDir);
     await updateStatus(taskName, {
       state: "done",
       endedAt: now(),
-      artifacts,
       executionTime:
         result.logs?.reduce((total, log) => total + (log.ms || 0), 0) || 0,
       refinementAttempts: result.refinementAttempts || 0,
@@ -172,16 +166,4 @@ function normalizeError(e) {
   if (e instanceof Error)
     return { name: e.name, message: e.message, stack: e.stack };
   return { message: String(e) };
-}
-
-async function getArtifacts(dir) {
-  const potentialFiles = ["output.json", "letter.json", "execution-logs.json"];
-  const artifacts = [];
-  for (const file of potentialFiles) {
-    try {
-      await fs.stat(path.join(dir, file));
-      artifacts.push(file);
-    } catch {}
-  }
-  return artifacts;
 }

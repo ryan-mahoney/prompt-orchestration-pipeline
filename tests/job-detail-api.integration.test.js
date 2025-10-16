@@ -28,8 +28,26 @@ describe("Job Detail API Integration Tests", () => {
       name: "Test Job",
       createdAt: new Date().toISOString(),
       tasks: {
-        "task-1": { state: "pending", startedAt: null, completedAt: null },
-        "task-2": { state: "pending", startedAt: null, completedAt: null },
+        "task-1": {
+          state: "pending",
+          startedAt: null,
+          completedAt: null,
+          files: {
+            artifacts: ["output.json"],
+            logs: ["process.log"],
+            tmp: ["temp.txt"],
+          },
+        },
+        "task-2": {
+          state: "pending",
+          startedAt: null,
+          completedAt: null,
+          files: {
+            artifacts: [],
+            logs: [],
+            tmp: [],
+          },
+        },
       },
     };
     await fs.writeFile(
@@ -78,6 +96,34 @@ describe("Job Detail API Integration Tests", () => {
     expect(result.data).toHaveProperty("status", "pending");
     expect(result.data).toHaveProperty("pipeline");
     expect(result.data.pipeline).toHaveProperty("tasks", ["task-1", "task-2"]);
+  });
+
+  it("returns job detail with new files.* schema instead of legacy artifacts", async () => {
+    const response = await fetch(`${server.url}/api/jobs/${jobId}`);
+
+    expect(response.status).toBe(200);
+    const result = await response.json();
+
+    // Verify new files.* schema is present
+    expect(result.data.tasks).toHaveLength(2);
+
+    const task1 = result.data.tasks.find((t) => t.name === "task-1");
+    expect(task1).toBeDefined();
+    expect(task1).toHaveProperty("files");
+    expect(task1.files).toHaveProperty("artifacts", ["output.json"]);
+    expect(task1.files).toHaveProperty("logs", ["process.log"]);
+    expect(task1.files).toHaveProperty("tmp", ["temp.txt"]);
+
+    const task2 = result.data.tasks.find((t) => t.name === "task-2");
+    expect(task2).toBeDefined();
+    expect(task2).toHaveProperty("files");
+    expect(task2.files).toHaveProperty("artifacts", []);
+    expect(task2.files).toHaveProperty("logs", []);
+    expect(task2.files).toHaveProperty("tmp", []);
+
+    // Verify legacy artifacts field is NOT present
+    expect(task1).not.toHaveProperty("artifacts");
+    expect(task2).not.toHaveProperty("artifacts");
   });
 
   it("returns 404 with proper envelope for non-existent job", async () => {

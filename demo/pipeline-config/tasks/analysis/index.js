@@ -13,12 +13,45 @@ export async function ingestion(context) {
       throw new Error("Research data not found in artifacts");
     }
 
+    // Use new file I/O API to log ingestion process
+    if (context.files) {
+      await context.files.writeLog(
+        "ingestion.log",
+        `[${new Date().toISOString()}] Starting data ingestion for ${context.seed.data.type}\n`
+      );
+      await context.files.writeLog(
+        "ingestion.log",
+        `Research content length: ${research.content.length} characters\n`
+      );
+    }
+
     const result = {
       output: {
         researchContent: research.content,
         analysisType: context.seed.data.type,
       },
     };
+
+    // Write raw research data as artifact for reference
+    if (context.files) {
+      await context.files.writeArtifact(
+        "raw-research.json",
+        JSON.stringify(
+          {
+            content: research.content,
+            type: context.seed.data.type,
+            ingestedAt: new Date().toISOString(),
+          },
+          null,
+          2
+        )
+      );
+
+      await context.files.writeLog(
+        "ingestion.log",
+        `[${new Date().toISOString()}] ✓ Successfully ingested data\n`
+      );
+    }
 
     console.log("[Analysis:ingestion] ✓ Successfully ingested data:", {
       researchContentLength: research.content.length,
@@ -27,6 +60,12 @@ export async function ingestion(context) {
 
     return result;
   } catch (error) {
+    if (context.files) {
+      await context.files.writeLog(
+        "ingestion.log",
+        `[${new Date().toISOString()}] ✗ Error during ingestion: ${error.message}\n`
+      );
+    }
     console.error(
       "[Analysis:ingestion] ✗ Error during ingestion:",
       error.message
@@ -154,6 +193,47 @@ export async function integration(context) {
   try {
     const { analysisContent, metadata } = context.output;
 
+    // Write final analysis as artifact using new file I/O API
+    if (context.files) {
+      await context.files.writeArtifact(
+        "analysis-output.json",
+        JSON.stringify(
+          {
+            content: analysisContent,
+            metadata,
+            timestamp: new Date().toISOString(),
+            taskName: context.taskName,
+            analysisType: context.output.analysisType,
+          },
+          null,
+          2
+        )
+      );
+
+      // Write a summary file for quick reference
+      await context.files.writeArtifact(
+        "analysis-summary.txt",
+        `Analysis Summary
+Type: ${context.output.analysisType}
+Generated: ${new Date().toISOString()}
+Model: ${metadata.model}
+Tokens: ${metadata.tokens}
+
+Content Preview:
+${analysisContent.substring(0, 500)}${analysisContent.length > 500 ? "..." : ""}`
+      );
+
+      // Log integration completion
+      await context.files.writeLog(
+        "integration.log",
+        `[${new Date().toISOString()}] ✓ Analysis integration completed\n`
+      );
+      await context.files.writeLog(
+        "integration.log",
+        `Output files: analysis-output.json, analysis-summary.txt\n`
+      );
+    }
+
     const result = {
       output: {
         analysis: {
@@ -167,6 +247,12 @@ export async function integration(context) {
     console.log("[Analysis:integration] ✓ Integration completed");
     return result;
   } catch (error) {
+    if (context.files) {
+      await context.files.writeLog(
+        "integration.log",
+        `[${new Date().toISOString()}] ✗ Error during integration: ${error.message}\n`
+      );
+    }
     console.error(
       "[Analysis:integration] ✗ Error during integration:",
       error.message

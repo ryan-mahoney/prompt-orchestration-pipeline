@@ -40,6 +40,11 @@ describe("adaptJobDetail - Object Tasks Validation", () => {
       endedAt: null,
       attempts: undefined,
       executionTimeMs: undefined,
+      files: {
+        artifacts: [],
+        logs: [],
+        tmp: [],
+      },
       artifacts: undefined,
     });
 
@@ -50,6 +55,11 @@ describe("adaptJobDetail - Object Tasks Validation", () => {
       endedAt: null,
       attempts: undefined,
       executionTimeMs: undefined,
+      files: {
+        artifacts: [],
+        logs: [],
+        tmp: [],
+      },
       artifacts: undefined,
     });
 
@@ -60,6 +70,11 @@ describe("adaptJobDetail - Object Tasks Validation", () => {
       endedAt: null,
       attempts: undefined,
       executionTimeMs: undefined,
+      files: {
+        artifacts: [],
+        logs: [],
+        tmp: [],
+      },
       artifacts: undefined,
     });
   });

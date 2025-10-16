@@ -71,6 +71,21 @@ function normalizeTasks(rawTasks) {
           typeof (t && t.executionTimeMs) === "number"
             ? t.executionTimeMs
             : undefined,
+        // Prefer new files.* schema, fallback to legacy artifacts
+        files:
+          t && t.files
+            ? {
+                artifacts: Array.isArray(t.files.artifacts)
+                  ? t.files.artifacts.slice()
+                  : [],
+                logs: Array.isArray(t.files.logs) ? t.files.logs.slice() : [],
+                tmp: Array.isArray(t.files.tmp) ? t.files.tmp.slice() : [],
+              }
+            : {
+                artifacts: [],
+                logs: [],
+                tmp: [],
+              },
         artifacts: Array.isArray(t && t.artifacts)
           ? t.artifacts.slice()
           : undefined,
