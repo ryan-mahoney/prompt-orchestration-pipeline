@@ -309,12 +309,162 @@ This will:
 
 ---
 
+## Section D — File I/O System (New)
+
+### Scoped File Operations
+
+The pipeline now includes a **scoped file I/O system** that provides each task with isolated file operations through a `context.files` API. This replaces the legacy artifacts system with a more organized approach.
+
+#### File Structure
+
+Each task gets its own directory structure:
+
+```
+pipeline-data/current/{jobId}/
+├── tasks/
+│   └── {taskName}/
+│       ├── artifacts/     # Generated outputs (replace mode)
+│       ├── logs/          # Process logs (append mode)
+│       └── tmp/           # Temporary files (replace mode
+└── tasks-status.json      # Updated with files.* arrays
+```
+
+#### File I/O API
+
+Tasks receive a `context.files` object with these methods:
+
+```javascript
+// Write artifacts (default: replace mode)
+await context.files.writeArtifact("output.json", data);
+await context.files.writeArtifact("report.txt", content, { mode: "replace" });
+
+// Write logs (default: append mode)
+await context.files.writeLog("process.log", "Starting process\n");
+await context.files.writeLog("debug.log", error, { mode: "append" });
+
+// Write temporary files (default: replace mode)
+await context.files.writeTmp("temp.json", intermediateData);
+
+// Read files
+const artifact = await context.files.readArtifact("output.json");
+const logs = await context.files.readLog("process.log");
+const temp = await context.files.readTmp("temp.json");
+```
+
+#### Status Schema Updates
+
+The `tasks-status.json` now includes `files.*` arrays:
+
+```json
+{
+  "pipelineId": "example-pipeline",
+  "current": "analysis",
+  "files": {
+    "artifacts": ["raw-research.json", "analysis-output.json", "summary.txt"],
+    "logs": ["ingestion.log", "integration.log"],
+    "tmp": ["temp-data.json"]
+  },
+  "tasks": {
+    "analysis": {
+      "state": "complete",
+      "files": {
+        "artifacts": ["raw-research.json", "analysis-output.json"],
+        "logs": ["ingestion.log"],
+        "tmp": []
+      }
+    }
+  }
+}
+```
+
+#### Migration from Legacy Artifacts
+
+The new system **breaks backward compatibility** intentionally:
+
+- **Old**: `task.artifacts` array with file objects
+- **New**: `task.files.artifacts` array with filenames only
+- **Old**: Files stored in task root directory
+- **New**: Files organized in `artifacts/`, `logs/`, `tmp/` subdirectories
+
+To migrate existing demo data:
+
+```bash
+node scripts/migrate-demo-files.js
+```
+
+#### Verification
+
+To verify the file I/O system is working:
+
+1. **Check test suite**: All 882 tests should pass
+2. **Run demo pipeline**: Files should appear in correct subdirectories
+3. **Inspect tasks-status.json**: Should contain `files.*` arrays
+4. **Check UI**: Job details should show files from new schema
+
+#### Example Task Usage
+
+```javascript
+export async function ingestion(context) {
+  const researchContent = context.seed.data.content;
+
+  // Log the start of ingestion
+  await context.files.writeLog(
+    "ingestion.log",
+    `[${new Date().toISOString()}] Starting data ingestion\n`
+  );
+
+  // Store raw research data
+  await context.files.writeArtifact(
+    "raw-research.json",
+    JSON.stringify(
+      {
+        content: researchContent,
+        type: context.seed.data.type,
+        ingestedAt: new Date().toISOString(),
+      },
+      null,
+      2
+    )
+  );
+
+  return { output: { researchContent } };
+}
+
+export async function integration(context) {
+  const { analysisContent } = context.output;
+
+  // Store final analysis output
+  await context.files.writeArtifact(
+    "analysis-output.json",
+    JSON.stringify(
+      {
+        content: analysisContent,
+        timestamp: new Date().toISOString(),
+        taskName: context.taskName,
+      },
+      null,
+      2
+    )
+  );
+
+  // Log completion
+  await context.files.writeLog(
+    "integration.log",
+    `[${new Date().toISOString()}] ✓ Analysis integration completed\n`
+  );
+
+  return { output: { analysis: { content: analysisContent } } };
+}
+```
+
+---
+
 ## Concepts & conventions (carry‑overs)
 
 - **Determinism** – each task persists its inputs/outputs; you can re‑run or debug any stage.
 - **Isolation** – tasks run in separate processes when appropriate.
-- **Artifacts** – tasks write structured artifacts (e.g., `letter.json`, `output.json`) to their run directory.
-- **Status** – a `tasks-status.json` file tracks progress and outcomes across the pipeline.
+- **Scoped File I/O** – tasks use `context.files` API for organized file operations.
+- **Status** – a `tasks-status.json` file tracks progress and file inventories across the pipeline.
 - **JobId-only** – all job identification and navigation uses unique job IDs, not pipeline names.
 
 ---

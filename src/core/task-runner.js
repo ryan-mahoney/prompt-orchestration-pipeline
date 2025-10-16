@@ -3,6 +3,7 @@ import { pathToFileURL } from "node:url";
 import { createLLM, getLLMEvents } from "../llm/index.js";
 import { loadEnvironment } from "./environment.js";
 import { getConfig } from "./config.js";
+import { createTaskFileIO } from "./file-io.js";
 
 /** Canonical order using the field terms we discussed */
 const ORDER = [
@@ -60,7 +61,26 @@ export async function runPipeline(modulePath, initialContext = {}) {
   const mod = await import(modUrl);
   const tasks = mod.default ?? mod;
 
-  const context = { ...initialContext, currentStage: null };
+  // Create fileIO singleton if we have the required context
+  let fileIO = null;
+  if (
+    initialContext.workDir &&
+    initialContext.taskName &&
+    initialContext.statusPath
+  ) {
+    fileIO = createTaskFileIO({
+      workDir: initialContext.workDir,
+      taskName: initialContext.taskName,
+      getStage: () => context.currentStage,
+      statusPath: initialContext.statusPath,
+    });
+  }
+
+  const context = {
+    ...initialContext,
+    currentStage: null,
+    files: fileIO,
+  };
   const logs = [];
   let needsRefinement = false;
   let refinementCount = 0;

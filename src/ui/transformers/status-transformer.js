@@ -158,6 +158,17 @@ export function transformTasks(rawTasks) {
       if ("endedAt" in raw) task.endedAt = raw.endedAt;
       if ("attempts" in raw) task.attempts = raw.attempts;
       if ("executionTimeMs" in raw) task.executionTimeMs = raw.executionTimeMs;
+
+      // Prefer new files.* schema, fallback to legacy artifacts
+      if ("files" in raw && raw.files && typeof raw.files === "object") {
+        task.files = {
+          artifacts: Array.isArray(raw.files.artifacts)
+            ? raw.files.artifacts.slice()
+            : [],
+          logs: Array.isArray(raw.files.logs) ? raw.files.logs.slice() : [],
+          tmp: Array.isArray(raw.files.tmp) ? raw.files.tmp.slice() : [],
+        };
+      }
       if ("artifacts" in raw) task.artifacts = raw.artifacts;
     }
 
