@@ -82,10 +82,10 @@ export function calculateCost(provider, model, usage) {
   return promptCost + completionCost;
 }
 
-// Main chat function - no metrics handling needed!
-export async function chat(options) {
+// Core chat function - no metrics handling needed!
+async function chat(options) {
   const {
-    provider = "openai",
+    provider,
     model,
     messages = [],
     temperature,
@@ -232,110 +232,67 @@ export async function chat(options) {
   }
 }
 
-// Convenience function for simple completions
-export async function complete(prompt, options = {}) {
-  return chat({
-    ...options,
-    messages: [{ role: "user", content: prompt }],
-  });
+// Helper to convert model alias to camelCase function name
+function toCamelCase(alias) {
+  const [provider, ...modelParts] = alias.split(":");
+  const model = modelParts.join("-");
+
+  // Convert to camelCase (handle both letters and numbers after hyphens)
+  const camelModel = model.replace(/-([a-z0-9])/g, (match, char) =>
+    char.toUpperCase()
+  );
+
+  return camelModel;
 }
 
-// Create a chain for multi-turn conversations
-export function createChain() {
-  const messages = [];
+// Build provider-grouped functions from registry
+function buildProviderFunctions(models) {
+  const functions = {};
 
-  return {
-    addSystemMessage: function (content) {
-      messages.push({ role: "system", content });
-      return this;
-    },
+  // Group by provider
+  const byProvider = {};
+  for (const [alias, config] of Object.entries(models)) {
+    const { provider } = config;
+    if (!byProvider[provider]) {
+      byProvider[provider] = {};
+    }
+    byProvider[provider][alias] = config;
+  }
 
-    addUserMessage: function (content) {
-      messages.push({ role: "user", content });
-      return this;
-    },
+  // Create functions for each provider
+  for (const [provider, providerModels] of Object.entries(byProvider)) {
+    functions[provider] = {};
 
-    addAssistantMessage: function (content) {
-      messages.push({ role: "assistant", content });
-      return this;
-    },
+    for (const [alias, modelConfig] of Object.entries(providerModels)) {
+      const functionName = toCamelCase(alias);
 
-    execute: async function (options = {}) {
-      const response = await chat({ ...options, messages });
-      messages.push({
-        role: "assistant",
-        content: response.content,
-      });
-      return response;
-    },
+      functions[provider][functionName] = (options = {}) => {
+        // Respect provider overrides in options (last-write-wins)
+        const finalProvider = options.provider || provider;
+        const finalModel = options.model || modelConfig.model;
 
-    getMessages: () => [...messages],
-
-    clear: function () {
-      messages.length = 0;
-      return this;
-    },
-  };
-}
-
-// Retry wrapper
-export async function withRetry(fn, args = [], options = {}) {
-  const config = getConfig();
-  const maxRetries = options.maxRetries ?? config.llm.retryMaxAttempts;
-  const backoffMs = options.backoffMs ?? config.llm.retryBackoffMs;
-
-  let lastError;
-
-  for (let i = 0; i <= maxRetries; i++) {
-    try {
-      if (i > 0) {
-        await new Promise((r) => setTimeout(r, backoffMs * Math.pow(2, i - 1)));
-      }
-      return await fn(...args);
-    } catch (error) {
-      lastError = error;
-      // Don't retry auth errors
-      if (error.status === 401 || error.message?.includes("API key")) {
-        throw error;
-      }
+        return chat({
+          provider: finalProvider,
+          model: finalModel,
+          ...options,
+          metadata: {
+            alias,
+            ...options.metadata,
+          },
+        });
+      };
     }
   }
 
-  throw lastError;
+  return functions;
 }
 
-// Parallel execution with concurrency control
-export async function parallel(fn, items, maxConcurrency) {
-  const config = getConfig();
-  const concurrency = maxConcurrency ?? config.llm.maxConcurrency;
-
-  const results = [];
-  for (let i = 0; i < items.length; i += concurrency) {
-    const batch = items.slice(i, i + concurrency);
-    const batchResults = await Promise.all(batch.map((item) => fn(item)));
-    results.push(...batchResults);
-  }
-  return results;
-}
-
-// Create a bound LLM interface (no metrics handling needed!)
+// Create a bound LLM interface with only provider-grouped functions
 export function createLLM(options = {}) {
   const config = getConfig();
-  const defaultProvider = options.defaultProvider || config.llm.defaultProvider;
 
-  return {
-    chat: (opts) => chat({ provider: defaultProvider, ...opts }),
-    complete: (prompt, opts) =>
-      complete(prompt, { provider: defaultProvider, ...opts }),
-    createChain: () => createChain(),
-    withRetry: (opts) =>
-      withRetry(chat, [{ provider: defaultProvider, ...opts }]),
-    parallel: (requests, maxConcurrency) =>
-      parallel(
-        (req) => chat({ provider: defaultProvider, ...req }),
-        requests,
-        maxConcurrency
-      ),
-    getAvailableProviders,
-  };
+  // Build functions from registry
+  const providerFunctions = buildProviderFunctions(config.llm.models);
+
+  return providerFunctions;
 }
