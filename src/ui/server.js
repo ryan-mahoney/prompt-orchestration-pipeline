@@ -707,6 +707,106 @@ function isTextMime(mime) {
 }
 
 /**
+ * Handle task file list request with validation and security checks
+ * @param {http.IncomingMessage} req - HTTP request
+ * @param {http.ServerResponse} res - HTTP response
+ * @param {Object} params - Request parameters
+ */
+async function handleTaskFileListRequest(req, res, { jobId, taskId, type }) {
+  const dataDir = process.env.PO_ROOT || DATA_DIR;
+
+  // Resolve job directories in order: current then complete
+  const currentJobDir = getJobDirectoryPath(dataDir, jobId, "current");
+  const completeJobDir = getJobDirectoryPath(dataDir, jobId, "complete");
+
+  const taskDir = path.join(currentJobDir, "tasks", taskId, type);
+  const fallbackTaskDir = path.join(completeJobDir, "tasks", taskId, type);
+
+  // Ensure resolved path is within the expected jail
+  const resolvedPath = path.resolve(taskDir);
+  const resolvedFallbackPath = path.resolve(fallbackTaskDir);
+  const allowedBase = path.resolve(currentJobDir);
+  const allowedFallbackBase = path.resolve(completeJobDir);
+
+  if (
+    !resolvedPath.startsWith(allowedBase) &&
+    !resolvedFallbackPath.startsWith(allowedFallbackBase)
+  ) {
+    sendJson(res, 403, {
+      ok: false,
+      error: "forbidden",
+      message: "Path resolves outside allowed directory",
+    });
+    return;
+  }
+
+  // Check if directory exists in current or complete
+  let targetDir = null;
+
+  if (await exists(taskDir)) {
+    targetDir = taskDir;
+  } else if (await exists(fallbackTaskDir)) {
+    targetDir = fallbackTaskDir;
+  } else {
+    // Directory doesn't exist, return empty list
+    sendJson(res, 200, {
+      ok: true,
+      data: {
+        files: [],
+        jobId,
+        taskId,
+        type,
+      },
+    });
+    return;
+  }
+
+  try {
+    // Read directory contents
+    const entries = await fs.promises.readdir(targetDir, {
+      withFileTypes: true,
+    });
+
+    // Filter and map to file list
+    const files = [];
+    for (const entry of entries) {
+      if (entry.isFile()) {
+        const filePath = path.join(targetDir, entry.name);
+        const stats = await fs.promises.stat(filePath);
+
+        files.push({
+          name: entry.name,
+          size: stats.size,
+          mtime: stats.mtime.toISOString(),
+          mime: getMimeType(entry.name),
+        });
+      }
+    }
+
+    // Sort files by name
+    files.sort((a, b) => a.name.localeCompare(b.name));
+
+    // Send successful response
+    sendJson(res, 200, {
+      ok: true,
+      data: {
+        files,
+        jobId,
+        taskId,
+        type,
+      },
+    });
+  } catch (error) {
+    console.error("Error listing files:", error);
+    sendJson(res, 500, {
+      ok: false,
+      error: "internal_error",
+      message: "Failed to list files",
+    });
+  }
+}
+
+/**
  * Handle task file request with validation, jail checks, and proper encoding
  * @param {http.IncomingMessage} req - HTTP request
  * @param {http.ServerResponse} res - HTTP response
@@ -1053,6 +1153,73 @@ function createServer() {
 
       // Use the handleSeedUpload function which properly parses multipart data
       await handleSeedUpload(req, res);
+      return;
+    }
+
+    // Route: GET /api/jobs/:jobId/tasks/:taskId/files (must come before generic /api/jobs/:jobId)
+    if (
+      pathname.startsWith("/api/jobs/") &&
+      pathname.includes("/tasks/") &&
+      pathname.endsWith("/files") &&
+      req.method === "GET"
+    ) {
+      const pathMatch = pathname.match(
+        /^\/api\/jobs\/([^\/]+)\/tasks\/([^\/]+)\/files$/
+      );
+      if (!pathMatch) {
+        sendJson(res, 400, {
+          ok: false,
+          error: "bad_request",
+          message: "Invalid path format",
+        });
+        return;
+      }
+
+      const [, jobId, taskId] = pathMatch;
+      const type = searchParams.get("type");
+
+      // Validate parameters
+      if (!jobId || typeof jobId !== "string" || jobId.trim() === "") {
+        sendJson(res, 400, {
+          ok: false,
+          error: "bad_request",
+          message: "jobId is required",
+        });
+        return;
+      }
+
+      if (!taskId || typeof taskId !== "string" || taskId.trim() === "") {
+        sendJson(res, 400, {
+          ok: false,
+          error: "bad_request",
+          message: "taskId is required",
+        });
+        return;
+      }
+
+      if (!type || !["artifacts", "logs", "tmp"].includes(type)) {
+        sendJson(res, 400, {
+          ok: false,
+          error: "bad_request",
+          message: "type must be one of: artifacts, logs, tmp",
+        });
+        return;
+      }
+
+      try {
+        await handleTaskFileListRequest(req, res, {
+          jobId,
+          taskId,
+          type,
+        });
+      } catch (error) {
+        console.error(`Error handling task file list request:`, error);
+        sendJson(res, 500, {
+          ok: false,
+          error: "internal_error",
+          message: "Internal server error",
+        });
+      }
       return;
     }
 
