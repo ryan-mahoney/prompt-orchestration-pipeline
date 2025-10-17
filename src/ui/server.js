@@ -513,6 +513,345 @@ async function handleSeedUpload(req, res) {
   }
 }
 
+// MIME type detection map
+const MIME_MAP = {
+  // Text types
+  ".txt": "text/plain",
+  ".log": "text/plain",
+  ".md": "text/markdown",
+  ".csv": "text/csv",
+  ".json": "application/json",
+  ".xml": "application/xml",
+  ".yaml": "application/x-yaml",
+  ".yml": "application/x-yaml",
+  ".toml": "application/toml",
+  ".ini": "text/plain",
+  ".conf": "text/plain",
+  ".config": "text/plain",
+  ".env": "text/plain",
+  ".gitignore": "text/plain",
+  ".dockerfile": "text/plain",
+  ".sh": "application/x-sh",
+  ".bash": "application/x-sh",
+  ".zsh": "application/x-sh",
+  ".fish": "application/x-fish",
+  ".ps1": "application/x-powershell",
+  ".bat": "application/x-bat",
+  ".cmd": "application/x-cmd",
+
+  // Code types
+  ".js": "application/javascript",
+  ".mjs": "application/javascript",
+  ".cjs": "application/javascript",
+  ".ts": "application/typescript",
+  ".mts": "application/typescript",
+  ".cts": "application/typescript",
+  ".jsx": "application/javascript",
+  ".tsx": "application/typescript",
+  ".py": "text/x-python",
+  ".rb": "text/x-ruby",
+  ".php": "application/x-php",
+  ".java": "text/x-java-source",
+  ".c": "text/x-c",
+  ".cpp": "text/x-c++",
+  ".cc": "text/x-c++",
+  ".cxx": "text/x-c++",
+  ".h": "text/x-c",
+  ".hpp": "text/x-c++",
+  ".cs": "text/x-csharp",
+  ".go": "text/x-go",
+  ".rs": "text/x-rust",
+  ".swift": "text/x-swift",
+  ".kt": "text/x-kotlin",
+  ".scala": "text/x-scala",
+  ".r": "text/x-r",
+  ".sql": "application/sql",
+  ".pl": "text/x-perl",
+  ".lua": "text/x-lua",
+  ".vim": "text/x-vim",
+  ".el": "text/x-elisp",
+  ".lisp": "text/x-lisp",
+  ".hs": "text/x-haskell",
+  ".ml": "text/x-ocaml",
+  ".ex": "text/x-elixir",
+  ".exs": "text/x-elixir",
+  ".erl": "text/x-erlang",
+  ".beam": "application/x-erlang-beam",
+
+  // Web types
+  ".html": "text/html",
+  ".htm": "text/html",
+  ".xhtml": "application/xhtml+xml",
+  ".css": "text/css",
+  ".scss": "text/x-scss",
+  ".sass": "text/x-sass",
+  ".less": "text/x-less",
+  ".styl": "text/x-stylus",
+  ".vue": "text/x-vue",
+  ".svelte": "text/x-svelte",
+
+  // Data formats
+  ".pdf": "application/pdf",
+  ".doc": "application/msword",
+  ".docx":
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  ".xls": "application/vnd.ms-excel",
+  ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  ".ppt": "application/vnd.ms-powerpoint",
+  ".pptx":
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  ".odt": "application/vnd.oasis.opendocument.text",
+  ".ods": "application/vnd.oasis.opendocument.spreadsheet",
+  ".odp": "application/vnd.oasis.opendocument.presentation",
+
+  // Images
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".gif": "image/gif",
+  ".bmp": "image/bmp",
+  ".webp": "image/webp",
+  ".svg": "image/svg+xml",
+  ".ico": "image/x-icon",
+  ".tiff": "image/tiff",
+  ".tif": "image/tiff",
+  ".psd": "image/vnd.adobe.photoshop",
+  ".ai": "application/pdf", // Illustrator files often saved as PDF
+  ".eps": "application/postscript",
+
+  // Audio
+  ".mp3": "audio/mpeg",
+  ".wav": "audio/wav",
+  ".ogg": "audio/ogg",
+  ".flac": "audio/flac",
+  ".aac": "audio/aac",
+  ".m4a": "audio/mp4",
+  ".wma": "audio/x-ms-wma",
+
+  // Video
+  ".mp4": "video/mp4",
+  ".avi": "video/x-msvideo",
+  ".mov": "video/quicktime",
+  ".wmv": "video/x-ms-wmv",
+  ".flv": "video/x-flv",
+  ".webm": "video/webm",
+  ".mkv": "video/x-matroska",
+  ".m4v": "video/mp4",
+
+  // Archives
+  ".zip": "application/zip",
+  ".rar": "application/x-rar-compressed",
+  ".tar": "application/x-tar",
+  ".gz": "application/gzip",
+  ".tgz": "application/gzip",
+  ".bz2": "application/x-bzip2",
+  ".xz": "application/x-xz",
+  ".7z": "application/x-7z-compressed",
+  ".deb": "application/x-debian-package",
+  ".rpm": "application/x-rpm",
+  ".dmg": "application/x-apple-diskimage",
+  ".iso": "application/x-iso9660-image",
+
+  // Fonts
+  ".ttf": "font/ttf",
+  ".otf": "font/otf",
+  ".woff": "font/woff",
+  ".woff2": "font/woff2",
+  ".eot": "application/vnd.ms-fontobject",
+
+  // Misc
+  ".bin": "application/octet-stream",
+  ".exe": "application/x-msdownload",
+  ".dll": "application/x-msdownload",
+  ".so": "application/x-sharedlib",
+  ".dylib": "application/x-mach-binary",
+  ".class": "application/java-vm",
+  ".jar": "application/java-archive",
+  ".war": "application/java-archive",
+  ".ear": "application/java-archive",
+  ".apk": "application/vnd.android.package-archive",
+  ".ipa": "application/x-itunes-ipa",
+};
+
+/**
+ * Determine MIME type from file extension
+ * @param {string} filename - File name
+ * @returns {string} MIME type
+ */
+function getMimeType(filename) {
+  const ext = path.extname(filename).toLowerCase();
+  return MIME_MAP[ext] || "application/octet-stream";
+}
+
+/**
+ * Check if MIME type should be treated as text
+ * @param {string} mime - MIME type
+ * @returns {boolean} True if text-like
+ */
+function isTextMime(mime) {
+  return (
+    mime.startsWith("text/") ||
+    mime === "application/json" ||
+    mime === "application/javascript" ||
+    mime === "application/xml" ||
+    mime === "application/x-yaml" ||
+    mime === "application/x-sh" ||
+    mime === "application/x-bat" ||
+    mime === "application/x-cmd" ||
+    mime === "application/x-powershell" ||
+    mime === "image/svg+xml" ||
+    mime === "application/x-ndjson" ||
+    mime === "text/csv" ||
+    mime === "text/markdown"
+  );
+}
+
+/**
+ * Handle task file request with validation, jail checks, and proper encoding
+ * @param {http.IncomingMessage} req - HTTP request
+ * @param {http.ServerResponse} res - HTTP response
+ * @param {Object} params - Request parameters
+ */
+async function handleTaskFileRequest(
+  req,
+  res,
+  { jobId, taskId, type, filename }
+) {
+  const dataDir = process.env.PO_ROOT || DATA_DIR;
+
+  // Path traversal and security checks
+  if (filename.includes("..")) {
+    sendJson(res, 403, {
+      ok: false,
+      error: "forbidden",
+      message: "Path traversal not allowed",
+    });
+    return;
+  }
+
+  if (
+    path.isAbsolute(filename) ||
+    /^[a-zA-Z]:/.test(filename) ||
+    filename.includes("\\")
+  ) {
+    sendJson(res, 403, {
+      ok: false,
+      error: "forbidden",
+      message: "Absolute paths not allowed",
+    });
+    return;
+  }
+
+  // Resolve job directories in order: current then complete
+  const currentJobDir = getJobDirectoryPath(dataDir, jobId, "current");
+  const completeJobDir = getJobDirectoryPath(dataDir, jobId, "complete");
+
+  const taskDir = path.join(currentJobDir, "tasks", taskId, type);
+  const fallbackTaskDir = path.join(completeJobDir, "tasks", taskId, type);
+
+  const filePath = path.join(taskDir, filename);
+  const fallbackFilePath = path.join(fallbackTaskDir, filename);
+
+  // Ensure resolved path is within the expected jail
+  const resolvedPath = path.resolve(filePath);
+  const resolvedFallbackPath = path.resolve(fallbackFilePath);
+  const allowedBase = path.resolve(currentJobDir);
+  const allowedFallbackBase = path.resolve(completeJobDir);
+
+  if (
+    !resolvedPath.startsWith(allowedBase) &&
+    !resolvedFallbackPath.startsWith(allowedFallbackBase)
+  ) {
+    sendJson(res, 403, {
+      ok: false,
+      error: "forbidden",
+      message: "Path resolves outside allowed directory",
+    });
+    return;
+  }
+
+  // Check if file exists in current or complete
+  let targetPath = null;
+  let targetBase = null;
+
+  if (await exists(filePath)) {
+    targetPath = filePath;
+    targetBase = allowedBase;
+  } else if (await exists(fallbackFilePath)) {
+    targetPath = fallbackFilePath;
+    targetBase = allowedFallbackBase;
+  } else {
+    sendJson(res, 404, {
+      ok: false,
+      error: "not_found",
+      message: "File not found",
+    });
+    return;
+  }
+
+  // Final jail check
+  const finalResolvedPath = path.resolve(targetPath);
+  if (!finalResolvedPath.startsWith(targetBase)) {
+    sendJson(res, 403, {
+      ok: false,
+      error: "forbidden",
+      message: "Path resolves outside allowed directory",
+    });
+    return;
+  }
+
+  try {
+    // Get file stats
+    const stats = await fs.promises.stat(targetPath);
+    if (!stats.isFile()) {
+      sendJson(res, 404, {
+        ok: false,
+        error: "not_found",
+        message: "Not a regular file",
+      });
+      return;
+    }
+
+    // Determine MIME type and encoding
+    const mime = getMimeType(filename);
+    const isText = isTextMime(mime);
+    const encoding = isText ? "utf8" : "base64";
+
+    // Read file content
+    let content;
+    if (isText) {
+      content = await fs.promises.readFile(targetPath, "utf8");
+    } else {
+      const buffer = await fs.promises.readFile(targetPath);
+      content = buffer.toString("base64");
+    }
+
+    // Build relative path for response
+    const relativePath = path.join("tasks", taskId, type, filename);
+
+    // Send successful response
+    sendJson(res, 200, {
+      ok: true,
+      jobId,
+      taskId,
+      type,
+      path: relativePath,
+      mime,
+      size: stats.size,
+      mtime: stats.mtime.toISOString(),
+      encoding,
+      content,
+    });
+  } catch (error) {
+    console.error("Error reading file:", error);
+    sendJson(res, 500, {
+      ok: false,
+      error: "internal_error",
+      message: "Failed to read file",
+    });
+  }
+}
+
 /**
  * Serve static files from dist directory (built React app)
  */
@@ -714,6 +1053,84 @@ function createServer() {
 
       // Use the handleSeedUpload function which properly parses multipart data
       await handleSeedUpload(req, res);
+      return;
+    }
+
+    // Route: GET /api/jobs/:jobId/tasks/:taskId/file (must come before generic /api/jobs/:jobId)
+    if (
+      pathname.startsWith("/api/jobs/") &&
+      pathname.includes("/tasks/") &&
+      pathname.endsWith("/file") &&
+      req.method === "GET"
+    ) {
+      const pathMatch = pathname.match(
+        /^\/api\/jobs\/([^\/]+)\/tasks\/([^\/]+)\/file$/
+      );
+      if (!pathMatch) {
+        sendJson(res, 400, {
+          ok: false,
+          error: "bad_request",
+          message: "Invalid path format",
+        });
+        return;
+      }
+
+      const [, jobId, taskId] = pathMatch;
+      const type = searchParams.get("type");
+      const filename = searchParams.get("filename");
+
+      // Validate parameters
+      if (!jobId || typeof jobId !== "string" || jobId.trim() === "") {
+        sendJson(res, 400, {
+          ok: false,
+          error: "bad_request",
+          message: "jobId is required",
+        });
+        return;
+      }
+
+      if (!taskId || typeof taskId !== "string" || taskId.trim() === "") {
+        sendJson(res, 400, {
+          ok: false,
+          error: "bad_request",
+          message: "taskId is required",
+        });
+        return;
+      }
+
+      if (!type || !["artifacts", "logs", "tmp"].includes(type)) {
+        sendJson(res, 400, {
+          ok: false,
+          error: "bad_request",
+          message: "type must be one of: artifacts, logs, tmp",
+        });
+        return;
+      }
+
+      if (!filename || typeof filename !== "string" || filename.trim() === "") {
+        sendJson(res, 400, {
+          ok: false,
+          error: "bad_request",
+          message: "filename is required",
+        });
+        return;
+      }
+
+      try {
+        await handleTaskFileRequest(req, res, {
+          jobId,
+          taskId,
+          type,
+          filename,
+        });
+      } catch (error) {
+        console.error(`Error handling task file request:`, error);
+        sendJson(res, 500, {
+          ok: false,
+          error: "internal_error",
+          message: "Internal server error",
+        });
+      }
       return;
     }
 
