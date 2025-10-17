@@ -228,6 +228,7 @@ required:
       <DAGGrid
         items={dagItems}
         activeIndex={activeIndex}
+        jobId={job.pipelineId}
         inputFilesForItem={inputFilesForItem}
         outputFilesForItem={outputFilesForItem}
         getFileContent={getFileContent}
