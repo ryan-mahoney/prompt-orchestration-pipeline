@@ -21,6 +21,7 @@ export function TaskFilePane({
 }) {
   const [copyNotice, setCopyNotice] = useState(null);
   const invokerRef = useRef(null);
+  const didAutoSelectRef = useRef(false);
 
   const {
     files,
@@ -42,7 +43,22 @@ export function TaskFilePane({
     selectFile,
   } = useTaskFiles({ isOpen, jobId, taskId, type, initialPath });
 
-  // Store invoker ref for focus return
+  // Auto-select first file when files load and no initialPath is provided
+  useEffect(() => {
+    if (
+      !initialPath &&
+      !didAutoSelectRef.current &&
+      files.length > 0 &&
+      !selected &&
+      !loadingContent &&
+      !contentError
+    ) {
+      didAutoSelectRef.current = true;
+      selectFile(files[0]);
+    }
+  }, [files, initialPath, selected, loadingContent, contentError, selectFile]);
+
+  // Store invoker ref for focus return and reset auto-select guard
   useEffect(() => {
     if (isOpen && !invokerRef.current) {
       // Try to find the element that opened this pane
@@ -50,6 +66,8 @@ export function TaskFilePane({
       if (activeElement && activeElement.getAttribute("role") === "listitem") {
         invokerRef.current = activeElement;
       }
+      // Reset auto-select guard when pane opens
+      didAutoSelectRef.current = false;
     }
   }, [isOpen]);
 

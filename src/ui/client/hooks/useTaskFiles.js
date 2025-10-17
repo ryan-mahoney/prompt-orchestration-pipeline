@@ -200,32 +200,33 @@ export function useTaskFiles({ isOpen, jobId, taskId, type, initialPath }) {
   });
 
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const [refreshSeq, setRefreshSeq] = useState(0);
 
   const abortControllerRef = useRef(null);
   const contentAbortControllerRef = useRef(null);
   const mountedRef = useRef(true);
 
-  // Reset state when dependencies change
-  useEffect(() => {
-    setListState({ files: [], loading: false, error: null, requestId: 0 });
-    setContentState({
-      selected: null,
-      content: null,
-      mime: null,
-      encoding: null,
-      loadingContent: false,
-      contentError: null,
-      contentRequestId: 0,
-    });
-    setPagination({ page: 1, totalPages: 1 });
-    setSelectedIndex(0);
-  }, [isOpen, jobId, taskId, type]);
-
-  // Fetch file list
+  // Fetch file list (includes reset logic)
   useEffect(() => {
     if (!isOpen || !jobId || !taskId || !type) {
+      // Reset state when closed or missing props
+      setListState({ files: [], loading: false, error: null, requestId: 0 });
+      setContentState({
+        selected: null,
+        content: null,
+        mime: null,
+        encoding: null,
+        loadingContent: false,
+        contentError: null,
+        contentRequestId: 0,
+      });
+      setPagination({ page: 1, totalPages: 1 });
+      setSelectedIndex(0);
       return;
     }
+
+    // Don't reset state here - let doFetch handle the loading state
+    // This prevents overriding successful state updates
 
     // Validate type
     if (!ALLOWED_TYPES.includes(type)) {
@@ -254,20 +255,25 @@ export function useTaskFiles({ isOpen, jobId, taskId, type, initialPath }) {
       abortControllerRef.current.abort();
     }
 
-    abortControllerRef.current = new AbortController();
+    // Use window.AbortController if available (jsdom environment) to fix test identity issues
+    const AbortControllerImpl =
+      (typeof window !== "undefined" && window.AbortController) ||
+      globalThis.AbortController;
+    abortControllerRef.current = new AbortControllerImpl();
     const { signal } = abortControllerRef.current;
 
     const doFetch = async () => {
       try {
         const result = await fetchFileList(jobId, taskId, type, signal);
 
-        if (!mountedRef.current || result.requestId !== requestId) {
+        if (!mountedRef.current) {
           return;
         }
 
         const files = result.data?.files || [];
         const totalPages = Math.ceil(files.length / FILES_PER_PAGE);
 
+        // Update state with the fetched data
         setListState({
           files,
           loading: false,
@@ -283,10 +289,7 @@ export function useTaskFiles({ isOpen, jobId, taskId, type, initialPath }) {
           const initialIndex = files.findIndex((f) => f.name === initialPath);
           if (initialIndex >= 0) {
             setSelectedIndex(initialIndex);
-            selectFile(files[initialIndex]);
           }
-        } else if (files.length > 0) {
-          selectFile(files[0]);
         }
       } catch (err) {
         if (err.name !== "AbortError" && mountedRef.current) {
@@ -301,7 +304,111 @@ export function useTaskFiles({ isOpen, jobId, taskId, type, initialPath }) {
     };
 
     doFetch();
-  }, [isOpen, jobId, taskId, type, initialPath]);
+  }, [isOpen, jobId, taskId, type, initialPath, refreshSeq]);
+
+  // Auto-select file when initialPath is provided and files are loaded
+  useEffect(() => {
+    // Only auto-select if we have files, not currently loading content, no content error, and initialPath is provided
+    if (
+      !initialPath ||
+      listState.loading ||
+      contentState.loadingContent ||
+      contentState.contentError
+    ) {
+      return;
+    }
+
+    const start = (pagination.page - 1) * FILES_PER_PAGE;
+    const end = start + FILES_PER_PAGE;
+    const currentFiles = listState.files.slice(start, end);
+
+    // Find the file with initialPath
+    const targetFile = currentFiles.find((f) => f.name === initialPath);
+
+    if (targetFile && contentState.selected?.name !== targetFile.name) {
+      if (!contentAbortControllerRef.current) {
+        // Use window.AbortController if available (jsdom environment) to fix test identity issues
+        const AbortControllerImpl =
+          (typeof window !== "undefined" && window.AbortController) ||
+          globalThis.AbortController;
+        contentAbortControllerRef.current = new AbortControllerImpl();
+      }
+
+      // Cancel previous content request
+      if (contentAbortControllerRef.current) {
+        contentAbortControllerRef.current.abort();
+      }
+
+      // Use window.AbortController if available (jsdom environment) to fix test identity issues
+      const AbortControllerImpl =
+        (typeof window !== "undefined" && window.AbortController) ||
+        globalThis.AbortController;
+      contentAbortControllerRef.current = new AbortControllerImpl();
+      const { signal } = contentAbortControllerRef.current;
+
+      const contentRequestId = Date.now();
+      setContentState((prev) => ({
+        ...prev,
+        selected: targetFile,
+        loadingContent: true,
+        contentError: null,
+        contentRequestId,
+      }));
+
+      const doFetchContent = async () => {
+        try {
+          const result = await fetchFileContent(
+            jobId,
+            taskId,
+            type,
+            targetFile.name,
+            signal
+          );
+
+          if (!mountedRef.current) {
+            return;
+          }
+
+          // Infer MIME type if not provided
+          const mime = result.data?.mime || inferMimeType(targetFile.name).mime;
+          const encoding =
+            result.data?.encoding || inferMimeType(targetFile.name).encoding;
+
+          setContentState({
+            selected: targetFile,
+            content: result.data?.content || null,
+            mime,
+            encoding,
+            loadingContent: false,
+            contentError: null,
+            contentRequestId,
+          });
+        } catch (err) {
+          if (err.name !== "AbortError" && mountedRef.current) {
+            setContentState((prev) => ({
+              ...prev,
+              loadingContent: false,
+              contentError: { error: { message: err.message } },
+              contentRequestId,
+            }));
+          }
+        }
+      };
+
+      doFetchContent();
+    }
+  }, [
+    initialPath,
+    listState.files,
+    pagination.page,
+    jobId,
+    taskId,
+    type,
+    listState.loading,
+    contentState.loadingContent,
+    contentState.contentError,
+    contentState.selected?.name,
+  ]);
 
   // Select and fetch file content
   const selectFile = useCallback(
@@ -332,7 +439,11 @@ export function useTaskFiles({ isOpen, jobId, taskId, type, initialPath }) {
         contentAbortControllerRef.current.abort();
       }
 
-      contentAbortControllerRef.current = new AbortController();
+      // Use window.AbortController if available (jsdom environment) to fix test identity issues
+      const AbortControllerImpl =
+        (typeof window !== "undefined" && window.AbortController) ||
+        globalThis.AbortController;
+      contentAbortControllerRef.current = new AbortControllerImpl();
       const { signal } = contentAbortControllerRef.current;
 
       const doFetchContent = async () => {
@@ -345,7 +456,7 @@ export function useTaskFiles({ isOpen, jobId, taskId, type, initialPath }) {
             signal
           );
 
-          if (!mountedRef.current || result.requestId !== contentRequestId) {
+          if (!mountedRef.current) {
             return;
           }
 
@@ -382,8 +493,8 @@ export function useTaskFiles({ isOpen, jobId, taskId, type, initialPath }) {
 
   // Retry functions
   const retryList = useCallback(() => {
-    // Trigger refetch by resetting and letting useEffect handle it
-    setListState((prev) => ({ ...prev, loading: true, error: null }));
+    // Trigger refetch by incrementing refresh sequence
+    setRefreshSeq((s) => s + 1);
   }, []);
 
   const retryContent = useCallback(() => {
@@ -454,10 +565,19 @@ export function useTaskFiles({ isOpen, jobId, taskId, type, initialPath }) {
         validPage * FILES_PER_PAGE
       );
       if (currentFiles.length > 0) {
-        selectFile(currentFiles[0]);
+        const firstFile = currentFiles[0];
+        // Only select if it's different from current selection
+        if (contentState.selected?.name !== firstFile.name) {
+          selectFile(firstFile);
+        }
       }
     },
-    [pagination.totalPages, listState.files, selectFile]
+    [
+      pagination.totalPages,
+      listState.files,
+      selectFile,
+      contentState.selected?.name,
+    ]
   );
 
   // Cleanup

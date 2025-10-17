@@ -18,12 +18,10 @@ Object.defineProperty(navigator, "clipboard", {
 describe("TaskFilePane Integration", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.useFakeTimers();
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
-    vi.useRealTimers();
   });
 
   const mockProps = {
@@ -220,14 +218,8 @@ describe("TaskFilePane Integration", () => {
     });
 
     it("should render markdown content", async () => {
-      fetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => mockFileList,
-      });
-
-      // Override file list to include markdown file
       const markdownFileList = {
-        ...mockFileList,
+        ok: true,
         data: {
           files: [
             {
@@ -240,14 +232,15 @@ describe("TaskFilePane Integration", () => {
         },
       };
 
-      fetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => markdownFileList,
-      });
-      fetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => mockMarkdownContent,
-      });
+      fetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => markdownFileList,
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => mockMarkdownContent,
+        });
 
       render(<TaskFilePane {...mockProps} />);
 
@@ -262,14 +255,8 @@ describe("TaskFilePane Integration", () => {
     });
 
     it("should render binary file placeholder", async () => {
-      fetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => mockFileList,
-      });
-
-      // Override file list to include only binary file
       const binaryFileList = {
-        ...mockFileList,
+        ok: true,
         data: {
           files: [
             {
@@ -282,14 +269,15 @@ describe("TaskFilePane Integration", () => {
         },
       };
 
-      fetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => binaryFileList,
-      });
-      fetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => mockBinaryContent,
-      });
+      fetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => binaryFileList,
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => mockBinaryContent,
+        });
 
       render(<TaskFilePane {...mockProps} />);
 
@@ -304,6 +292,7 @@ describe("TaskFilePane Integration", () => {
 
   describe("copy functionality", () => {
     it("should copy content to clipboard", async () => {
+      vi.useFakeTimers();
       mockClipboard.writeText.mockResolvedValueOnce(undefined);
 
       fetch.mockResolvedValueOnce({
@@ -334,6 +323,7 @@ describe("TaskFilePane Integration", () => {
       // Verify notice disappears after timeout
       vi.advanceTimersByTime(2000);
       expect(screen.queryByText("Copied to clipboard")).not.toBeInTheDocument();
+      vi.useRealTimers();
     });
 
     it("should handle copy failure", async () => {
@@ -362,13 +352,8 @@ describe("TaskFilePane Integration", () => {
     });
 
     it("should not show copy button for binary files", async () => {
-      fetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => mockFileList,
-      });
-
       const binaryFileList = {
-        ...mockFileList,
+        ok: true,
         data: {
           files: [
             {
@@ -381,14 +366,15 @@ describe("TaskFilePane Integration", () => {
         },
       };
 
-      fetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => binaryFileList,
-      });
-      fetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => mockBinaryContent,
-      });
+      fetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => binaryFileList,
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => mockBinaryContent,
+        });
 
       render(<TaskFilePane {...mockProps} />);
 
