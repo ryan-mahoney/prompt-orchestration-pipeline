@@ -743,23 +743,31 @@ function isTextMime(mime) {
 async function handleTaskFileListRequest(req, res, { jobId, taskId, type }) {
   const dataDir = process.env.PO_ROOT || DATA_DIR;
 
-  // Resolve job directories in order: current then complete
-  const currentJobDir = getJobDirectoryPath(dataDir, jobId, "current");
-  const completeJobDir = getJobDirectoryPath(dataDir, jobId, "complete");
+  // Resolve job lifecycle deterministically
+  const lifecycle = await resolveJobLifecycle(dataDir, jobId);
+  if (!lifecycle) {
+    // Job not found, return empty list
+    sendJson(res, 200, {
+      ok: true,
+      data: {
+        files: [],
+        jobId,
+        taskId,
+        type,
+      },
+    });
+    return;
+  }
 
-  const taskDir = path.join(currentJobDir, "tasks", taskId, type);
-  const fallbackTaskDir = path.join(completeJobDir, "tasks", taskId, type);
+  // Use single lifecycle directory
+  const jobDir = getJobDirectoryPath(dataDir, jobId, lifecycle);
+  const taskDir = path.join(jobDir, "tasks", taskId, type);
 
-  // Ensure resolved path is within the expected jail
+  // Use path.relative for stricter jail enforcement
   const resolvedPath = path.resolve(taskDir);
-  const resolvedFallbackPath = path.resolve(fallbackTaskDir);
-  const allowedBase = path.resolve(currentJobDir);
-  const allowedFallbackBase = path.resolve(completeJobDir);
+  const relativePath = path.relative(jobDir, resolvedPath);
 
-  if (
-    !resolvedPath.startsWith(allowedBase) ||
-    !resolvedFallbackPath.startsWith(allowedFallbackBase)
-  ) {
+  if (relativePath.startsWith("..") || path.isAbsolute(relativePath)) {
     sendJson(res, 403, {
       ok: false,
       error: "forbidden",
@@ -768,14 +776,8 @@ async function handleTaskFileListRequest(req, res, { jobId, taskId, type }) {
     return;
   }
 
-  // Check if directory exists in current or complete
-  let targetDir = null;
-
-  if (await exists(taskDir)) {
-    targetDir = taskDir;
-  } else if (await exists(fallbackTaskDir)) {
-    targetDir = fallbackTaskDir;
-  } else {
+  // Check if directory exists
+  if (!(await exists(taskDir))) {
     // Directory doesn't exist, return empty list
     sendJson(res, 200, {
       ok: true,
@@ -791,7 +793,7 @@ async function handleTaskFileListRequest(req, res, { jobId, taskId, type }) {
 
   try {
     // Read directory contents
-    const entries = await fs.promises.readdir(targetDir, {
+    const entries = await fs.promises.readdir(taskDir, {
       withFileTypes: true,
     });
 
@@ -799,7 +801,7 @@ async function handleTaskFileListRequest(req, res, { jobId, taskId, type }) {
     const files = [];
     for (const entry of entries) {
       if (entry.isFile()) {
-        const filePath = path.join(targetDir, entry.name);
+        const filePath = path.join(taskDir, entry.name);
         const stats = await fs.promises.stat(filePath);
 
         files.push({
@@ -870,26 +872,27 @@ async function handleTaskFileRequest(
     return;
   }
 
-  // Resolve job directories in order: current then complete
-  const currentJobDir = getJobDirectoryPath(dataDir, jobId, "current");
-  const completeJobDir = getJobDirectoryPath(dataDir, jobId, "complete");
+  // Resolve job lifecycle deterministically
+  const lifecycle = await resolveJobLifecycle(dataDir, jobId);
+  if (!lifecycle) {
+    sendJson(res, 404, {
+      ok: false,
+      error: "not_found",
+      message: "Job not found",
+    });
+    return;
+  }
 
-  const taskDir = path.join(currentJobDir, "tasks", taskId, type);
-  const fallbackTaskDir = path.join(completeJobDir, "tasks", taskId, type);
-
+  // Use single lifecycle directory
+  const jobDir = getJobDirectoryPath(dataDir, jobId, lifecycle);
+  const taskDir = path.join(jobDir, "tasks", taskId, type);
   const filePath = path.join(taskDir, filename);
-  const fallbackFilePath = path.join(fallbackTaskDir, filename);
 
-  // Ensure resolved path is within the expected jail
+  // Use path.relative for stricter jail enforcement
   const resolvedPath = path.resolve(filePath);
-  const resolvedFallbackPath = path.resolve(fallbackFilePath);
-  const allowedBase = path.resolve(currentJobDir);
-  const allowedFallbackBase = path.resolve(completeJobDir);
+  const relativePath = path.relative(jobDir, resolvedPath);
 
-  if (
-    !resolvedPath.startsWith(allowedBase) ||
-    !resolvedFallbackPath.startsWith(allowedFallbackBase)
-  ) {
+  if (relativePath.startsWith("..") || path.isAbsolute(relativePath)) {
     sendJson(res, 403, {
       ok: false,
       error: "forbidden",
@@ -898,17 +901,8 @@ async function handleTaskFileRequest(
     return;
   }
 
-  // Check if file exists in current or complete
-  let targetPath = null;
-  let targetBase = null;
-
-  if (await exists(filePath)) {
-    targetPath = filePath;
-    targetBase = allowedBase;
-  } else if (await exists(fallbackFilePath)) {
-    targetPath = fallbackFilePath;
-    targetBase = allowedFallbackBase;
-  } else {
+  // Check if file exists
+  if (!(await exists(filePath))) {
     sendJson(res, 404, {
       ok: false,
       error: "not_found",
@@ -917,20 +911,9 @@ async function handleTaskFileRequest(
     return;
   }
 
-  // Final jail check
-  const finalResolvedPath = path.resolve(targetPath);
-  if (!finalResolvedPath.startsWith(targetBase)) {
-    sendJson(res, 403, {
-      ok: false,
-      error: "forbidden",
-      message: "Path resolves outside allowed directory",
-    });
-    return;
-  }
-
   try {
     // Get file stats
-    const stats = await fs.promises.stat(targetPath);
+    const stats = await fs.promises.stat(filePath);
     if (!stats.isFile()) {
       sendJson(res, 404, {
         ok: false,
@@ -948,9 +931,9 @@ async function handleTaskFileRequest(
     // Read file content
     let content;
     if (isText) {
-      content = await fs.promises.readFile(targetPath, "utf8");
+      content = await fs.promises.readFile(filePath, "utf8");
     } else {
-      const buffer = await fs.promises.readFile(targetPath);
+      const buffer = await fs.promises.readFile(filePath);
       content = buffer.toString("base64");
     }
 
