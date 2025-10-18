@@ -525,30 +525,6 @@ function DAGGrid({
                 </div>
               </div>
 
-              {/* Legacy File Display for selectedFile (fallback) */}
-              {selectedFile && (
-                <section className="mt-6 border-t pt-6">
-                  <div className="flex items-center justify-between mb-3">
-                    <h3 className="text-base font-semibold text-gray-900">
-                      File Content: {selectedFile.name}
-                    </h3>
-                    <button
-                      type="button"
-                      aria-label="Close file"
-                      onClick={() => setSelectedFile(null)}
-                      className="rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50 px-3 py-1.5 text-sm"
-                    >
-                      ×
-                    </button>
-                  </div>
-                  <div className="bg-gray-900 rounded-lg p-4 overflow-auto max-h-96">
-                    <pre className="text-green-400 text-sm font-mono whitespace-pre-wrap">
-                      {getFileContent(selectedFile.name, items[openIdx])}
-                    </pre>
-                  </div>
-                </section>
-              )}
-
               {/* TaskFilePane Modal */}
               <TaskFilePane
                 isOpen={filePaneOpen}

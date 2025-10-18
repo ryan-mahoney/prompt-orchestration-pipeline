@@ -269,193 +269,191 @@ export function TaskFilePane({
   }
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-6xl max-h-[90vh] flex flex-col">
-        {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b">
-          <div>
-            <h2 className="text-lg font-semibold">Task Files</h2>
-            <p className="text-sm text-gray-600">
-              {jobId} / {taskId} / {type}
-            </p>
-          </div>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 transition-colors"
-            aria-label="Close file pane"
-          >
-            <svg
-              className="h-6 w-6"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M6 18L18 6M6 6l12 12"
-              />
-            </svg>
-          </button>
+    <div className="bg-white rounded-lg shadow-xl w-full max-w-6xl max-h-[90vh] flex flex-col">
+      {/* Header */}
+      <div className="flex items-center justify-between p-4 border-b">
+        <div>
+          <h2 className="text-lg font-semibold">Task Files</h2>
+          <p className="text-sm text-gray-600">
+            {jobId} / {taskId} / {type}
+          </p>
         </div>
+        <button
+          onClick={onClose}
+          className="text-gray-400 hover:text-gray-600 transition-colors"
+          aria-label="Close file pane"
+        >
+          <svg
+            className="h-6 w-6"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M6 18L18 6M6 6l12 12"
+            />
+          </svg>
+        </button>
+      </div>
 
-        {/* Content */}
-        <div className="flex-1 flex overflow-hidden">
-          {/* File List */}
-          <div className="w-80 border-r flex flex-col">
-            {/* List Header */}
-            <div className="p-4 border-b">
-              <h3 className="font-medium mb-2">Files</h3>
-              {error && (
-                <div className="bg-red-50 border border-red-200 rounded p-2 mb-2">
-                  <p className="text-sm text-red-700">{error.error?.message}</p>
-                  <button
-                    onClick={retryList}
-                    className="text-xs text-red-600 hover:text-red-800 underline mt-1"
-                  >
-                    Retry
-                  </button>
-                </div>
-              )}
-            </div>
-
-            {/* File List */}
-            <div className="flex-1 overflow-y-auto">
-              {loading ? (
-                <div className="flex items-center justify-center h-32 text-gray-500">
-                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mr-2"></div>
-                  Loading...
-                </div>
-              ) : files.length === 0 ? (
-                <div className="p-4 text-center text-gray-500">
-                  <svg
-                    className="mx-auto h-12 w-12 text-gray-400"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"
-                    />
-                  </svg>
-                  <p className="mt-2 text-sm">No files found</p>
-                </div>
-              ) : (
-                <div
-                  role="listbox"
-                  className="divide-y"
-                  onKeyDown={handleKeyDown}
-                  tabIndex={0}
+      {/* Content */}
+      <div className="flex-1 flex overflow-hidden">
+        {/* File List */}
+        <div className="w-80 border-r flex flex-col">
+          {/* List Header */}
+          <div className="p-4 border-b">
+            <h3 className="font-medium mb-2">Files</h3>
+            {error && (
+              <div className="bg-red-50 border border-red-200 rounded p-2 mb-2">
+                <p className="text-sm text-red-700">{error.error?.message}</p>
+                <button
+                  onClick={retryList}
+                  className="text-xs text-red-600 hover:text-red-800 underline mt-1"
                 >
-                  {files.map((file, index) => (
-                    <div
-                      key={file.name}
-                      role="option"
-                      aria-selected={selectedIndex === index}
-                      className={`p-3 cursor-pointer hover:bg-gray-50 ${
-                        selectedIndex === index
-                          ? "bg-blue-50 border-l-4 border-blue-500"
-                          : ""
-                      }`}
-                      onClick={() => {
-                        setSelectedIndex(index);
-                        selectFile(file);
-                      }}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex-1 min-w-0">
-                          <p
-                            className="text-sm font-medium truncate"
-                            title={file.name}
-                          >
-                            {file.name}
-                          </p>
-                          <div className="flex items-center text-xs text-gray-500 mt-1">
-                            <span>{formatSize(file.size)}</span>
-                            <span className="mx-1">•</span>
-                            <span>{formatDate(file.mtime)}</span>
-                          </div>
+                  Retry
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* File List */}
+          <div className="flex-1 overflow-y-auto">
+            {loading ? (
+              <div className="flex items-center justify-center h-32 text-gray-500">
+                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mr-2"></div>
+                Loading...
+              </div>
+            ) : files.length === 0 ? (
+              <div className="p-4 text-center text-gray-500">
+                <svg
+                  className="mx-auto h-12 w-12 text-gray-400"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"
+                  />
+                </svg>
+                <p className="mt-2 text-sm">No files found</p>
+              </div>
+            ) : (
+              <div
+                role="listbox"
+                className="divide-y"
+                onKeyDown={handleKeyDown}
+                tabIndex={0}
+              >
+                {files.map((file, index) => (
+                  <div
+                    key={file.name}
+                    role="option"
+                    aria-selected={selectedIndex === index}
+                    className={`p-3 cursor-pointer hover:bg-gray-50 ${
+                      selectedIndex === index
+                        ? "bg-blue-50 border-l-4 border-blue-500"
+                        : ""
+                    }`}
+                    onClick={() => {
+                      setSelectedIndex(index);
+                      selectFile(file);
+                    }}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex-1 min-w-0">
+                        <p
+                          className="text-sm font-medium truncate"
+                          title={file.name}
+                        >
+                          {file.name}
+                        </p>
+                        <div className="flex items-center text-xs text-gray-500 mt-1">
+                          <span>{formatSize(file.size)}</span>
+                          <span className="mx-1">•</span>
+                          <span>{formatDate(file.mtime)}</span>
                         </div>
                       </div>
                     </div>
-                  ))}
-                </div>
-              )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Pagination */}
+          {pagination.totalPages > 1 && (
+            <div className="p-3 border-t flex items-center justify-between">
+              <button
+                onClick={() => goToPage(pagination.page - 1)}
+                disabled={pagination.page === 1}
+                className="px-3 py-1 text-sm border rounded disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Previous
+              </button>
+              <span className="text-sm text-gray-600">
+                Page {pagination.page} of {pagination.totalPages}
+              </span>
+              <button
+                onClick={() => goToPage(pagination.page + 1)}
+                disabled={pagination.page === pagination.totalPages}
+                className="px-3 py-1 text-sm border rounded disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Next
+              </button>
             </div>
+          )}
+        </div>
 
-            {/* Pagination */}
-            {pagination.totalPages > 1 && (
-              <div className="p-3 border-t flex items-center justify-between">
-                <button
-                  onClick={() => goToPage(pagination.page - 1)}
-                  disabled={pagination.page === 1}
-                  className="px-3 py-1 text-sm border rounded disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  Previous
-                </button>
-                <span className="text-sm text-gray-600">
-                  Page {pagination.page} of {pagination.totalPages}
-                </span>
-                <button
-                  onClick={() => goToPage(pagination.page + 1)}
-                  disabled={pagination.page === pagination.totalPages}
-                  className="px-3 py-1 text-sm border rounded disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  Next
-                </button>
-              </div>
-            )}
-          </div>
-
-          {/* Preview */}
-          <div className="flex-1 flex flex-col bg-gray-50">
-            {/* Preview Header */}
-            {selected && (
-              <div className="bg-white border-b p-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="font-medium">{selected.name}</h3>
-                    <div className="flex items-center text-sm text-gray-500 mt-1">
-                      <span>{formatSize(selected.size)}</span>
-                      <span className="mx-1">•</span>
-                      <span>{formatDate(selected.mtime)}</span>
-                      <span className="mx-1">•</span>
-                      <span>{mime}</span>
-                    </div>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    {copyNotice && (
-                      <div
-                        className={`text-sm ${
-                          copyNotice.type === "success"
-                            ? "text-green-600"
-                            : "text-red-600"
-                        }`}
-                      >
-                        {copyNotice.message}
-                      </div>
-                    )}
-                    {content && encoding === "utf8" && (
-                      <button
-                        onClick={handleCopy}
-                        className="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
-                        aria-label="Copy content to clipboard"
-                      >
-                        Copy
-                      </button>
-                    )}
+        {/* Preview */}
+        <div className="flex-1 flex flex-col bg-gray-50">
+          {/* Preview Header */}
+          {selected && (
+            <div className="bg-white border-b p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="font-medium">{selected.name}</h3>
+                  <div className="flex items-center text-sm text-gray-500 mt-1">
+                    <span>{formatSize(selected.size)}</span>
+                    <span className="mx-1">•</span>
+                    <span>{formatDate(selected.mtime)}</span>
+                    <span className="mx-1">•</span>
+                    <span>{mime}</span>
                   </div>
                 </div>
+                <div className="flex items-center space-x-2">
+                  {copyNotice && (
+                    <div
+                      className={`text-sm ${
+                        copyNotice.type === "success"
+                          ? "text-green-600"
+                          : "text-red-600"
+                      }`}
+                    >
+                      {copyNotice.message}
+                    </div>
+                  )}
+                  {content && encoding === "utf8" && (
+                    <button
+                      onClick={handleCopy}
+                      className="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+                      aria-label="Copy content to clipboard"
+                    >
+                      Copy
+                    </button>
+                  )}
+                </div>
               </div>
-            )}
+            </div>
+          )}
 
-            {/* Preview Content */}
-            <div className="flex-1 overflow-auto">{renderContent()}</div>
-          </div>
+          {/* Preview Content */}
+          <div className="flex-1 overflow-auto">{renderContent()}</div>
         </div>
       </div>
     </div>
