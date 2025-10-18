@@ -181,6 +181,7 @@ describe("Job Task File Endpoint Integration", () => {
     });
 
     it("should return 400 for missing type parameter", async () => {
+      // Validation: Input validation is unchanged by job-scoped storage
       const response = await fetch(
         `${baseUrl}/api/jobs/test-job-123/tasks/analysis/file?filename=output.json`
       );
@@ -237,6 +238,7 @@ describe("Job Task File Endpoint Integration", () => {
     });
 
     it("should return 403 for path traversal attempt", async () => {
+      // Security: Path traversal validation is unchanged by job-scoped storage
       const response = await fetch(
         `${baseUrl}/api/jobs/test-job-123/tasks/analysis/file?type=artifacts&filename=../../../etc/passwd`
       );
