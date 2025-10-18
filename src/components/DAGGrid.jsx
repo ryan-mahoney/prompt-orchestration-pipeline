@@ -429,40 +429,6 @@ function DAGGrid({
                   </Callout.Root>
                 </section>
               )}
-              <section>
-                <h3 className="text-base font-semibold text-gray-900">Input</h3>
-                <ul className="mt-3 list-disc pl-6 text-sm text-gray-700 space-y-1">
-                  {inputFilesForItem(items[openIdx]).map((file) => (
-                    <li
-                      key={file.name}
-                      className="cursor-pointer hover:text-blue-600 transition-colors"
-                      onClick={() =>
-                        setSelectedFile({ name: file.name, type: "input" })
-                      }
-                    >
-                      {file.name}
-                    </li>
-                  ))}
-                </ul>
-              </section>
-              <section>
-                <h3 className="text-base font-semibold text-gray-900">
-                  Output
-                </h3>
-                <ul className="mt-3 list-disc pl-6 text-sm text-gray-700 space-y-1">
-                  {outputFilesForItem(items[openIdx]).map((file) => (
-                    <li
-                      key={file.name}
-                      className="cursor-pointer hover:text-blue-600 transition-colors"
-                      onClick={() =>
-                        setSelectedFile({ name: file.name, type: "output" })
-                      }
-                    >
-                      {file.name}
-                    </li>
-                  ))}
-                </ul>
-              </section>
 
               {/* File Display Area with Type Tabs */}
               <section className="mt-6">
@@ -549,13 +515,9 @@ function DAGGrid({
                         }}
                       >
                         <div className="flex items-center space-x-2">
-                          <div className="w-2 h-2 rounded bg-blue-500"></div>
                           <span className="text-sm text-gray-700">
                             {file.name}
                           </span>
-                        </div>
-                        <div className="text-xs text-gray-500">
-                          {file.type === "input" ? "Input" : "Output"}
                         </div>
                       </div>
                     ));
