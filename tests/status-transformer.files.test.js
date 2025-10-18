@@ -226,8 +226,8 @@ describe("transformJobStatus - job-level files", () => {
       expect(result).toMatchObject({
         id: jobId,
         name: "Test Job",
-        status: "running",
-        progress: 50,
+        status: "complete",
+        progress: 100,
         createdAt: "2023-01-01T00:00:00Z",
         updatedAt: "2023-01-01T01:00:00Z",
         location,

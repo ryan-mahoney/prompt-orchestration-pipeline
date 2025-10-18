@@ -68,6 +68,9 @@ describe("Migration Script Tests", () => {
       ]);
       // Note: After transformer changes, files object will exist even if not explicitly set
       expect(status.tasks.research.files).toBeDefined();
+      expect(status.tasks.research.files.artifacts).toEqual([]);
+      expect(status.tasks.research.files.logs).toEqual([]);
+      expect(status.tasks.research.files.tmp).toEqual([]);
     });
   });
 
