@@ -1522,7 +1522,11 @@ async function startServer({ dataDir, port: customPort }) {
     // In development, start Vite in middlewareMode so the Node server can serve
     // the client with HMR in a single process. We dynamically import Vite here
     // to avoid including it in production bundles.
-    if (process.env.NODE_ENV !== "production") {
+    // Skip Vite entirely for API-only tests when DISABLE_VITE=1 is set.
+    if (
+      process.env.NODE_ENV !== "production" &&
+      process.env.DISABLE_VITE !== "1"
+    ) {
       try {
         // Import createServer under an alias to avoid collision with our createServer()
         const { createServer: createViteServer } = await import("vite");
@@ -1536,6 +1540,8 @@ async function startServer({ dataDir, port: customPort }) {
         console.error("Failed to start Vite dev server:", err);
         viteServer = null;
       }
+    } else if (process.env.DISABLE_VITE === "1") {
+      console.log("DEBUG: Vite disabled via DISABLE_VITE=1 (API-only mode)");
     }
 
     const server = createServer();

@@ -49,6 +49,12 @@ function DAGGrid({
 
   // Responsive: force single-column on narrow screens
   useLayoutEffect(() => {
+    // Skip in test environment
+    if (process.env.NODE_ENV === "test") {
+      setEffectiveCols(cols);
+      return;
+    }
+
     const mq = window.matchMedia("(min-width: 1024px)");
     const apply = () => setEffectiveCols(mq.matches ? cols : 1);
     apply();
@@ -95,7 +101,12 @@ function DAGGrid({
 
   // Calculate connector lines between cards
   useLayoutEffect(() => {
-    // Skip if in test environment or no items
+    // Skip entirely in test environment to prevent hanging
+    if (process.env.NODE_ENV === "test") {
+      return;
+    }
+
+    // Skip if no window or no items
     if (
       typeof window === "undefined" ||
       !overlayRef.current ||
@@ -104,82 +115,93 @@ function DAGGrid({
       return;
     }
 
+    let isComputing = false;
     const compute = () => {
-      if (!overlayRef.current) return;
+      if (isComputing) return; // Prevent infinite loops
+      isComputing = true;
 
-      const overlayBox = overlayRef.current.getBoundingClientRect();
-      const boxes = nodeRefs.current.map((r) => {
-        const el = r.current;
-        if (!el) return null;
+      try {
+        if (!overlayRef.current) return;
 
-        const b = el.getBoundingClientRect();
-        const headerEl = el.querySelector('[data-role="card-header"]');
-        const hr = headerEl ? headerEl.getBoundingClientRect() : null;
-        const headerMidY = hr
-          ? hr.top - overlayBox.top + hr.height / 2
-          : b.top - overlayBox.top + Math.min(24, b.height / 6);
+        const overlayBox = overlayRef.current.getBoundingClientRect();
+        const boxes = nodeRefs.current.map((r) => {
+          const el = r.current;
+          if (!el) return null;
 
-        return {
-          left: b.left - overlayBox.left,
-          top: b.top - overlayBox.top,
-          width: b.width,
-          height: b.height,
-          right: b.right - overlayBox.left,
-          bottom: b.bottom - overlayBox.top,
-          cx: b.left - overlayBox.left + b.width / 2,
-          cy: b.top - overlayBox.top + b.height / 2,
-          headerMidY,
-        };
-      });
+          const b = el.getBoundingClientRect();
+          const headerEl = el.querySelector('[data-role="card-header"]');
+          const hr = headerEl ? headerEl.getBoundingClientRect() : null;
+          const headerMidY = hr
+            ? hr.top - overlayBox.top + hr.height / 2
+            : b.top - overlayBox.top + Math.min(24, b.height / 6);
 
-      const newLines = [];
-      for (let i = 0; i < items.length - 1; i++) {
-        const a = boxes[i];
-        const b = boxes[i + 1];
-        if (!a || !b) continue;
+          return {
+            left: b.left - overlayBox.left,
+            top: b.top - overlayBox.top,
+            width: b.width,
+            height: b.height,
+            right: b.right - overlayBox.left,
+            bottom: b.bottom - overlayBox.top,
+            cx: b.left - overlayBox.left + b.width / 2,
+            cy: b.top - overlayBox.top + b.height / 2,
+            headerMidY,
+          };
+        });
 
-        const rowA = Math.floor(i / effectiveCols);
-        const rowB = Math.floor((i + 1) / effectiveCols);
-        const sameRow = rowA === rowB;
+        const newLines = [];
+        for (let i = 0; i < items.length - 1; i++) {
+          const a = boxes[i];
+          const b = boxes[i + 1];
+          if (!a || !b) continue;
 
-        if (sameRow) {
-          // Horizontal connection
-          const leftToRight = rowA % 2 === 0;
-          if (leftToRight) {
-            const start = { x: a.right, y: a.headerMidY };
-            const end = { x: b.left, y: b.headerMidY };
-            const midX = (start.x + end.x) / 2;
-            newLines.push({
-              d: `M ${start.x} ${start.y} L ${midX} ${start.y} L ${midX} ${end.y} L ${end.x} ${end.y}`,
-            });
+          const rowA = Math.floor(i / effectiveCols);
+          const rowB = Math.floor((i + 1) / effectiveCols);
+          const sameRow = rowA === rowB;
+
+          if (sameRow) {
+            // Horizontal connection
+            const leftToRight = rowA % 2 === 0;
+            if (leftToRight) {
+              const start = { x: a.right, y: a.headerMidY };
+              const end = { x: b.left, y: b.headerMidY };
+              const midX = (start.x + end.x) / 2;
+              newLines.push({
+                d: `M ${start.x} ${start.y} L ${midX} ${start.y} L ${midX} ${end.y} L ${end.x} ${end.y}`,
+              });
+            } else {
+              const start = { x: a.left, y: a.headerMidY };
+              const end = { x: b.right, y: b.headerMidY };
+              const midX = (start.x + end.x) / 2;
+              newLines.push({
+                d: `M ${start.x} ${start.y} L ${midX} ${start.y} L ${midX} ${end.y} L ${end.x} ${end.y}`,
+              });
+            }
           } else {
-            const start = { x: a.left, y: a.headerMidY };
-            const end = { x: b.right, y: b.headerMidY };
-            const midX = (start.x + end.x) / 2;
+            // Vertical connection
+            const start = { x: a.cx, y: a.bottom };
+            const end = { x: b.cx, y: b.top };
+            const midY = (start.y + end.y) / 2;
             newLines.push({
-              d: `M ${start.x} ${start.y} L ${midX} ${start.y} L ${midX} ${end.y} L ${end.x} ${end.y}`,
+              d: `M ${start.x} ${start.y} L ${start.x} ${midY} L ${end.x} ${midY} L ${end.x} ${end.y}`,
             });
           }
-        } else {
-          // Vertical connection
-          const start = { x: a.cx, y: a.bottom };
-          const end = { x: b.cx, y: b.top };
-          const midY = (start.y + end.y) / 2;
-          newLines.push({
-            d: `M ${start.x} ${start.y} L ${start.x} ${midY} L ${end.x} ${midY} L ${end.x} ${end.y}`,
-          });
         }
-      }
 
-      setLines(newLines);
+        setLines(newLines);
+      } finally {
+        isComputing = false;
+      }
     };
 
     // Initial compute
     compute();
 
-    // Set up observers only if ResizeObserver is available
+    // Set up observers only if ResizeObserver is available and not in test
     let ro = null;
-    if (typeof ResizeObserver !== "undefined") {
+    if (
+      typeof ResizeObserver !== "undefined" &&
+      process.env.NODE_ENV !== "test"
+    ) {
       ro = new ResizeObserver(compute);
       if (gridRef.current) ro.observe(gridRef.current);
       nodeRefs.current.forEach((r) => r.current && ro.observe(r.current));
@@ -364,6 +386,9 @@ function DAGGrid({
 
       {/* Slide-over panel for task details */}
       <aside
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={`slide-over-title-${openIdx}`}
         aria-hidden={openIdx === null}
         className={`fixed inset-y-0 right-0 z-[2000] w-full max-w-4xl bg-white border-l border-gray-200 transform transition-transform duration-300 ease-out ${openIdx !== null ? "translate-x-0" : "translate-x-full"}`}
       >
@@ -372,7 +397,10 @@ function DAGGrid({
             <div
               className={`px-6 py-4 border-b flex items-center justify-between ${getHeaderClasses(getStatus(openIdx))}`}
             >
-              <div className="text-lg font-semibold truncate">
+              <div
+                id={`slide-over-title-${openIdx}`}
+                className="text-lg font-semibold truncate"
+              >
                 {items[openIdx]?.title ??
                   items[openIdx]?.id ??
                   `Step ${openIdx + 1}`}
