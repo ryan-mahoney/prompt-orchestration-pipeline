@@ -38,15 +38,13 @@ pipeline-data/
 ├── current/
 │   └── {jobId}/                    # Active pipeline directory
 │       ├── seed.json               # Original seed data
-│       ├── tasks-status.json       # Execution status tracking
-│       └── tasks/                  # Task execution directories
+│       ├── tasks-status.json       # Execution status tracking + file index
+│       ├── files/                  # Actual on-disk files live here (source of truth)
+│       │   ├── artifacts/          # Created via context.files.writeArtifact()
+│       │   ├── logs/               # Created via context.files.writeLog()
+│       │   └── tmp/                # Created via context.files.writeTmp()
+│       └── tasks/                  # Task execution directories (legacy files below)
 │           └── {task-name}/
-│               ├── artifacts/      # Task artifacts (output files)
-│               │   └── *.json      # Generated artifacts via context.files.writeArtifact
-│               ├── logs/           # Task log files
-│               │   └── *.log       # Log files via context.files.writeLog
-│               ├── tmp/            # Temporary files
-│               │   └── *           # Temporary files via context.files.writeTmp
 │               ├── output.json     # Legacy task results (deprecated)
 │               ├── letter.json     # Task metadata
 │               └── execution-logs.json # Execution logs
@@ -54,11 +52,12 @@ pipeline-data/
 │   └── {jobId}/                    # Completed pipeline directory
 │       ├── seed.json
 │       ├── tasks-status.json
+│       ├── files/                  # Actual on-disk files
+│       │   ├── artifacts/
+│       │   ├── logs/
+│       │   └── tmp/
 │       └── tasks/
 │           └── {task-name}/
-│               ├── artifacts/      # Task artifacts
-│               ├── logs/           # Task log files
-│               ├── tmp/            # Temporary files
 │               ├── output.json     # Legacy task results (deprecated)
 │               ├── letter.json     # Task metadata
 │               └── execution-logs.json # Execution logs
@@ -350,6 +349,12 @@ This schema exists at both:
 - **Task level**: `tasks.{taskName}.files` object contains files for that specific task
 
 **Legacy artifacts field**: The `artifacts` array is maintained for backward compatibility but is deprecated.
+
+Important: On-disk files vs index in tasks-status.json
+
+- All physical files created via the `context.files` API are written under `{jobId}/files/(artifacts|logs|tmp)` on disk. This job-level `files/` folder is the single source of truth for file storage.
+- `tasks-status.json` maintains both job-level `files.*` arrays and per-task `tasks.{taskName}.files.*` arrays. These arrays act as an index for filtering which filenames to show for a given step; they do not change where files live.
+- When listing files for a task, the UI/API reads `tasks.{taskName}.files.*` and resolves those filenames relative to `{jobId}/files/...`. The on-disk layout always remains under `{jobId}/files/`.
 
 ### 5. Task Output Files (`output.json`)
 
