@@ -298,10 +298,13 @@ describe("Task File Endpoints - Single Lifecycle", () => {
       // Create job directory in current
       const jobDir = path.join(testDataDir, "pipeline-data", "current", jobId);
       const taskDir = path.join(jobDir, "tasks", taskId, type);
+      const filesDir = path.join(jobDir, "files", type);
       await fs.mkdir(taskDir, { recursive: true });
+      await fs.mkdir(filesDir, { recursive: true });
 
-      // Create test file
+      // Create test file in both task-scoped (for list tests) and job-scoped (for file reads)
       await fs.writeFile(path.join(taskDir, filename), content);
+      await fs.writeFile(path.join(filesDir, filename), content);
 
       // Act
       const response = await fetch(
@@ -335,10 +338,13 @@ describe("Task File Endpoints - Single Lifecycle", () => {
       // Create job directory in complete only
       const jobDir = path.join(testDataDir, "pipeline-data", "complete", jobId);
       const taskDir = path.join(jobDir, "tasks", taskId, type);
+      const filesDir = path.join(jobDir, "files", type);
       await fs.mkdir(taskDir, { recursive: true });
+      await fs.mkdir(filesDir, { recursive: true });
 
-      // Create test file
+      // Create test file in both task-scoped (for list tests) and job-scoped (for file reads)
       await fs.writeFile(path.join(taskDir, filename), content);
+      await fs.writeFile(path.join(filesDir, filename), content);
 
       // Act
       const response = await fetch(
@@ -368,10 +374,13 @@ describe("Task File Endpoints - Single Lifecycle", () => {
       // Create job directory in current
       const jobDir = path.join(testDataDir, "pipeline-data", "current", jobId);
       const taskDir = path.join(jobDir, "tasks", taskId, type);
+      const filesDir = path.join(jobDir, "files", type);
       await fs.mkdir(taskDir, { recursive: true });
+      await fs.mkdir(filesDir, { recursive: true });
 
-      // Create test file
+      // Create test file in both task-scoped (for list tests) and job-scoped (for file reads)
       await fs.writeFile(path.join(taskDir, filename), binaryContent);
+      await fs.writeFile(path.join(filesDir, filename), binaryContent);
 
       // Act
       const response = await fetch(
@@ -415,13 +424,22 @@ describe("Task File Endpoints - Single Lifecycle", () => {
 
       const currentTaskDir = path.join(currentJobDir, "tasks", taskId, type);
       const completeTaskDir = path.join(completeJobDir, "tasks", taskId, type);
+      const currentFilesDir = path.join(currentJobDir, "files", type);
+      const completeFilesDir = path.join(completeJobDir, "files", type);
 
       await fs.mkdir(currentTaskDir, { recursive: true });
       await fs.mkdir(completeTaskDir, { recursive: true });
+      await fs.mkdir(currentFilesDir, { recursive: true });
+      await fs.mkdir(completeFilesDir, { recursive: true });
 
       // Different files in each location
       await fs.writeFile(path.join(currentTaskDir, filename), currentContent);
       await fs.writeFile(path.join(completeTaskDir, filename), completeContent);
+      await fs.writeFile(path.join(currentFilesDir, filename), currentContent);
+      await fs.writeFile(
+        path.join(completeFilesDir, filename),
+        completeContent
+      );
 
       // Act
       const response = await fetch(
