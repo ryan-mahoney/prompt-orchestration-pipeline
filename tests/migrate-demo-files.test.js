@@ -66,7 +66,8 @@ describe("Migration Script Tests", () => {
         "output.json",
         "letter.json",
       ]);
-      expect(status.tasks.research.files).toBeUndefined();
+      // Note: After transformer changes, files object will exist even if not explicitly set
+      expect(status.tasks.research.files).toBeDefined();
     });
   });
 
