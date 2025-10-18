@@ -28,10 +28,19 @@ export default function JobDetail({ job, pipeline, onClose, onResume }) {
     );
   }, [job.pipelineId, pipeline?.tasks?.length]);
 
-  // job.tasks is expected to be an object keyed by task name
+  // job.tasks is expected to be an object keyed by task name; normalize from array if needed
   const taskById = React.useMemo(() => {
     const tasks = job?.tasks;
-    return tasks || {};
+    if (!tasks) return {};
+    if (Array.isArray(tasks)) {
+      const map = {};
+      for (const t of tasks) {
+        const key = t?.name;
+        if (key) map[key] = t;
+      }
+      return map;
+    }
+    return tasks; // already keyed object
   }, [job?.tasks]);
 
   // Compute pipeline tasks from pipeline or derive from job tasks
@@ -228,7 +237,7 @@ required:
       <DAGGrid
         items={dagItems}
         activeIndex={activeIndex}
-        jobId={job.pipelineId}
+        jobId={job.id}
         inputFilesForItem={inputFilesForItem}
         outputFilesForItem={outputFilesForItem}
         getFileContent={getFileContent}
