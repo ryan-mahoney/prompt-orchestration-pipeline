@@ -30,6 +30,14 @@ export function TaskFilePane({
   const invokerRef = useRef(null);
   const abortControllerRef = useRef(null);
 
+  // Local filename state for retry functionality
+  const [tempFilename, setFilename] = useState(filename);
+
+  // Sync filename with prop changes
+  useEffect(() => {
+    setFilename(filename);
+  }, [filename]);
+
   /**
    * Infer MIME type and encoding from file extension
    * @param {string} filename - File name
@@ -171,11 +179,7 @@ export function TaskFilePane({
       abortControllerRef.current.abort();
     }
 
-    // Use window.AbortController if available (jsdom environment) to fix test identity issues
-    const AbortControllerImpl =
-      (typeof window !== "undefined" && window.AbortController) ||
-      globalThis.AbortController;
-    abortControllerRef.current = new AbortControllerImpl();
+    abortControllerRef.current = new AbortController();
     const { signal } = abortControllerRef.current;
 
     const doFetch = async () => {
@@ -274,13 +278,6 @@ export function TaskFilePane({
       setTimeout(() => setCopyNotice(null), 2000);
     }
   };
-
-  const [tempFilename, setFilename] = useState(filename);
-
-  // Sync filename with prop changes
-  useEffect(() => {
-    setFilename(filename);
-  }, [filename]);
 
   // Retry fetch
   const handleRetry = () => {
