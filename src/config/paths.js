@@ -15,6 +15,7 @@ function resolvePipelinePaths(baseDir) {
     pending: path.join(baseDir, "pipeline-data", "pending"),
     current: path.join(baseDir, "pipeline-data", "current"),
     complete: path.join(baseDir, "pipeline-data", "complete"),
+    rejected: path.join(baseDir, "pipeline-data", "rejected"),
   };
 }
 

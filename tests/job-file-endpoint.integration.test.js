@@ -224,7 +224,7 @@ describe("Job Task File Endpoint Integration", () => {
       expect(data).toEqual({
         ok: false,
         error: "forbidden",
-        message: "Path traversal not allowed",
+        message: "Path validation failed",
       });
     });
 
@@ -238,7 +238,7 @@ describe("Job Task File Endpoint Integration", () => {
       expect(data).toEqual({
         ok: false,
         error: "forbidden",
-        message: "Absolute paths not allowed",
+        message: "Path validation failed",
       });
     });
 
@@ -252,7 +252,7 @@ describe("Job Task File Endpoint Integration", () => {
       expect(data).toEqual({
         ok: false,
         error: "forbidden",
-        message: "Absolute paths not allowed",
+        message: "Path validation failed",
       });
     });
 
