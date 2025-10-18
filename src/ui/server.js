@@ -768,10 +768,14 @@ async function handleTaskFileListRequest(req, res, { jobId, taskId, type }) {
   const relativePath = path.relative(jobDir, resolvedPath);
 
   if (relativePath.startsWith("..") || path.isAbsolute(relativePath)) {
+    console.error("Path security: directory traversal detected", {
+      taskDir,
+      relativePath,
+    });
     sendJson(res, 403, {
       ok: false,
       error: "forbidden",
-      message: "Path resolves outside allowed directory",
+      message: "Path validation failed",
     });
     return;
   }
@@ -801,6 +805,16 @@ async function handleTaskFileListRequest(req, res, { jobId, taskId, type }) {
     const files = [];
     for (const entry of entries) {
       if (entry.isFile()) {
+        // Validate each filename using the consolidated function
+        const validation = validateFilePath(entry.name);
+        if (validation) {
+          console.error("Path security: skipping invalid file", {
+            filename: entry.name,
+            reason: validation.message,
+          });
+          continue; // Skip files that fail validation
+        }
+
         const filePath = path.join(taskDir, entry.name);
         const stats = await fs.promises.stat(filePath);
 
@@ -837,6 +851,48 @@ async function handleTaskFileListRequest(req, res, { jobId, taskId, type }) {
 }
 
 /**
+ * Consolidated path jail security validation with generic error messages
+ * @param {string} filename - Filename to validate
+ * @returns {Object|null} Validation result or null if valid
+ */
+function validateFilePath(filename) {
+  // Check for path traversal patterns
+  if (filename.includes("..")) {
+    console.error("Path security: path traversal detected", { filename });
+    return {
+      allowed: false,
+      message: "Path validation failed",
+    };
+  }
+
+  // Check for absolute paths (POSIX, Windows, backslashes, ~)
+  if (
+    path.isAbsolute(filename) ||
+    /^[a-zA-Z]:/.test(filename) ||
+    filename.includes("\\") ||
+    filename.startsWith("~")
+  ) {
+    console.error("Path security: absolute path detected", { filename });
+    return {
+      allowed: false,
+      message: "Path validation failed",
+    };
+  }
+
+  // Check for empty filename
+  if (!filename || filename.trim() === "") {
+    console.error("Path security: empty filename detected");
+    return {
+      allowed: false,
+      message: "Path validation failed",
+    };
+  }
+
+  // Path is valid
+  return null;
+}
+
+/**
  * Handle task file request with validation, jail checks, and proper encoding
  * @param {http.IncomingMessage} req - HTTP request
  * @param {http.ServerResponse} res - HTTP response
@@ -849,25 +905,13 @@ async function handleTaskFileRequest(
 ) {
   const dataDir = process.env.PO_ROOT || DATA_DIR;
 
-  // Path traversal and security checks
-  if (filename.includes("..")) {
+  // Unified security validation
+  const validation = validateFilePath(filename);
+  if (validation) {
     sendJson(res, 403, {
       ok: false,
       error: "forbidden",
-      message: "Path traversal not allowed",
-    });
-    return;
-  }
-
-  if (
-    path.isAbsolute(filename) ||
-    /^[a-zA-Z]:/.test(filename) ||
-    filename.includes("\\")
-  ) {
-    sendJson(res, 403, {
-      ok: false,
-      error: "forbidden",
-      message: "Absolute paths not allowed",
+      message: validation.message,
     });
     return;
   }
