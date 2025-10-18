@@ -1523,8 +1523,9 @@ async function startServer({ dataDir, port: customPort }) {
     // the client with HMR in a single process. We dynamically import Vite here
     // to avoid including it in production bundles.
     // Skip Vite entirely for API-only tests when DISABLE_VITE=1 is set.
+    // Do not start Vite in tests to avoid dep-scan errors during teardown.
     if (
-      process.env.NODE_ENV !== "production" &&
+      process.env.NODE_ENV === "development" &&
       process.env.DISABLE_VITE !== "1"
     ) {
       try {
@@ -1540,6 +1541,8 @@ async function startServer({ dataDir, port: customPort }) {
         console.error("Failed to start Vite dev server:", err);
         viteServer = null;
       }
+    } else if (process.env.NODE_ENV === "test") {
+      console.log("DEBUG: Vite disabled in test mode (API-only mode)");
     } else if (process.env.DISABLE_VITE === "1") {
       console.log("DEBUG: Vite disabled via DISABLE_VITE=1 (API-only mode)");
     }
