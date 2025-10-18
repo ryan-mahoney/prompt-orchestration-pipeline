@@ -3,12 +3,9 @@ import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { TaskFilePane } from "../src/components/TaskFilePane.jsx";
 
-// Mock the useTaskFiles hook
-vi.mock("../src/ui/client/hooks/useTaskFiles.js", () => ({
-  useTaskFiles: vi.fn(),
-}));
-
-import { useTaskFiles } from "../src/ui/client/hooks/useTaskFiles.js";
+// Mock fetch globally
+const mockFetch = vi.fn();
+global.fetch = mockFetch;
 
 // Mock navigator.clipboard
 const mockClipboard = {
@@ -19,30 +16,12 @@ Object.defineProperty(navigator, "clipboard", {
   writable: true,
 });
 
-describe("TaskFilePane Integration", () => {
+describe("TaskFilePane Integration (Single File Viewer)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
 
-    // Default mock implementation for useTaskFiles
-    useTaskFiles.mockReturnValue({
-      files: [],
-      loading: false,
-      error: null,
-      retryList: vi.fn(),
-      selected: null,
-      content: null,
-      mime: null,
-      encoding: null,
-      loadingContent: false,
-      contentError: null,
-      retryContent: vi.fn(),
-      pagination: { page: 1, totalPages: 1 },
-      goToPage: vi.fn(),
-      selectedIndex: -1,
-      setSelectedIndex: vi.fn(),
-      handleKeyDown: vi.fn(),
-      selectFile: vi.fn(),
-    });
+    // Reset fetch mock
+    mockFetch.mockClear();
 
     // Clean up DOM
     document.body.innerHTML = "";
@@ -57,299 +36,112 @@ describe("TaskFilePane Integration", () => {
     jobId: "test-job-123",
     taskId: "test-task",
     type: "artifacts",
+    filename: "test.json",
     onClose: vi.fn(),
   };
 
-  const mockFileList = {
+  const mockFileResponse = {
     ok: true,
-    data: {
-      files: [
-        {
-          name: "test.json",
-          size: 1024,
-          mtime: "2023-01-01T00:00:00.000Z",
-          mime: "application/json",
-        },
-        {
-          name: "log.txt",
-          size: 512,
-          mtime: "2023-01-01T01:00:00.000Z",
-          mime: "text/plain",
-        },
-        {
-          name: "image.png",
-          size: 2048,
-          mtime: "2023-01-01T02:00:00.000Z",
-          mime: "image/png",
-        },
-      ],
-    },
+    json: async () => ({
+      ok: true,
+      data: {
+        content: '{"test": "data", "number": 42}',
+        mime: "application/json",
+        encoding: "utf8",
+        size: 1024,
+        mtime: "2023-01-01T00:00:00.000Z",
+      },
+    }),
   };
 
-  const mockFileContent = {
+  const mockMarkdownResponse = {
     ok: true,
-    data: {
-      content: '{"test": "data", "number": 42}',
-      mime: "application/json",
-      encoding: "utf8",
-      size: 1024,
-      mtime: "2023-01-01T00:00:00.000Z",
-    },
+    json: async () => ({
+      ok: true,
+      data: {
+        content:
+          "# Test Header\n\nThis is a **markdown** file.\n\n- Item 1\n- Item 2",
+        mime: "text/markdown",
+        encoding: "utf8",
+        size: 256,
+        mtime: "2023-01-01T00:00:00.000Z",
+      },
+    }),
   };
 
-  const mockMarkdownContent = {
+  const mockBinaryResponse = {
     ok: true,
-    data: {
-      content:
-        "# Test Header\n\nThis is a **markdown** file.\n\n- Item 1\n- Item 2",
-      mime: "text/markdown",
-      encoding: "utf8",
-      size: 256,
-      mtime: "2023-01-01T00:00:00.000Z",
-    },
+    json: async () => ({
+      ok: true,
+      data: {
+        content:
+          "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==",
+        mime: "image/png",
+        encoding: "base64",
+        size: 2048,
+        mtime: "2023-01-01T02:00:00.000Z",
+      },
+    }),
   };
 
-  const mockBinaryContent = {
-    ok: true,
-    data: {
-      content:
-        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==", // Base64 PNG
-      mime: "image/png",
-      encoding: "base64",
-      size: 2048,
-      mtime: "2023-01-01T02:00:00.000Z",
-    },
+  const mockErrorResponse = {
+    ok: false,
+    json: async () => ({
+      ok: false,
+      message: "File not found",
+    }),
   };
 
   describe("basic rendering", () => {
-    it("should render file pane when open", async () => {
+    it("renders when open and shows header with identifiers and filename", async () => {
+      mockFetch.mockResolvedValue(mockFileResponse);
+
       render(<TaskFilePane {...mockProps} />);
 
-      expect(screen.getByText("Task Files")).toBeInTheDocument();
+      expect(screen.getByText("File Preview")).toBeInTheDocument();
       expect(
-        screen.getByText("test-job-123 / test-task / artifacts")
+        screen.getByText("test-job-123 / test-task / artifacts / test.json")
       ).toBeInTheDocument();
-      expect(screen.getByText("Files")).toBeInTheDocument();
+      expect(screen.getByText("test.json")).toBeInTheDocument();
     });
 
-    it("should not render when not open", () => {
+    it("does not render when not open", () => {
       render(<TaskFilePane {...mockProps} isOpen={false} />);
 
-      expect(screen.queryByText("Task Files")).not.toBeInTheDocument();
+      expect(screen.queryByText("File Preview")).not.toBeInTheDocument();
     });
 
-    it("should display loading state", () => {
-      useTaskFiles.mockReturnValue({
-        files: [],
-        loading: true,
-        error: null,
-        retryList: vi.fn(),
-        selected: null,
-        content: null,
-        mime: null,
-        encoding: null,
-        loadingContent: false,
-        contentError: null,
-        retryContent: vi.fn(),
-        pagination: { page: 1, totalPages: 1 },
-        goToPage: vi.fn(),
-        selectedIndex: -1,
-        setSelectedIndex: vi.fn(),
-        handleKeyDown: vi.fn(),
-        selectFile: vi.fn(),
-      });
+    it("fetches content on open and displays JSON pretty-printed", async () => {
+      mockFetch.mockResolvedValue(mockFileResponse);
 
       render(<TaskFilePane {...mockProps} />);
 
-      expect(screen.getByText("Loading...")).toBeInTheDocument();
-    });
+      // Verify fetch was called with correct URL
+      expect(mockFetch).toHaveBeenCalledWith(
+        "/api/jobs/test-job-123/tasks/test-task/file?type=artifacts&filename=test.json",
+        expect.objectContaining({ signal: expect.any(AbortSignal) })
+      );
 
-    it("should display file list after loading", async () => {
-      useTaskFiles.mockReturnValue({
-        files: mockFileList.data.files,
-        loading: false,
-        error: null,
-        retryList: vi.fn(),
-        selected: null,
-        content: null,
-        mime: null,
-        encoding: null,
-        loadingContent: false,
-        contentError: null,
-        retryContent: vi.fn(),
-        pagination: { page: 1, totalPages: 1 },
-        goToPage: vi.fn(),
-        selectedIndex: -1,
-        setSelectedIndex: vi.fn(),
-        handleKeyDown: vi.fn(),
-        selectFile: vi.fn(),
+      // Wait for content to load
+      await waitFor(() => {
+        expect(screen.getByText(/"test":/)).toBeInTheDocument();
       });
 
-      render(<TaskFilePane {...mockProps} />);
-
-      expect(screen.getByText("test.json")).toBeInTheDocument();
-      expect(screen.getByText("log.txt")).toBeInTheDocument();
-      expect(screen.getByText("image.png")).toBeInTheDocument();
-    });
-
-    it("should display empty state when no files", async () => {
-      useTaskFiles.mockReturnValue({
-        files: [],
-        loading: false,
-        error: null,
-        retryList: vi.fn(),
-        selected: null,
-        content: null,
-        mime: null,
-        encoding: null,
-        loadingContent: false,
-        contentError: null,
-        retryContent: vi.fn(),
-        pagination: { page: 1, totalPages: 1 },
-        goToPage: vi.fn(),
-        selectedIndex: -1,
-        setSelectedIndex: vi.fn(),
-        handleKeyDown: vi.fn(),
-        selectFile: vi.fn(),
-      });
-
-      render(<TaskFilePane {...mockProps} />);
-
-      // Use getAllByText since there might be multiple instances
-      const noFilesElements = screen.getAllByText("No files found");
-      expect(noFilesElements.length).toBeGreaterThan(0);
-    });
-
-    it("should display error state", async () => {
-      useTaskFiles.mockReturnValue({
-        files: [],
-        loading: false,
-        error: { error: { message: "Network error" } },
-        retryList: vi.fn(),
-        selected: null,
-        content: null,
-        mime: null,
-        encoding: null,
-        loadingContent: false,
-        contentError: null,
-        retryContent: vi.fn(),
-        pagination: { page: 1, totalPages: 1 },
-        goToPage: vi.fn(),
-        selectedIndex: -1,
-        setSelectedIndex: vi.fn(),
-        handleKeyDown: vi.fn(),
-        selectFile: vi.fn(),
-      });
-
-      render(<TaskFilePane {...mockProps} />);
-
-      expect(screen.getByText("Network error")).toBeInTheDocument();
-      expect(screen.getByText("Retry")).toBeInTheDocument();
-    });
-  });
-
-  describe("file selection and preview", () => {
-    it("should select and preview first file automatically", async () => {
-      const mockSelectFile = vi.fn();
-
-      useTaskFiles.mockReturnValue({
-        files: mockFileList.data.files,
-        loading: false,
-        error: null,
-        retryList: vi.fn(),
-        selected: mockFileList.data.files[0],
-        content: mockFileContent.data.content,
-        mime: mockFileContent.data.mime,
-        encoding: mockFileContent.data.encoding,
-        loadingContent: false,
-        contentError: null,
-        retryContent: vi.fn(),
-        pagination: { page: 1, totalPages: 1 },
-        goToPage: vi.fn(),
-        selectedIndex: 0,
-        setSelectedIndex: vi.fn(),
-        handleKeyDown: vi.fn(),
-        selectFile: mockSelectFile,
-      });
-
-      render(<TaskFilePane {...mockProps} />);
-
-      // Use getAllByText to avoid duplicate match issues
-      const testJsonElements = screen.getAllByText("test.json");
-      expect(testJsonElements.length).toBeGreaterThan(0);
-
-      // Check for JSON content using more flexible matchers
-      expect(screen.getByText(/"test":/)).toBeInTheDocument();
       expect(screen.getByText(/"number": 42/)).toBeInTheDocument();
+      expect(screen.getByText("1.0 kB")).toBeInTheDocument();
+      expect(screen.getByText("application/json")).toBeInTheDocument();
     });
 
-    it("should select file when clicked", async () => {
-      const mockSelectFile = vi.fn();
+    it("renders markdown content", async () => {
+      mockFetch.mockResolvedValue(mockMarkdownResponse);
 
-      useTaskFiles.mockReturnValue({
-        files: mockFileList.data.files,
-        loading: false,
-        error: null,
-        retryList: vi.fn(),
-        selected: mockFileList.data.files[0],
-        content: mockFileContent.data.content,
-        mime: mockFileContent.data.mime,
-        encoding: mockFileContent.data.encoding,
-        loadingContent: false,
-        contentError: null,
-        retryContent: vi.fn(),
-        pagination: { page: 1, totalPages: 1 },
-        goToPage: vi.fn(),
-        selectedIndex: 0,
-        setSelectedIndex: vi.fn(),
-        handleKeyDown: vi.fn(),
-        selectFile: mockSelectFile,
+      const markdownProps = { ...mockProps, filename: "readme.md" };
+      render(<TaskFilePane {...markdownProps} />);
+
+      await waitFor(() => {
+        expect(screen.getByText("Test Header")).toBeInTheDocument();
       });
 
-      render(<TaskFilePane {...mockProps} />);
-
-      // Use getAllByText to avoid duplicate match issues
-      const testJsonElements = screen.getAllByText("test.json");
-      expect(testJsonElements.length).toBeGreaterThan(0);
-
-      // Click second file - use the option with the file name in the list
-      const options = screen.getAllByRole("option");
-      fireEvent.click(options[1]); // Second option should be log.txt
-
-      expect(mockSelectFile).toHaveBeenCalledWith(mockFileList.data.files[1]);
-    });
-
-    it("should render markdown content", async () => {
-      const markdownFile = {
-        name: "readme.md",
-        size: 256,
-        mtime: "2023-01-01T00:00:00.000Z",
-        mime: "text/markdown",
-      };
-
-      useTaskFiles.mockReturnValue({
-        files: [markdownFile],
-        loading: false,
-        error: null,
-        retryList: vi.fn(),
-        selected: markdownFile,
-        content: mockMarkdownContent.data.content,
-        mime: mockMarkdownContent.data.mime,
-        encoding: mockMarkdownContent.data.encoding,
-        loadingContent: false,
-        contentError: null,
-        retryContent: vi.fn(),
-        pagination: { page: 1, totalPages: 1 },
-        goToPage: vi.fn(),
-        selectedIndex: 0,
-        setSelectedIndex: vi.fn(),
-        handleKeyDown: vi.fn(),
-        selectFile: vi.fn(),
-      });
-
-      render(<TaskFilePane {...mockProps} />);
-
-      expect(screen.getByText("Test Header")).toBeInTheDocument();
       expect(
         screen.getByText("This is a **markdown** file.")
       ).toBeInTheDocument();
@@ -357,229 +149,214 @@ describe("TaskFilePane Integration", () => {
       expect(screen.getByText("• Item 2")).toBeInTheDocument();
     });
 
-    it("should render binary file placeholder", async () => {
-      const binaryFile = {
-        name: "image.png",
-        size: 2048,
-        mtime: "2023-01-01T02:00:00.000Z",
-        mime: "image/png",
-      };
+    it("renders binary placeholder for base64 content", async () => {
+      mockFetch.mockResolvedValue(mockBinaryResponse);
 
-      useTaskFiles.mockReturnValue({
-        files: [binaryFile],
-        loading: false,
-        error: null,
-        retryList: vi.fn(),
-        selected: binaryFile,
-        content: mockBinaryContent.data.content,
-        mime: mockBinaryContent.data.mime,
-        encoding: mockBinaryContent.data.encoding,
-        loadingContent: false,
-        contentError: null,
-        retryContent: vi.fn(),
-        pagination: { page: 1, totalPages: 1 },
-        goToPage: vi.fn(),
-        selectedIndex: 0,
-        setSelectedIndex: vi.fn(),
-        handleKeyDown: vi.fn(),
-        selectFile: vi.fn(),
+      const binaryProps = { ...mockProps, filename: "image.png" };
+      render(<TaskFilePane {...binaryProps} />);
+
+      await waitFor(() => {
+        expect(
+          screen.getByText("Binary file cannot be previewed")
+        ).toBeInTheDocument();
       });
+
+      expect(screen.getByText("Type: image/png")).toBeInTheDocument();
+    });
+
+    it("shows loading state while fetching", async () => {
+      // Mock a delayed response
+      mockFetch.mockImplementation(
+        () =>
+          new Promise((resolve) =>
+            setTimeout(() => resolve(mockFileResponse), 100)
+          )
+      );
 
       render(<TaskFilePane {...mockProps} />);
 
-      expect(
-        screen.getByText("Binary file cannot be previewed")
-      ).toBeInTheDocument();
-      expect(screen.getByText("Type: image/png")).toBeInTheDocument();
+      expect(screen.getByText("Loading...")).toBeInTheDocument();
+
+      // Wait for loading to complete
+      await waitFor(() => {
+        expect(screen.queryByText("Loading...")).not.toBeInTheDocument();
+      });
+    });
+
+    it("handles error and allows retry", async () => {
+      mockFetch.mockResolvedValue(mockErrorResponse);
+
+      render(<TaskFilePane {...mockProps} />);
+
+      await waitFor(() => {
+        expect(screen.getByText("Error loading file")).toBeInTheDocument();
+      });
+
+      expect(screen.getByText("File not found")).toBeInTheDocument();
+      expect(screen.getByText("Retry")).toBeInTheDocument();
+
+      // Test retry functionality
+      mockFetch.mockClear();
+      mockFetch.mockResolvedValue(mockFileResponse);
+
+      fireEvent.click(screen.getByText("Retry"));
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        "/api/jobs/test-job-123/tasks/test-task/file?type=artifacts&filename=test.json",
+        expect.objectContaining({ signal: expect.any(AbortSignal) })
+      );
+    });
+
+    it("aborts in-flight on prop change", async () => {
+      let abortController;
+      mockFetch.mockImplementation((_, options) => {
+        abortController = options.signal;
+        return new Promise(() => {}); // Never resolves
+      });
+
+      const { rerender } = render(<TaskFilePane {...mockProps} />);
+
+      // Change filename to trigger abort
+      const newProps = { ...mockProps, filename: "other.txt" };
+      rerender(<TaskFilePane {...newProps} />);
+
+      expect(abortController.aborted).toBe(true);
     });
   });
 
   describe("copy functionality", () => {
-    it("should copy content to clipboard", async () => {
-      mockClipboard.writeText.mockResolvedValueOnce(undefined);
-
-      useTaskFiles.mockReturnValue({
-        files: mockFileList.data.files,
-        loading: false,
-        error: null,
-        retryList: vi.fn(),
-        selected: mockFileList.data.files[0],
-        content: mockFileContent.data.content,
-        mime: mockFileContent.data.mime,
-        encoding: mockFileContent.data.encoding,
-        loadingContent: false,
-        contentError: null,
-        retryContent: vi.fn(),
-        pagination: { page: 1, totalPages: 1 },
-        goToPage: vi.fn(),
-        selectedIndex: 0,
-        setSelectedIndex: vi.fn(),
-        handleKeyDown: vi.fn(),
-        selectFile: vi.fn(),
-      });
+    it("copy button only for utf8", async () => {
+      mockFetch.mockResolvedValue(mockFileResponse);
 
       render(<TaskFilePane {...mockProps} />);
 
-      expect(screen.getByText("Copy")).toBeInTheDocument();
+      await waitFor(() => {
+        expect(screen.getByText("Copy")).toBeInTheDocument();
+      });
+
+      // Test binary file doesn't show copy button
+      mockFetch.mockResolvedValue(mockBinaryResponse);
+      const binaryProps = { ...mockProps, filename: "image.png" };
+      render(<TaskFilePane {...binaryProps} />);
+
+      await waitFor(() => {
+        expect(screen.queryByText("Copy")).not.toBeInTheDocument();
+      });
+    });
+
+    it("copies content to clipboard", async () => {
+      mockClipboard.writeText.mockResolvedValue(undefined);
+      mockFetch.mockResolvedValue(mockFileResponse);
+
+      render(<TaskFilePane {...mockProps} />);
+
+      await waitFor(() => {
+        expect(screen.getByText("Copy")).toBeInTheDocument();
+      });
 
       fireEvent.click(screen.getByText("Copy"));
 
-      // Verify the clipboard API was called with correct content
       expect(mockClipboard.writeText).toHaveBeenCalledWith(
         '{"test": "data", "number": 42}'
       );
+      expect(screen.getByText("Copied to clipboard")).toBeInTheDocument();
     });
 
-    it("should handle copy failure", async () => {
-      mockClipboard.writeText.mockRejectedValueOnce(new Error("Copy failed"));
-
-      useTaskFiles.mockReturnValue({
-        files: mockFileList.data.files,
-        loading: false,
-        error: null,
-        retryList: vi.fn(),
-        selected: mockFileList.data.files[0],
-        content: mockFileContent.data.content,
-        mime: mockFileContent.data.mime,
-        encoding: mockFileContent.data.encoding,
-        loadingContent: false,
-        contentError: null,
-        retryContent: vi.fn(),
-        pagination: { page: 1, totalPages: 1 },
-        goToPage: vi.fn(),
-        selectedIndex: 0,
-        setSelectedIndex: vi.fn(),
-        handleKeyDown: vi.fn(),
-        selectFile: vi.fn(),
-      });
+    it("handles copy failure", async () => {
+      mockClipboard.writeText.mockRejectedValue(new Error("Copy failed"));
+      mockFetch.mockResolvedValue(mockFileResponse);
 
       render(<TaskFilePane {...mockProps} />);
 
-      expect(screen.getByText("Copy")).toBeInTheDocument();
+      await waitFor(() => {
+        expect(screen.getByText("Copy")).toBeInTheDocument();
+      });
 
       fireEvent.click(screen.getByText("Copy"));
 
-      // Verify the clipboard API was called even though it fails
-      expect(mockClipboard.writeText).toHaveBeenCalledWith(
-        '{"test": "data", "number": 42}'
-      );
-    });
-
-    it("should not show copy button for binary files", async () => {
-      const binaryFile = {
-        name: "image.png",
-        size: 2048,
-        mtime: "2023-01-01T02:00:00.000Z",
-        mime: "image/png",
-      };
-
-      useTaskFiles.mockReturnValue({
-        files: [binaryFile],
-        loading: false,
-        error: null,
-        retryList: vi.fn(),
-        selected: binaryFile,
-        content: mockBinaryContent.data.content,
-        mime: mockBinaryContent.data.mime,
-        encoding: mockBinaryContent.data.encoding,
-        loadingContent: false,
-        contentError: null,
-        retryContent: vi.fn(),
-        pagination: { page: 1, totalPages: 1 },
-        goToPage: vi.fn(),
-        selectedIndex: 0,
-        setSelectedIndex: vi.fn(),
-        handleKeyDown: vi.fn(),
-        selectFile: vi.fn(),
-      });
-
-      render(<TaskFilePane {...mockProps} />);
-
-      expect(screen.queryByText("Copy")).not.toBeInTheDocument();
+      expect(screen.getByText("Failed to copy")).toBeInTheDocument();
     });
   });
 
-  describe("keyboard navigation", () => {
-    it("should support keyboard navigation", async () => {
-      const mockHandleKeyDown = vi.fn();
+  describe("validation", () => {
+    it("shows error for invalid type", async () => {
+      const invalidProps = { ...mockProps, type: "invalid" };
 
-      useTaskFiles.mockReturnValue({
-        files: mockFileList.data.files,
-        loading: false,
-        error: null,
-        retryList: vi.fn(),
-        selected: mockFileList.data.files[0],
-        content: mockFileContent.data.content,
-        mime: mockFileContent.data.mime,
-        encoding: mockFileContent.data.encoding,
-        loadingContent: false,
-        contentError: null,
-        retryContent: vi.fn(),
-        pagination: { page: 1, totalPages: 1 },
-        goToPage: vi.fn(),
-        selectedIndex: 0,
-        setSelectedIndex: vi.fn(),
-        handleKeyDown: mockHandleKeyDown,
-        selectFile: vi.fn(),
+      render(<TaskFilePane {...invalidProps} />);
+
+      await waitFor(() => {
+        expect(screen.getByText("Error loading file")).toBeInTheDocument();
       });
+
+      expect(screen.getByText(/Invalid type: invalid/)).toBeInTheDocument();
+    });
+
+    it("does not fetch when missing required props", async () => {
+      const incompleteProps = { ...mockProps, filename: "" };
+
+      render(<TaskFilePane {...incompleteProps} />);
+
+      expect(mockFetch).not.toHaveBeenCalled();
+      expect(screen.getByText("No file content")).toBeInTheDocument();
+    });
+  });
+
+  describe("mime type inference", () => {
+    it("falls back to inferred mime when server doesn't provide it", async () => {
+      const responseWithoutMime = {
+        ok: true,
+        json: async () => ({
+          ok: true,
+          data: {
+            content: '{"test": "data"}',
+            size: 1024,
+            mtime: "2023-01-01T00:00:00.000Z",
+          },
+        }),
+      };
+
+      mockFetch.mockResolvedValue(responseWithoutMime);
 
       render(<TaskFilePane {...mockProps} />);
 
-      // Use getAllByText to avoid duplicate match issues
-      const testJsonElements = screen.getAllByText("test.json");
-      expect(testJsonElements.length).toBeGreaterThan(0);
+      await waitFor(() => {
+        expect(screen.getByText(/"test":/)).toBeInTheDocument();
+      });
 
-      const fileList = screen.getByRole("listbox");
-
-      // Test ArrowDown
-      fireEvent.keyDown(fileList, { key: "ArrowDown" });
-
-      expect(mockHandleKeyDown).toHaveBeenCalledWith(
-        expect.objectContaining({ key: "ArrowDown" })
-      );
-
-      // Test ArrowUp
-      fireEvent.keyDown(fileList, { key: "ArrowUp" });
-
-      expect(mockHandleKeyDown).toHaveBeenCalledWith(
-        expect.objectContaining({ key: "ArrowUp" })
-      );
-
-      // Test Home
-      fireEvent.keyDown(fileList, { key: "Home" });
-
-      expect(mockHandleKeyDown).toHaveBeenCalledWith(
-        expect.objectContaining({ key: "Home" })
-      );
-
-      // Test End
-      fireEvent.keyDown(fileList, { key: "End" });
-
-      expect(mockHandleKeyDown).toHaveBeenCalledWith(
-        expect.objectContaining({ key: "End" })
-      );
+      expect(screen.getByText("application/json")).toBeInTheDocument();
     });
 
-    it("should close on Escape key", async () => {
-      useTaskFiles.mockReturnValue({
-        files: mockFileList.data.files,
-        loading: false,
-        error: null,
-        retryList: vi.fn(),
-        selected: mockFileList.data.files[0],
-        content: mockFileContent.data.content,
-        mime: mockFileContent.data.mime,
-        encoding: mockFileContent.data.encoding,
-        loadingContent: false,
-        contentError: null,
-        retryContent: vi.fn(),
-        pagination: { page: 1, totalPages: 1 },
-        goToPage: vi.fn(),
-        selectedIndex: 0,
-        setSelectedIndex: vi.fn(),
-        handleKeyDown: vi.fn(),
-        selectFile: vi.fn(),
+    it("handles unknown file extensions", async () => {
+      const unknownFileResponse = {
+        ok: true,
+        json: async () => ({
+          ok: true,
+          data: {
+            content: "some binary data",
+            mime: "application/octet-stream",
+            encoding: "base64",
+            size: 100,
+            mtime: "2023-01-01T00:00:00.000Z",
+          },
+        }),
+      };
+
+      mockFetch.mockResolvedValue(unknownFileResponse);
+
+      const unknownProps = { ...mockProps, filename: "unknown.xyz" };
+      render(<TaskFilePane {...unknownProps} />);
+
+      await waitFor(() => {
+        expect(
+          screen.getByText("Binary file cannot be previewed")
+        ).toBeInTheDocument();
       });
+    });
+  });
+
+  describe("escape handling", () => {
+    it("closes on escape key", async () => {
+      mockFetch.mockResolvedValue(mockFileResponse);
 
       render(<TaskFilePane {...mockProps} />);
 
@@ -589,318 +366,16 @@ describe("TaskFilePane Integration", () => {
     });
   });
 
-  describe("pagination", () => {
-    it("should show pagination for large file lists", async () => {
-      const largeFileList = Array.from({ length: 75 }, (_, i) => ({
-        name: `file-${i}.txt`,
-        size: 1024,
-        mtime: "2023-01-01T00:00:00.000Z",
-        mime: "text/plain",
-      }));
-
-      const mockGoToPage = vi.fn();
-
-      useTaskFiles.mockReturnValue({
-        files: largeFileList.slice(0, 50), // First page
-        loading: false,
-        error: null,
-        retryList: vi.fn(),
-        selected: largeFileList[0],
-        content: "test content",
-        mime: "text/plain",
-        encoding: "utf8",
-        loadingContent: false,
-        contentError: null,
-        retryContent: vi.fn(),
-        pagination: { page: 1, totalPages: 2 },
-        goToPage: mockGoToPage,
-        selectedIndex: 0,
-        setSelectedIndex: vi.fn(),
-        handleKeyDown: vi.fn(),
-        selectFile: vi.fn(),
-      });
+  describe("focus management", () => {
+    it("returns focus to close button when opened", async () => {
+      mockFetch.mockResolvedValue(mockFileResponse);
 
       render(<TaskFilePane {...mockProps} />);
 
-      expect(screen.getByText("Page 1 of 2")).toBeInTheDocument();
-      expect(screen.getByText("Previous")).toBeInTheDocument();
-      expect(screen.getByText("Next")).toBeInTheDocument();
-    });
-
-    it("should navigate pages", async () => {
-      const largeFileList = Array.from({ length: 75 }, (_, i) => ({
-        name: `file-${i}.txt`,
-        size: 1024,
-        mtime: "2023-01-01T00:00:00.000Z",
-        mime: "text/plain",
-      }));
-
-      const mockGoToPage = vi.fn();
-
-      const page1Props = {
-        ...mockProps,
-        // useTaskFiles will be mocked below
-      };
-
-      const page2Props = {
-        ...mockProps,
-        // useTaskFiles will be mocked below
-      };
-
-      // Mock first page
-      useTaskFiles.mockReturnValue({
-        files: largeFileList.slice(0, 50), // First page
-        loading: false,
-        error: null,
-        retryList: vi.fn(),
-        selected: largeFileList[0],
-        content: "test content",
-        mime: "text/plain",
-        encoding: "utf8",
-        loadingContent: false,
-        contentError: null,
-        retryContent: vi.fn(),
-        pagination: { page: 1, totalPages: 2 },
-        goToPage: mockGoToPage,
-        selectedIndex: 0,
-        setSelectedIndex: vi.fn(),
-        handleKeyDown: vi.fn(),
-        selectFile: vi.fn(),
+      await waitFor(() => {
+        const closeButton = screen.getByLabelText("Close file pane");
+        expect(closeButton).toHaveFocus();
       });
-
-      const { rerender } = render(<TaskFilePane {...page1Props} />);
-
-      expect(screen.getByText("Page 1 of 2")).toBeInTheDocument();
-
-      // Click Next
-      fireEvent.click(screen.getByText("Next"));
-
-      expect(mockGoToPage).toHaveBeenCalledWith(2);
-
-      // Mock second page and rerender
-      mockGoToPage.mockClear();
-      useTaskFiles.mockReturnValue({
-        files: largeFileList.slice(50), // Second page
-        loading: false,
-        error: null,
-        retryList: vi.fn(),
-        selected: largeFileList[50],
-        content: "test content",
-        mime: "text/plain",
-        encoding: "utf8",
-        loadingContent: false,
-        contentError: null,
-        retryContent: vi.fn(),
-        pagination: { page: 2, totalPages: 2 },
-        goToPage: mockGoToPage,
-        selectedIndex: 0,
-        setSelectedIndex: vi.fn(),
-        handleKeyDown: vi.fn(),
-        selectFile: vi.fn(),
-      });
-
-      rerender(<TaskFilePane {...page2Props} />);
-
-      // Click Previous (should be enabled now)
-      fireEvent.click(screen.getByText("Previous"));
-
-      expect(mockGoToPage).toHaveBeenCalledWith(1);
-    });
-  });
-
-  describe("error handling", () => {
-    it("should show retry button for list errors", async () => {
-      const mockRetryList = vi.fn();
-
-      useTaskFiles.mockReturnValue({
-        files: [],
-        loading: false,
-        error: { error: { message: "First fetch failed" } },
-        retryList: mockRetryList,
-        selected: null,
-        content: null,
-        mime: null,
-        encoding: null,
-        loadingContent: false,
-        contentError: null,
-        retryContent: vi.fn(),
-        pagination: { page: 1, totalPages: 1 },
-        goToPage: vi.fn(),
-        selectedIndex: -1,
-        setSelectedIndex: vi.fn(),
-        handleKeyDown: vi.fn(),
-        selectFile: vi.fn(),
-      });
-
-      render(<TaskFilePane {...mockProps} />);
-
-      expect(screen.getByText("First fetch failed")).toBeInTheDocument();
-      expect(screen.getByText("Retry")).toBeInTheDocument();
-
-      fireEvent.click(screen.getByText("Retry"));
-
-      expect(mockRetryList).toHaveBeenCalled();
-    });
-
-    it("should show retry button for content errors", async () => {
-      const mockRetryContent = vi.fn();
-
-      useTaskFiles.mockReturnValue({
-        files: mockFileList.data.files,
-        loading: false,
-        error: null,
-        retryList: vi.fn(),
-        selected: mockFileList.data.files[0],
-        content: null,
-        mime: null,
-        encoding: null,
-        loadingContent: false,
-        contentError: { error: { message: "Content fetch failed" } },
-        retryContent: mockRetryContent,
-        pagination: { page: 1, totalPages: 1 },
-        goToPage: vi.fn(),
-        selectedIndex: 0,
-        setSelectedIndex: vi.fn(),
-        handleKeyDown: vi.fn(),
-        selectFile: vi.fn(),
-      });
-
-      render(<TaskFilePane {...mockProps} />);
-
-      // Use getAllByText to avoid duplicate match issues
-      const testJsonElements = screen.getAllByText("test.json");
-      expect(testJsonElements.length).toBeGreaterThan(0);
-      expect(screen.getByText("Error loading file")).toBeInTheDocument();
-      expect(screen.getByText("Content fetch failed")).toBeInTheDocument();
-      expect(screen.getByText("Retry")).toBeInTheDocument();
-
-      fireEvent.click(screen.getByText("Retry"));
-
-      expect(mockRetryContent).toHaveBeenCalled();
-    });
-  });
-
-  describe("close functionality", () => {
-    it("should call onClose when close button clicked", async () => {
-      useTaskFiles.mockReturnValue({
-        files: mockFileList.data.files,
-        loading: false,
-        error: null,
-        retryList: vi.fn(),
-        selected: mockFileList.data.files[0],
-        content: mockFileContent.data.content,
-        mime: mockFileContent.data.mime,
-        encoding: mockFileContent.data.encoding,
-        loadingContent: false,
-        contentError: null,
-        retryContent: vi.fn(),
-        pagination: { page: 1, totalPages: 1 },
-        goToPage: vi.fn(),
-        selectedIndex: 0,
-        setSelectedIndex: vi.fn(),
-        handleKeyDown: vi.fn(),
-        selectFile: vi.fn(),
-      });
-
-      render(<TaskFilePane {...mockProps} />);
-
-      fireEvent.click(screen.getByLabelText("Close file pane"));
-
-      expect(mockProps.onClose).toHaveBeenCalled();
-    });
-  });
-
-  describe("accessibility", () => {
-    it("should have proper ARIA roles when files are present", () => {
-      useTaskFiles.mockReturnValue({
-        files: mockFileList.data.files,
-        loading: false,
-        error: null,
-        retryList: vi.fn(),
-        selected: mockFileList.data.files[0],
-        content: mockFileContent.data.content,
-        mime: mockFileContent.data.mime,
-        encoding: mockFileContent.data.encoding,
-        loadingContent: false,
-        contentError: null,
-        retryContent: vi.fn(),
-        pagination: { page: 1, totalPages: 1 },
-        goToPage: vi.fn(),
-        selectedIndex: 0,
-        setSelectedIndex: vi.fn(),
-        handleKeyDown: vi.fn(),
-        selectFile: vi.fn(),
-      });
-
-      render(<TaskFilePane {...mockProps} />);
-
-      // Check that listbox is present
-      const listbox = screen.getByRole("listbox");
-      expect(listbox).toBeInTheDocument();
-
-      // Check that options are present
-      const options = screen.getAllByRole("option");
-      expect(options).toHaveLength(3);
-    });
-
-    it("should show aria-selected for selected item", () => {
-      useTaskFiles.mockReturnValue({
-        files: mockFileList.data.files,
-        loading: false,
-        error: null,
-        retryList: vi.fn(),
-        selected: mockFileList.data.files[0],
-        content: mockFileContent.data.content,
-        mime: mockFileContent.data.mime,
-        encoding: mockFileContent.data.encoding,
-        loadingContent: false,
-        contentError: null,
-        retryContent: vi.fn(),
-        pagination: { page: 1, totalPages: 1 },
-        goToPage: vi.fn(),
-        selectedIndex: 0,
-        setSelectedIndex: vi.fn(),
-        handleKeyDown: vi.fn(),
-        selectFile: vi.fn(),
-      });
-
-      render(<TaskFilePane {...mockProps} />);
-
-      const options = screen.getAllByRole("option");
-      expect(options).toHaveLength(3);
-
-      // First option should be selected
-      expect(options[0]).toHaveAttribute("aria-selected", "true");
-      expect(options[1]).toHaveAttribute("aria-selected", "false");
-      expect(options[2]).toHaveAttribute("aria-selected", "false");
-    });
-
-    it("should not show listbox when no files", () => {
-      useTaskFiles.mockReturnValue({
-        files: [],
-        loading: false,
-        error: null,
-        retryList: vi.fn(),
-        selected: null,
-        content: null,
-        mime: null,
-        encoding: null,
-        loadingContent: false,
-        contentError: null,
-        retryContent: vi.fn(),
-        pagination: { page: 1, totalPages: 1 },
-        goToPage: vi.fn(),
-        selectedIndex: -1,
-        setSelectedIndex: vi.fn(),
-        handleKeyDown: vi.fn(),
-        selectFile: vi.fn(),
-      });
-
-      render(<TaskFilePane {...mockProps} />);
-
-      // Should not find listbox when no files
-      expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
-      expect(screen.getByText("No files found")).toBeInTheDocument();
     });
   });
 });
