@@ -929,7 +929,7 @@ async function handleTaskFileRequest(
 
   // Use single lifecycle directory
   const jobDir = getJobDirectoryPath(dataDir, jobId, lifecycle);
-  const taskDir = path.join(jobDir, "tasks", taskId, type);
+  const taskDir = path.join(jobDir, "files", type);
   const filePath = path.join(taskDir, filename);
 
   // Use path.relative for stricter jail enforcement
@@ -951,6 +951,7 @@ async function handleTaskFileRequest(
       ok: false,
       error: "not_found",
       message: "File not found",
+      filePath,
     });
     return;
   }

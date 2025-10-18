@@ -65,9 +65,9 @@ export default defineConfig({
     environment: "jsdom",
 
     // Test timeout
-    testTimeout: 60000,
-    hookTimeout: 30000,
-    teardownTimeout: 15000,
+    testTimeout: 20000,
+    hookTimeout: 5000,
+    teardownTimeout: 10000,
 
     // Coverage configuration
     coverage: {
