@@ -1,14 +1,13 @@
 import React, { useState, useEffect, useRef } from "react";
-import { useTaskFiles } from "../ui/client/hooks/useTaskFiles.js";
 
 /**
- * TaskFilePane component for displaying task files with preview
+ * TaskFilePane component for displaying a single task file with preview
  * @param {Object} props - Component props
  * @param {boolean} props.isOpen - Whether the pane is open
  * @param {string} props.jobId - Job ID
  * @param {string} props.taskId - Task ID
  * @param {string} props.type - File type (artifacts|logs|tmp)
- * @param {string} props.initialPath - Initial file path to select
+ * @param {string} props.filename - File name to display
  * @param {Function} props.onClose - Close handler
  */
 export function TaskFilePane({
@@ -16,49 +15,215 @@ export function TaskFilePane({
   jobId,
   taskId,
   type,
-  initialPath,
+  filename,
   onClose,
 }) {
   const [copyNotice, setCopyNotice] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [content, setContent] = useState(null);
+  const [mime, setMime] = useState(null);
+  const [encoding, setEncoding] = useState(null);
+  const [size, setSize] = useState(null);
+  const [mtime, setMtime] = useState(null);
+
   const invokerRef = useRef(null);
-  const didAutoSelectRef = useRef(false);
+  const abortControllerRef = useRef(null);
 
-  const {
-    files,
-    loading,
-    error,
-    retryList,
-    selected,
-    content,
-    mime,
-    encoding,
-    loadingContent,
-    contentError,
-    retryContent,
-    pagination,
-    goToPage,
-    selectedIndex,
-    setSelectedIndex,
-    handleKeyDown,
-    selectFile,
-  } = useTaskFiles({ isOpen, jobId, taskId, type, initialPath });
+  /**
+   * Infer MIME type and encoding from file extension
+   * @param {string} filename - File name
+   * @returns {Object} { mime, encoding }
+   */
+  function inferMimeType(filename) {
+    const ext = filename.toLowerCase().split(".").pop();
 
-  // Auto-select first file when files load and no initialPath is provided
+    const MIME_MAP = {
+      // Text types
+      txt: { mime: "text/plain", encoding: "utf8" },
+      log: { mime: "text/plain", encoding: "utf8" },
+      md: { mime: "text/markdown", encoding: "utf8" },
+      csv: { mime: "text/csv", encoding: "utf8" },
+      json: { mime: "application/json", encoding: "utf8" },
+      xml: { mime: "application/xml", encoding: "utf8" },
+      yaml: { mime: "application/x-yaml", encoding: "utf8" },
+      yml: { mime: "application/x-yaml", encoding: "utf8" },
+      toml: { mime: "application/toml", encoding: "utf8" },
+      ini: { mime: "text/plain", encoding: "utf8" },
+      conf: { mime: "text/plain", encoding: "utf8" },
+      config: { mime: "text/plain", encoding: "utf8" },
+      env: { mime: "text/plain", encoding: "utf8" },
+      gitignore: { mime: "text/plain", encoding: "utf8" },
+      dockerfile: { mime: "text/plain", encoding: "utf8" },
+      sh: { mime: "application/x-sh", encoding: "utf8" },
+      bash: { mime: "application/x-sh", encoding: "utf8" },
+      zsh: { mime: "application/x-sh", encoding: "utf8" },
+      fish: { mime: "application/x-fish", encoding: "utf8" },
+      ps1: { mime: "application/x-powershell", encoding: "utf8" },
+      bat: { mime: "application/x-bat", encoding: "utf8" },
+      cmd: { mime: "application/x-cmd", encoding: "utf8" },
+
+      // Code types
+      js: { mime: "application/javascript", encoding: "utf8" },
+      mjs: { mime: "application/javascript", encoding: "utf8" },
+      cjs: { mime: "application/javascript", encoding: "utf8" },
+      ts: { mime: "application/typescript", encoding: "utf8" },
+      mts: { mime: "application/typescript", encoding: "utf8" },
+      cts: { mime: "application/typescript", encoding: "utf8" },
+      jsx: { mime: "application/javascript", encoding: "utf8" },
+      tsx: { mime: "application/typescript", encoding: "utf8" },
+      py: { mime: "text/x-python", encoding: "utf8" },
+      rb: { mime: "text/x-ruby", encoding: "utf8" },
+      php: { mime: "application/x-php", encoding: "utf8" },
+      java: { mime: "text/x-java-source", encoding: "utf8" },
+      c: { mime: "text/x-c", encoding: "utf8" },
+      cpp: { mime: "text/x-c++", encoding: "utf8" },
+      cc: { mime: "text/x-c++", encoding: "utf8" },
+      cxx: { mime: "text/x-c++", encoding: "utf8" },
+      h: { mime: "text/x-c", encoding: "utf8" },
+      hpp: { mime: "text/x-c++", encoding: "utf8" },
+      cs: { mime: "text/x-csharp", encoding: "utf8" },
+      go: { mime: "text/x-go", encoding: "utf8" },
+      rs: { mime: "text/x-rust", encoding: "utf8" },
+      swift: { mime: "text/x-swift", encoding: "utf8" },
+      kt: { mime: "text/x-kotlin", encoding: "utf8" },
+      scala: { mime: "text/x-scala", encoding: "utf8" },
+      r: { mime: "text/x-r", encoding: "utf8" },
+      sql: { mime: "application/sql", encoding: "utf8" },
+      pl: { mime: "text/x-perl", encoding: "utf8" },
+      lua: { mime: "text/x-lua", encoding: "utf8" },
+      vim: { mime: "text/x-vim", encoding: "utf8" },
+      el: { mime: "text/x-elisp", encoding: "utf8" },
+      lisp: { mime: "text/x-lisp", encoding: "utf8" },
+      hs: { mime: "text/x-haskell", encoding: "utf8" },
+      ml: { mime: "text/x-ocaml", encoding: "utf8" },
+      ex: { mime: "text/x-elixir", encoding: "utf8" },
+      exs: { mime: "text/x-elixir", encoding: "utf8" },
+      erl: { mime: "text/x-erlang", encoding: "utf8" },
+      beam: { mime: "application/x-erlang-beam", encoding: "base64" },
+
+      // Web types
+      html: { mime: "text/html", encoding: "utf8" },
+      htm: { mime: "text/html", encoding: "utf8" },
+      xhtml: { mime: "application/xhtml+xml", encoding: "utf8" },
+      css: { mime: "text/css", encoding: "utf8" },
+      scss: { mime: "text/x-scss", encoding: "utf8" },
+      sass: { mime: "text/x-sass", encoding: "utf8" },
+      less: { mime: "text/x-less", encoding: "utf8" },
+      styl: { mime: "text/x-stylus", encoding: "utf8" },
+      vue: { mime: "text/x-vue", encoding: "utf8" },
+      svelte: { mime: "text/x-svelte", encoding: "utf8" },
+
+      // Images
+      png: { mime: "image/png", encoding: "base64" },
+      jpg: { mime: "image/jpeg", encoding: "base64" },
+      jpeg: { mime: "image/jpeg", encoding: "base64" },
+      gif: { mime: "image/gif", encoding: "base64" },
+      bmp: { mime: "image/bmp", encoding: "base64" },
+      webp: { mime: "image/webp", encoding: "base64" },
+      svg: { mime: "image/svg+xml", encoding: "utf8" },
+      ico: { mime: "image/x-icon", encoding: "base64" },
+      tiff: { mime: "image/tiff", encoding: "base64" },
+      tif: { mime: "image/tiff", encoding: "base64" },
+      psd: { mime: "image/vnd.adobe.photoshop", encoding: "base64" },
+      ai: { mime: "application/pdf", encoding: "base64" },
+      eps: { mime: "application/postscript", encoding: "base64" },
+
+      // Default to binary
+    };
+
+    return (
+      MIME_MAP[ext] || { mime: "application/octet-stream", encoding: "base64" }
+    );
+  }
+
+  // Fetch file content when dependencies change
   useEffect(() => {
-    if (
-      !initialPath &&
-      !didAutoSelectRef.current &&
-      files.length > 0 &&
-      !selected &&
-      !loadingContent &&
-      !contentError
-    ) {
-      didAutoSelectRef.current = true;
-      selectFile(files[0]);
+    if (!isOpen || !jobId || !taskId || !type || !filename) {
+      // Reset state when closed or missing props
+      setLoading(false);
+      setError(null);
+      setContent(null);
+      setMime(null);
+      setEncoding(null);
+      setSize(null);
+      setMtime(null);
+      return;
     }
-  }, [files, initialPath, selected, loadingContent, contentError, selectFile]);
 
-  // Store invoker ref for focus return and reset auto-select guard
+    // Validate type
+    const allowedTypes = ["artifacts", "logs", "tmp"];
+    if (!allowedTypes.includes(type)) {
+      setError({
+        error: {
+          message: `Invalid type: ${type}. Must be one of: ${allowedTypes.join(", ")}`,
+        },
+      });
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+
+    // Cancel previous request
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+
+    // Use window.AbortController if available (jsdom environment) to fix test identity issues
+    const AbortControllerImpl =
+      (typeof window !== "undefined" && window.AbortController) ||
+      globalThis.AbortController;
+    abortControllerRef.current = new AbortControllerImpl();
+    const { signal } = abortControllerRef.current;
+
+    const doFetch = async () => {
+      try {
+        const response = await fetch(
+          `/api/jobs/${encodeURIComponent(jobId)}/tasks/${encodeURIComponent(taskId)}/file?type=${encodeURIComponent(type)}&filename=${encodeURIComponent(tempFilename)}`,
+          { signal }
+        );
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.message || `HTTP ${response.status}`);
+        }
+
+        const result = await response.json();
+        if (!result.ok) {
+          throw new Error(result.message || "Failed to fetch file content");
+        }
+
+        // Use server-provided mime/encoding, fallback to inference
+        const serverMime = result.data?.mime;
+        const serverEncoding = result.data?.encoding;
+        const inferred = inferMimeType(filename);
+
+        setMime(serverMime || inferred.mime);
+        setEncoding(serverEncoding || inferred.encoding);
+        setContent(result.data?.content || null);
+        setSize(result.data?.size || null);
+        setMtime(result.data?.mtime || null);
+        setLoading(false);
+        setError(null);
+      } catch (err) {
+        if (err.name !== "AbortError") {
+          setError({ error: { message: err.message } });
+          setLoading(false);
+          setContent(null);
+          setMime(null);
+          setEncoding(null);
+          setSize(null);
+          setMtime(null);
+        }
+      }
+    };
+
+    doFetch();
+  }, [isOpen, jobId, taskId, type, tempFilename]);
+
+  // Store invoker ref for focus return
   useEffect(() => {
     if (isOpen && !invokerRef.current) {
       // Try to find the element that opened this pane
@@ -66,8 +231,6 @@ export function TaskFilePane({
       if (activeElement && activeElement.getAttribute("role") === "listitem") {
         invokerRef.current = activeElement;
       }
-      // Reset auto-select guard when pane opens
-      didAutoSelectRef.current = false;
     }
   }, [isOpen]);
 
@@ -89,6 +252,15 @@ export function TaskFilePane({
     }
   }, [isOpen, onClose]);
 
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
+  }, []);
+
   // Copy to clipboard with feedback
   const handleCopy = async () => {
     if (!content) return;
@@ -103,9 +275,25 @@ export function TaskFilePane({
     }
   };
 
+  const [tempFilename, setFilename] = useState(filename);
+
+  // Sync filename with prop changes
+  useEffect(() => {
+    setFilename(filename);
+  }, [filename]);
+
+  // Retry fetch
+  const handleRetry = () => {
+    // Trigger refetch by changing the dependencies
+    // This will cause the useEffect to run again
+    const currentFilename = tempFilename;
+    setFilename(`${currentFilename}?retry=${Date.now()}`);
+    setTimeout(() => setFilename(currentFilename), 0);
+  };
+
   // Render file content based on MIME type
   const renderContent = () => {
-    if (loadingContent) {
+    if (loading) {
       return (
         <div className="flex items-center justify-center h-64 text-gray-500">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mr-3"></div>
@@ -114,7 +302,7 @@ export function TaskFilePane({
       );
     }
 
-    if (contentError) {
+    if (error) {
       return (
         <div className="p-4">
           <div className="bg-red-50 border border-red-200 rounded-lg p-4">
@@ -137,10 +325,10 @@ export function TaskFilePane({
                   Error loading file
                 </h3>
                 <p className="mt-1 text-sm text-red-700">
-                  {contentError.error?.message || "Unknown error"}
+                  {error.error?.message || "Unknown error"}
                 </p>
                 <button
-                  onClick={retryContent}
+                  onClick={handleRetry}
                   className="mt-2 text-sm text-red-600 hover:text-red-800 underline"
                 >
                   Retry
@@ -155,7 +343,7 @@ export function TaskFilePane({
     if (!content) {
       return (
         <div className="flex items-center justify-center h-64 text-gray-500">
-          No file selected
+          No file content
         </div>
       );
     }
@@ -273,9 +461,9 @@ export function TaskFilePane({
       {/* Header */}
       <div className="flex items-center justify-between p-4 border-b">
         <div>
-          <h2 className="text-lg font-semibold">Task Files</h2>
+          <h2 className="text-lg font-semibold">File Preview</h2>
           <p className="text-sm text-gray-600">
-            {jobId} / {taskId} / {type}
+            {jobId} / {taskId} / {type} / {filename}
           </p>
         </div>
         <button
@@ -299,162 +487,48 @@ export function TaskFilePane({
         </button>
       </div>
 
-      {/* Content */}
-      <div className="flex-1 flex overflow-hidden">
-        {/* File List */}
-        <div className="w-80 border-r flex flex-col">
-          {/* List Header */}
-          <div className="p-4 border-b">
-            <h3 className="font-medium mb-2">Files</h3>
-            {error && (
-              <div className="bg-red-50 border border-red-200 rounded p-2 mb-2">
-                <p className="text-sm text-red-700">{error.error?.message}</p>
+      {/* Preview */}
+      <div className="flex-1 flex flex-col bg-gray-50">
+        {/* Preview Header */}
+        <div className="bg-white border-b p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="font-medium">{filename}</h3>
+              <div className="flex items-center text-sm text-gray-500 mt-1">
+                {size && <span>{formatSize(size)}</span>}
+                {size && mtime && <span className="mx-1">•</span>}
+                {mtime && <span>{formatDate(mtime)}</span>}
+                {mime && (size || mtime) && <span className="mx-1">•</span>}
+                {mime && <span>{mime}</span>}
+              </div>
+            </div>
+            <div className="flex items-center space-x-2">
+              {copyNotice && (
+                <div
+                  className={`text-sm ${
+                    copyNotice.type === "success"
+                      ? "text-green-600"
+                      : "text-red-600"
+                  }`}
+                >
+                  {copyNotice.message}
+                </div>
+              )}
+              {content && encoding === "utf8" && (
                 <button
-                  onClick={retryList}
-                  className="text-xs text-red-600 hover:text-red-800 underline mt-1"
+                  onClick={handleCopy}
+                  className="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+                  aria-label="Copy content to clipboard"
                 >
-                  Retry
+                  Copy
                 </button>
-              </div>
-            )}
-          </div>
-
-          {/* File List */}
-          <div className="flex-1 overflow-y-auto">
-            {loading ? (
-              <div className="flex items-center justify-center h-32 text-gray-500">
-                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mr-2"></div>
-                Loading...
-              </div>
-            ) : files.length === 0 ? (
-              <div className="p-4 text-center text-gray-500">
-                <svg
-                  className="mx-auto h-12 w-12 text-gray-400"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"
-                  />
-                </svg>
-                <p className="mt-2 text-sm">No files found</p>
-              </div>
-            ) : (
-              <div
-                role="listbox"
-                className="divide-y"
-                onKeyDown={handleKeyDown}
-                tabIndex={0}
-              >
-                {files.map((file, index) => (
-                  <div
-                    key={file.name}
-                    role="option"
-                    aria-selected={selectedIndex === index}
-                    className={`p-3 cursor-pointer hover:bg-gray-50 ${
-                      selectedIndex === index
-                        ? "bg-blue-50 border-l-4 border-blue-500"
-                        : ""
-                    }`}
-                    onClick={() => {
-                      setSelectedIndex(index);
-                      selectFile(file);
-                    }}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex-1 min-w-0">
-                        <p
-                          className="text-sm font-medium truncate"
-                          title={file.name}
-                        >
-                          {file.name}
-                        </p>
-                        <div className="flex items-center text-xs text-gray-500 mt-1">
-                          <span>{formatSize(file.size)}</span>
-                          <span className="mx-1">•</span>
-                          <span>{formatDate(file.mtime)}</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Pagination */}
-          {pagination.totalPages > 1 && (
-            <div className="p-3 border-t flex items-center justify-between">
-              <button
-                onClick={() => goToPage(pagination.page - 1)}
-                disabled={pagination.page === 1}
-                className="px-3 py-1 text-sm border rounded disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Previous
-              </button>
-              <span className="text-sm text-gray-600">
-                Page {pagination.page} of {pagination.totalPages}
-              </span>
-              <button
-                onClick={() => goToPage(pagination.page + 1)}
-                disabled={pagination.page === pagination.totalPages}
-                className="px-3 py-1 text-sm border rounded disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Next
-              </button>
+              )}
             </div>
-          )}
+          </div>
         </div>
 
-        {/* Preview */}
-        <div className="flex-1 flex flex-col bg-gray-50">
-          {/* Preview Header */}
-          {selected && (
-            <div className="bg-white border-b p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="font-medium">{selected.name}</h3>
-                  <div className="flex items-center text-sm text-gray-500 mt-1">
-                    <span>{formatSize(selected.size)}</span>
-                    <span className="mx-1">•</span>
-                    <span>{formatDate(selected.mtime)}</span>
-                    <span className="mx-1">•</span>
-                    <span>{mime}</span>
-                  </div>
-                </div>
-                <div className="flex items-center space-x-2">
-                  {copyNotice && (
-                    <div
-                      className={`text-sm ${
-                        copyNotice.type === "success"
-                          ? "text-green-600"
-                          : "text-red-600"
-                      }`}
-                    >
-                      {copyNotice.message}
-                    </div>
-                  )}
-                  {content && encoding === "utf8" && (
-                    <button
-                      onClick={handleCopy}
-                      className="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
-                      aria-label="Copy content to clipboard"
-                    >
-                      Copy
-                    </button>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Preview Content */}
-          <div className="flex-1 overflow-auto">{renderContent()}</div>
-        </div>
+        {/* Preview Content */}
+        <div className="flex-1 overflow-auto">{renderContent()}</div>
       </div>
     </div>
   );
