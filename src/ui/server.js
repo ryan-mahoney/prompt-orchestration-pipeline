@@ -42,6 +42,34 @@ const WATCHED_PATHS = (
 const HEARTBEAT_INTERVAL = 30000; // 30 seconds
 const DATA_DIR = process.env.PO_ROOT || process.cwd();
 
+/**
+ * Resolve job lifecycle directory deterministically
+ * @param {string} dataDir - Base data directory
+ * @param {string} jobId - Job identifier
+ * @returns {Promise<string|null>} One of "current", "complete", "rejected", or null if job not found
+ */
+async function resolveJobLifecycle(dataDir, jobId) {
+  const currentJobDir = getJobDirectoryPath(dataDir, jobId, "current");
+  const completeJobDir = getJobDirectoryPath(dataDir, jobId, "complete");
+  const rejectedJobDir = getJobDirectoryPath(dataDir, jobId, "rejected");
+
+  // Check in order of preference: current > complete > rejected
+  if (await exists(currentJobDir)) {
+    return "current";
+  }
+
+  if (await exists(completeJobDir)) {
+    return "complete";
+  }
+
+  if (await exists(rejectedJobDir)) {
+    return "rejected";
+  }
+
+  // Job not found in any lifecycle
+  return null;
+}
+
 function hasValidPayload(seed) {
   if (!seed || typeof seed !== "object") return false;
   const hasData = seed.data && typeof seed.data === "object";
@@ -1661,6 +1689,7 @@ export {
   sseRegistry,
   initializeWatcher,
   state,
+  resolveJobLifecycle,
 };
 
 // Start server if run directly
