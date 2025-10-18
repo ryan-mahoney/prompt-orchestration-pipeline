@@ -33,11 +33,6 @@ export function TaskFilePane({
   // Local filename state for retry functionality
   const [tempFilename, setFilename] = useState(filename);
 
-  // Sync filename with prop changes
-  useEffect(() => {
-    setFilename(filename);
-  }, [filename]);
-
   /**
    * Infer MIME type and encoding from file extension
    * @param {string} filename - File name
@@ -145,6 +140,11 @@ export function TaskFilePane({
     );
   }
 
+  // Sync filename with prop changes
+  useEffect(() => {
+    setFilename(filename);
+  }, [filename]);
+
   // Fetch file content when dependencies change
   useEffect(() => {
     if (!isOpen || !jobId || !taskId || !type || !filename) {
@@ -184,8 +184,9 @@ export function TaskFilePane({
 
     const doFetch = async () => {
       try {
+        const currentFilename = tempFilename || filename;
         const response = await fetch(
-          `/api/jobs/${encodeURIComponent(jobId)}/tasks/${encodeURIComponent(taskId)}/file?type=${encodeURIComponent(type)}&filename=${encodeURIComponent(tempFilename)}`,
+          `/api/jobs/${encodeURIComponent(jobId)}/tasks/${encodeURIComponent(taskId)}/file?type=${encodeURIComponent(type)}&filename=${encodeURIComponent(currentFilename)}`,
           { signal }
         );
 
@@ -225,7 +226,7 @@ export function TaskFilePane({
     };
 
     doFetch();
-  }, [isOpen, jobId, taskId, type, tempFilename]);
+  }, [isOpen, jobId, taskId, type, filename]);
 
   // Store invoker ref for focus return
   useEffect(() => {
