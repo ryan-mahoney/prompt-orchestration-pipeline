@@ -17,3 +17,15 @@
     line-height: inherit;
   }
 }
+
+body {
+  font-family: "Inter", sans-serif;
+  line-height: 1.6;
+  min-height: 100vh;
+}
+
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 2rem;
+}
