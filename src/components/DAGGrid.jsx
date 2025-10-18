@@ -39,7 +39,7 @@ function DAGGrid({
   const [selectedFile, setSelectedFile] = useState(null);
   const [filePaneOpen, setFilePaneOpen] = useState(false);
   const [filePaneType, setFilePaneType] = useState("artifacts");
-  const [filePaneInitialPath, setFilePaneInitialPath] = useState(null);
+  const [filePaneFilename, setFilePaneFilename] = useState(null);
 
   // Create refs for each node
   nodeRefs.current = useMemo(
@@ -510,7 +510,7 @@ function DAGGrid({
                         key={file.name}
                         className="flex items-center justify-between p-2 rounded border border-gray-200 hover:border-gray-300 hover:bg-gray-50 cursor-pointer transition-colors"
                         onClick={() => {
-                          setFilePaneInitialPath(file.name);
+                          setFilePaneFilename(file.name);
                           setFilePaneOpen(true);
                         }}
                       >
@@ -531,10 +531,10 @@ function DAGGrid({
                 jobId={jobId}
                 taskId={items[openIdx]?.id || `task-${openIdx}`}
                 type={filePaneType}
-                initialPath={filePaneInitialPath}
+                filename={filePaneFilename}
                 onClose={() => {
                   setFilePaneOpen(false);
-                  setFilePaneInitialPath(null);
+                  setFilePaneFilename(null);
                 }}
               />
             </div>
