@@ -206,6 +206,7 @@ export function useTaskFiles({ isOpen, jobId, taskId, type, initialPath }) {
   const contentAbortControllerRef = useRef(null);
   const mountedRef = useRef(true);
   const contentReqSeqRef = useRef(0);
+  const lastAutoSelectRequestRef = useRef(null);
 
   // Fetch file list (includes reset logic)
   useEffect(() => {
@@ -283,15 +284,6 @@ export function useTaskFiles({ isOpen, jobId, taskId, type, initialPath }) {
         });
 
         setPagination({ page: 1, totalPages });
-        setSelectedIndex(0);
-
-        // Auto-select initial path if provided
-        if (initialPath) {
-          const initialIndex = files.findIndex((f) => f.name === initialPath);
-          if (initialIndex >= 0) {
-            setSelectedIndex(initialIndex);
-          }
-        }
       } catch (err) {
         if (err.name !== "AbortError" && mountedRef.current) {
           setListState((prev) => ({
@@ -305,17 +297,25 @@ export function useTaskFiles({ isOpen, jobId, taskId, type, initialPath }) {
     };
 
     doFetch();
-  }, [isOpen, jobId, taskId, type, initialPath, refreshSeq]);
+  }, [isOpen, jobId, taskId, type, refreshSeq]);
 
-  // Auto-select file when initialPath is provided and files are loaded
+  // Unified post-population selection effect
+  const selectFileRef = useRef(null);
+
   useEffect(() => {
-    // Only auto-select if we have files, not currently loading content, no content error, and initialPath is provided
+    // Guards: only run when open, not loading, no active content ops, and no user selection yet
     if (
-      !initialPath ||
+      !isOpen ||
       listState.loading ||
       contentState.loadingContent ||
-      contentState.contentError
+      contentState.contentError ||
+      contentState.selected
     ) {
+      return;
+    }
+
+    // Guard: prevent repeated auto-selection for the same fetch request
+    if (lastAutoSelectRequestRef.current === listState.requestId) {
       return;
     }
 
@@ -323,96 +323,42 @@ export function useTaskFiles({ isOpen, jobId, taskId, type, initialPath }) {
     const end = start + FILES_PER_PAGE;
     const currentFiles = listState.files.slice(start, end);
 
-    // Find the file with initialPath
-    const targetFile = currentFiles.find((f) => f.name === initialPath);
-
-    if (targetFile && contentState.selected?.name !== targetFile.name) {
-      if (!contentAbortControllerRef.current) {
-        // Use window.AbortController if available (jsdom environment) to fix test identity issues
-        const AbortControllerImpl =
-          (typeof window !== "undefined" && window.AbortController) ||
-          globalThis.AbortController;
-        contentAbortControllerRef.current = new AbortControllerImpl();
-      }
-
-      // Cancel previous content request
-      if (contentAbortControllerRef.current) {
-        contentAbortControllerRef.current.abort();
-      }
-
-      // Use window.AbortController if available (jsdom environment) to fix test identity issues
-      const AbortControllerImpl =
-        (typeof window !== "undefined" && window.AbortController) ||
-        globalThis.AbortController;
-      contentAbortControllerRef.current = new AbortControllerImpl();
-      const { signal } = contentAbortControllerRef.current;
-
-      const mySeq = ++contentReqSeqRef.current;
-      setContentState((prev) => ({
-        ...prev,
-        selected: targetFile,
-        loadingContent: true,
-        contentError: null,
-        contentRequestId: mySeq,
-      }));
-
-      const doFetchContent = async () => {
-        try {
-          const result = await fetchFileContent(
-            jobId,
-            taskId,
-            type,
-            targetFile.name,
-            signal
-          );
-
-          if (!mountedRef.current || mySeq !== contentReqSeqRef.current) {
-            return;
-          }
-
-          // Infer MIME type if not provided
-          const mime = result.data?.mime || inferMimeType(targetFile.name).mime;
-          const encoding =
-            result.data?.encoding || inferMimeType(targetFile.name).encoding;
-
-          setContentState({
-            selected: targetFile,
-            content: result.data?.content || null,
-            mime,
-            encoding,
-            loadingContent: false,
-            contentError: null,
-            contentRequestId: mySeq,
-          });
-        } catch (err) {
-          if (
-            err.name !== "AbortError" &&
-            mountedRef.current &&
-            mySeq === contentReqSeqRef.current
-          ) {
-            setContentState((prev) => ({
-              ...prev,
-              loadingContent: false,
-              contentError: { error: { message: err.message } },
-              contentRequestId: mySeq,
-            }));
-          }
-        }
-      };
-
-      doFetchContent();
+    if (currentFiles.length === 0) {
+      return;
     }
+
+    // Choose file: prefer initialPath if present on current page; otherwise first file
+    const fileToSelect = initialPath
+      ? currentFiles.find((f) => f.name === initialPath)
+      : currentFiles[0];
+
+    if (!fileToSelect) {
+      return;
+    }
+
+    // Mark that we're auto-selecting for this request
+    lastAutoSelectRequestRef.current = listState.requestId;
+
+    // Update selected index to match the chosen file on the current page
+    const selectedIndexOnPage = currentFiles.findIndex(
+      (f) => f.name === fileToSelect.name
+    );
+    if (selectedIndexOnPage >= 0) {
+      setSelectedIndex(selectedIndexOnPage);
+    }
+
+    // Fetch content via the centralized selectFile function (via ref to avoid dependency cycle)
+    selectFileRef.current(fileToSelect);
   }, [
-    initialPath,
+    isOpen,
     listState.files,
-    pagination.page,
-    jobId,
-    taskId,
-    type,
+    listState.requestId,
     listState.loading,
+    pagination.page,
+    initialPath,
+    contentState.selected,
     contentState.loadingContent,
     contentState.contentError,
-    contentState.selected?.name,
   ]);
 
   // Select and fetch file content
@@ -588,6 +534,11 @@ export function useTaskFiles({ isOpen, jobId, taskId, type, initialPath }) {
       contentState.selected?.name,
     ]
   );
+
+  // Update selectFile ref when selectFile changes
+  useEffect(() => {
+    selectFileRef.current = selectFile;
+  }, [selectFile]);
 
   // Cleanup
   useEffect(() => {
