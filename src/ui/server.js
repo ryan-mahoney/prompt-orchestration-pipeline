@@ -729,7 +729,7 @@ async function handleTaskFileListRequest(req, res, { jobId, taskId, type }) {
   const allowedFallbackBase = path.resolve(completeJobDir);
 
   if (
-    !resolvedPath.startsWith(allowedBase) &&
+    !resolvedPath.startsWith(allowedBase) ||
     !resolvedFallbackPath.startsWith(allowedFallbackBase)
   ) {
     sendJson(res, 403, {
@@ -859,7 +859,7 @@ async function handleTaskFileRequest(
   const allowedFallbackBase = path.resolve(completeJobDir);
 
   if (
-    !resolvedPath.startsWith(allowedBase) &&
+    !resolvedPath.startsWith(allowedBase) ||
     !resolvedFallbackPath.startsWith(allowedFallbackBase)
   ) {
     sendJson(res, 403, {
