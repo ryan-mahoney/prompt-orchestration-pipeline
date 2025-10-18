@@ -292,18 +292,18 @@ describe("Job Task File Endpoint Integration", () => {
       });
     });
 
-    it("should return 404 for non-existent task", async () => {
+    it("should return 200 even when taskId has no folder (file storage is job-scoped)", async () => {
       const response = await fetch(
         `${baseUrl}/api/jobs/test-job-123/tasks/non-existent-task/file?type=artifacts&filename=output.json`
       );
 
-      expect(response.status).toBe(404);
+      expect(response.status).toBe(200);
       const data = await response.json();
-      expect(data).toEqual({
-        ok: false,
-        error: "not_found",
-        message: expect.stringContaining("not found"),
-      });
+      expect(data.ok).toBe(true);
+      expect(data.jobId).toBe("test-job-123");
+      expect(data.taskId).toBe("non-existent-task");
+      expect(data.path).toBe("tasks/non-existent-task/artifacts/output.json");
+      expect(data.content).toContain('"result": "success"');
     });
 
     it("should return 404 for non-existent file", async () => {
@@ -313,11 +313,12 @@ describe("Job Task File Endpoint Integration", () => {
 
       expect(response.status).toBe(404);
       const data = await response.json();
-      expect(data).toEqual({
-        ok: false,
-        error: "not_found",
-        message: expect.stringContaining("not found"),
-      });
+      expect(data.ok).toBe(false);
+      expect(data.error).toBe("not_found");
+      expect(data.message).toEqual(expect.stringContaining("not found"));
+      expect(data.filePath).toEqual(
+        expect.stringContaining("non-existent.json")
+      );
     });
 
     it("should fallback to complete directory when not found in current", async () => {
@@ -378,11 +379,12 @@ describe("Job Task File Endpoint Integration", () => {
 
       expect(response.status).toBe(404);
       const data = await response.json();
-      expect(data).toEqual({
-        ok: false,
-        error: "not_found",
-        message: expect.stringContaining("not found"),
-      });
+      expect(data.ok).toBe(false);
+      expect(data.error).toBe("not_found");
+      expect(data.message).toEqual(expect.stringContaining("not found"));
+      expect(data.filePath).toEqual(
+        expect.stringContaining("missing-file.json")
+      );
     });
 
     it("should handle nested directory paths correctly", async () => {
