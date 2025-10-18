@@ -205,6 +205,7 @@ export function useTaskFiles({ isOpen, jobId, taskId, type, initialPath }) {
   const abortControllerRef = useRef(null);
   const contentAbortControllerRef = useRef(null);
   const mountedRef = useRef(true);
+  const contentReqSeqRef = useRef(0);
 
   // Fetch file list (includes reset logic)
   useEffect(() => {
@@ -346,13 +347,13 @@ export function useTaskFiles({ isOpen, jobId, taskId, type, initialPath }) {
       contentAbortControllerRef.current = new AbortControllerImpl();
       const { signal } = contentAbortControllerRef.current;
 
-      const contentRequestId = Date.now();
+      const mySeq = ++contentReqSeqRef.current;
       setContentState((prev) => ({
         ...prev,
         selected: targetFile,
         loadingContent: true,
         contentError: null,
-        contentRequestId,
+        contentRequestId: mySeq,
       }));
 
       const doFetchContent = async () => {
@@ -365,7 +366,7 @@ export function useTaskFiles({ isOpen, jobId, taskId, type, initialPath }) {
             signal
           );
 
-          if (!mountedRef.current) {
+          if (!mountedRef.current || mySeq !== contentReqSeqRef.current) {
             return;
           }
 
@@ -381,15 +382,19 @@ export function useTaskFiles({ isOpen, jobId, taskId, type, initialPath }) {
             encoding,
             loadingContent: false,
             contentError: null,
-            contentRequestId,
+            contentRequestId: mySeq,
           });
         } catch (err) {
-          if (err.name !== "AbortError" && mountedRef.current) {
+          if (
+            err.name !== "AbortError" &&
+            mountedRef.current &&
+            mySeq === contentReqSeqRef.current
+          ) {
             setContentState((prev) => ({
               ...prev,
               loadingContent: false,
               contentError: { error: { message: err.message } },
-              contentRequestId,
+              contentRequestId: mySeq,
             }));
           }
         }
@@ -425,13 +430,13 @@ export function useTaskFiles({ isOpen, jobId, taskId, type, initialPath }) {
         return;
       }
 
-      const contentRequestId = Date.now();
+      const mySeq = ++contentReqSeqRef.current;
       setContentState((prev) => ({
         ...prev,
         selected: file,
         loadingContent: true,
         contentError: null,
-        contentRequestId,
+        contentRequestId: mySeq,
       }));
 
       // Cancel previous content request
@@ -456,7 +461,7 @@ export function useTaskFiles({ isOpen, jobId, taskId, type, initialPath }) {
             signal
           );
 
-          if (!mountedRef.current) {
+          if (!mountedRef.current || mySeq !== contentReqSeqRef.current) {
             return;
           }
 
@@ -472,15 +477,19 @@ export function useTaskFiles({ isOpen, jobId, taskId, type, initialPath }) {
             encoding,
             loadingContent: false,
             contentError: null,
-            contentRequestId,
+            contentRequestId: mySeq,
           });
         } catch (err) {
-          if (err.name !== "AbortError" && mountedRef.current) {
+          if (
+            err.name !== "AbortError" &&
+            mountedRef.current &&
+            mySeq === contentReqSeqRef.current
+          ) {
             setContentState((prev) => ({
               ...prev,
               loadingContent: false,
               contentError: { error: { message: err.message } },
-              contentRequestId,
+              contentRequestId: mySeq,
             }));
           }
         }

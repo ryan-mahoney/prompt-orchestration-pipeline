@@ -719,6 +719,112 @@ describe("useTaskFiles", () => {
     });
   });
 
+  describe("race conditions", () => {
+    it("ignores stale content response when an older request resolves after a newer selection", async () => {
+      vi.useFakeTimers();
+
+      let firstResolve, secondResolve;
+      const firstPromise = new Promise((resolve) => {
+        firstResolve = resolve;
+      });
+      const secondPromise = new Promise((resolve) => {
+        secondResolve = resolve;
+      });
+
+      // Mock file list fetch
+      fetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => mockFileList,
+      });
+
+      // Mock content fetches with controlled timing
+      fetch.mockImplementation((url, options) => {
+        if (url.includes("/file")) {
+          // Return different promises based on filename
+          if (url.includes("test.json")) {
+            return firstPromise.then(() => ({
+              ok: true,
+              json: async () => ({
+                ok: true,
+                data: {
+                  content: '{"old": "data"}',
+                  mime: "application/json",
+                  encoding: "utf8",
+                },
+              }),
+            }));
+          } else if (url.includes("log.txt")) {
+            return secondPromise.then(() => ({
+              ok: true,
+              json: async () => ({
+                ok: true,
+                data: {
+                  content: "log content",
+                  mime: "text/plain",
+                  encoding: "utf8",
+                },
+              }),
+            }));
+          }
+        }
+        return Promise.resolve({
+          ok: true,
+          json: async () => mockFileList,
+        });
+      });
+
+      const { result } = renderHook(() =>
+        useTaskFiles({
+          isOpen: true,
+          jobId: mockJobId,
+          taskId: mockTaskId,
+          type: mockType,
+        })
+      );
+
+      // Wait for list fetch
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(100);
+      });
+
+      expect(result.current.files).toEqual(mockFileList.data.files);
+
+      // Select first file (test.json) - this will create the first promise
+      act(() => {
+        result.current.selectFile(mockFileList.data.files[0]);
+      });
+
+      // Immediately select second file (log.txt) - this will create the second promise
+      act(() => {
+        result.current.selectFile(mockFileList.data.files[1]);
+      });
+
+      // Resolve the second (newer) request first
+      await act(async () => {
+        secondResolve();
+        await vi.advanceTimersByTimeAsync(10);
+      });
+
+      // Verify state reflects the newer (second) file
+      expect(result.current.selected?.name).toBe("log.txt");
+      expect(result.current.content).toBe("log content");
+      expect(result.current.mime).toBe("text/plain");
+
+      // Now resolve the first (older) request - this should be ignored
+      await act(async () => {
+        firstResolve();
+        await vi.advanceTimersByTimeAsync(10);
+      });
+
+      // Verify state is unchanged (still the second file's content)
+      expect(result.current.selected?.name).toBe("log.txt");
+      expect(result.current.content).toBe("log content");
+      expect(result.current.mime).toBe("text/plain");
+
+      vi.useRealTimers();
+    });
+  });
+
   describe("cleanup", () => {
     it("should abort requests on unmount", async () => {
       let abortController = null;
