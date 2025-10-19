@@ -61,12 +61,17 @@ describe("Migration Script Tests", () => {
       const statusContent = await fs.readFile(statusFile, "utf8");
       const status = JSON.parse(statusContent);
 
-      // Should still have legacy artifacts in dry run
+      // Should still have legacy artifacts in dry run (no changes made)
       expect(status.tasks.research.artifacts).toEqual([
         "output.json",
         "letter.json",
       ]);
+      // In dry run, no actual migration happens, so files object won't exist yet
+      // The migration script only adds files when actually running, not in dry run
       expect(status.tasks.research.files).toBeUndefined();
+
+      // Analysis task also has no files object in dry run
+      expect(status.tasks.analysis.files).toBeUndefined();
     });
   });
 

@@ -4,6 +4,19 @@
 
 This API provides secure access to task-scoped files (artifacts, logs, and temporary files) for pipeline jobs. It includes comprehensive validation, path traversal protection, and automatic MIME type detection.
 
+## UI Integration
+
+The frontend uses a single-file viewer component (`TaskFilePane`) that displays exactly one file at a time. The component:
+
+- Takes `jobId`, `taskId`, `type`, and `filename` as props
+- Fetches one file via the single-file endpoint
+- Displays content based on MIME type (JSON pretty-printed, Markdown rendered, text, or binary placeholder)
+- Includes copy functionality for UTF-8 content
+- Shows loading states and error handling with retry capability
+- **Does not** perform client-side pagination or file listing (parent components handle file selection)
+
+**Usage Pattern**: Parent components (like DAGGrid) maintain file lists and pass a specific `filename` to TaskFilePane for viewing.
+
 ## Endpoint
 
 ```

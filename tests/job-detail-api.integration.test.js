@@ -1,3 +1,6 @@
+/**
+ * @vitest-environment node
+ */
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { promises as fs } from "node:fs";
 import path from "node:path";
@@ -27,6 +30,11 @@ describe("Job Detail API Integration Tests", () => {
       id: jobId,
       name: "Test Job",
       createdAt: new Date().toISOString(),
+      files: {
+        artifacts: ["job-a1.json"],
+        logs: ["job.log"],
+        tmp: ["tmp-1.txt"],
+      },
       tasks: {
         "task-1": {
           state: "pending",
@@ -104,7 +112,13 @@ describe("Job Detail API Integration Tests", () => {
     expect(response.status).toBe(200);
     const result = await response.json();
 
-    // Verify new files.* schema is present
+    // Verify job-level files exist
+    expect(result.data).toHaveProperty("files");
+    expect(result.data.files).toHaveProperty("artifacts", ["job-a1.json"]);
+    expect(result.data.files).toHaveProperty("logs", ["job.log"]);
+    expect(result.data.files).toHaveProperty("tmp", ["tmp-1.txt"]);
+
+    // Verify new files.* schema is present for tasks
     expect(result.data.tasks).toHaveLength(2);
 
     const task1 = result.data.tasks.find((t) => t.name === "task-1");
@@ -124,6 +138,9 @@ describe("Job Detail API Integration Tests", () => {
     // Verify legacy artifacts field is NOT present
     expect(task1).not.toHaveProperty("artifacts");
     expect(task2).not.toHaveProperty("artifacts");
+
+    // Verify legacy top-level artifacts is NOT present
+    expect(result.data).not.toHaveProperty("artifacts");
   });
 
   it("returns 404 with proper envelope for non-existent job", async () => {

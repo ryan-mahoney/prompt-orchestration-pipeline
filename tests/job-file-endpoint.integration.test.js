@@ -36,7 +36,29 @@ describe("Job Task File Endpoint Integration", () => {
     await fs.mkdir(path.join(currentJobDir, "logs"), { recursive: true });
     await fs.mkdir(path.join(currentJobDir, "tmp"), { recursive: true });
 
-    // Create test files
+    // Create job-scoped files directory (for file reads)
+    const jobFilesDir = path.join(currentDir, jobId, "files");
+    await fs.mkdir(path.join(jobFilesDir, "artifacts"), { recursive: true });
+    await fs.mkdir(path.join(jobFilesDir, "logs"), { recursive: true });
+    await fs.mkdir(path.join(jobFilesDir, "tmp"), { recursive: true });
+
+    // Create test files in job-scoped location (for file reads)
+    await fs.writeFile(
+      path.join(jobFilesDir, "artifacts", "output.json"),
+      JSON.stringify({ result: "success", data: [1, 2, 3] }, null, 2)
+    );
+
+    await fs.writeFile(
+      path.join(jobFilesDir, "logs", "test.log"),
+      "2024-01-01 10:00:00 INFO Starting analysis\n2024-01-01 10:00:05 INFO Analysis complete"
+    );
+
+    await fs.writeFile(
+      path.join(jobFilesDir, "tmp", "blob.bin"),
+      Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]) // PNG header
+    );
+
+    // Keep task-scoped files for list tests (unchanged)
     await fs.writeFile(
       path.join(currentJobDir, "artifacts", "output.json"),
       JSON.stringify({ result: "success", data: [1, 2, 3] }, null, 2)
@@ -159,6 +181,7 @@ describe("Job Task File Endpoint Integration", () => {
     });
 
     it("should return 400 for missing type parameter", async () => {
+      // Validation: Input validation is unchanged by job-scoped storage
       const response = await fetch(
         `${baseUrl}/api/jobs/test-job-123/tasks/analysis/file?filename=output.json`
       );
@@ -215,6 +238,7 @@ describe("Job Task File Endpoint Integration", () => {
     });
 
     it("should return 403 for path traversal attempt", async () => {
+      // Security: Path traversal validation is unchanged by job-scoped storage
       const response = await fetch(
         `${baseUrl}/api/jobs/test-job-123/tasks/analysis/file?type=artifacts&filename=../../../etc/passwd`
       );
@@ -224,7 +248,7 @@ describe("Job Task File Endpoint Integration", () => {
       expect(data).toEqual({
         ok: false,
         error: "forbidden",
-        message: "Path traversal not allowed",
+        message: "Path validation failed",
       });
     });
 
@@ -238,7 +262,7 @@ describe("Job Task File Endpoint Integration", () => {
       expect(data).toEqual({
         ok: false,
         error: "forbidden",
-        message: "Absolute paths not allowed",
+        message: "Path validation failed",
       });
     });
 
@@ -252,7 +276,7 @@ describe("Job Task File Endpoint Integration", () => {
       expect(data).toEqual({
         ok: false,
         error: "forbidden",
-        message: "Absolute paths not allowed",
+        message: "Path validation failed",
       });
     });
 
@@ -270,18 +294,18 @@ describe("Job Task File Endpoint Integration", () => {
       });
     });
 
-    it("should return 404 for non-existent task", async () => {
+    it("should return 200 even when taskId has no folder (file storage is job-scoped)", async () => {
       const response = await fetch(
         `${baseUrl}/api/jobs/test-job-123/tasks/non-existent-task/file?type=artifacts&filename=output.json`
       );
 
-      expect(response.status).toBe(404);
+      expect(response.status).toBe(200);
       const data = await response.json();
-      expect(data).toEqual({
-        ok: false,
-        error: "not_found",
-        message: expect.stringContaining("not found"),
-      });
+      expect(data.ok).toBe(true);
+      expect(data.jobId).toBe("test-job-123");
+      expect(data.taskId).toBe("non-existent-task");
+      expect(data.path).toBe("tasks/non-existent-task/artifacts/output.json");
+      expect(data.content).toContain('"result": "success"');
     });
 
     it("should return 404 for non-existent file", async () => {
@@ -291,11 +315,12 @@ describe("Job Task File Endpoint Integration", () => {
 
       expect(response.status).toBe(404);
       const data = await response.json();
-      expect(data).toEqual({
-        ok: false,
-        error: "not_found",
-        message: expect.stringContaining("not found"),
-      });
+      expect(data.ok).toBe(false);
+      expect(data.error).toBe("not_found");
+      expect(data.message).toEqual(expect.stringContaining("not found"));
+      expect(data.filePath).toEqual(
+        expect.stringContaining("non-existent.json")
+      );
     });
 
     it("should fallback to complete directory when not found in current", async () => {
@@ -305,13 +330,27 @@ describe("Job Task File Endpoint Integration", () => {
 
       const completeDir = path.join(tempDir, "pipeline-data", "complete");
       const completeJobDir = path.join(completeDir, jobId, "tasks", taskId);
+      const completeFilesDir = path.join(completeDir, jobId, "files");
+
       await fs.mkdir(path.join(completeJobDir, "artifacts"), {
         recursive: true,
       });
+      await fs.mkdir(path.join(completeFilesDir, "artifacts"), {
+        recursive: true,
+      });
 
+      const completeContent = JSON.stringify(
+        { result: "complete", data: [4, 5, 6] },
+        null,
+        2
+      );
       await fs.writeFile(
         path.join(completeJobDir, "artifacts", "complete-output.json"),
-        JSON.stringify({ result: "complete", data: [4, 5, 6] }, null, 2)
+        completeContent
+      );
+      await fs.writeFile(
+        path.join(completeFilesDir, "artifacts", "complete-output.json"),
+        completeContent
       );
 
       await fs.writeFile(
@@ -342,16 +381,17 @@ describe("Job Task File Endpoint Integration", () => {
 
       expect(response.status).toBe(404);
       const data = await response.json();
-      expect(data).toEqual({
-        ok: false,
-        error: "not_found",
-        message: expect.stringContaining("not found"),
-      });
+      expect(data.ok).toBe(false);
+      expect(data.error).toBe("not_found");
+      expect(data.message).toEqual(expect.stringContaining("not found"));
+      expect(data.filePath).toEqual(
+        expect.stringContaining("missing-file.json")
+      );
     });
 
     it("should handle nested directory paths correctly", async () => {
-      // Create nested directory structure
-      const nestedDir = path.join(
+      // Create nested directory structure in both task-scoped and job-scoped locations
+      const taskNestedDir = path.join(
         tempDir,
         "pipeline-data",
         "current",
@@ -361,12 +401,25 @@ describe("Job Task File Endpoint Integration", () => {
         "artifacts",
         "subdir"
       );
-      await fs.mkdir(nestedDir, { recursive: true });
-
-      await fs.writeFile(
-        path.join(nestedDir, "nested.json"),
-        JSON.stringify({ nested: true }, null, 2)
+      const jobNestedDir = path.join(
+        tempDir,
+        "pipeline-data",
+        "current",
+        "test-job-123",
+        "files",
+        "artifacts",
+        "subdir"
       );
+
+      await fs.mkdir(taskNestedDir, { recursive: true });
+      await fs.mkdir(jobNestedDir, { recursive: true });
+
+      const nestedContent = JSON.stringify({ nested: true }, null, 2);
+      await fs.writeFile(
+        path.join(taskNestedDir, "nested.json"),
+        nestedContent
+      );
+      await fs.writeFile(path.join(jobNestedDir, "nested.json"), nestedContent);
 
       const response = await fetch(
         `${baseUrl}/api/jobs/test-job-123/tasks/analysis/file?type=artifacts&filename=subdir/nested.json`
@@ -390,8 +443,8 @@ describe("Job Task File Endpoint Integration", () => {
     });
 
     it("should allow path traversal that stays within jail", async () => {
-      // Create nested directory with traversal that stays within bounds
-      const nestedDir = path.join(
+      // Create nested directory with traversal that stays within bounds in both locations
+      const taskNestedDir = path.join(
         tempDir,
         "pipeline-data",
         "current",
@@ -402,12 +455,23 @@ describe("Job Task File Endpoint Integration", () => {
         "subdir",
         "inner"
       );
-      await fs.mkdir(nestedDir, { recursive: true });
-
-      await fs.writeFile(
-        path.join(nestedDir, "safe.json"),
-        JSON.stringify({ safe: true }, null, 2)
+      const jobNestedDir = path.join(
+        tempDir,
+        "pipeline-data",
+        "current",
+        "test-job-123",
+        "files",
+        "artifacts",
+        "subdir",
+        "inner"
       );
+
+      await fs.mkdir(taskNestedDir, { recursive: true });
+      await fs.mkdir(jobNestedDir, { recursive: true });
+
+      const safeContent = JSON.stringify({ safe: true }, null, 2);
+      await fs.writeFile(path.join(taskNestedDir, "safe.json"), safeContent);
+      await fs.writeFile(path.join(jobNestedDir, "safe.json"), safeContent);
 
       const response = await fetch(
         `${baseUrl}/api/jobs/test-job-123/tasks/analysis/file?type=artifacts&filename=subdir/inner/./safe.json`
@@ -432,36 +496,44 @@ describe("Job Task File Endpoint Integration", () => {
         "analysis"
       );
 
+      const jobFilesDir = path.join(
+        tempDir,
+        "pipeline-data",
+        "current",
+        "test-job-123",
+        "files"
+      );
+
       await fs.mkdir(path.join(currentJobDir, "artifacts"), {
         recursive: true,
       });
       await fs.mkdir(path.join(currentJobDir, "logs"), { recursive: true });
+      await fs.mkdir(path.join(jobFilesDir, "artifacts"), { recursive: true });
 
-      // Create files with different extensions
-      await fs.writeFile(
-        path.join(currentJobDir, "artifacts", "report.txt"),
-        "This is a plain text report"
-      );
+      // Create files with different extensions in both locations
+      const testFiles = [
+        { name: "report.txt", content: "This is a plain text report" },
+        { name: "data.csv", content: "name,value\ntest,123" },
+        {
+          name: "config.xml",
+          content: '<?xml version="1.0"?><config></config>',
+        },
+        { name: "script.js", content: "console.log('hello');" },
+        { name: "unknown", content: Buffer.from([0x01, 0x02, 0x03, 0x04]) },
+      ];
 
-      await fs.writeFile(
-        path.join(currentJobDir, "artifacts", "data.csv"),
-        "name,value\ntest,123"
-      );
-
-      await fs.writeFile(
-        path.join(currentJobDir, "artifacts", "config.xml"),
-        '<?xml version="1.0"?><config></config>'
-      );
-
-      await fs.writeFile(
-        path.join(currentJobDir, "artifacts", "script.js"),
-        "console.log('hello');"
-      );
-
-      await fs.writeFile(
-        path.join(currentJobDir, "artifacts", "unknown"),
-        Buffer.from([0x01, 0x02, 0x03, 0x04])
-      );
+      for (const file of testFiles) {
+        // Task-scoped (for list tests)
+        await fs.writeFile(
+          path.join(currentJobDir, "artifacts", file.name),
+          file.content
+        );
+        // Job-scoped (for file reads)
+        await fs.writeFile(
+          path.join(jobFilesDir, "artifacts", file.name),
+          file.content
+        );
+      }
     });
 
     it("should detect text/plain for .txt files", async () => {

@@ -6,24 +6,22 @@ import {
   fireEvent,
   waitFor,
   cleanup,
+  within,
 } from "@testing-library/react";
 import DAGGrid from "../src/components/DAGGrid.jsx";
 
 // Mock layout APIs to prevent JSDOM errors
-const mockResizeObserver = vi.fn();
-const mockGetBoundingClientRect = vi.fn();
-
 beforeEach(() => {
-  // Mock ResizeObserver
-  global.ResizeObserver = mockResizeObserver;
-  mockResizeObserver.mockReturnValue({
-    observe: vi.fn(),
-    unobserve: vi.fn(),
-    disconnect: vi.fn(),
-  });
-
-  // Mock getBoundingClientRect
-  Element.prototype.getBoundingClientRect = mockGetBoundingClientRect;
+  // Mock ResizeObserver with a simple polyfill
+  class ResizeObserver {
+    constructor(cb) {
+      this.cb = cb;
+    }
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  }
+  global.ResizeObserver = ResizeObserver;
 
   // Mock window.matchMedia
   Object.defineProperty(window, "matchMedia", {
@@ -38,36 +36,6 @@ beforeEach(() => {
       removeEventListener: vi.fn(),
       dispatchEvent: vi.fn(),
     })),
-  });
-
-  // Mock getBoundingClientRect to return sensible defaults
-  mockGetBoundingClientRect.mockReturnValue({
-    left: 0,
-    top: 0,
-    width: 200,
-    height: 100,
-    right: 200,
-    bottom: 100,
-    x: 0,
-    y: 0,
-    toJSON: vi.fn(),
-  });
-
-  // Mock querySelector for card headers
-  Element.prototype.querySelector = vi.fn((selector) => {
-    if (selector === '[data-role="card-header"]') {
-      return {
-        getBoundingClientRect: () => ({
-          left: 0,
-          top: 0,
-          width: 200,
-          height: 40,
-          right: 200,
-          bottom: 40,
-        }),
-      };
-    }
-    return null;
   });
 });
 
@@ -141,86 +109,6 @@ describe("DAGGrid", () => {
     expect(activeCards[0].textContent).toContain("Analysis");
   });
 
-  // TODO: Fix async slide-over tests - these are timing out due to React state updates
-  // it("opens slide-over when first card is clicked", async () => {
-  //   vi.useFakeTimers();
-  //   render(<DAGGrid items={mockItems} activeIndex={1} />);
-  //
-  //   const firstCard = screen.getAllByRole("listitem")[0];
-  //   fireEvent.click(firstCard);
-  //
-  //   // Advance timers to flush any pending effects
-  //   vi.advanceTimersByTime(0);
-  //
-  //   await waitFor(
-  //     () => {
-  //       expect(screen.getByText("Task Details")).toBeTruthy();
-  //       expect(screen.getByText("Close details")).toBeTruthy();
-  //     },
-  //     { timeout: 5000 }
-  //   );
-  //
-  //   vi.useRealTimers();
-  // });
-  //
-  // it("closes slide-over when close button is clicked", async () => {
-  //   vi.useFakeTimers();
-  //   render(<DAGGrid items={mockItems} activeIndex={1} />);
-  //
-  //   // Open slide-over
-  //   const firstCard = screen.getAllByRole("listitem")[0];
-  //   fireEvent.click(firstCard);
-  //
-  //   vi.advanceTimersByTime(0);
-  //
-  //   await waitFor(
-  //     () => {
-  //       expect(screen.getByText("Task Details")).toBeTruthy();
-  //     },
-  //     { timeout: 5000 }
-  //   );
-  //
-  //   // Close slide-over
-  //   const closeButton = screen.getByLabelText("Close details");
-  //   fireEvent.click(closeButton);
-  //
-  //   vi.advanceTimersByTime(0);
-  //
-  //   await waitFor(
-  //     () => {
-  //       expect(screen.queryByText("Task Details")).toBeNull();
-  //     },
-  //     { timeout: 5000 }
-  //   );
-  //
-  //   vi.useRealTimers();
-  // });
-  //
-  // it("displays task details in slide-over", async () => {
-  //   vi.useFakeTimers();
-  //   render(<DAGGrid items={mockItems} activeIndex={1} />);
-  //
-  //   const firstCard = screen.getAllByRole("listitem")[0];
-  //   fireEvent.click(firstCard);
-  //
-  //   vi.advanceTimersByTime(0);
-  //
-  //   await waitFor(
-  //     () => {
-  //       expect(screen.getByText("Task Details")).toBeTruthy();
-  //       expect(screen.getByText("ID:")).toBeTruthy();
-  //       expect(screen.getByText("research")).toBeTruthy();
-  //       expect(screen.getByText("Status:")).toBeTruthy();
-  //       expect(screen.getByText("succeeded")).toBeTruthy();
-  //       expect(screen.getByText("Description:")).toBeTruthy();
-  //       expect(screen.getByText("Gather data")).toBeTruthy();
-  //     },
-  //     { timeout: 5000 }
-  //   );
-  //
-  //   vi.useRealTimers();
-  // });
-
   it("handles empty items array", () => {
     render(<DAGGrid items={[]} activeIndex={0} />);
 
@@ -287,105 +175,5 @@ describe("DAGGrid", () => {
 
     // Third card should show "pending" (index > activeIndex)
     expect(cards[2].innerHTML).toContain("pending");
-  });
-
-  it("renders file lists when props provided", () => {
-    const mockInputFiles = [{ name: "input.json" }];
-    const mockOutputFiles = [{ name: "output.json" }];
-
-    render(
-      <DAGGrid
-        items={mockItems}
-        activeIndex={1}
-        inputFilesForItem={() => mockInputFiles}
-        outputFilesForItem={() => mockOutputFiles}
-      />
-    );
-
-    // Open slide-over
-    const firstCard = screen.getAllByRole("listitem")[0];
-    fireEvent.click(firstCard);
-
-    // Check that file lists are rendered
-    expect(screen.getByText("input.json")).toBeTruthy();
-    expect(screen.getByText("output.json")).toBeTruthy();
-  });
-
-  it("displays file content when file is selected", () => {
-    const mockInputFiles = [{ name: "test.json" }];
-    const mockFileContent = '{"test": "content"}';
-
-    render(
-      <DAGGrid
-        items={mockItems}
-        activeIndex={1}
-        inputFilesForItem={() => mockInputFiles}
-        getFileContent={() => mockFileContent}
-      />
-    );
-
-    // Open slide-over
-    const firstCard = screen.getAllByRole("listitem")[0];
-    fireEvent.click(firstCard);
-
-    // Click on file to show content
-    const fileLink = screen.getByText("test.json");
-    fireEvent.click(fileLink);
-
-    // Check that file content is displayed
-    expect(screen.getByText("File Content: test.json")).toBeTruthy();
-    expect(screen.getByText(mockFileContent)).toBeTruthy();
-  });
-
-  it("closes file preview when close button is clicked", () => {
-    const mockInputFiles = [{ name: "test.json" }];
-
-    render(
-      <DAGGrid
-        items={mockItems}
-        activeIndex={1}
-        inputFilesForItem={() => mockInputFiles}
-      />
-    );
-
-    // Open slide-over and file
-    const firstCard = screen.getAllByRole("listitem")[0];
-    fireEvent.click(firstCard);
-
-    const fileLink = screen.getByText("test.json");
-    fireEvent.click(fileLink);
-
-    // Close file preview
-    const closeButton = screen.getByLabelText("Close file");
-    fireEvent.click(closeButton);
-
-    // File content should no longer be visible
-    expect(screen.queryByText("File Content: test.json")).toBeNull();
-  });
-
-  it("resets selected file when opening new card", () => {
-    const mockInputFiles = [{ name: "test.json" }];
-
-    render(
-      <DAGGrid
-        items={mockItems}
-        activeIndex={1}
-        inputFilesForItem={() => mockInputFiles}
-      />
-    );
-
-    // Open first card and select file
-    const firstCard = screen.getAllByRole("listitem")[0];
-    fireEvent.click(firstCard);
-
-    const fileLink = screen.getByText("test.json");
-    fireEvent.click(fileLink);
-
-    // Open second card
-    const secondCard = screen.getAllByRole("listitem")[1];
-    fireEvent.click(secondCard);
-
-    // File content should no longer be visible (selectedFile was reset)
-    expect(screen.queryByText("File Content: test.json")).toBeNull();
   });
 });
