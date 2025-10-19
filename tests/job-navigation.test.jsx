@@ -1,6 +1,6 @@
 import React from "react";
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { render, screen, fireEvent, cleanup } from "@testing-library/react";
 
 // Mocks must be registered before modules under test are imported
 const mockNavigate = vi.fn();
@@ -39,6 +39,13 @@ describe("Job Navigation", () => {
     vi.clearAllMocks();
     mockNavigate.mockClear();
     useJobListWithUpdates.mockReset();
+    useJobListWithUpdates.mockImplementation(() => createJobsHookDefault());
+    vi.useRealTimers();
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
   });
 
   describe("PromptPipelineDashboard openJob function", () => {
