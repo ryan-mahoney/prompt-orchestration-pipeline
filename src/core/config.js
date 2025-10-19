@@ -73,20 +73,28 @@ export const defaultConfig = {
   paths: {
     root: process.env.PO_ROOT || process.cwd(),
     dataDir: "pipeline-data",
-    configDir: "pipeline-config",
     pendingDir: "pending",
     currentDir: "current",
     completeDir: "complete",
   },
   pipelines: {
-    registry: "pipeline-config/registry.json",
     defaultSlug: "content",
-    slugs: {
+    /**
+     * Pipeline registry configuration
+     * Each pipeline entry requires:
+     * - configDir: Path to pipeline configuration directory (contains pipeline.json)
+     * - tasksDir: Path to tasks directory (contains task implementations)
+     *
+     * Optional keys:
+     * - name: Human-readable pipeline name
+     * - description: Pipeline description
+     */
+    registry: {
       content: {
         name: "Demo Content Pipeline",
         description: "Default content generation pipeline",
-        pipelinePath: "pipeline-config/content/pipeline.json",
-        taskRegistryPath: "pipeline-config/content/tasks/index.js",
+        configDir: "pipeline-config/content",
+        tasksDir: "pipeline-config/content/tasks",
       },
     },
   },
@@ -196,9 +204,7 @@ function loadFromEnvironment(config) {
   if (process.env.PO_DATA_DIR) {
     envConfig.paths.dataDir = process.env.PO_DATA_DIR;
   }
-  if (process.env.PO_CONFIG_DIR) {
-    envConfig.paths.configDir = process.env.PO_CONFIG_DIR;
-  }
+  // Note: PO_CONFIG_DIR is deprecated - use pipelines.registry instead
 
   // Logging settings
   if (process.env.PO_LOG_LEVEL) {
@@ -396,18 +402,32 @@ export function getPipelineConfig(slug) {
   const config = getConfig();
   const { pipelines } = config;
 
-  if (!pipelines || !pipelines.slugs) {
+  if (!pipelines || !pipelines.registry) {
     return {
       config: null,
       error: "Pipeline registry is missing from configuration.",
     };
   }
 
-  const pipelineConfig = pipelines.slugs[slug];
+  const pipelineConfig = pipelines.registry[slug];
   if (!pipelineConfig) {
     return {
       config: null,
       error: `Pipeline slug '${slug}' not found in registry.`,
+    };
+  }
+
+  // Validate required keys
+  if (!pipelineConfig.configDir) {
+    return {
+      config: null,
+      error: `Pipeline '${slug}' missing required 'configDir' key.`,
+    };
+  }
+  if (!pipelineConfig.tasksDir) {
+    return {
+      config: null,
+      error: `Pipeline '${slug}' missing required 'tasksDir' key.`,
     };
   }
 
@@ -418,8 +438,14 @@ export function getPipelineConfig(slug) {
     config: {
       ...pipelineConfig,
       slug,
-      pipelinePath: path.resolve(root, pipelineConfig.pipelinePath),
-      taskRegistryPath: path.resolve(root, pipelineConfig.taskRegistryPath),
+      configDir: path.resolve(root, pipelineConfig.configDir),
+      tasksDir: path.resolve(root, pipelineConfig.tasksDir),
+      pipelinePath: path.resolve(
+        root,
+        pipelineConfig.configDir,
+        "pipeline.json"
+      ),
+      taskRegistryPath: path.resolve(root, pipelineConfig.tasksDir, "index.js"),
     },
     error: null,
   };
@@ -434,19 +460,30 @@ export function getAllPipelineConfigs() {
   const config = getConfig();
   const { pipelines } = config;
 
-  if (!pipelines || !pipelines.slugs) {
+  if (!pipelines || !pipelines.registry) {
     return {};
   }
 
   const result = {};
   const root = config.paths.root;
 
-  for (const [slug, pipelineConfig] of Object.entries(pipelines.slugs)) {
+  for (const [slug, pipelineConfig] of Object.entries(pipelines.registry)) {
+    // Validate required keys
+    if (!pipelineConfig.configDir || !pipelineConfig.tasksDir) {
+      continue; // Skip invalid entries
+    }
+
     result[slug] = {
       ...pipelineConfig,
       slug,
-      pipelinePath: path.resolve(root, pipelineConfig.pipelinePath),
-      taskRegistryPath: path.resolve(root, pipelineConfig.taskRegistryPath),
+      configDir: path.resolve(root, pipelineConfig.configDir),
+      tasksDir: path.resolve(root, pipelineConfig.tasksDir),
+      pipelinePath: path.resolve(
+        root,
+        pipelineConfig.configDir,
+        "pipeline.json"
+      ),
+      taskRegistryPath: path.resolve(root, pipelineConfig.tasksDir, "index.js"),
     };
   }
 
@@ -466,10 +503,10 @@ export function getDefaultPipelineConfig() {
     return null;
   }
 
-  // Validate that defaultSlug exists in pipelines.slugs
-  if (!pipelines.slugs || !(pipelines.defaultSlug in pipelines.slugs)) {
+  // Validate that defaultSlug exists in pipelines.registry
+  if (!pipelines.registry || !(pipelines.defaultSlug in pipelines.registry)) {
     throw new Error(
-      `Default pipeline slug "${pipelines.defaultSlug}" does not exist in pipelines.slugs.`
+      `Default pipeline slug "${pipelines.defaultSlug}" does not exist in pipelines.registry.`
     );
   }
   return getPipelineConfig(pipelines.defaultSlug).config;
