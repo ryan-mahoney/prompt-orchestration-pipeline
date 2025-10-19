@@ -4,7 +4,7 @@ import fs from "node:fs/promises";
 import { validateSeedOrThrow } from "../core/validation.js";
 import { validateSeed } from "./validators/seed.js";
 import { atomicWrite, cleanupOnFailure } from "./files.js";
-import { getDefaultPipelineConfig } from "../core/config.js";
+import { getPipelineConfig } from "../core/config.js";
 import {
   getPendingSeedPath,
   resolvePipelinePaths,
@@ -19,21 +19,17 @@ const createPaths = (config) => {
   const {
     rootDir,
     dataDir = "pipeline-data",
-    configDir = "pipeline-config",
   } = config;
   return {
     pending: path.join(rootDir, dataDir, "pending"),
     current: path.join(rootDir, dataDir, "current"),
     complete: path.join(rootDir, dataDir, "complete"),
-    pipeline: path.join(rootDir, configDir, "pipeline.json"),
-    tasks: path.join(rootDir, configDir, "tasks"),
   };
 };
 
 const validateConfig = (options = {}) => ({
   rootDir: options.rootDir || process.cwd(),
   dataDir: options.dataDir || "pipeline-data",
-  configDir: options.configDir || "pipeline-config",
   autoStart: options.autoStart ?? true,
   ui: options.ui ?? false,
   uiPort: options.uiPort || 3000,
@@ -72,7 +68,11 @@ export const createPipelineOrchestrator = async (options = {}) => {
   const paths = createPaths(config);
 
   await ensureDirectories(paths);
-  const pipelineDefinition = await loadPipelineDefinition(paths.pipeline);
+  
+  // Use the new registry API to get pipeline configuration
+  const pipelineConfig = getPipelineConfig("content");
+  const pipelineDefinition = await loadPipelineDefinition(pipelineConfig.pipelineJsonPath);
+  
   // Pass config.rootDir as the orchestrator dataDir root so the orchestrator resolves
   // pipeline-data/... correctly (avoids duplicate path segments).
   const orchestrator = await createOrchestrator(
@@ -160,14 +160,10 @@ export const submitJobWithValidation = async ({ dataDir, seedObject }) => {
     // Read pipeline configuration for snapshot
     let pipelineSnapshot = null;
     try {
-      // Use the default pipeline configuration from registry
-      const defaultPipelineConfig = getDefaultPipelineConfig();
-      if (!defaultPipelineConfig) {
-        throw new Error("No default pipeline configuration found");
-      }
-
+      // Use the new registry API to get pipeline configuration
+      const pipelineConfig = getPipelineConfig("content");
       const pipelineContent = await fs.readFile(
-        defaultPipelineConfig.pipelinePath,
+        pipelineConfig.pipelineJsonPath,
         "utf8"
       );
       pipelineSnapshot = JSON.parse(pipelineContent);
