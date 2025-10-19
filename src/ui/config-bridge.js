@@ -80,6 +80,15 @@ export const Constants = {
 };
 
 /**
+ * Gets the legacy pipeline path as a fallback
+ * @param {string} base - Base directory path
+ * @returns {string} Legacy pipeline configuration path
+ */
+function getLegacyPipelinePath(base) {
+  return path.join(base, "pipeline-config", "pipeline.json");
+}
+
+/**
  * Resolves pipeline data paths relative to the project root
  * @returns {Object} Object containing resolved paths
  */
@@ -98,11 +107,11 @@ export function resolvePipelinePaths() {
       pipelinePath = pipelineConfig.pipelinePath;
     } else {
       // Fallback to legacy path for backward compatibility
-      pipelinePath = path.join(base, "pipeline-config", "pipeline.json");
+      pipelinePath = getLegacyPipelinePath(base);
     }
   } catch {
     // Fallback to legacy path if configuration system fails
-    pipelinePath = path.join(base, "pipeline-config", "pipeline.json");
+    pipelinePath = getLegacyPipelinePath(base);
   }
 
   return {
