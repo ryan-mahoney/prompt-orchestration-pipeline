@@ -1,146 +1,252 @@
 <task_objective>
-Prepare the codebase for explicit multi-pipeline support by introducing a slug-indexed configuration registry and restructuring the pipeline configuration directory. The workflow MUST run start-to-finish with no human interaction, working on the current branch, automatically choosing the most pragmatic approach at each decision point. It MUST (1) preserve git history for moved files, (2) keep the demo working, (3) update configuration defaults and helpers, (4) remove legacy single-pipeline fallbacks, (5) update docs, and (6) finish with sanity checks. Each step runs in a fresh context; therefore, restate any critical assumptions/paths/slugs needed from earlier steps. A Conventional Commit is made at the end of every step/section.
-</task_objective>
+Run a fully automated, non-interactive workflow that restructures the repository for explicit multi-pipeline support, updates references, extends configuration, implements a pipeline registry loader, normalizes paths, removes legacy fallbacks, updates docs, and runs sanity checks—**start-to-finish with no human interaction**. Each section ends with **one atomic Conventional Commit** made by a temporary **zsh** script following the required protocol:
+
+- Create a temp zsh file with `#!/bin/zsh -f`, `set -euo pipefail` (zsh `set -o pipefail`), `unsetopt BANG_HIST`, and stable env (`GIT_TERMINAL_PROMPT=0`, `GIT_EDITOR=:`, `LC_ALL=C.UTF-8`).
+- Inputs: **subject** (`type(scope)!: subject`, ≤72 chars), **body** (Markdown “Why / What changed”, with `BREAKING CHANGE:` when `!` present), and an explicit **file list to stage** for this section only.
+- Algorithm: verify repo state (no merges/rebases/unmerged paths), stage only intended files with `git add -- <paths>`, **skip if nothing staged**, write the commit message to a **single-quoted heredoc** file, and commit non-interactively with per-command configs and `--no-verify`. Print the new commit hash and delete all temps.
+- Guardrails: **No editors** or prompts; **no `-m`** for multi-line; **path safety** (`--` before pathspecs); **deterministic** behavior independent of user git config; **skip empty commits**.
+  </task_objective>
 
 <detailed_sequence_of_steps>
-STEP 1 — Restructure to slugged layout (preserve history)
 
-- Assumptions to carry forward: treat the existing demo pipeline as the canonical baseline; choose the most pragmatic single slug `content` for it to avoid placeholder noise. Do not scaffold additional slugs unless there are concrete definitions already present in the repo.
-- Create `pipeline-config/content/` and move (with history preservation) the current demo pipeline config contents there (e.g., anything presently under a single-folder layout like `pipeline-config/` or `demo/pipeline-config/` that represents the demo pipeline).
-- Ensure `pipeline-config/` root contains only slug subfolders after the move (e.g., `pipeline-config/content/`).
-- Acceptance gates:
-  - The demo pipeline’s former files now live under `pipeline-config/content/…` with history preserved.
-  - No orphan files remain directly under `pipeline-config/` root.
+1. SECTION 1 — Introduce slugged directory layout (filesystem + history)
 
-- Conventional Commit: `refactor(config)!: restructure pipeline-config into slugged layout and preserve history (demo -> content)`
+Goal
+Restructure `pipeline-config/` to be slug-indexed and preserve history by relocating the existing demo pipeline under `pipeline-config/content/`. Ensure `pipeline-config/` root contains only slug subfolders after this change.
+
+Actions
+
+- Create slug folder `pipeline-config/content/`.
+- Relocate (history-preserving) the demo pipeline’s `pipeline.json` and `tasks/` from `demo/pipeline-config/` into `pipeline-config/content/`.
+- Remove any obsolete demo pipeline directory under `demo/pipeline-config/` (only the moved files, nothing else).
+- Verify post-state: `pipeline-config/` root contains slug directories only (e.g., `content/`); `pipeline-config/content/pipeline.json` and `pipeline-config/content/tasks/` exist.
+
+Determinism & Safety
+
+- Do not create placeholder slug folders beyond `content/`.
+- Use only history-preserving moves for the two known demo items; avoid globbing; treat paths as opaque.
+- Validate repo cleanliness and absence of in-progress merges/rebases before staging.
+
+Conventional Commit (zsh temp script)
+
+- **Subject**: `refactor(config)!: introduce slugged layout and preserve history`
+- **Body** (Why / What changed & footer):
+  - **Why**: Prepare for multi-pipeline support and remove single-directory coupling.
+  - **What changed**: Move demo pipeline to `pipeline-config/content/`; ensure `pipeline-config/` contains only slug subfolders.
+  - **BREAKING CHANGE**: Paths to pipeline config and tasks moved under slug directories.
+
+- **Stage exactly**:
+  - `pipeline-config/content/pipeline.json`
+  - all files under `pipeline-config/content/tasks/`
+  - removal of `demo/pipeline-config/pipeline.json` and `demo/pipeline-config/tasks/`
+    (Enumerate deterministically; no globs; pass explicit list to the commit script.)
+    </detailed_sequence_of_steps>
+
+<new_task/>
+
+<detailed_sequence_of_steps>
+
+2. SECTION 2 — Update demo references to use slugged paths
+
+Goal
+Update any code or scripts that referenced `demo/pipeline-config/` to now use `pipeline-config/content/`.
+
+Actions
+
+- Repository-wide static reference update (string replacement where applicable) from `demo/pipeline-config/` → `pipeline-config/content/`.
+- Likely touch points: demo loaders/runners (e.g., `demo/run-demo.js`), sample scripts, and any hardcoded paths in demo code.
+- Validate demo runs still locate `pipeline.json` and `tasks/` at the new location.
+
+Determinism & Safety
+
+- Restrict changes to references that exactly match the previous path; do not alter unrelated strings.
+- Keep scope within demo code and example loaders only.
+
+Conventional Commit (zsh temp script)
+
+- **Subject**: `chore(demo): update paths to pipeline-config/content slug`
+- **Body**:
+  - **Why**: Demo must reference the new slugged layout.
+  - **What changed**: Updated all demo references from `demo/pipeline-config/` to `pipeline-config/content/`.
+
+- **Stage exactly**: the modified demo files (e.g., `demo/run-demo.js`, other demo loaders/scripts) updated in this section.
   </detailed_sequence_of_steps>
 
-<new_task>
-STEP 2 — Update demo references to the new slug path
-</new_task>
+<new_task/>
 
 <detailed_sequence_of_steps>
 
-- Context carried forward: the demo’s canonical slug is `content`; all prior demo references must follow `pipeline-config/content/…`.
-- Relocate demo assets that referenced the old path:
-  - Move `demo/pipeline-config/pipeline.json` under `pipeline-config/content/pipeline.json` (or the equivalent correct slug path used by the demo).
-  - Move `demo/pipeline-config/tasks/index.js` to the slugged tasks directory (`pipeline-config/content/tasks/index.js`) or to the intended runtime tasks location for the demo, matching the project’s conventions.
+3. SECTION 3 — Extend defaultConfig structure (pipelines registry)
 
-- Update any demo runner(s) to reference slugged paths (e.g., `demo/run-demo.js` should resolve `content`).
-- Acceptance gates:
-  - Demo runner resolves `content` slug (not a flat `pipeline-config`).
-  - No stale references to pre-slug paths remain in demo code.
+Goal
+Introduce a top-level `pipelines` registry in config defaults (e.g., in `src/core/config.js`) and deprecate the single `configDir` default.
 
-- Conventional Commit: `chore(demo): migrate demo references to slugged pipeline-config/content paths`
+Actions
+
+- Add `pipelines` object to defaults with a `content` entry whose `configDir` and `tasksDir` point to the slugged directories.
+- Document required keys for each pipeline entry: `configDir`, `tasksDir`.
+- Deprecate or remove the single `configDir` default; prepare for registry lookups.
+
+Determinism & Safety
+
+- Keep the change localized to configuration defaults; no behavior changes outside of defaults in this section.
+
+Conventional Commit (zsh temp script)
+
+- **Subject**: `feat(config)!: add pipelines registry and deprecate single configDir`
+- **Body**:
+  - **Why**: Enable explicit multi-pipeline configuration.
+  - **What changed**: Introduced `pipelines` defaults with `content`; deprecated single `configDir` default.
+  - **BREAKING CHANGE**: Consumers must use the pipelines registry instead of a single default directory.
+
+- **Stage exactly**: modified config source files (e.g., `src/core/config.js`) and any config schema/examples changed in this section only.
   </detailed_sequence_of_steps>
 
-<new_task>
-STEP 3 — Extend default configuration to include a pipelines registry
-</new_task>
+<new_task/>
 
 <detailed_sequence_of_steps>
 
-- Context carried forward: the previous single `configDir` default is now legacy; introduce a `pipelines` object with at least a `content` (or `default`) entry.
-- Modify the default configuration structure (e.g., in `src/core/config.js` near the defaults) to add:
-  - `pipelines`: object keyed by slug (e.g., `content`) with keys `configDir` and `tasksDir` pointing to the slugged directories.
-  - Remove or deprecate the old top-level single `configDir` default once the registry is in use.
+4. SECTION 4 — Implement `getPipelineConfig(slug)` helper
 
-- Document (inline comments) the expected keys: `configDir`, `tasksDir`; emphasize they are paths relative to the repo root unless normalized.
-- Acceptance gates:
-  - The default config includes a `pipelines` registry with a working `content` entry.
-  - No code path relies exclusively on a single default `configDir`.
+Goal
+Provide a loader that returns normalized, validated absolute paths for a pipeline’s `pipeline.json` and `tasks/`, using the new registry.
 
-- Conventional Commit: `feat(config)!: add pipelines registry to defaults and deprecate single configDir`
+Actions
+
+- Implement `getPipelineConfig(slug)` (e.g., near other config helpers):
+  - Read current config.
+  - Validate `pipelines[slug]` exists.
+  - Normalize to absolute paths.
+  - Return `{ pipelineJsonPath, tasksDir }`.
+  - Throw a descriptive error if slug missing.
+
+Determinism & Safety
+
+- No side effects beyond reading config; keep error messages stable and actionable.
+
+Conventional Commit (zsh temp script)
+
+- **Subject**: `feat(config): add getPipelineConfig(slug) with validation`
+- **Body**:
+  - **Why**: Central, safe access to per-slug pipeline assets.
+  - **What changed**: New helper to resolve and validate registry entries, returning normalized absolute paths.
+
+- **Stage exactly**: the config helper source file(s) added/modified in this section.
   </detailed_sequence_of_steps>
 
-<new_task>
-STEP 4 — Implement `getPipelineConfig(slug)` helper
-</new_task>
+<new_task/>
 
 <detailed_sequence_of_steps>
 
-- Context carried forward: callers must retrieve per-slug config via a helper, not by assuming a single directory.
-- Add `getPipelineConfig(slug)` (in `src/core/config.js` near other helpers) that:
-  - Reads the resolved runtime config.
-  - Validates `pipelines[slug]` presence.
-  - Returns normalized absolute paths for `pipeline.json` and `tasks/` derived from the registry entry.
-  - Throws a descriptive error if the slug is unknown (include the available slugs in the error message).
+5. SECTION 5 — Normalize pipeline paths at load time
 
-- Acceptance gates:
-  - Helper returns a stable shape including absolute paths.
-  - Error messaging is explicit and actionable when a slug is missing.
+Goal
+Ensure all registry entries resolve to absolute, existing paths during config load.
 
-- Conventional Commit: `feat(config): introduce getPipelineConfig(slug) with validation and normalized outputs`
+Actions
+
+- Update config load routine to resolve each pipeline’s `configDir`/`tasksDir` against repo root.
+- Validate existence; emit clear errors if directories or `pipeline.json` are missing.
+
+Determinism & Safety
+
+- Purely deterministic normalization and validation; no filesystem writes.
+
+Conventional Commit (zsh temp script)
+
+- **Subject**: `refactor(config): normalize and validate registry pipeline paths`
+- **Body**:
+  - **Why**: Prevent path drift and environment-dependent resolution.
+  - **What changed**: Load now normalizes absolute paths and validates directories/files exist for each pipeline entry.
+
+- **Stage exactly**: modified config loader source file(s) touched only by this section.
   </detailed_sequence_of_steps>
 
-<new_task>
-STEP 5 — Normalize registry paths during config load
-</new_task>
+<new_task/>
 
 <detailed_sequence_of_steps>
 
-- Context carried forward: `pipelines[slug].configDir` and `.tasksDir` may be relative and need normalization.
-- Enhance config loading (e.g., `loadConfig` in `src/core/config.js`) to:
-  - Resolve each pipeline entry’s `configDir` and `tasksDir` relative to the repo root (commonly `paths.root`).
-  - Verify that resolved directories exist; if not, fail fast with a targeted message that includes the slug and expected path.
+6. SECTION 6 — Remove legacy single-pipeline fallbacks
 
-- Acceptance gates:
-  - All registry paths are absolute and verified at load time.
-  - Clear diagnostics for misconfigured or missing directories.
+Goal
+Eliminate code paths that assume a single `configDir` and migrate callsites to use the registry/loader.
 
-- Conventional Commit: `fix(config): normalize pipeline registry dirs at load and guard against missing paths`
+Actions
+
+- Search for usages of single-pipeline fields (e.g., `paths.configDir`, or similar) and replace with explicit registry lookups or `getPipelineConfig(slug)`.
+- Keep the scope limited to removing the fallback and updating minimal necessary callsites to compile and run.
+
+Determinism & Safety
+
+- Confine edits to exact callsites; avoid broad refactors.
+- Ensure unaffected components remain untouched.
+
+Conventional Commit (zsh temp script)
+
+- **Subject**: `refactor(config)!: remove single-pipeline fallbacks in callsites`
+- **Body**:
+  - **Why**: Fully adopt explicit multi-pipeline model.
+  - **What changed**: Removed legacy `configDir` assumptions; updated dependent callsites to registry access.
+  - **BREAKING CHANGE**: Code must resolve paths via registry APIs (e.g., `getPipelineConfig`).
+
+- **Stage exactly**: the specific files where fallbacks were removed; list paths explicitly for this section.
   </detailed_sequence_of_steps>
 
-<new_task>
-STEP 6 — Remove legacy single-pipeline fallbacks across the codebase
-</new_task>
+<new_task/>
 
 <detailed_sequence_of_steps>
 
-- Context carried forward: any existing `paths.configDir` or similar single-pipeline assumptions must be retired in favor of slug-based lookups.
-- Identify and update call sites that relied on `paths.configDir` or equivalent:
-  - Replace with `getPipelineConfig(slug)` (or a wrapper where the active slug is determined higher up).
-  - Where a default pipeline is implied (former single-pipeline behavior), select `content` (or the configured default slug) explicitly to keep behavior deterministic.
+7. SECTION 7 — Update documentation
 
-- Acceptance gates:
-  - No remaining references to legacy single-pipeline defaults.
-  - All configuration resolution paths flow through the registry.
+Goal
+Explain the slugged directory structure and registry usage.
 
-- Conventional Commit: `refactor(core)!: remove single-pipeline fallbacks; adopt registry lookups`
+Actions
+
+- Update or add docs (e.g., `docs/multi-pipeline-backend-plan.md`) to:
+  - Describe `pipeline-config/<slug>/` layout.
+  - Show expected keys (`configDir`, `tasksDir`).
+  - Note breaking changes and migration steps from single-pipeline layout.
+
+Determinism & Safety
+
+- Text-only documentation updates; no code changes.
+
+Conventional Commit (zsh temp script)
+
+- **Subject**: `docs(config): document slugged layout and pipeline registry`
+- **Body**:
+  - **Why**: Provide clear guidance for contributors and users.
+  - **What changed**: Documented directory layout, registry keys, and migration notes.
+
+- **Stage exactly**: the updated/added documentation files only.
   </detailed_sequence_of_steps>
 
-<new_task>
-STEP 7 — Update documentation for slugged multi-pipeline structure
-</new_task>
+<new_task/>
 
 <detailed_sequence_of_steps>
 
-- Context carried forward: the definitive structure is `pipeline-config/<slug>/{pipeline.json,tasks/}` and is now required.
-- Update the multi-pipeline backend plan doc (e.g., `docs/plans/multi-pipeline-backend-plan.md`) to:
-  - Show the slugged directory layout.
-  - Describe the `pipelines` registry keys and their meanings.
-  - Note the breaking change: single `configDir` is deprecated in favor of registry.
+8. SECTION 8 — Regression sanity
 
-- Acceptance gates:
-  - Docs explain how to add a new pipeline: create slug folder + update config registry.
-  - Docs warn that placeholders slugs should not be created without concrete definitions.
+Goal
+Verify configuration tests and demo run still function with the new layout.
 
-- Conventional Commit: `docs: document slugged pipeline-config layout and pipelines registry`
-  </detailed_sequence_of_steps>
+Actions
 
-<new_task>
-STEP 8 — Regression sanity (tests + demo)
-</new_task>
+- Run the existing config-related test subset.
+- Execute the demo in list mode to ensure assets are discovered at `pipeline-config/content/`.
+- No file changes are expected in this section.
 
-<detailed_sequence_of_steps>
+Determinism & Safety
 
-- Context carried forward: the demo uses the `content` slug; config tests should read registry paths.
-- Execute the configuration-related test subset and any smoke tests that cover config loading. If failures indicate stale path usage, update those references to the registry and re-run automatically until green or a genuinely unrelated failure is detected.
-- Run the demo list command to confirm the relocated assets load via the new slugged paths. If it fails due to path resolution, prefer fixing the registry entry or the demo’s slug selection rather than re-introducing legacy fallbacks.
-- If tests update snapshots or minor configs, include those changes.
-- Acceptance gates:
-  - Config tests pass.
-  - Demo list runs successfully against the `content` slug.
+- If any unexpected changes occur (e.g., snapshot updates are required), treat them as a failure for this section; do not proceed silently.
 
-- Conventional Commit: `test(demo): update tests/config references and verify demo under slugged layout`
+Conventional Commit (zsh temp script)
+
+- **Subject**: `chore(test): regression sanity for slugged pipeline registry`
+- **Body**:
+  - **Why**: Prove new layout and registry do not break existing behavior.
+  - **What changed**: Ran tests and demo list; no code changes expected.
+
+- **Stage exactly**: none (the script will detect nothing staged and print “No staged changes; skipping” and exit 0).
   </detailed_sequence_of_steps>
