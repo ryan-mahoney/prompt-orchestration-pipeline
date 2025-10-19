@@ -154,7 +154,7 @@ pipeline-data/
 
 **Purpose**: Define task sequence and model configurations.
 
-**Location**: `demo/pipeline-config/pipeline.json`
+**Location**: `pipeline-config/content/pipeline.json`
 
 **Schema**:
 
@@ -232,7 +232,7 @@ See also: `docs/tasks-data-shape.md` — canonical Task[] schema and migration g
 
 **Purpose**: Map task names to their implementation modules.
 
-**Location**: `demo/pipeline-config/tasks/index.js`
+**Location**: `pipeline-config/content/tasks/index.js`
 
 **Format**: JavaScript module exports
 

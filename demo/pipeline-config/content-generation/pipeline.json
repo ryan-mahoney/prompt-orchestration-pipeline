@@ -1,0 +1,6 @@
+{
+  "name": "demo-pipeline",
+  "version": "1.0.0",
+  "description": "Demo pipeline showcasing multi-stage LLM workflows",
+  "tasks": ["research", "analysis", "synthesis", "formatting"]
+}
