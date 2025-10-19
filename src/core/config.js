@@ -472,5 +472,5 @@ export function getDefaultPipelineConfig() {
       `Default pipeline slug "${pipelines.defaultSlug}" does not exist in pipelines.slugs.`
     );
   }
-  return getPipelineConfig(pipelines.defaultSlug);
+  return getPipelineConfig(pipelines.defaultSlug).config;
 }
