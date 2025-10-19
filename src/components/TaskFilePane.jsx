@@ -197,15 +197,15 @@ export function TaskFilePane({
         }
 
         // Use server-provided mime/encoding, fallback to inference
-        const serverMime = result.data?.mime;
-        const serverEncoding = result.data?.encoding;
+        const serverMime = result.mime;
+        const serverEncoding = result.encoding;
         const inferred = inferMimeType(filename);
 
         setMime(serverMime || inferred.mime);
         setEncoding(serverEncoding || inferred.encoding);
-        setContent(result.data?.content || null);
-        setSize(result.data?.size || null);
-        setMtime(result.data?.mtime || null);
+        setContent(result.content || null);
+        setSize(result.size || null);
+        setMtime(result.mtime || null);
         setLoading(false);
         setError(null);
       } catch (err) {
