@@ -3,6 +3,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import chokidar from "chokidar";
 import { spawn as defaultSpawn } from "node:child_process";
+import { getDefaultPipelineConfig } from "./config.js";
 
 /**
  * Resolve canonical pipeline directories for the given data root.
@@ -226,7 +227,15 @@ function spawnRunner(jobId, dirs, running, spawn, testMode) {
     "pipeline-runner.js"
   );
 
-  // Use environment variables if set, otherwise fall back to demo config
+  // Get pipeline configuration from registry (supports environment override)
+  const pipelineConfig = getDefaultPipelineConfig();
+  if (!pipelineConfig) {
+    throw new Error(
+      "No pipeline configuration available. Check your pipeline registry."
+    );
+  }
+
+  // Use environment variables if set, otherwise use pipeline config
   const env = {
     ...process.env,
     PO_DATA_DIR: dirs.dataDir,
@@ -234,11 +243,9 @@ function spawnRunner(jobId, dirs, running, spawn, testMode) {
     PO_CURRENT_DIR: dirs.current,
     PO_COMPLETE_DIR: dirs.complete,
     PO_PIPELINE_PATH:
-      process.env.PO_PIPELINE_PATH ||
-      path.join(process.cwd(), "demo", "pipeline-config", "pipeline.json"),
+      process.env.PO_PIPELINE_PATH || pipelineConfig.pipelinePath,
     PO_TASK_REGISTRY:
-      process.env.PO_TASK_REGISTRY ||
-      path.join(process.cwd(), "demo", "pipeline-config", "tasks", "index.js"),
+      process.env.PO_TASK_REGISTRY || pipelineConfig.taskRegistryPath,
     // Force mock provider for testing
     PO_DEFAULT_PROVIDER: "mock",
   };
