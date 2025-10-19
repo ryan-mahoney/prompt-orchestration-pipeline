@@ -17,12 +17,31 @@ import Layout from "../components/Layout.jsx";
 
 export default function PromptPipelineDashboard({ isConnected }) {
   const navigate = useNavigate();
-  const {
-    data: apiJobs,
-    loading,
-    error,
-    connectionStatus,
-  } = useJobListWithUpdates();
+  const hookResult = useJobListWithUpdates();
+
+  if (
+    process.env.NODE_ENV === "test" &&
+    (hookResult === undefined ||
+      hookResult === null ||
+      typeof hookResult !== "object" ||
+      Array.isArray(hookResult))
+  ) {
+    // eslint-disable-next-line no-console
+    console.error(
+      "[PromptPipelineDashboard] useJobListWithUpdates returned unexpected value",
+      {
+        hookResultType: typeof hookResult,
+        hookResultKeys:
+          hookResult && typeof hookResult === "object"
+            ? Object.keys(hookResult)
+            : null,
+        isMockFunction: Boolean(useJobListWithUpdates?.mock),
+        stack: new Error().stack,
+      }
+    );
+  }
+
+  const { data: apiJobs, loading, error, connectionStatus } = hookResult;
 
   const jobs = useMemo(() => {
     const src = Array.isArray(apiJobs) ? apiJobs : [];

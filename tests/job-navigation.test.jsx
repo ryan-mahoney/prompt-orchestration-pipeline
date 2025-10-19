@@ -1,20 +1,25 @@
 import React from "react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { render, screen, fireEvent, cleanup } from "@testing-library/react";
 
-// Mock the components we want to test
-import JobTable from "../src/components/JobTable.jsx";
-import JobCard from "../src/components/JobCard.jsx";
-import PromptPipelineDashboard from "../src/pages/PromptPipelineDashboard.jsx";
-
-// Mock the hook used by the dashboard
-vi.mock("../src/ui/client/hooks/useJobListWithUpdates.js", () => ({
-  useJobListWithUpdates: vi.fn(),
-}));
-
-// Mock react-router-dom
+// Mocks must be registered before modules under test are imported
 const mockNavigate = vi.fn();
+
+const createJobsHookDefault = () => ({
+  loading: false,
+  data: [],
+  error: null,
+  refetch: vi.fn(),
+  connectionStatus: "disconnected",
+});
+
+vi.mock("../src/ui/client/hooks/useJobListWithUpdates.js", () => {
+  const mockHook = vi.fn(() => createJobsHookDefault());
+  return {
+    useJobListWithUpdates: mockHook,
+  };
+});
+
 vi.mock("react-router-dom", async () => {
   const actual = await vi.importActual("react-router-dom");
   return {
@@ -23,6 +28,10 @@ vi.mock("react-router-dom", async () => {
   };
 });
 
+import { MemoryRouter } from "react-router-dom";
+import JobTable from "../src/components/JobTable.jsx";
+import JobCard from "../src/components/JobCard.jsx";
+import PromptPipelineDashboard from "../src/pages/PromptPipelineDashboard.jsx";
 import { useJobListWithUpdates } from "../src/ui/client/hooks/useJobListWithUpdates.js";
 
 describe("Job Navigation", () => {
@@ -30,10 +39,13 @@ describe("Job Navigation", () => {
     vi.clearAllMocks();
     mockNavigate.mockClear();
     useJobListWithUpdates.mockReset();
+    useJobListWithUpdates.mockImplementation(() => createJobsHookDefault());
+    vi.useRealTimers();
   });
 
   afterEach(() => {
-    vi.restoreAllMocks();
+    cleanup();
+    vi.useRealTimers();
   });
 
   describe("PromptPipelineDashboard openJob function", () => {
