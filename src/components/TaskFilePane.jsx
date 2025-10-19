@@ -494,9 +494,6 @@ export function TaskFilePane({
       <div className="flex items-center justify-between p-4 border-b">
         <div>
           <h2 className="text-lg font-semibold">File Preview</h2>
-          <p className="text-sm text-gray-600">
-            {jobId} / {taskId} / {type} / {filename}
-          </p>
         </div>
         <button
           ref={closeButtonRef}
