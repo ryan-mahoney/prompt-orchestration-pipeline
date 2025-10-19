@@ -54,6 +54,11 @@ describe("Status Transformer", () => {
         createdAt: "2023-01-01T00:00:00Z",
         updatedAt: "2023-01-01T01:00:00Z",
         location: "current",
+        files: {
+          artifacts: [],
+          logs: [],
+          tmp: [],
+        },
         tasks: [
           {
             name: "task-1",
@@ -145,6 +150,11 @@ describe("Status Transformer", () => {
         createdAt: "2023-01-01T00:00:00Z",
         updatedAt: "2023-01-01T00:00:00Z",
         location: "current",
+        files: {
+          artifacts: [],
+          logs: [],
+          tmp: [],
+        },
         tasks: [],
       });
     });

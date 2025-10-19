@@ -230,6 +230,18 @@ export function transformJobStatus(raw, jobId, location) {
   // Compute status/progress based on the raw tasks mapping (so computeJobStatus sees unknown states)
   const jobStatusObj = computeJobStatus(raw.tasks);
 
+  // Attach job-level files with safe defaults
+  let jobFiles = { artifacts: [], logs: [], tmp: [] };
+  if ("files" in raw && raw.files && typeof raw.files === "object") {
+    jobFiles = {
+      artifacts: Array.isArray(raw.files.artifacts)
+        ? raw.files.artifacts.slice()
+        : [],
+      logs: Array.isArray(raw.files.logs) ? raw.files.logs.slice() : [],
+      tmp: Array.isArray(raw.files.tmp) ? raw.files.tmp.slice() : [],
+    };
+  }
+
   const job = {
     id: jobId,
     name,
@@ -239,6 +251,7 @@ export function transformJobStatus(raw, jobId, location) {
     updatedAt,
     location,
     tasks: tasksArray,
+    files: jobFiles,
   };
 
   if (warnings.length > 0) job.warnings = warnings;

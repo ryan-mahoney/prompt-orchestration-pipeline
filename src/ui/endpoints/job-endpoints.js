@@ -37,49 +37,57 @@ export async function handleJobList() {
   console.log("[JobEndpoints] GET /api/jobs called");
 
   // Instrumentation: log resolved paths and check for pipeline.json presence
-  try {
-    const paths =
-      (typeof configBridge.getPATHS === "function" &&
-        configBridge.getPATHS()) ||
-      configBridge.PATHS ||
-      (typeof configBridge.resolvePipelinePaths === "function" &&
-        (function () {
-          try {
-            return configBridge.resolvePipelinePaths();
-          } catch {
-            return null;
-          }
-        })()) ||
-      null;
+  // Only run in non-test environments when explicitly enabled
+  const shouldInstrument =
+    process.env.NODE_ENV !== "test" &&
+    (process.env.JOB_ENDPOINTS_INSTRUMENT === "1" ||
+      process.env.UI_LOG_LEVEL === "debug");
 
-    console.log("[JobEndpoints] resolved PATHS:", paths);
-
-    const pipelinePath =
-      (paths && paths.pipeline) ||
-      (typeof configBridge.resolvePipelinePaths === "function"
-        ? (function () {
+  if (shouldInstrument) {
+    try {
+      const paths =
+        (typeof configBridge.getPATHS === "function" &&
+          configBridge.getPATHS()) ||
+        configBridge.PATHS ||
+        (typeof configBridge.resolvePipelinePaths === "function" &&
+          (function () {
             try {
-              return configBridge.resolvePipelinePaths().pipeline;
+              return configBridge.resolvePipelinePaths();
             } catch {
               return null;
             }
-          })()
-        : null);
+          })()) ||
+        null;
 
-    if (pipelinePath) {
-      try {
-        await fs.access(pipelinePath);
-        console.log(`[JobEndpoints] pipeline.json exists at ${pipelinePath}`);
-      } catch (err) {
-        console.warn(
-          `[JobEndpoints] pipeline.json NOT found at ${pipelinePath}: ${err?.message}`
-        );
+      console.log("[JobEndpoints] resolved PATHS:", paths);
+
+      const pipelinePath =
+        (paths && paths.pipeline) ||
+        (typeof configBridge.resolvePipelinePaths === "function"
+          ? (function () {
+              try {
+                return configBridge.resolvePipelinePaths().pipeline;
+              } catch {
+                return null;
+              }
+            })()
+          : null);
+
+      if (pipelinePath) {
+        try {
+          await fs.access(pipelinePath);
+          console.log(`[JobEndpoints] pipeline.json exists at ${pipelinePath}`);
+        } catch (err) {
+          console.warn(
+            `[JobEndpoints] pipeline.json NOT found at ${pipelinePath}: ${err?.message}`
+          );
+        }
+      } else {
+        console.warn("[JobEndpoints] could not resolve pipeline.json path");
       }
-    } else {
-      console.warn("[JobEndpoints] could not resolve pipeline.json path");
+    } catch (instrErr) {
+      console.error("JobEndpoints instrumentation error:", instrErr);
     }
-  } catch (instrErr) {
-    console.error("JobEndpoints instrumentation error:", instrErr);
   }
 
   try {

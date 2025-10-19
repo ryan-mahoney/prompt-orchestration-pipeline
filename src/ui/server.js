@@ -42,6 +42,34 @@ const WATCHED_PATHS = (
 const HEARTBEAT_INTERVAL = 30000; // 30 seconds
 const DATA_DIR = process.env.PO_ROOT || process.cwd();
 
+/**
+ * Resolve job lifecycle directory deterministically
+ * @param {string} dataDir - Base data directory
+ * @param {string} jobId - Job identifier
+ * @returns {Promise<string|null>} One of "current", "complete", "rejected", or null if job not found
+ */
+async function resolveJobLifecycle(dataDir, jobId) {
+  const currentJobDir = getJobDirectoryPath(dataDir, jobId, "current");
+  const completeJobDir = getJobDirectoryPath(dataDir, jobId, "complete");
+  const rejectedJobDir = getJobDirectoryPath(dataDir, jobId, "rejected");
+
+  // Check in order of preference: current > complete > rejected
+  if (await exists(currentJobDir)) {
+    return "current";
+  }
+
+  if (await exists(completeJobDir)) {
+    return "complete";
+  }
+
+  if (await exists(rejectedJobDir)) {
+    return "rejected";
+  }
+
+  // Job not found in any lifecycle
+  return null;
+}
+
 function hasValidPayload(seed) {
   if (!seed || typeof seed !== "object") return false;
   const hasData = seed.data && typeof seed.data === "object";
@@ -707,6 +735,164 @@ function isTextMime(mime) {
 }
 
 /**
+ * Handle task file list request with validation and security checks
+ * @param {http.IncomingMessage} req - HTTP request
+ * @param {http.ServerResponse} res - HTTP response
+ * @param {Object} params - Request parameters
+ */
+async function handleTaskFileListRequest(req, res, { jobId, taskId, type }) {
+  const dataDir = process.env.PO_ROOT || DATA_DIR;
+
+  // Resolve job lifecycle deterministically
+  const lifecycle = await resolveJobLifecycle(dataDir, jobId);
+  if (!lifecycle) {
+    // Job not found, return empty list
+    sendJson(res, 200, {
+      ok: true,
+      data: {
+        files: [],
+        jobId,
+        taskId,
+        type,
+      },
+    });
+    return;
+  }
+
+  // Use single lifecycle directory
+  const jobDir = getJobDirectoryPath(dataDir, jobId, lifecycle);
+  const taskDir = path.join(jobDir, "tasks", taskId, type);
+
+  // Use path.relative for stricter jail enforcement
+  const resolvedPath = path.resolve(taskDir);
+  const relativePath = path.relative(jobDir, resolvedPath);
+
+  if (relativePath.startsWith("..") || path.isAbsolute(relativePath)) {
+    console.error("Path security: directory traversal detected", {
+      taskDir,
+      relativePath,
+    });
+    sendJson(res, 403, {
+      ok: false,
+      error: "forbidden",
+      message: "Path validation failed",
+    });
+    return;
+  }
+
+  // Check if directory exists
+  if (!(await exists(taskDir))) {
+    // Directory doesn't exist, return empty list
+    sendJson(res, 200, {
+      ok: true,
+      data: {
+        files: [],
+        jobId,
+        taskId,
+        type,
+      },
+    });
+    return;
+  }
+
+  try {
+    // Read directory contents
+    const entries = await fs.promises.readdir(taskDir, {
+      withFileTypes: true,
+    });
+
+    // Filter and map to file list
+    const files = [];
+    for (const entry of entries) {
+      if (entry.isFile()) {
+        // Validate each filename using the consolidated function
+        const validation = validateFilePath(entry.name);
+        if (validation) {
+          console.error("Path security: skipping invalid file", {
+            filename: entry.name,
+            reason: validation.message,
+          });
+          continue; // Skip files that fail validation
+        }
+
+        const filePath = path.join(taskDir, entry.name);
+        const stats = await fs.promises.stat(filePath);
+
+        files.push({
+          name: entry.name,
+          size: stats.size,
+          mtime: stats.mtime.toISOString(),
+          mime: getMimeType(entry.name),
+        });
+      }
+    }
+
+    // Sort files by name
+    files.sort((a, b) => a.name.localeCompare(b.name));
+
+    // Send successful response
+    sendJson(res, 200, {
+      ok: true,
+      data: {
+        files,
+        jobId,
+        taskId,
+        type,
+      },
+    });
+  } catch (error) {
+    console.error("Error listing files:", error);
+    sendJson(res, 500, {
+      ok: false,
+      error: "internal_error",
+      message: "Failed to list files",
+    });
+  }
+}
+
+/**
+ * Consolidated path jail security validation with generic error messages
+ * @param {string} filename - Filename to validate
+ * @returns {Object|null} Validation result or null if valid
+ */
+function validateFilePath(filename) {
+  // Check for path traversal patterns
+  if (filename.includes("..")) {
+    console.error("Path security: path traversal detected", { filename });
+    return {
+      allowed: false,
+      message: "Path validation failed",
+    };
+  }
+
+  // Check for absolute paths (POSIX, Windows, backslashes, ~)
+  if (
+    path.isAbsolute(filename) ||
+    /^[a-zA-Z]:/.test(filename) ||
+    filename.includes("\\") ||
+    filename.startsWith("~")
+  ) {
+    console.error("Path security: absolute path detected", { filename });
+    return {
+      allowed: false,
+      message: "Path validation failed",
+    };
+  }
+
+  // Check for empty filename
+  if (!filename || filename.trim() === "") {
+    console.error("Path security: empty filename detected");
+    return {
+      allowed: false,
+      message: "Path validation failed",
+    };
+  }
+
+  // Path is valid
+  return null;
+}
+
+/**
  * Handle task file request with validation, jail checks, and proper encoding
  * @param {http.IncomingMessage} req - HTTP request
  * @param {http.ServerResponse} res - HTTP response
@@ -719,49 +905,38 @@ async function handleTaskFileRequest(
 ) {
   const dataDir = process.env.PO_ROOT || DATA_DIR;
 
-  // Path traversal and security checks
-  if (filename.includes("..")) {
+  // Unified security validation
+  const validation = validateFilePath(filename);
+  if (validation) {
     sendJson(res, 403, {
       ok: false,
       error: "forbidden",
-      message: "Path traversal not allowed",
+      message: validation.message,
     });
     return;
   }
 
-  if (
-    path.isAbsolute(filename) ||
-    /^[a-zA-Z]:/.test(filename) ||
-    filename.includes("\\")
-  ) {
-    sendJson(res, 403, {
+  // Resolve job lifecycle deterministically
+  const lifecycle = await resolveJobLifecycle(dataDir, jobId);
+  if (!lifecycle) {
+    sendJson(res, 404, {
       ok: false,
-      error: "forbidden",
-      message: "Absolute paths not allowed",
+      error: "not_found",
+      message: "Job not found",
     });
     return;
   }
 
-  // Resolve job directories in order: current then complete
-  const currentJobDir = getJobDirectoryPath(dataDir, jobId, "current");
-  const completeJobDir = getJobDirectoryPath(dataDir, jobId, "complete");
-
-  const taskDir = path.join(currentJobDir, "tasks", taskId, type);
-  const fallbackTaskDir = path.join(completeJobDir, "tasks", taskId, type);
-
+  // Use single lifecycle directory
+  const jobDir = getJobDirectoryPath(dataDir, jobId, lifecycle);
+  const taskDir = path.join(jobDir, "files", type);
   const filePath = path.join(taskDir, filename);
-  const fallbackFilePath = path.join(fallbackTaskDir, filename);
 
-  // Ensure resolved path is within the expected jail
+  // Use path.relative for stricter jail enforcement
   const resolvedPath = path.resolve(filePath);
-  const resolvedFallbackPath = path.resolve(fallbackFilePath);
-  const allowedBase = path.resolve(currentJobDir);
-  const allowedFallbackBase = path.resolve(completeJobDir);
+  const relativePath = path.relative(jobDir, resolvedPath);
 
-  if (
-    !resolvedPath.startsWith(allowedBase) &&
-    !resolvedFallbackPath.startsWith(allowedFallbackBase)
-  ) {
+  if (relativePath.startsWith("..") || path.isAbsolute(relativePath)) {
     sendJson(res, 403, {
       ok: false,
       error: "forbidden",
@@ -770,39 +945,20 @@ async function handleTaskFileRequest(
     return;
   }
 
-  // Check if file exists in current or complete
-  let targetPath = null;
-  let targetBase = null;
-
-  if (await exists(filePath)) {
-    targetPath = filePath;
-    targetBase = allowedBase;
-  } else if (await exists(fallbackFilePath)) {
-    targetPath = fallbackFilePath;
-    targetBase = allowedFallbackBase;
-  } else {
+  // Check if file exists
+  if (!(await exists(filePath))) {
     sendJson(res, 404, {
       ok: false,
       error: "not_found",
       message: "File not found",
-    });
-    return;
-  }
-
-  // Final jail check
-  const finalResolvedPath = path.resolve(targetPath);
-  if (!finalResolvedPath.startsWith(targetBase)) {
-    sendJson(res, 403, {
-      ok: false,
-      error: "forbidden",
-      message: "Path resolves outside allowed directory",
+      filePath,
     });
     return;
   }
 
   try {
     // Get file stats
-    const stats = await fs.promises.stat(targetPath);
+    const stats = await fs.promises.stat(filePath);
     if (!stats.isFile()) {
       sendJson(res, 404, {
         ok: false,
@@ -820,9 +976,9 @@ async function handleTaskFileRequest(
     // Read file content
     let content;
     if (isText) {
-      content = await fs.promises.readFile(targetPath, "utf8");
+      content = await fs.promises.readFile(filePath, "utf8");
     } else {
-      const buffer = await fs.promises.readFile(targetPath);
+      const buffer = await fs.promises.readFile(filePath);
       content = buffer.toString("base64");
     }
 
@@ -1053,6 +1209,73 @@ function createServer() {
 
       // Use the handleSeedUpload function which properly parses multipart data
       await handleSeedUpload(req, res);
+      return;
+    }
+
+    // Route: GET /api/jobs/:jobId/tasks/:taskId/files (must come before generic /api/jobs/:jobId)
+    if (
+      pathname.startsWith("/api/jobs/") &&
+      pathname.includes("/tasks/") &&
+      pathname.endsWith("/files") &&
+      req.method === "GET"
+    ) {
+      const pathMatch = pathname.match(
+        /^\/api\/jobs\/([^\/]+)\/tasks\/([^\/]+)\/files$/
+      );
+      if (!pathMatch) {
+        sendJson(res, 400, {
+          ok: false,
+          error: "bad_request",
+          message: "Invalid path format",
+        });
+        return;
+      }
+
+      const [, jobId, taskId] = pathMatch;
+      const type = searchParams.get("type");
+
+      // Validate parameters
+      if (!jobId || typeof jobId !== "string" || jobId.trim() === "") {
+        sendJson(res, 400, {
+          ok: false,
+          error: "bad_request",
+          message: "jobId is required",
+        });
+        return;
+      }
+
+      if (!taskId || typeof taskId !== "string" || taskId.trim() === "") {
+        sendJson(res, 400, {
+          ok: false,
+          error: "bad_request",
+          message: "taskId is required",
+        });
+        return;
+      }
+
+      if (!type || !["artifacts", "logs", "tmp"].includes(type)) {
+        sendJson(res, 400, {
+          ok: false,
+          error: "bad_request",
+          message: "type must be one of: artifacts, logs, tmp",
+        });
+        return;
+      }
+
+      try {
+        await handleTaskFileListRequest(req, res, {
+          jobId,
+          taskId,
+          type,
+        });
+      } catch (error) {
+        console.error(`Error handling task file list request:`, error);
+        sendJson(res, 500, {
+          ok: false,
+          error: "internal_error",
+          message: "Internal server error",
+        });
+      }
       return;
     }
 
@@ -1355,7 +1578,12 @@ async function startServer({ dataDir, port: customPort }) {
     // In development, start Vite in middlewareMode so the Node server can serve
     // the client with HMR in a single process. We dynamically import Vite here
     // to avoid including it in production bundles.
-    if (process.env.NODE_ENV !== "production") {
+    // Skip Vite entirely for API-only tests when DISABLE_VITE=1 is set.
+    // Do not start Vite in tests to avoid dep-scan errors during teardown.
+    if (
+      process.env.NODE_ENV === "development" &&
+      process.env.DISABLE_VITE !== "1"
+    ) {
       try {
         // Import createServer under an alias to avoid collision with our createServer()
         const { createServer: createViteServer } = await import("vite");
@@ -1369,6 +1597,10 @@ async function startServer({ dataDir, port: customPort }) {
         console.error("Failed to start Vite dev server:", err);
         viteServer = null;
       }
+    } else if (process.env.NODE_ENV === "test") {
+      console.log("DEBUG: Vite disabled in test mode (API-only mode)");
+    } else if (process.env.DISABLE_VITE === "1") {
+      console.log("DEBUG: Vite disabled via DISABLE_VITE=1 (API-only mode)");
     }
 
     const server = createServer();
@@ -1485,6 +1717,7 @@ export {
   sseRegistry,
   initializeWatcher,
   state,
+  resolveJobLifecycle,
 };
 
 // Start server if run directly
