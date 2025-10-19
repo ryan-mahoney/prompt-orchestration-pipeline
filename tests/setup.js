@@ -89,13 +89,15 @@ global.testUtils = {
 beforeEach(() => {
   // Reset all mocks before each test
   global.testUtils.resetAllMocks();
-
-  // Set up fake timers if needed
-  vi.useFakeTimers();
+  console.log("[tests/setup] beforeEach forcing real timers");
+  // React Testing Library suites expect real timers so waitFor polling and cleanup work.
+  // Individual tests should opt into fake timers explicitly when required.
+  vi.useRealTimers();
 });
 
 // Global afterEach hook
 afterEach(() => {
+  console.log("[tests/setup] afterEach ensuring real timers");
   // Restore real timers
   vi.useRealTimers();
 

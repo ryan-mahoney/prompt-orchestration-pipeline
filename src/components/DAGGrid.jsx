@@ -499,8 +499,8 @@ function DAGGrid({
 
                     if (filesForTab.length === 0) {
                       return (
-                        <div className="text-sm text-gray-500 italic">
-                          No {filePaneType} files found
+                        <div className="text-sm text-gray-500 italic py-4 text-center">
+                          No {filePaneType} files available for this task
                         </div>
                       );
                     }

@@ -83,6 +83,9 @@ describe("orchestrator", () => {
   let orchestrator;
 
   beforeEach(async () => {
+    console.log("[tests/orchestrator] beforeEach enabling fake timers");
+    vi.useFakeTimers();
+
     // clean process signal handlers from previous test imports
     removeAllSigHandlers();
 
@@ -164,15 +167,20 @@ describe("orchestrator", () => {
   });
 
   afterEach(async () => {
-    if (orchestrator) {
-      // In test environment, we need to manually trigger the child process exit
-      // to avoid the 2-second timeout in the stop() method
-      children.forEach((child) => {
-        child._emit("exit", 0, null);
-      });
-      await orchestrator.stop();
+    try {
+      if (orchestrator) {
+        // In test environment, we need to manually trigger the child process exit
+        // to avoid the 2-second timeout in the stop() method
+        children.forEach((child) => {
+          child._emit("exit", 0, null);
+        });
+        await orchestrator.stop();
+      }
+    } finally {
+      console.log("[tests/orchestrator] afterEach restoring real timers");
+      vi.useRealTimers();
+      exitSpy.mockRestore();
     }
-    exitSpy.mockRestore();
   }, 30000); // Increase timeout for afterEach hook
 
   it("creates pipeline dirs and runs pipeline on seed add", async () => {
