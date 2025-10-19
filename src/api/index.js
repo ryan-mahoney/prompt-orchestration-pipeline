@@ -4,6 +4,7 @@ import fs from "node:fs/promises";
 import { validateSeedOrThrow } from "../core/validation.js";
 import { validateSeed } from "./validators/seed.js";
 import { atomicWrite, cleanupOnFailure } from "./files.js";
+import { getDefaultPipelineConfig } from "../core/config.js";
 import {
   getPendingSeedPath,
   resolvePipelinePaths,
@@ -159,12 +160,16 @@ export const submitJobWithValidation = async ({ dataDir, seedObject }) => {
     // Read pipeline configuration for snapshot
     let pipelineSnapshot = null;
     try {
-      const pipelineConfigPath = path.join(
-        dataDir,
-        "pipeline-config",
-        "pipeline.json"
+      // Use the default pipeline configuration from registry
+      const defaultPipelineConfig = getDefaultPipelineConfig();
+      if (!defaultPipelineConfig) {
+        throw new Error("No default pipeline configuration found");
+      }
+
+      const pipelineContent = await fs.readFile(
+        defaultPipelineConfig.pipelinePath,
+        "utf8"
       );
-      const pipelineContent = await fs.readFile(pipelineConfigPath, "utf8");
       pipelineSnapshot = JSON.parse(pipelineContent);
     } catch (error) {
       // If pipeline config doesn't exist, create a minimal snapshot
