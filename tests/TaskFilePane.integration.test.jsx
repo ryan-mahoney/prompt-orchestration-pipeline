@@ -211,7 +211,22 @@ describe("TaskFilePane Integration (Single File Viewer)", () => {
       let abortController;
       mockFetch.mockImplementation((_, options) => {
         abortController = options.signal;
-        return new Promise(() => {}); // Never resolves
+
+        // Immediately reject if already aborted
+        if (abortController.aborted) {
+          return Promise.reject(new DOMException("Aborted", "AbortError"));
+        }
+
+        // Otherwise return a promise that rejects when abort signal fires
+        return new Promise((_, reject) => {
+          const handleAbort = () => {
+            reject(new DOMException("Aborted", "AbortError"));
+          };
+
+          abortController.addEventListener("abort", handleAbort, {
+            once: true,
+          });
+        });
       });
 
       const { rerender } = render(<TaskFilePane {...mockProps} />);
