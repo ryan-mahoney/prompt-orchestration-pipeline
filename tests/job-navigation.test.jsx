@@ -5,9 +5,20 @@ import { render, screen, fireEvent } from "@testing-library/react";
 // Mocks must be registered before modules under test are imported
 const mockNavigate = vi.fn();
 
-vi.mock("../src/ui/client/hooks/useJobListWithUpdates.js", () => ({
-  useJobListWithUpdates: vi.fn(),
-}));
+const createJobsHookDefault = () => ({
+  loading: false,
+  data: [],
+  error: null,
+  refetch: vi.fn(),
+  connectionStatus: "disconnected",
+});
+
+vi.mock("../src/ui/client/hooks/useJobListWithUpdates.js", () => {
+  const mockHook = vi.fn(() => createJobsHookDefault());
+  return {
+    useJobListWithUpdates: mockHook,
+  };
+});
 
 vi.mock("react-router-dom", async () => {
   const actual = await vi.importActual("react-router-dom");
