@@ -228,16 +228,16 @@ describe("TaskFilePane Integration (Single File Viewer)", () => {
     it("copy button only for utf8", async () => {
       mockFetch.mockResolvedValue(mockFileResponse);
 
-      render(<TaskFilePane {...mockProps} />);
+      const { rerender } = render(<TaskFilePane {...mockProps} />);
 
       await waitFor(() => {
         expect(screen.getByText("Copy")).toBeInTheDocument();
       });
 
-      // Test binary file doesn't show copy button
+      // Test binary file doesn't show copy button by rerendering same instance
       mockFetch.mockResolvedValue(mockBinaryResponse);
       const binaryProps = { ...mockProps, filename: "image.png" };
-      render(<TaskFilePane {...binaryProps} />);
+      rerender(<TaskFilePane {...binaryProps} />);
 
       await waitFor(() => {
         expect(screen.queryByText("Copy")).not.toBeInTheDocument();
