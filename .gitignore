@@ -144,3 +144,6 @@ Thumbs.db
 
 # Temporary payload samples
 tmp-payload.json
+
+# Cline temporary workflow files
+.clinerules/workflows/pr-*
