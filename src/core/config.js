@@ -577,6 +577,11 @@ export function getAllPipelineConfigs() {
   for (const [slug, pipelineConfig] of Object.entries(pipelines.registry)) {
     // Validate required keys
     if (!pipelineConfig.configDir || !pipelineConfig.tasksDir) {
+      console.warn(
+        `Skipping pipeline entry '${slug}': missing required key(s) ` +
+        `${!pipelineConfig.configDir ? "'configDir' " : ""}` +
+        `${!pipelineConfig.tasksDir ? "'tasksDir' " : ""}`.trim()
+      );
       continue; // Skip invalid entries
     }
 
