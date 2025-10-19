@@ -78,24 +78,10 @@ export const defaultConfig = {
     completeDir: "complete",
   },
   pipelines: {
-    defaultSlug: "content",
-    /**
-     * Pipeline registry configuration
-     * Each pipeline entry requires:
-     * - configDir: Path to pipeline configuration directory (contains pipeline.json)
-     * - tasksDir: Path to tasks directory (contains task implementations)
-     *
-     * Optional keys:
-     * - name: Human-readable pipeline name
-     * - description: Pipeline description
-     */
-    registry: {
-      content: {
-        name: "Demo Content Pipeline",
-        description: "Default content generation pipeline",
-        configDir: "pipeline-config/content",
-        tasksDir: "pipeline-config/content/tasks",
-      },
+    content: {
+      tasksDir: "pipeline-config/content/tasks"
+    }
+  },
     },
   },
   validation: {
@@ -545,7 +531,6 @@ export function getPipelineConfig(slug) {
     config: {
       ...pipelineConfig,
       slug,
-      configDir: path.resolve(root, pipelineConfig.configDir),
       tasksDir: path.resolve(root, pipelineConfig.tasksDir),
       pipelinePath: path.resolve(
         root,
@@ -588,7 +573,6 @@ export function getAllPipelineConfigs() {
     result[slug] = {
       ...pipelineConfig,
       slug,
-      configDir: path.resolve(root, pipelineConfig.configDir),
       tasksDir: path.resolve(root, pipelineConfig.tasksDir),
       pipelinePath: path.resolve(
         root,
