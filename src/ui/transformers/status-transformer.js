@@ -24,6 +24,7 @@
  */
 
 import * as configBridge from "../config-bridge.browser.js";
+import { normalizeTaskFiles } from "../../utils/task-files.js";
 
 // Known/valid task states for basic validation
 const VALID_TASK_STATES = new Set(["pending", "running", "done", "error"]);
@@ -160,15 +161,7 @@ export function transformTasks(rawTasks) {
       if ("executionTimeMs" in raw) task.executionTimeMs = raw.executionTimeMs;
 
       // Prefer new files.* schema, fallback to legacy artifacts
-      if ("files" in raw && raw.files && typeof raw.files === "object") {
-        task.files = {
-          artifacts: Array.isArray(raw.files.artifacts)
-            ? raw.files.artifacts.slice()
-            : [],
-          logs: Array.isArray(raw.files.logs) ? raw.files.logs.slice() : [],
-          tmp: Array.isArray(raw.files.tmp) ? raw.files.tmp.slice() : [],
-        };
-      }
+      task.files = normalizeTaskFiles(raw?.files);
       if ("artifacts" in raw) task.artifacts = raw.artifacts;
     }
 
@@ -231,16 +224,7 @@ export function transformJobStatus(raw, jobId, location) {
   const jobStatusObj = computeJobStatus(raw.tasks);
 
   // Attach job-level files with safe defaults
-  let jobFiles = { artifacts: [], logs: [], tmp: [] };
-  if ("files" in raw && raw.files && typeof raw.files === "object") {
-    jobFiles = {
-      artifacts: Array.isArray(raw.files.artifacts)
-        ? raw.files.artifacts.slice()
-        : [],
-      logs: Array.isArray(raw.files.logs) ? raw.files.logs.slice() : [],
-      tmp: Array.isArray(raw.files.tmp) ? raw.files.tmp.slice() : [],
-    };
-  }
+  const jobFiles = normalizeTaskFiles(raw.files);
 
   const job = {
     id: jobId,
