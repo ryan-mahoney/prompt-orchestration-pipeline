@@ -68,11 +68,21 @@ describe("Status Transformer", () => {
             attempts: 1,
             executionTimeMs: 1800000,
             artifacts: ["tasks/task-1/output.json"],
+            files: {
+              artifacts: [],
+              logs: [],
+              tmp: [],
+            },
           },
           {
             name: "task-2",
             state: "running",
             startedAt: "2023-01-01T00:30:00Z",
+            files: {
+              artifacts: [],
+              logs: [],
+              tmp: [],
+            },
           },
         ],
       });
@@ -265,11 +275,21 @@ describe("Status Transformer", () => {
           attempts: 1,
           executionTimeMs: 1800000,
           artifacts: ["tasks/task-1/output.json"],
+          files: {
+            artifacts: [],
+            logs: [],
+            tmp: [],
+          },
         },
         {
           name: "task-2",
           state: "running",
           startedAt: "2023-01-01T00:30:00Z",
+          files: {
+            artifacts: [],
+            logs: [],
+            tmp: [],
+          },
         },
       ]);
     });
