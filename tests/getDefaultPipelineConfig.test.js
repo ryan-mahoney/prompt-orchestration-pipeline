@@ -45,13 +45,13 @@ describe("getDefaultPipelineConfig", () => {
     expect(result).toBeNull();
   });
 
-  it("should throw error when default slug doesn't exist in slugs", () => {
+  it("should throw error when default slug doesn't exist in registry", () => {
     // Modify config to have invalid default slug
     const config = getConfig();
     config.pipelines.defaultSlug = "nonexistent";
 
     expect(() => getDefaultPipelineConfig()).toThrow(
-      'Default pipeline slug "nonexistent" does not exist in pipelines.slugs.'
+      'Default pipeline slug "nonexistent" does not exist in pipelines.registry.'
     );
   });
 

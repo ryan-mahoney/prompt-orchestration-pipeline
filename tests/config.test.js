@@ -249,7 +249,7 @@ describe("Configuration Module", () => {
       expect(config.ui.port).toBe(5000);
     });
 
-    it("should load path settings from env", () => {
+    it("should load path settings from env while ignoring deprecated configDir override", () => {
       process.env.PO_ROOT = "/custom/root";
       process.env.PO_DATA_DIR = "custom-data";
       process.env.PO_CONFIG_DIR = "custom-config";
@@ -258,7 +258,7 @@ describe("Configuration Module", () => {
       const config = getConfig();
       expect(config.paths.root).toBe("/custom/root");
       expect(config.paths.dataDir).toBe("custom-data");
-      expect(config.paths.configDir).toBe("custom-config");
+      expect(config.paths.configDir).toBeUndefined();
     });
 
     it("should load logging settings from env", () => {
