@@ -397,22 +397,31 @@ export function getPipelineConfig(slug) {
   const { pipelines } = config;
 
   if (!pipelines || !pipelines.slugs) {
-    return null;
+    return {
+      config: null,
+      error: "Pipeline registry is missing from configuration.",
+    };
   }
 
   const pipelineConfig = pipelines.slugs[slug];
   if (!pipelineConfig) {
-    return null;
+    return {
+      config: null,
+      error: `Pipeline slug '${slug}' not found in registry.`,
+    };
   }
 
   // Normalize paths relative to root directory
   const root = config.paths.root;
 
   return {
-    ...pipelineConfig,
-    slug,
-    pipelinePath: path.resolve(root, pipelineConfig.pipelinePath),
-    taskRegistryPath: path.resolve(root, pipelineConfig.taskRegistryPath),
+    config: {
+      ...pipelineConfig,
+      slug,
+      pipelinePath: path.resolve(root, pipelineConfig.pipelinePath),
+      taskRegistryPath: path.resolve(root, pipelineConfig.taskRegistryPath),
+    },
+    error: null,
   };
 }
 
