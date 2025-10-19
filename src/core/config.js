@@ -466,5 +466,11 @@ export function getDefaultPipelineConfig() {
     return null;
   }
 
+  // Validate that defaultSlug exists in pipelines.slugs
+  if (!pipelines.slugs || !(pipelines.defaultSlug in pipelines.slugs)) {
+    throw new Error(
+      `Default pipeline slug "${pipelines.defaultSlug}" does not exist in pipelines.slugs.`
+    );
+  }
   return getPipelineConfig(pipelines.defaultSlug);
 }
