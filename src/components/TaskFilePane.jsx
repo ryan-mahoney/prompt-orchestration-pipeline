@@ -28,6 +28,7 @@ export function TaskFilePane({
   const [mtime, setMtime] = useState(null);
 
   const invokerRef = useRef(null);
+  const closeButtonRef = useRef(null);
   const abortControllerRef = useRef(null);
 
   // Local filename state for retry functionality
@@ -228,13 +229,23 @@ export function TaskFilePane({
     doFetch();
   }, [isOpen, jobId, taskId, type, filename]);
 
-  // Store invoker ref for focus return
+  // Store invoker ref for focus return and focus close button on open
   useEffect(() => {
-    if (isOpen && !invokerRef.current) {
+    if (isOpen) {
       // Try to find the element that opened this pane
-      const activeElement = document.activeElement;
-      if (activeElement && activeElement.getAttribute("role") === "listitem") {
-        invokerRef.current = activeElement;
+      if (!invokerRef.current) {
+        const activeElement = document.activeElement;
+        if (
+          activeElement &&
+          activeElement.getAttribute("role") === "listitem"
+        ) {
+          invokerRef.current = activeElement;
+        }
+      }
+
+      // Focus close button when pane opens
+      if (closeButtonRef.current) {
+        closeButtonRef.current.focus();
       }
     }
   }, [isOpen]);
@@ -465,6 +476,7 @@ export function TaskFilePane({
           </p>
         </div>
         <button
+          ref={closeButtonRef}
           onClick={onClose}
           className="text-gray-400 hover:text-gray-600 transition-colors"
           aria-label="Close file pane"
