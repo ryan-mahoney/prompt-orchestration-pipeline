@@ -1,137 +1,137 @@
-# File test fix
+You have full access to the repository, terminal, and test runner. Work on the current branch only. Do not ask for confirmation. Do not use `<read_file>` or `<search_file>`—assume you can open and edit any file. After each section, make a Conventional Commit. Each step must start in a fresh context with the critical details carried forward via `<new_task>`.
 
 <task_objective>
-Autonomously align the test suite with the updated <code>handleTaskFileRequest</code> contract and validate behavior from start to finish with **no human interaction**. Execute entirely on the **current branch** (do not create a new branch), and after each section make a **Conventional Commit**. Because each step runs in a fresh context, explicitly restate any details needed from previous steps. The workflow must automatically choose the most pragmatic approach when options exist, avoid <read_file> and <search_file> (full access is assumed), and complete without pausing for input.
-
-Authoritative context to carry through every step:
-
-- **Server behavior (src/ui/server.js)**:
-  - **GET** <code>/api/jobs/:jobId/tasks/:taskId/file</code> reads from **<code>jobDir/files/{type}/{filename}</code>** (job-scoped; ignores <code>taskId</code> for storage).
-  - **GET** <code>/api/jobs/:jobId/tasks/:taskId/files</code> lists from **<code>jobDir/tasks/{taskId}/{type}</code>** (task-scoped).
-  - Response path remains virtual: <code>"tasks/{taskId}/{type}/{filename}"</code>.
-  - Error codes: <code>400</code> (validation), <code>403</code> (jail), <code>404</code> (not_found).
-
-- **Impact on tests**: Any test that fetches **file content** must ensure the file exists under **<code>jobDir/files/{type}</code>**; list tests can keep task-scoped seeding.
-  </task_objective>
+Autonomously make minimal, targeted edits so that tests/TaskFilePane.integration.test.jsx completes deterministically with no open handles. The workflow must run from start to finish with no human interaction, automatically choosing the most pragmatic approach, operating on the current branch, committing after every section, and carrying forward essential context between steps.
+</task_objective>
 
 <detailed_sequence_of_steps>
 
-**Step 1 — Seed job-scoped files for file-read tests in <code>tests/job-file-endpoint.integration.test.js</code>**
+# Step 1 — Fix duplicate render causing stale “Copy” button
 
-- Restate context: File reads must come from <code>pipeline-data/(current|complete)/{jobId}/files/{type}/{filename}</code>; keep task-scoped seeding only for list tests.
-- Edit the test’s <code>beforeEach</code> setup to create **<code>files/artifacts</code>**, **<code>files/logs</code>**, **<code>files/tmp</code>** under the job’s **current** lifecycle directory and write:
-  - <code>artifacts/output.json</code>
-  - <code>logs/test.log</code>
-  - <code>tmp/blob.bin</code>
+Goal: Ensure the “copy button only for utf8” test manipulates a single TaskFilePane instance to avoid stale visibility state.
 
-- Keep any existing <code>tasks/{taskId}/{type}</code> seeding (harmless; useful for list tests).
-- Run focused tests for this file only.
-- Commit:
-  - **Message**: <code>test(api): seed job-scoped files for file endpoint reads</code>
-  - **Body**:
-    - Create <code>files/(artifacts|logs|tmp)</code> under jobDir (current)
-    - Seed output.json, test.log, blob.bin for file-read cases
-    - Preserve task-scoped seeding for list tests
-      <new_task/>
+Where to change:
 
-**Step 2 — Cover nested paths by seeding under <code>files</code> as well**
+- tests/TaskFilePane.integration.test.jsx (“copy button only for utf8”)
 
-- Restate context: Nested artifacts must also live under job-scoped <code>files</code>.
-- For “nested directory paths” add <code>files/artifacts/subdir/nested.json</code>.
-- For “allow path traversal that stays within jail” add <code>files/artifacts/subdir/inner/safe.json</code>.
-- Keep response expectations using the virtual <code>tasks/analysis/…</code> path.
-- Run focused tests for nested/traversal cases.
-- Commit:
-  - **Message**: <code>test(api): seed nested artifacts under files/\* for path/jail cases</code>
-  - **Body**:
-    - Add <code>subdir/nested.json</code> and <code>subdir/inner/safe.json</code> under <code>files/artifacts</code>
-    - Retain virtual response path assertions
-      <new_task/>
+What to do (describe, no code):
 
-**Step 3 — Complete-lifecycle read comes from <code>pipeline-data/complete/.../files</code>**
+- Replace the second render of TaskFilePane with a rerender of the original instance.
+- At the initial render, retain the return object so you can call rerender later.
+- After confirming “Copy” is visible for a UTF-8 file, rerender the same component instance with a binary filename (e.g., image.png).
+- Keep the existing assertion that “Copy” is no longer in the document.
+- Remove any extra render invocations so only one component instance exists throughout the test.
 
-- Restate context: When reading from the <em>complete</em> lifecycle, file content must exist at <code>complete/{jobId}/files/{type}</code>.
-- Update the “fallback to complete” case to seed <code>complete/{jobId}/files/artifacts/complete-output.json</code> and keep <code>complete/{jobId}/metadata.json</code>.
-- Run focused tests for this scenario.
-- Commit:
-  - **Message**: <code>test(api): read file content from complete/{jobId}/files for lifecycle resolution</code>
-  - **Body**:
-    - Seed <code>complete-output.json</code> under <code>complete/.../files/artifacts</code>
-    - Preserve existing metadata placement
-      <new_task/>
+Acceptance checks:
 
-**Step 4 — Clarify non-existent task behavior (job-scoped reads still 200)**
+- The test passes consistently without intermittently seeing a stale “Copy”.
+- No additional warnings or act() notices are emitted.
 
-- Restate contract: Storage ignores <code>taskId</code> for content reads; 200 is expected if the file exists in <code>files/{type}</code>.
-- Update the test title and expectation to: **“should return 200 even when taskId has no folder (file storage is job-scoped)”** and assert 200 with expected content for <code>files/artifacts/output.json</code>.
-- Run focused test on this case.
-- Commit:
-  - **Message**: <code>test(api): document job-scoped file read when task folder is absent</code>
-  - **Body**:
-    - Rename test to reflect job-scoped storage
-    - Expect 200 with same artifact payload despite missing <code>tasks/:taskId</code> folder
-      <new_task/>
+Conventional commit to make:
 
-**Step 5 — Preserve negative cases (400/403/404) unchanged; document intent**
+- test(task-file-pane): use rerender to avoid stale Copy visibility and duplicate instance
 
-- Restate: Validation, jail, and not_found semantics are unchanged.
-- Review the negative tests and keep as-is; add brief inline comments noting alignment with the updated contract.
-- Run only the negative test block(s) to confirm.
-- Commit:
-  - **Message**: <code>test(api): affirm unchanged negative cases for validation/jail/not_found</code>
-  - **Body**:
-    - Add clarifying comments; no behavioral changes
-    - Verified 400/403/404 still enforced
-      <new_task/>
+</detailed_sequence_of_steps>
 
-**Step 6 — Update <code>tests/TaskFilePane.integration.test.jsx</code> for dual seeding (list + content)**
+<new_task> <context>
+Carry forward: We are on the current branch; Step 1 updated tests/TaskFilePane.integration.test.jsx to use a single component instance via rerender in the “copy button only for utf8” test. Next we will make fetch in the “aborts in-flight on prop change” test abort-aware so pending requests settle. </context>
+</new_task>
 
-- Restate context: UI lists from <code>tasks/{taskId}/{type}</code> but reads content from <code>files/{type}</code>.
-- For each previewed file in this integration:
-  - Seed **both** <code>tasks/{taskId}/{type}/<file></code> **and** <code>files/{type}/<file></code> with identical content.
+<detailed_sequence_of_steps>
 
-- Keep all UI expectations unchanged (selection → content fetch).
-- Run this integration spec only.
-- Commit:
-  - **Message**: <code>test(ui): duplicate file seeding for TaskFilePane list+read contract</code>
-  - **Body**:
-    - Seed mirrored files in task-scoped and job-scoped locations
-    - Prevent 404 during content fetch
-      <new_task/>
+# Step 2 — Make abort-aware fetch so the pending promise settles
 
-**Step 7 — Audit other specs that combine list + read; mirror seeding**
+Goal: Ensure “aborts in-flight on prop change” deterministically settles the in-flight fetch via AbortSignal rather than leaking a pending promise.
 
-- Restate context globally: any test that lists from task scope and then reads content must also seed under <code>files/{type}</code>.
-- Search test setup utilities and specs for writes to <code>tasks/<taskId>/(artifacts|logs|tmp)</code> followed by a file endpoint read; duplicate writes to <code>files/(artifacts|logs|tmp)</code> for those files.
-- Run the affected specs individually in sequence.
-- Commit:
-  - **Message**: <code>test: duplicate seeding under files/\* for all list+content specs</code>
-  - **Body**:
-    - Mirror artifacts/logs/tmp for any spec that reads via the file endpoint
-    - Keep list-only specs unchanged
-      <new_task/>
+Where to change:
 
-**Step 8 — Keep server response assertions intact across tests**
+- tests/TaskFilePane.integration.test.jsx (“aborts in-flight on prop change”)
 
-- Restate required envelope and fields: <code>{ ok, jobId, taskId, type, path, mime, size, mtime, encoding, content }</code>.
-- Verify MIME/encoding selection expectations and that the virtual <code>path</code> reflects <code>tasks/{taskId}/{type}/{filename}</code>.
-- Do not alter these assertions unless a failure directly contradicts the confirmed contract.
-- Run the specs that assert these response shapes.
-- Commit:
-  - **Message**: <code>test: verify response envelope and virtual path remain stable</code>
-  - **Body**:
-    - Keep JSON envelope + field names
-    - Maintain virtual path assertion despite job-scoped storage
-      <new_task/>
+What to do (describe, no code):
 
-**Step 9 — Validate incrementally; document focused run strategy**
+- Replace the mock fetch implementation used in this test with one that:
+  - Immediately rejects with an AbortError if the provided signal is already aborted.
+  - Attaches a one-time listener to the signal that rejects the promise with an AbortError when the signal aborts.
+  - Intentionally never calls resolve on its own (simulating an in-flight request that will only settle on abort).
 
-- Restate pragmatic approach: avoid full-suite hangs by running updated specs first, then proceed outward.
-- Execute an incremental sequence (examples): file-endpoint → TaskFilePane → other audited specs; only then consider the full suite.
-- Add a short contributor note (if your repo keeps docs) describing the incremental validation approach tied to the job-scoped storage change so future edits follow the same pattern.
-- Commit:
-  - **Message**: <code>docs(test): add incremental validation notes for job-scoped file reads</code>
-  - **Body**:
-    - Recommend running updated specs first to avoid hangs
-    - Clarify list vs content seeding strategy
-      </detailed_sequence_of_steps>
+- Keep the existing test flow: trigger a prop change that aborts the prior request and assert the controller is aborted and no open handles remain from this request.
+
+Acceptance checks:
+
+- The test reliably passes and no hanging fetch promises remain.
+- The test runner reports no unhandled promise rejections or lingering handles from this test.
+
+Conventional commit to make:
+
+- test(task-file-pane): mock fetch to reject on AbortSignal and settle in-flight request
+
+</detailed_sequence_of_steps>
+
+<new_task> <context>
+Carry forward: We remain on the current branch; Step 2 replaced the test’s fetch mock to reject on AbortSignal. Next we will ensure initial focus behavior makes the focus-related wait resolve by focusing the close button when the pane opens. </context>
+</new_task>
+
+<detailed_sequence_of_steps>
+
+# Step 3 — Focus the close button on open so focus wait resolves
+
+Goal: Guarantee the focus assertion/wait used by the tests resolves deterministically by managing initial focus within the component.
+
+Where to change:
+
+- src/components/TaskFilePane.jsx
+
+What to do (describe, no code):
+
+- Introduce a ref for the pane’s close button.
+- Attach the ref to the existing close button element (the icon button used to dismiss the pane).
+- Add an effect that, when the pane becomes open, focuses the close button (guard with a null check).
+- Ensure this runs only when opening (e.g., when isOpen changes to true) and does not interfere with other keyboard focus flows.
+
+Acceptance checks:
+
+- Any test that waits for focus now resolves consistently without timeouts.
+- Manual accessibility scan confirms focus lands on a visible, interactive control when the pane opens.
+
+Conventional commit to make:
+
+- feat(task-file-pane): focus close button on open to stabilize focus-based tests
+
+</detailed_sequence_of_steps>
+
+<new_task> <context>
+Carry forward: On the current branch; Step 3 added a close button ref and an “on open” focus effect in TaskFilePane. Next we will track and clear component timeouts to prevent lingering timers and open handles. </context>
+</new_task>
+
+<detailed_sequence_of_steps>
+
+# Step 4 — Track and clear component timeouts to avoid open handles
+
+Goal: Eliminate lingering timers (copy notice/retry) that keep the test environment alive after tests complete.
+
+Where to change:
+
+- src/components/TaskFilePane.jsx
+
+What to do (describe, no code):
+
+- Add refs to hold timer IDs for any setTimeout used by the component (e.g., the transient “copied” notice and any retry/backoff timers).
+- Before scheduling a new timer, clear an existing one stored in the corresponding ref.
+- Store the new timer ID in the ref.
+- In the component’s unmount cleanup, clear both timers and abort any in-flight fetch via the existing abort controller (if present).
+- Ensure no new timers are scheduled after unmount is initiated.
+
+Acceptance checks:
+
+- The integration suite reports zero open handles after completion.
+- The copy notice still appears and clears as expected during normal operation.
+
+Conventional commit to make:
+
+- fix(task-file-pane): track and clear copy/retry timers and abort on unmount to prevent open handles
+
+</detailed_sequence_of_steps>
+
+<new_task> <context>
+Carry forward: All four targeted changes are complete on the current branch. Run the full test suite and confirm that tests/TaskFilePane.integration.test.jsx passes deterministically with no open handles, no pending timers, and no unhandled rejections. If anything still hangs, capture test runner diagnostics and flake data, then iteratively adjust only within the scope above to maintain minimal surface area. </context>
+</new_task>

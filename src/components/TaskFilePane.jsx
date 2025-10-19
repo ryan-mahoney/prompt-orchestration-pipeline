@@ -32,8 +32,8 @@ export function TaskFilePane({
   const abortControllerRef = useRef(null);
   const copyNoticeTimerRef = useRef(null);
 
-  // Local filename state for retry functionality
-  const [tempFilename, setFilename] = useState(filename);
+  // Retry counter for refetching
+  const [retryCounter, setRetryCounter] = useState(0);
 
   /**
    * Infer MIME type and encoding from file extension
@@ -142,11 +142,6 @@ export function TaskFilePane({
     );
   }
 
-  // Sync filename with prop changes
-  useEffect(() => {
-    setFilename(filename);
-  }, [filename]);
-
   // Fetch file content when dependencies change
   useEffect(() => {
     if (!isOpen || !jobId || !taskId || !type || !filename) {
@@ -186,9 +181,8 @@ export function TaskFilePane({
 
     const doFetch = async () => {
       try {
-        const currentFilename = tempFilename || filename;
         const response = await fetch(
-          `/api/jobs/${encodeURIComponent(jobId)}/tasks/${encodeURIComponent(taskId)}/file?type=${encodeURIComponent(type)}&filename=${encodeURIComponent(currentFilename)}`,
+          `/api/jobs/${encodeURIComponent(jobId)}/tasks/${encodeURIComponent(taskId)}/file?type=${encodeURIComponent(type)}&filename=${encodeURIComponent(filename)}`,
           { signal }
         );
 
@@ -228,7 +222,7 @@ export function TaskFilePane({
     };
 
     doFetch();
-  }, [isOpen, jobId, taskId, type, filename]);
+  }, [isOpen, jobId, taskId, type, filename, retryCounter]);
 
   // Store invoker ref for focus return and focus close button on open
   useEffect(() => {
@@ -244,10 +238,14 @@ export function TaskFilePane({
         }
       }
 
-      // Focus close button when pane opens
-      if (closeButtonRef.current) {
-        closeButtonRef.current.focus();
-      }
+      // Focus close button when pane opens (with a small delay to avoid race conditions)
+      const focusTimer = setTimeout(() => {
+        if (closeButtonRef.current) {
+          closeButtonRef.current.focus();
+        }
+      }, 0);
+
+      return () => clearTimeout(focusTimer);
     }
   }, [isOpen]);
 
@@ -265,7 +263,9 @@ export function TaskFilePane({
 
     if (isOpen) {
       document.addEventListener("keydown", handleEscape);
-      return () => document.removeEventListener("keydown", handleEscape);
+      return () => {
+        document.removeEventListener("keydown", handleEscape);
+      };
     }
   }, [isOpen, onClose]);
 
@@ -318,11 +318,9 @@ export function TaskFilePane({
 
   // Retry fetch
   const handleRetry = () => {
-    // Trigger refetch by changing the dependencies
+    // Trigger refetch by incrementing retry counter
     // This will cause the useEffect to run again
-    const currentFilename = tempFilename;
-    setFilename(`${currentFilename}?retry=${Date.now()}`);
-    setTimeout(() => setFilename(currentFilename), 0);
+    setRetryCounter((prev) => prev + 1);
   };
 
   // Render file content based on MIME type
