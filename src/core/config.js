@@ -260,10 +260,114 @@ async function loadFromFile(configPath) {
 }
 
 /**
+ * Validate pipeline registry paths exist
+ * @param {Object} config - Configuration object
+ * @param {Array} errors - Array to collect validation errors
+ */
+async function validatePipelinePaths(config, errors) {
+  if (!config.pipelines || !config.pipelines.registry) {
+    errors.push("Pipeline registry is missing from configuration");
+    return;
+  }
+
+  const root = config.paths.root;
+
+  for (const [slug, pipelineConfig] of Object.entries(
+    config.pipelines.registry
+  )) {
+    // Validate required keys
+    if (!pipelineConfig.configDir) {
+      errors.push(`Pipeline '${slug}' missing required 'configDir' key`);
+      continue;
+    }
+    if (!pipelineConfig.tasksDir) {
+      errors.push(`Pipeline '${slug}' missing required 'tasksDir' key`);
+      continue;
+    }
+
+    // Normalize paths
+    const configDir = path.resolve(root, pipelineConfig.configDir);
+    const tasksDir = path.resolve(root, pipelineConfig.tasksDir);
+    const pipelinePath = path.resolve(configDir, "pipeline.json");
+    const taskRegistryPath = path.resolve(tasksDir, "index.js");
+
+    // Validate directories exist
+    try {
+      const configDirStat = await fs.stat(configDir);
+      if (!configDirStat.isDirectory()) {
+        errors.push(
+          `Pipeline '${slug}' configDir is not a directory: ${configDir}`
+        );
+        continue;
+      }
+    } catch (error) {
+      if (error.code === "ENOENT") {
+        errors.push(
+          `Pipeline '${slug}' configDir does not exist: ${configDir}`
+        );
+      } else {
+        errors.push(
+          `Pipeline '${slug}' configDir is not accessible: ${configDir} - ${error.message}`
+        );
+      }
+      continue;
+    }
+
+    try {
+      const tasksDirStat = await fs.stat(tasksDir);
+      if (!tasksDirStat.isDirectory()) {
+        errors.push(
+          `Pipeline '${slug}' tasksDir is not a directory: ${tasksDir}`
+        );
+        continue;
+      }
+    } catch (error) {
+      if (error.code === "ENOENT") {
+        errors.push(`Pipeline '${slug}' tasksDir does not exist: ${tasksDir}`);
+      } else {
+        errors.push(
+          `Pipeline '${slug}' tasksDir is not accessible: ${tasksDir} - ${error.message}`
+        );
+      }
+      continue;
+    }
+
+    // Validate required files exist
+    try {
+      await fs.access(pipelinePath, fs.constants.F_OK);
+    } catch (error) {
+      if (error.code === "ENOENT") {
+        errors.push(
+          `Pipeline '${slug}' pipeline.json does not exist: ${pipelinePath}`
+        );
+      } else {
+        errors.push(
+          `Pipeline '${slug}' pipeline.json is not accessible: ${pipelinePath} - ${error.message}`
+        );
+      }
+    }
+
+    try {
+      await fs.access(taskRegistryPath, fs.constants.F_OK);
+    } catch (error) {
+      if (error.code === "ENOENT") {
+        errors.push(
+          `Pipeline '${slug}' tasks/index.js does not exist: ${taskRegistryPath}`
+        );
+      } else {
+        errors.push(
+          `Pipeline '${slug}' tasks/index.js is not accessible: ${taskRegistryPath} - ${error.message}`
+        );
+      }
+    }
+  }
+}
+
+/**
  * Validate configuration values
  * Throws if configuration is invalid
  */
-function validateConfig(config) {
+async function validateConfig(config) {
   const errors = [];
 
   // Validate numeric values are positive
@@ -296,6 +400,9 @@ function validateConfig(config) {
   if (!validLogLevels.includes(config.logging.level)) {
     errors.push(`logging.level must be one of: ${validLogLevels.join(", ")}`);
   }
+
+  // Validate pipeline registry paths
+  await validatePipelinePaths(config, errors);
 
   if (errors.length > 0) {
     throw new Error(
@@ -336,7 +443,7 @@ export async function loadConfig(options = {}) {
 
   // Validate if requested
   if (validate) {
-    validateConfig(config);
+    await validateConfig(config);
   }
 
   // Cache the loaded config
