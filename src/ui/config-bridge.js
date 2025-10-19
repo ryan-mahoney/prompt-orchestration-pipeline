@@ -6,6 +6,7 @@
 import path from "node:path";
 import { promises as fs } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { getDefaultPipelineConfig } from "../core/config.js";
 
 // Get current directory for path resolution
 const __filename = fileURLToPath(import.meta.url);
@@ -89,13 +90,28 @@ export function resolvePipelinePaths() {
     ? path.resolve(process.env.PO_ROOT)
     : path.resolve(__dirname, "../..");
 
+  // Use pipeline configuration registry for pipeline definition path
+  let pipelinePath;
+  try {
+    const pipelineConfig = getDefaultPipelineConfig();
+    if (pipelineConfig) {
+      pipelinePath = pipelineConfig.pipelinePath;
+    } else {
+      // Fallback to legacy path for backward compatibility
+      pipelinePath = path.join(base, "pipeline-config", "pipeline.json");
+    }
+  } catch {
+    // Fallback to legacy path if configuration system fails
+    pipelinePath = path.join(base, "pipeline-config", "pipeline.json");
+  }
+
   return {
     current: path.join(base, "pipeline-data", "current"),
     complete: path.join(base, "pipeline-data", "complete"),
     pending: path.join(base, "pipeline-data", "pending"),
     rejected: path.join(base, "pipeline-data", "rejected"),
-    // Pipeline definition location (useful for UI/server logic that wants to read pipeline.json)
-    pipeline: path.join(base, "pipeline-config", "pipeline.json"),
+    // Pipeline definition location from registry or legacy fallback
+    pipeline: pipelinePath,
   };
 }
 
