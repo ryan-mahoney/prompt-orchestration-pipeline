@@ -1,20 +1,14 @@
 import React from "react";
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
 
-// Mock the components we want to test
-import JobTable from "../src/components/JobTable.jsx";
-import JobCard from "../src/components/JobCard.jsx";
-import PromptPipelineDashboard from "../src/pages/PromptPipelineDashboard.jsx";
+// Mocks must be registered before modules under test are imported
+const mockNavigate = vi.fn();
 
-// Mock the hook used by the dashboard
 vi.mock("../src/ui/client/hooks/useJobListWithUpdates.js", () => ({
   useJobListWithUpdates: vi.fn(),
 }));
 
-// Mock react-router-dom
-const mockNavigate = vi.fn();
 vi.mock("react-router-dom", async () => {
   const actual = await vi.importActual("react-router-dom");
   return {
@@ -23,6 +17,10 @@ vi.mock("react-router-dom", async () => {
   };
 });
 
+import { MemoryRouter } from "react-router-dom";
+import JobTable from "../src/components/JobTable.jsx";
+import JobCard from "../src/components/JobCard.jsx";
+import PromptPipelineDashboard from "../src/pages/PromptPipelineDashboard.jsx";
 import { useJobListWithUpdates } from "../src/ui/client/hooks/useJobListWithUpdates.js";
 
 describe("Job Navigation", () => {
@@ -30,10 +28,6 @@ describe("Job Navigation", () => {
     vi.clearAllMocks();
     mockNavigate.mockClear();
     useJobListWithUpdates.mockReset();
-  });
-
-  afterEach(() => {
-    vi.restoreAllMocks();
   });
 
   describe("PromptPipelineDashboard openJob function", () => {
