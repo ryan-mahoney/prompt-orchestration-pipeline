@@ -16,7 +16,7 @@ const COMPLETE_DIR =
 const pipelineConfig = getDefaultPipelineConfig();
 if (!pipelineConfig) {
   throw new Error(
-    "No pipeline configuration available. Check your pipeline registry."
+    "No pipeline configuration available. Ensure that 'pipeline-config/registry.json' exists and contains a valid 'defaultSlug' configuration."
   );
 }
 
