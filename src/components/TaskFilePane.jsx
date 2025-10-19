@@ -30,6 +30,7 @@ export function TaskFilePane({
   const invokerRef = useRef(null);
   const closeButtonRef = useRef(null);
   const abortControllerRef = useRef(null);
+  const copyNoticeTimerRef = useRef(null);
 
   // Local filename state for retry functionality
   const [tempFilename, setFilename] = useState(filename);
@@ -274,6 +275,10 @@ export function TaskFilePane({
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
       }
+      if (copyNoticeTimerRef.current) {
+        clearTimeout(copyNoticeTimerRef.current);
+        copyNoticeTimerRef.current = null;
+      }
     };
   }, []);
 
@@ -284,10 +289,30 @@ export function TaskFilePane({
     try {
       await navigator.clipboard.writeText(content);
       setCopyNotice({ type: "success", message: "Copied to clipboard" });
-      setTimeout(() => setCopyNotice(null), 2000);
+
+      // Clear existing timer
+      if (copyNoticeTimerRef.current) {
+        clearTimeout(copyNoticeTimerRef.current);
+      }
+
+      // Set new timer
+      copyNoticeTimerRef.current = setTimeout(() => {
+        setCopyNotice(null);
+        copyNoticeTimerRef.current = null;
+      }, 2000);
     } catch (err) {
       setCopyNotice({ type: "error", message: "Failed to copy" });
-      setTimeout(() => setCopyNotice(null), 2000);
+
+      // Clear existing timer
+      if (copyNoticeTimerRef.current) {
+        clearTimeout(copyNoticeTimerRef.current);
+      }
+
+      // Set new timer
+      copyNoticeTimerRef.current = setTimeout(() => {
+        setCopyNotice(null);
+        copyNoticeTimerRef.current = null;
+      }, 2000);
     }
   };
 
