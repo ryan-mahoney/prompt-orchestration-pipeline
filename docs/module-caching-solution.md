@@ -2,7 +2,7 @@
 
 ## Problem
 
-Node.js ESM (ECMAScript Modules) caches imported modules by their file path. This means that when you modify a task file (e.g., `demo/pipeline-config/tasks/synthesis/index.js`), subsequent imports of that module will return the cached version instead of reloading the updated code.
+Node.js ESM (ECMAScript Modules) caches imported modules by their file path. This means that when you modify a task file (e.g., `pipeline-config/content/tasks/synthesis/index.js`), subsequent imports of that module will return the cached version instead of reloading the updated code.
 
 This affects the prompt orchestration pipeline in two places:
 

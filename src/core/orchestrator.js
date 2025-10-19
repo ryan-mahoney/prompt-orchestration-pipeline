@@ -235,10 +235,16 @@ function spawnRunner(jobId, dirs, running, spawn, testMode) {
     PO_COMPLETE_DIR: dirs.complete,
     PO_PIPELINE_PATH:
       process.env.PO_PIPELINE_PATH ||
-      path.join(process.cwd(), "demo", "pipeline-config", "pipeline.json"),
+      path.join(process.cwd(), "pipeline-config", "content", "pipeline.json"),
     PO_TASK_REGISTRY:
       process.env.PO_TASK_REGISTRY ||
-      path.join(process.cwd(), "demo", "pipeline-config", "tasks", "index.js"),
+      path.join(
+        process.cwd(),
+        "pipeline-config",
+        "content",
+        "tasks",
+        "index.js"
+      ),
     // Force mock provider for testing
     PO_DEFAULT_PROVIDER: "mock",
   };

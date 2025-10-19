@@ -81,7 +81,7 @@ Validation
 Dev notes
 
 - Runtime code reads per-task config as `pipeline.taskConfig?.[taskName] || {}`. Task modules should expect an object at `ctx.taskConfig`.
-- Demo pipeline config (demo/pipeline-config/pipeline.json) already follows the canonical format.
+- Demo pipeline config (pipeline-config/content/pipeline.json) already follows the canonical format.
 - If you need to validate a pipeline file manually, use the provided validation function from `src/core/validation.js`. A small helper script can be created at `scripts/validate-pipeline.js` to call it.
 
 Acceptance checklist (for maintainers)
