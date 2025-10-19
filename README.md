@@ -163,13 +163,20 @@ flowchart TD
 ```
 my-project/
 ├── pipeline-config/
-│   ├── pipeline.json              # Pipeline definition (ordered list of task IDs)
-│   └── tasks/                     # Task implementations
-│       ├── index.js               # Task registry (maps task IDs → modules)
-│       ├── task-a/
-│       │   └── index.js
-│       └── task-b/
-│           └── index.js
+│   ├── registry.json              # Pipeline registry (maps slugs → configurations)
+│   └── pipelines/                 # Pipeline definitions (slugged layout)
+│       ├── content/
+│       │   ├── pipeline.json      # Pipeline definition (ordered list of task IDs)
+│       │   └── tasks/             # Task implementations
+│       │       ├── index.js       # Task registry (maps task IDs → modules)
+│       │       ├── task-a/
+│       │       │   └── index.js
+│       │       └── task-b/
+│       │           └── index.js
+│       └── analytics/             # Additional pipeline (example)
+│           ├── pipeline.json
+│           └── tasks/
+│               └── index.js
 ├── pipeline-data/                 # Runtime directories (auto‑created/managed)
 │   ├── pending/
 │   ├── current/
@@ -178,7 +185,29 @@ my-project/
 └── .pipelinerc.json              # Optional CLI config
 ```
 
-**`pipeline.json` (example)**
+**`pipeline-config/registry.json` (example)**
+
+```json
+{
+  "defaultSlug": "content",
+  "slugs": {
+    "content": {
+      "name": "Content Generation Pipeline",
+      "description": "Generates and processes content using LLM tasks",
+      "pipelinePath": "pipeline-config/pipelines/content/pipeline.json",
+      "taskRegistryPath": "pipeline-config/pipelines/content/tasks/index.js"
+    },
+    "analytics": {
+      "name": "Analytics Pipeline",
+      "description": "Processes data for analytics and reporting",
+      "pipelinePath": "pipeline-config/pipelines/analytics/pipeline.json",
+      "taskRegistryPath": "pipeline-config/pipelines/analytics/tasks/index.js"
+    }
+  }
+}
+```
+
+**`pipeline-config/pipelines/content/pipeline.json` (example)**
 
 ```json
 {
@@ -186,7 +215,7 @@ my-project/
 }
 ```
 
-**`pipeline-config/tasks/index.js` (example registry)**
+**`pipeline-config/pipelines/content/tasks/index.js` (example registry)**
 
 ```js
 // ESM registry mapping task IDs to loader functions or modules
@@ -196,7 +225,7 @@ export default {
 };
 ```
 
-> The orchestrator resolves task IDs from `pipeline.json` using this registry.
+> The orchestrator resolves pipeline slugs from `registry.json` and loads the corresponding pipeline configuration and task registry.
 
 ### Install & scripts
 
@@ -218,8 +247,8 @@ Add the package and scripts to your consumer project:
 
 ### CLI overview
 
-- **`pipeline-orchestrator init`** – scaffolds `pipeline-config/` and `pipeline-data/` if missing.
-- **`pipeline-orchestrator start`** – starts the orchestrator; watches `pipeline-data/pending/` for new seeds and processes them according to `pipeline-config/pipeline.json`.
+- **`pipeline-orchestrator init`** – scaffolds `pipeline-config/` with registry and default pipeline, plus `pipeline-data/` if missing.
+- **`pipeline-orchestrator start`** – starts the orchestrator; watches `pipeline-data/pending/` for new seeds and processes them using the default pipeline from `pipeline-config/registry.json`.
 - **`pipeline-orchestrator start --ui`** – starts the orchestrator and the optional UI server.
 - **`pipeline-orchestrator submit [path]`** – submits a seed into `pipeline-data/pending/` (path can point to a JSON file).
 
@@ -240,11 +269,12 @@ _(Keys and defaults may vary by version; prefer `--help` for authoritative optio
 
 ### Example flow in a consumer project
 
-1. **Initialize**: `npm run pipeline:init` to ensure folders exist.
-2. **Define**: Edit `pipeline-config/pipeline.json` and implement tasks under `pipeline-config/tasks/`.
-3. **Run**: `npm run pipeline` (or `npm run pipeline:ui` for the UI).
-4. **Submit**: Add a seed JSON to `pipeline-data/pending/` or run `npm run pipeline:submit -- ./path/to/seed.json`.
-5. **Inspect**: Watch `pipeline-data/current/{jobId}` for in‑progress artifacts and `pipeline-data/complete/{jobId}` for results.
+1. **Initialize**: `npm run pipeline:init` to create the registry and default pipeline structure.
+2. **Define**: Edit `pipeline-config/pipelines/{slug}/pipeline.json` and implement tasks under `pipeline-config/pipelines/{slug}/tasks/`.
+3. **Configure**: Update `pipeline-config/registry.json` to add new pipelines or change the default.
+4. **Run**: `npm run pipeline` (or `npm run pipeline:ui` for the UI).
+5. **Submit**: Add a seed JSON to `pipeline-data/pending/` or run `npm run pipeline:submit -- ./path/to/seed.json`.
+6. **Inspect**: Watch `pipeline-data/current/{jobId}` for in‑progress artifacts and `pipeline-data/complete/{jobId}` for results.
 
 ---
 

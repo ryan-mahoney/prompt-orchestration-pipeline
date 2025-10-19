@@ -1,0 +1,23 @@
+{
+  "defaultSlug": "content-generation",
+  "slugs": {
+    "content-generation": {
+      "name": "Content Generation Pipeline",
+      "description": "Generates and processes content using LLM tasks",
+      "pipelinePath": "demo/pipeline-config/pipelines/content-generation/pipeline.json",
+      "taskRegistryPath": "demo/pipeline-config/pipelines/content-generation/tasks/index.js"
+    },
+    "data-processing": {
+      "name": "Data Processing Pipeline",
+      "description": "Processes and transforms data for analysis",
+      "pipelinePath": "demo/pipeline-config/pipelines/data-processing/pipeline.json",
+      "taskRegistryPath": "demo/pipeline-config/pipelines/data-processing/tasks/index.js"
+    },
+    "market-analysis": {
+      "name": "Market Analysis Pipeline",
+      "description": "Analyzes market trends and generates insights",
+      "pipelinePath": "demo/pipeline-config/pipelines/market-analysis/pipeline.json",
+      "taskRegistryPath": "demo/pipeline-config/pipelines/market-analysis/tasks/index.js"
+    }
+  }
+}
