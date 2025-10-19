@@ -7,6 +7,7 @@ import React, {
 } from "react";
 import { Callout } from "@radix-ui/themes";
 import { TaskFilePane } from "./TaskFilePane.jsx";
+import { createEmptyTaskFiles } from "../utils/task-files.js";
 
 /**
  * DAGGrid component for visualizing pipeline tasks with connectors and slide-over details
@@ -16,9 +17,7 @@ import { TaskFilePane } from "./TaskFilePane.jsx";
  * @param {string} props.cardClass - Additional CSS classes for cards
  * @param {number} props.activeIndex - Index of the active item
  * @param {string} props.jobId - Job ID for file operations
- * @param {Function} props.inputFilesForItem - Function to get input files for an item
- * @param {Function} props.outputFilesForItem - Function to get output files for an item
- * @param {Function} props.getFileContent - Function to get file content
+ * @param {Function} props.filesByTypeForItem - Selector returning { artifacts, logs, tmp }
  */
 function DAGGrid({
   items,
@@ -26,9 +25,7 @@ function DAGGrid({
   cardClass = "",
   activeIndex = 0,
   jobId,
-  inputFilesForItem = () => [],
-  outputFilesForItem = () => [],
-  getFileContent = () => "",
+  filesByTypeForItem = () => createEmptyTaskFiles(),
 }) {
   const overlayRef = useRef(null);
   const gridRef = useRef(null);
@@ -272,6 +269,22 @@ function DAGGrid({
     }
   }, [openIdx]);
 
+  React.useEffect(() => {
+    setFilePaneFilename(null);
+    setFilePaneOpen(false);
+  }, [filePaneType]);
+
+  React.useEffect(() => {
+    if (openIdx === null) {
+      setFilePaneFilename(null);
+      setFilePaneOpen(false);
+      return;
+    }
+    setFilePaneType("artifacts");
+    setFilePaneFilename(null);
+    setFilePaneOpen(false);
+  }, [openIdx]);
+
   return (
     <div className="relative w-full" role="list">
       {/* SVG overlay for connector lines */}
@@ -481,23 +494,10 @@ function DAGGrid({
                 </div>
                 <div className="space-y-1">
                   {(() => {
-                    const allFiles = [
-                      ...inputFilesForItem(items[openIdx]),
-                      ...outputFilesForItem(items[openIdx]),
-                    ];
+                    const filesForStep = filesByTypeForItem(items[openIdx]);
+                    const filesForTab = filesForStep[filePaneType] ?? [];
 
-                    const filteredFiles = allFiles.filter((file) => {
-                      if (file.type === "input") {
-                        return (
-                          file.name.includes("input") ||
-                          file.name.includes("config") ||
-                          file.name.includes("schema")
-                        );
-                      }
-                      return true; // Output files are shown in all tabs
-                    });
-
-                    if (filteredFiles.length === 0) {
+                    if (filesForTab.length === 0) {
                       return (
                         <div className="text-sm text-gray-500 italic">
                           No {filePaneType} files found
@@ -505,19 +505,17 @@ function DAGGrid({
                       );
                     }
 
-                    return filteredFiles.map((file) => (
+                    return filesForTab.map((name) => (
                       <div
-                        key={file.name}
+                        key={`${filePaneType}-${name}`}
                         className="flex items-center justify-between p-2 rounded border border-gray-200 hover:border-gray-300 hover:bg-gray-50 cursor-pointer transition-colors"
                         onClick={() => {
-                          setFilePaneFilename(file.name);
+                          setFilePaneFilename(name);
                           setFilePaneOpen(true);
                         }}
                       >
                         <div className="flex items-center space-x-2">
-                          <span className="text-sm text-gray-700">
-                            {file.name}
-                          </span>
+                          <span className="text-sm text-gray-700">{name}</span>
                         </div>
                       </div>
                     ));
