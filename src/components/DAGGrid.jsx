@@ -435,7 +435,7 @@ function DAGGrid({
               {/* Error Callout - shown when task has error status and body */}
               {items[openIdx]?.status === "error" && items[openIdx]?.body && (
                 <section aria-label="Error">
-                  <Callout.Root color="red" role="alert" aria-live="assertive">
+                  <Callout.Root role="alert" aria-live="assertive">
                     <Callout.Text className="whitespace-pre-wrap break-words">
                       {items[openIdx].body}
                     </Callout.Text>
