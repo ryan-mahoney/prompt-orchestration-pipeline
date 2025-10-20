@@ -114,7 +114,7 @@ export default function JobTable({
                     <Text size="2" className="text-slate-900">
                       {job.pipelineLabel || job.pipeline || "—"}
                     </Text>
-                    {job.pipeline && (
+                    {job.pipelineLabel && job.pipeline && (
                       <Text size="1" className="text-slate-500">
                         {job.pipeline}
                       </Text>
