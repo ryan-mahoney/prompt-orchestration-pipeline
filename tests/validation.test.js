@@ -10,6 +10,7 @@ describe("validateSeed", () => {
     const seed = {
       name: "test-job",
       data: { key: "value" },
+      pipeline: "content",
     };
 
     const result = validateSeed(seed);
@@ -21,6 +22,7 @@ describe("validateSeed", () => {
     const seed = {
       name: "test-job",
       data: { key: "value" },
+      pipeline: "content",
       metadata: { author: "test" },
     };
 
@@ -89,7 +91,7 @@ describe("validateSeed", () => {
     ];
 
     for (const name of validNames) {
-      const seed = { name, data: {} };
+      const seed = { name, data: {}, pipeline: "content" };
       const result = validateSeed(seed);
       expect(result.valid).toBe(true);
     }
@@ -203,6 +205,7 @@ describe("validateSeedOrThrow", () => {
     const seed = {
       name: "test-job",
       data: { key: "value" },
+      pipeline: "content",
     };
 
     expect(() => validateSeedOrThrow(seed)).not.toThrow();
@@ -240,6 +243,7 @@ describe("Edge Cases", () => {
     const seed = {
       name: "test-job",
       data: {},
+      pipeline: "content",
     };
 
     const result = validateSeed(seed);
@@ -250,6 +254,7 @@ describe("Edge Cases", () => {
     const seed = {
       name: "test-job",
       data: {},
+      pipeline: "content",
       metadata: {},
     };
 
@@ -268,6 +273,7 @@ describe("Edge Cases", () => {
         },
         array: [1, 2, 3],
       },
+      pipeline: "content",
     };
 
     const result = validateSeed(seed);
@@ -278,6 +284,7 @@ describe("Edge Cases", () => {
     const seed = {
       name: "test-job",
       data: {},
+      pipeline: "content",
       metadata: {
         author: "test",
         timestamp: new Date().toISOString(),

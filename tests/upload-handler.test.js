@@ -40,6 +40,7 @@ describe("Upload Handler (Step 2)", () => {
       const validSeed = {
         name: "test-job-1",
         data: { test: "data" },
+        pipeline: "content",
       };
 
       const result = await submitJobWithValidation({
@@ -77,6 +78,7 @@ describe("Upload Handler (Step 2)", () => {
       const invalidSeed = {
         // Missing name field
         data: { test: "data" },
+        pipeline: "content",
       };
 
       const result = await submitJobWithValidation({
@@ -92,6 +94,7 @@ describe("Upload Handler (Step 2)", () => {
       const seed = {
         name: "duplicate-job",
         data: { test: "data" },
+        pipeline: "content",
       };
 
       // First upload should succeed
@@ -118,6 +121,7 @@ describe("Upload Handler (Step 2)", () => {
       const invalidSeed = {
         name: "partial-job",
         // Missing data field
+        pipeline: "content",
       };
 
       const result = await submitJobWithValidation({
@@ -142,6 +146,40 @@ describe("Upload Handler (Step 2)", () => {
         // File doesn't exist, which is expected
         expect(error.code).toBe("ENOENT");
       }
+    });
+
+    it("should reject missing pipeline field", async () => {
+      const invalidSeed = {
+        name: "test-job",
+        data: { test: "data" },
+        // Missing pipeline field
+      };
+
+      const result = await submitJobWithValidation({
+        dataDir: tempDir,
+        seedObject: invalidSeed,
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.message).toBe("Required fields missing");
+    });
+
+    it("should reject unknown pipeline slug", async () => {
+      const invalidSeed = {
+        name: "test-job",
+        data: { test: "data" },
+        pipeline: "unknown-slug",
+      };
+
+      const result = await submitJobWithValidation({
+        dataDir: tempDir,
+        seedObject: invalidSeed,
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.message).toContain(
+        "Pipeline unknown-slug not found in registry"
+      );
     });
   });
 });

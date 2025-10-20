@@ -5,6 +5,7 @@
 
 import { promises as fs } from "fs";
 import path from "path";
+import { getPipelineConfig } from "../../core/config.js";
 
 /**
  * Validate JSON string and parse it
@@ -37,6 +38,14 @@ function validateRequiredFields(seedObject) {
 
   if (!seedObject.data || typeof seedObject.data !== "object") {
     throw new Error("data field is required");
+  }
+
+  if (
+    !seedObject.pipeline ||
+    typeof seedObject.pipeline !== "string" ||
+    seedObject.pipeline.trim() === ""
+  ) {
+    throw new Error("pipeline field is required");
   }
 
   return seedObject;
@@ -103,7 +112,10 @@ async function validateSeed(jsonString, baseDir) {
   // Step 3: Validate name format
   validateNameFormat(validatedObject.name);
 
-  // Step 4: Check for duplicates
+  // Step 4: Validate pipeline slug against registry
+  getPipelineConfig(validatedObject.pipeline);
+
+  // Step 5: Check for duplicates
   const isDuplicate = await checkDuplicateJob(baseDir, validatedObject.name);
   if (isDuplicate) {
     throw new Error("Job with this name already exists");

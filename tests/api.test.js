@@ -50,9 +50,6 @@ describe("API Module", () => {
     it("should create orchestrator with default config", async () => {
       // Arrange
       vi.spyOn(fs, "mkdir").mockResolvedValue();
-      vi.spyOn(fs, "readFile").mockResolvedValue(
-        JSON.stringify({ tasks: ["test-task"] })
-      );
 
       // Act
       const state = await apiModule.createPipelineOrchestrator();
@@ -62,15 +59,13 @@ describe("API Module", () => {
       expect(state.config.autoStart).toBe(true);
       expect(state.config.ui).toBe(false);
       expect(state.orchestrator).toBe(mockOrchestrator);
+      expect(state.pipelineDefinition).toBeUndefined();
       // Note: startOrchestrator auto-starts when autoStart=true, but there's no separate start method to call
     });
 
     it("should create orchestrator with custom config", async () => {
       // Arrange
       vi.spyOn(fs, "mkdir").mockResolvedValue();
-      vi.spyOn(fs, "readFile").mockResolvedValue(
-        JSON.stringify({ tasks: ["test-task"] })
-      );
 
       const customOptions = {
         rootDir: "/custom",
@@ -87,15 +82,13 @@ describe("API Module", () => {
       expect(state.config.dataDir).toBe("my-data");
       expect(state.config.configDir).toBe("my-config");
       expect(state.config.autoStart).toBe(false);
+      expect(state.pipelineDefinition).toBeUndefined();
       // Note: startOrchestrator doesn't auto-start when autoStart=false
     });
 
     it("should start UI server when configured", async () => {
       // Arrange
       vi.spyOn(fs, "mkdir").mockResolvedValue();
-      vi.spyOn(fs, "readFile").mockResolvedValue(
-        JSON.stringify({ tasks: ["test-task"] })
-      );
 
       // Act
       const state = await apiModule.createPipelineOrchestrator({
@@ -105,20 +98,19 @@ describe("API Module", () => {
 
       // Assert
       expect(state.uiServer).toBe(mockUIServer);
+      expect(state.pipelineDefinition).toBeUndefined();
     });
 
     it("should not start UI server when disabled", async () => {
       // Arrange
       vi.spyOn(fs, "mkdir").mockResolvedValue();
-      vi.spyOn(fs, "readFile").mockResolvedValue(
-        JSON.stringify({ tasks: ["test-task"] })
-      );
 
       // Act
       const state = await apiModule.createPipelineOrchestrator({ ui: false });
 
       // Assert
       expect(state.uiServer).toBeNull();
+      expect(state.pipelineDefinition).toBeUndefined();
     });
   });
 
@@ -128,7 +120,11 @@ describe("API Module", () => {
       const state = {
         paths: { pending: "/test/pending" },
       };
-      const seed = { name: "test-job", data: { test: "value" } };
+      const seed = {
+        name: "test-job",
+        pipeline: "content",
+        data: { test: "value" },
+      };
 
       // Act & Assert
       await expect(apiModule.submitJob(state, seed)).rejects.toThrow(
@@ -390,9 +386,6 @@ describe("API Module", () => {
       it("should create PipelineOrchestrator instance", async () => {
         // Arrange
         vi.spyOn(fs, "mkdir").mockResolvedValue();
-        vi.spyOn(fs, "readFile").mockResolvedValue(
-          JSON.stringify({ tasks: ["test-task"] })
-        );
 
         // Act
         const instance = await apiModule.PipelineOrchestrator.create();
@@ -411,7 +404,6 @@ describe("API Module", () => {
         // Arrange
         vi.spyOn(fs, "mkdir").mockResolvedValue();
         vi.spyOn(fs, "readFile")
-          .mockResolvedValueOnce(JSON.stringify({ tasks: ["test-task"] })) // Pipeline config
           .mockRejectedValueOnce(new Error("Not found")) // Current directory status
           .mockRejectedValueOnce(new Error("Not found")); // Complete directory status
         vi.spyOn(fs, "readdir").mockResolvedValue([]); // Empty job list
@@ -426,6 +418,7 @@ describe("API Module", () => {
         await expect(
           instance.submitJob({
             name: "test-job",
+            pipeline: "content",
             data: { test: "value" },
           })
         ).rejects.toThrow(

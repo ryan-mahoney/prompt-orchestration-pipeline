@@ -94,9 +94,12 @@ describe("Job Endpoints Integration", () => {
         .spyOn(fs, "readFile")
         .mockResolvedValue(JSON.stringify(mockPipelineConfig));
 
-      // Mock the config path resolution
+      // Mock the config path resolution (no longer includes pipeline)
       vi.spyOn(configBridge, "getPATHS").mockReturnValue({
-        pipeline: "/mock/path/to/pipeline.json",
+        current: "/mock/path/to/current",
+        complete: "/mock/path/to/complete",
+        pending: "/mock/path/to/pending",
+        rejected: "/mock/path/to/rejected",
       });
 
       // Mock readJob to return a valid job
@@ -154,9 +157,12 @@ describe("Job Endpoints Integration", () => {
         .spyOn(fs, "readFile")
         .mockRejectedValue(new Error("ENOENT: no such file or directory"));
 
-      // Mock the config path resolution
+      // Mock the config path resolution (no longer includes pipeline)
       vi.spyOn(configBridge, "getPATHS").mockReturnValue({
-        pipeline: "/mock/path/to/pipeline.json",
+        current: "/mock/path/to/current",
+        complete: "/mock/path/to/complete",
+        pending: "/mock/path/to/pending",
+        rejected: "/mock/path/to/rejected",
       });
 
       // Mock readJob to return a valid job
@@ -218,9 +224,12 @@ describe("Job Endpoints Integration", () => {
         .spyOn(fs, "readFile")
         .mockResolvedValue(JSON.stringify(mockPipelineConfig));
 
-      // Mock the config path resolution
+      // Mock the config path resolution (no longer includes pipeline)
       vi.spyOn(configBridge, "getPATHS").mockReturnValue({
-        pipeline: "/mock/path/to/pipeline.json",
+        current: "/mock/path/to/current",
+        complete: "/mock/path/to/complete",
+        pending: "/mock/path/to/pending",
+        rejected: "/mock/path/to/rejected",
       });
 
       // Mock readJob to return a job with all expected fields

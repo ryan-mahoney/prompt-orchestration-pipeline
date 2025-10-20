@@ -9,6 +9,7 @@ import {
   checkDuplicateJob,
   validateSeed,
 } from "../src/api/validators/seed.js";
+import { validateSeed as validateSeedAjv } from "../src/core/validation.js";
 
 describe("Seed Validation Utilities", () => {
   let tempDir;
@@ -46,14 +47,18 @@ describe("Seed Validation Utilities", () => {
 
   describe("validateRequiredFields", () => {
     it("should validate object with required fields", () => {
-      const validObject = { name: "test-job", data: { key: "value" } };
+      const validObject = {
+        name: "test-job",
+        data: { key: "value" },
+        pipeline: "content",
+      };
       const result = validateRequiredFields(validObject);
 
       expect(result).toEqual(validObject);
     });
 
     it("should throw error with 'required' for missing name field", () => {
-      const invalidObject = { data: { key: "value" } };
+      const invalidObject = { data: { key: "value" }, pipeline: "content" };
 
       expect(() => validateRequiredFields(invalidObject)).toThrow(
         "name field is required"
@@ -61,7 +66,11 @@ describe("Seed Validation Utilities", () => {
     });
 
     it("should throw error with 'required' for empty name field", () => {
-      const invalidObject = { name: "", data: { key: "value" } };
+      const invalidObject = {
+        name: "",
+        data: { key: "value" },
+        pipeline: "content",
+      };
 
       expect(() => validateRequiredFields(invalidObject)).toThrow(
         "name field is required"
@@ -69,7 +78,7 @@ describe("Seed Validation Utilities", () => {
     });
 
     it("should throw error with 'required' for missing data field", () => {
-      const invalidObject = { name: "test-job" };
+      const invalidObject = { name: "test-job", pipeline: "content" };
 
       expect(() => validateRequiredFields(invalidObject)).toThrow(
         "data field is required"
@@ -77,10 +86,46 @@ describe("Seed Validation Utilities", () => {
     });
 
     it("should throw error with 'required' for non-object data field", () => {
-      const invalidObject = { name: "test-job", data: "not-an-object" };
+      const invalidObject = {
+        name: "test-job",
+        data: "not-an-object",
+        pipeline: "content",
+      };
 
       expect(() => validateRequiredFields(invalidObject)).toThrow(
         "data field is required"
+      );
+    });
+
+    it("should throw error with 'required' for missing pipeline field", () => {
+      const invalidObject = { name: "test-job", data: { key: "value" } };
+
+      expect(() => validateRequiredFields(invalidObject)).toThrow(
+        "pipeline field is required"
+      );
+    });
+
+    it("should throw error with 'required' for empty pipeline field", () => {
+      const invalidObject = {
+        name: "test-job",
+        data: { key: "value" },
+        pipeline: "",
+      };
+
+      expect(() => validateRequiredFields(invalidObject)).toThrow(
+        "pipeline field is required"
+      );
+    });
+
+    it("should throw error with 'required' for non-string pipeline field", () => {
+      const invalidObject = {
+        name: "test-job",
+        data: { key: "value" },
+        pipeline: 123,
+      };
+
+      expect(() => validateRequiredFields(invalidObject)).toThrow(
+        "pipeline field is required"
       );
     });
   });
@@ -185,6 +230,7 @@ describe("Seed Validation Utilities", () => {
       const validSeed = JSON.stringify({
         name: "test-job",
         data: { key: "value" },
+        pipeline: "content",
       });
 
       const result = await validateSeed(validSeed, tempDir);
@@ -192,6 +238,7 @@ describe("Seed Validation Utilities", () => {
       expect(result).toEqual({
         name: "test-job",
         data: { key: "value" },
+        pipeline: "content",
       });
     });
 
@@ -204,7 +251,10 @@ describe("Seed Validation Utilities", () => {
     });
 
     it("should throw 'required' for missing name field", async () => {
-      const missingName = JSON.stringify({ data: { key: "value" } });
+      const missingName = JSON.stringify({
+        data: { key: "value" },
+        pipeline: "content",
+      });
 
       await expect(validateSeed(missingName, tempDir)).rejects.toThrow(
         "name field is required"
@@ -215,6 +265,7 @@ describe("Seed Validation Utilities", () => {
       const invalidName = JSON.stringify({
         name: "test job",
         data: { key: "value" },
+        pipeline: "content",
       });
 
       await expect(validateSeed(invalidName, tempDir)).rejects.toThrow(
@@ -227,6 +278,7 @@ describe("Seed Validation Utilities", () => {
       const validSeed = JSON.stringify({
         name: jobName,
         data: { key: "value" },
+        pipeline: "content",
       });
 
       // Create a pending file to simulate duplicate
@@ -249,6 +301,7 @@ describe("Seed Validation Utilities", () => {
       const validSeed = JSON.stringify({
         name: jobName,
         data: { key: "value" },
+        pipeline: "content",
       });
 
       const result = await validateSeed(validSeed, tempDir);
@@ -256,7 +309,110 @@ describe("Seed Validation Utilities", () => {
       expect(result).toEqual({
         name: jobName,
         data: { key: "value" },
+        pipeline: "content",
       });
+    });
+
+    it("should throw error for missing pipeline field", async () => {
+      const missingPipeline = JSON.stringify({
+        name: "test-job",
+        data: { key: "value" },
+      });
+
+      await expect(validateSeed(missingPipeline, tempDir)).rejects.toThrow(
+        "pipeline field is required"
+      );
+    });
+
+    it("should throw error for unknown pipeline slug", async () => {
+      const unknownPipeline = JSON.stringify({
+        name: "test-job",
+        data: { key: "value" },
+        pipeline: "unknown-slug",
+      });
+
+      await expect(validateSeed(unknownPipeline, tempDir)).rejects.toThrow(
+        "Pipeline unknown-slug not found in registry"
+      );
+    });
+  });
+
+  describe("Ajv Validation Tests", () => {
+    it("should fail Ajv validation when pipeline is missing", () => {
+      const seedWithoutPipeline = {
+        name: "test-job",
+        data: { key: "value" },
+      };
+
+      const result = validateSeedAjv(seedWithoutPipeline);
+
+      expect(result.valid).toBe(false);
+      expect(result.errors).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            message: "must have required property 'pipeline'",
+            keyword: "required",
+          }),
+        ])
+      );
+    });
+
+    it("should fail Ajv validation when pipeline is not in registry", () => {
+      const seedWithUnknownPipeline = {
+        name: "test-job",
+        data: { key: "value" },
+        pipeline: "does-not-exist",
+      };
+
+      const result = validateSeedAjv(seedWithUnknownPipeline);
+
+      expect(result.valid).toBe(false);
+      expect(result.errors).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            message: "must be equal to one of the allowed values",
+            keyword: "enum",
+          }),
+        ])
+      );
+    });
+
+    it("should pass Ajv validation when pipeline is valid", () => {
+      const seedWithValidPipeline = {
+        name: "test-job",
+        data: { key: "value" },
+        pipeline: "content",
+      };
+
+      const result = validateSeedAjv(seedWithValidPipeline);
+
+      expect(result.valid).toBe(true);
+      expect(result.errors).toBeUndefined();
+    });
+  });
+
+  describe("Imperative Validator Tests", () => {
+    it("should throw 'pipeline field is required' when no pipeline is present", async () => {
+      const seedWithoutPipeline = JSON.stringify({
+        name: "test-job",
+        data: { key: "value" },
+      });
+
+      await expect(validateSeed(seedWithoutPipeline, tempDir)).rejects.toThrow(
+        "pipeline field is required"
+      );
+    });
+
+    it("should throw when the slug is not in the registry", async () => {
+      const seedWithUnknownPipeline = JSON.stringify({
+        name: "test-job",
+        data: { key: "value" },
+        pipeline: "unknown-slug",
+      });
+
+      await expect(
+        validateSeed(seedWithUnknownPipeline, tempDir)
+      ).rejects.toThrow("Pipeline unknown-slug not found in registry");
     });
   });
 });

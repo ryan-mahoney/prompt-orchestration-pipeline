@@ -56,6 +56,7 @@ describe("Upload API (Step 2)", () => {
     it("should accept valid seed file upload", async () => {
       const validSeed = {
         name: "test-job-1",
+        pipeline: "content",
         data: { test: "data" },
       };
 
@@ -191,6 +192,7 @@ describe("Upload API (Step 2)", () => {
     it("should allow duplicate job names with different job IDs", async () => {
       const seed = {
         name: "duplicate-job",
+        pipeline: "content",
         data: { test: "data" },
       };
 
@@ -298,6 +300,7 @@ describe("Upload API (Step 2)", () => {
     it("should create only ID-based folders after upload (Step 6 verification)", async () => {
       const validSeed = {
         name: "test-job-id-only",
+        pipeline: "content",
         data: { test: "id-only-verification" },
       };
 

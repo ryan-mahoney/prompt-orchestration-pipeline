@@ -15,9 +15,9 @@ import {
   File,
   EventSource,
 } from "./utils/index.js";
+import { getConfig } from "../src/core/config.js";
 import { startTestServer } from "./utils/serverHelper.js";
 import { createTempDir } from "./test-utils.js";
-import { registerMockProvider } from "../src/llm/index.js";
 
 const SSE_PATH = process.env.SSE_PATH || "/api/sse";
 const UPLOAD_SEED_PATH = process.env.UPLOAD_SEED_PATH || "/api/upload/seed";
@@ -33,44 +33,6 @@ async function waitFor(checkFn, { timeout = 5000, interval = 50 } = {}) {
     // eslint-disable-next-line no-await-in-loop
     await new Promise((r) => setTimeout(r, interval));
   }
-}
-
-/** Wait for a typed SSE event with a hard timeout. */
-function waitForSSE(eventSource, eventType, { timeout = 3000 } = {}) {
-  return new Promise((resolve, reject) => {
-    let timer = setTimeout(() => {
-      cleanup();
-      reject(new Error(`Timed out waiting for SSE event "${eventType}"`));
-    }, timeout);
-
-    function onTyped(ev) {
-      cleanup();
-      resolve(ev);
-    }
-
-    function onMessage(ev) {
-      // Some polyfills expose ev.event on 'message'; be forgiving.
-      if (ev?.event === eventType) {
-        cleanup();
-        resolve(ev);
-      }
-    }
-
-    function onError(_err) {
-      // Intentionally swallow transient SSE errors to avoid flakiness.
-    }
-
-    function cleanup() {
-      clearTimeout(timer);
-      eventSource.removeEventListener(eventType, onTyped);
-      eventSource.removeEventListener("message", onMessage);
-      eventSource.onerror = null;
-    }
-
-    eventSource.addEventListener(eventType, onTyped);
-    eventSource.addEventListener("message", onMessage);
-    eventSource.onerror = onError;
-  });
 }
 
 // --- Child process mock: simulate successful pipeline completion
@@ -191,6 +153,20 @@ export async function integration(context) {
       `export default ${JSON.stringify(taskRegistry, null, 2)};`
     );
 
+    // Instrumentation: capture which pipelines are visible before orchestrator boot
+    try {
+      const pipelines = Object.keys(getConfig()?.pipelines ?? {});
+      console.log(
+        "[E2E Upload] Pipelines visible to getConfig() before orchestrator start:",
+        pipelines.join(", ") || "(none)"
+      );
+    } catch (error) {
+      console.log(
+        "[E2E Upload] Failed to read pipelines from getConfig():",
+        error.message
+      );
+    }
+
     // Start orchestrator watching the SAME dir the server writes to
     console.log("Starting orchestrator...");
     orchestrator = await startOrchestrator({ dataDir });
@@ -241,6 +217,7 @@ export async function integration(context) {
     const job = `job-${Date.now()}`;
     const seed = {
       name: job,
+      pipeline: "content",
       data: {
         type: "content-creation",
         topic: "Test Topic for E2E Test",
