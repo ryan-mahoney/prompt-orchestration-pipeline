@@ -134,7 +134,7 @@ async function handleSeedUploadDirect(seedObject, dataDir) {
     const jobMetadata = {
       id: jobId,
       name: seedObject.name,
-      pipelineName: seedObject.pipeline || "default",
+      pipeline: seedObject.pipeline || "default",
       createdAt: new Date().toISOString(),
       status: "pending",
     };
