@@ -35,6 +35,11 @@ vi.mock("../src/ui/config-bridge.js", () => ({
   },
   createErrorResponse: vi.fn(),
   validateJobId: vi.fn(),
+  CONFIG: {
+    featureFlags: {
+      includePipelineMetadata: false,
+    },
+  },
 }));
 
 // Import the mocked modules
@@ -207,7 +212,9 @@ describe("Job Endpoints", () => {
         mockTransformedJobs.filter((job) => job.location === "current"),
         mockTransformedJobs.filter((job) => job.location === "complete")
       );
-      expect(transformJobListForAPI).toHaveBeenCalledWith(mockAggregatedJobs);
+      expect(transformJobListForAPI).toHaveBeenCalledWith(mockAggregatedJobs, {
+        includePipelineMetadata: true,
+      });
     });
 
     it("should handle empty job lists", async () => {
