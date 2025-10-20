@@ -12,7 +12,6 @@ export function derivePipelineMetadata(source = {}) {
   const pipelineValue = source?.pipeline;
   const pipelineSlugFromSource =
     source?.pipelineSlug ??
-    source?.pipeline_name ??
     (typeof pipelineValue === "string" ? pipelineValue : null);
 
   const pipelineLabel =
