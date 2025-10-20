@@ -16,10 +16,7 @@ import { generateJobId } from "../utils/id-generator.js";
 
 // Pure functional utilities
 const createPaths = (config) => {
-  const {
-    rootDir,
-    dataDir = "pipeline-data",
-  } = config;
+  const { rootDir, dataDir = "pipeline-data" } = config;
   return {
     pending: path.join(rootDir, dataDir, "pending"),
     current: path.join(rootDir, dataDir, "current"),
@@ -59,7 +56,7 @@ const loadPipelineDefinition = async (pipelinePath) => {
 
 const createOrchestrator = (paths, pipelineDefinition, rootDir) =>
   // Accept an explicit rootDir (project root) to avoid passing a subpath.
-  // If not provided, fall back to the (possibly-misused) pending path for backward-compat.
+  // Pipeline is mandatory - see docs/plans/multi-pipeline-backend-plan-PR2.md
   startOrchestrator({ dataDir: rootDir || paths.pending });
 
 // Main API functions
@@ -68,16 +65,12 @@ export const createPipelineOrchestrator = async (options = {}) => {
   const paths = createPaths(config);
 
   await ensureDirectories(paths);
-  
-  // Use the new registry API to get pipeline configuration
-  const pipelineConfig = getPipelineConfig("content");
-  const pipelineDefinition = await loadPipelineDefinition(pipelineConfig.pipelineJsonPath);
-  
+
   // Pass config.rootDir as the orchestrator dataDir root so the orchestrator resolves
   // pipeline-data/... correctly (avoids duplicate path segments).
   const orchestrator = await createOrchestrator(
     paths,
-    pipelineDefinition,
+    null, // unused - pipeline definition will be loaded per-job
     config.rootDir
   );
 
@@ -86,7 +79,7 @@ export const createPipelineOrchestrator = async (options = {}) => {
   const state = {
     config,
     paths,
-    pipelineDefinition,
+    pipelineDefinition: undefined, // TODO: multi-pipeline UI will provide per-slug previews from snapshots
     orchestrator,
     uiServer,
   };
@@ -152,7 +145,7 @@ export const submitJobWithValidation = async ({ dataDir, seedObject }) => {
     const jobMetadata = {
       id: jobId,
       name: validatedSeed.name,
-      pipelineName: validatedSeed.pipeline || "default",
+      pipelineName: validatedSeed.pipeline,
       createdAt: new Date().toISOString(),
       status: "pending",
     };
@@ -160,18 +153,27 @@ export const submitJobWithValidation = async ({ dataDir, seedObject }) => {
     // Read pipeline configuration for snapshot
     let pipelineSnapshot = null;
     try {
-      // Use the new registry API to get pipeline configuration
-      const pipelineConfig = getPipelineConfig("content");
-      const pipelineContent = await fs.readFile(
-        pipelineConfig.pipelineJsonPath,
-        "utf8"
-      );
+      // Compute snapshot path from the seed-derived slug
+      const pipelineSlug = validatedSeed.pipeline;
+      const { pipelineJsonPath } = getPipelineConfig(pipelineSlug);
+      const pipelineContent = await fs.readFile(pipelineJsonPath, "utf8");
       pipelineSnapshot = JSON.parse(pipelineContent);
     } catch (error) {
+      // Handle unknown pipeline slug
+      if (
+        error.message.includes("Unknown pipeline") ||
+        error.message.includes("not found")
+      ) {
+        const errorMessage = "Unknown pipeline slug: " + validatedSeed.pipeline;
+        return {
+          success: false,
+          message: errorMessage,
+        };
+      }
       // If pipeline config doesn't exist, create a minimal snapshot
       pipelineSnapshot = {
         tasks: [],
-        name: validatedSeed.pipeline || "default",
+        name: validatedSeed.pipeline,
       };
     }
 
