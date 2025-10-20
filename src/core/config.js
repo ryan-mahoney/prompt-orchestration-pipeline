@@ -5,8 +5,147 @@
  * supporting both environment variables and config file overrides.
  */
 
-import { promises as fs } from "node:fs";
+import { promises as fs, existsSync, readFileSync } from "node:fs";
 import path from "node:path";
+
+async function checkFileExistence(filePath) {
+  try {
+    await fs.access(filePath);
+    return true;
+  } catch (error) {
+    if (error.code === "ENOENT") {
+      return false;
+    } else {
+      throw error; // Re-throw other errors
+    }
+  }
+}
+
+function resolveRepoRoot(config) {
+  const configuredRoot = config?.paths?.root;
+  return configuredRoot ? path.resolve(configuredRoot) : process.cwd();
+}
+
+function resolveWithBase(rootDir, maybePath) {
+  if (!maybePath) {
+    return undefined;
+  }
+  return path.isAbsolute(maybePath)
+    ? maybePath
+    : path.resolve(rootDir, maybePath);
+}
+
+function normalizeRegistryEntry(slug, entry, rootDir) {
+  const pipelineJsonPath = entry?.pipelineJsonPath
+    ? resolveWithBase(rootDir, entry.pipelineJsonPath)
+    : undefined;
+
+  const configDir = entry?.configDir
+    ? resolveWithBase(rootDir, entry.configDir)
+    : pipelineJsonPath
+      ? path.dirname(pipelineJsonPath)
+      : path.join(rootDir, "pipeline-config", slug);
+
+  const tasksDir = entry?.tasksDir
+    ? resolveWithBase(rootDir, entry.tasksDir)
+    : path.join(configDir, "tasks");
+
+  return {
+    configDir,
+    tasksDir,
+    name: entry?.name,
+    description: entry?.description,
+  };
+}
+
+async function hydratePipelinesFromRegistry(config) {
+  const rootDir = resolveRepoRoot(config);
+  const registryPath = path.join(rootDir, "pipeline-config", "registry.json");
+
+  let registryData;
+  try {
+    const contents = await fs.readFile(registryPath, "utf8");
+    registryData = JSON.parse(contents);
+  } catch (error) {
+    if (error?.code === "ENOENT") {
+      return;
+    }
+    throw new Error(
+      "Failed to read pipeline registry at " +
+        registryPath +
+        ": " +
+        error.message
+    );
+  }
+
+  if (
+    !registryData ||
+    typeof registryData !== "object" ||
+    !registryData.pipelines ||
+    typeof registryData.pipelines !== "object"
+  ) {
+    return;
+  }
+
+  const resolved = {};
+  for (const [slug, entry] of Object.entries(registryData.pipelines)) {
+    const normalized = normalizeRegistryEntry(slug, entry, rootDir);
+    resolved[slug] = normalized;
+  }
+
+  if (Object.keys(resolved).length > 0) {
+    config.pipelines = resolved;
+  }
+
+  if (registryData.defaultSlug && !config.defaultPipelineSlug) {
+    config.defaultPipelineSlug = registryData.defaultSlug;
+  }
+}
+
+function hydratePipelinesFromRegistrySync(config) {
+  const rootDir = resolveRepoRoot(config);
+  const registryPath = path.join(rootDir, "pipeline-config", "registry.json");
+
+  if (!existsSync(registryPath)) {
+    return;
+  }
+
+  let registryData;
+  try {
+    const contents = readFileSync(registryPath, "utf8");
+    registryData = JSON.parse(contents);
+  } catch (error) {
+    throw new Error(
+      "Failed to read pipeline registry at " +
+        registryPath +
+        ": " +
+        error.message
+    );
+  }
+
+  if (
+    !registryData ||
+    typeof registryData !== "object" ||
+    !registryData.pipelines ||
+    typeof registryData.pipelines !== "object"
+  ) {
+    return;
+  }
+
+  const resolved = {};
+  for (const [slug, entry] of Object.entries(registryData.pipelines)) {
+    const normalized = normalizeRegistryEntry(slug, entry, rootDir);
+    resolved[slug] = normalized;
+  }
+
+  if (Object.keys(resolved).length > 0) {
+    config.pipelines = resolved;
+  }
+
+  if (registryData.defaultSlug && !config.defaultPipelineSlug) {
+    config.defaultPipelineSlug = registryData.defaultSlug;
+  }
+}
 
 /**
  * Default configuration values
@@ -80,8 +219,8 @@ export const defaultConfig = {
   pipelines: {
     content: {
       configDir: "pipeline-config/content",
-      tasksDir: "pipeline-config/content/tasks"
-    }
+      tasksDir: "pipeline-config/content/tasks",
+    },
   },
   validation: {
     seedNameMinLength: 1,
@@ -319,6 +458,9 @@ export async function loadConfig(options = {}) {
   // Override with environment variables
   config = loadFromEnvironment(config);
 
+  // Hydrate pipeline registry if present
+  await hydratePipelinesFromRegistry(config);
+
   // Normalize pipeline paths and validate existence
   if (config.pipelines) {
     const repoRoot = process.cwd(); // Use current working directory as repo root
@@ -331,16 +473,16 @@ export async function loadConfig(options = {}) {
       pipeline.tasksDir = path.resolve(repoRoot, pipeline.tasksDir);
 
       // Validate directory existence
-      if (!fs.existsSync(pipeline.configDir)) {
+      if (!(await checkFileExistence(pipeline.configDir))) {
         throw new Error(pipeline.configDir + " does not exist");
       }
-      if (!fs.existsSync(pipeline.tasksDir)) {
+      if (!(await checkFileExistence(pipeline.tasksDir))) {
         throw new Error(pipeline.tasksDir + " does not exist");
       }
 
       // Validate pipeline.json exists
       const pipelineJsonPath = path.join(pipeline.configDir, "pipeline.json");
-      if (!fs.existsSync(pipelineJsonPath)) {
+      if (!(await checkFileExistence(pipelineJsonPath))) {
         throw new Error(pipelineJsonPath + " does not exist");
       }
     }
@@ -369,6 +511,7 @@ export function getConfig() {
     currentConfig = loadFromEnvironment(
       JSON.parse(JSON.stringify(defaultConfig))
     );
+    hydratePipelinesFromRegistrySync(currentConfig);
   }
   return currentConfig;
 }

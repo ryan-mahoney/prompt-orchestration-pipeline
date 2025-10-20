@@ -6,7 +6,7 @@
 import path from "node:path";
 import { promises as fs } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { getDefaultPipelineConfig } from "../core/config.js";
+import { getPipelineConfig } from "../core/config.js";
 
 // Get current directory for path resolution
 const __filename = fileURLToPath(import.meta.url);
@@ -102,9 +102,11 @@ export function resolvePipelinePaths() {
   // Use pipeline configuration registry for pipeline definition path
   let pipelinePath;
   try {
-    const pipelineConfig = getDefaultPipelineConfig();
+    // Get pipeline slug from environment or use default
+    const pipelineSlug = process.env.PO_PIPELINE_SLUG || "content";
+    const pipelineConfig = getPipelineConfig(pipelineSlug);
     if (pipelineConfig) {
-      pipelinePath = pipelineConfig.pipelinePath;
+      pipelinePath = pipelineConfig.pipelineJsonPath;
     } else {
       // Fallback to legacy path for backward compatibility
       pipelinePath = getLegacyPipelinePath(base);

@@ -3,7 +3,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { runPipeline } from "./task-runner.js";
 import { validatePipelineOrThrow } from "./validation.js";
-import { getDefaultPipelineConfig } from "./config.js";
+import { getPipelineConfig } from "./config.js";
 
 const ROOT = process.env.PO_ROOT || process.cwd();
 const DATA_DIR = path.join(ROOT, process.env.PO_DATA_DIR || "pipeline-data");
@@ -12,18 +12,22 @@ const CURRENT_DIR =
 const COMPLETE_DIR =
   process.env.PO_COMPLETE_DIR || path.join(DATA_DIR, "complete");
 
-// Use pipeline configuration registry as primary source
-const pipelineConfig = getDefaultPipelineConfig();
-if (!pipelineConfig) {
+// Get pipeline slug from environment or job status
+const pipelineSlug = process.env.PO_PIPELINE_SLUG;
+if (!pipelineSlug) {
   throw new Error(
-    "No pipeline configuration available. Ensure that 'pipeline-config/registry.json' exists and contains a valid 'defaultSlug' configuration."
+    "Pipeline slug is required. Set PO_PIPELINE_SLUG environment variable."
   );
 }
 
+// Use explicit pipeline configuration
+const pipelineConfig = getPipelineConfig(pipelineSlug);
+
 const TASK_REGISTRY =
-  process.env.PO_TASK_REGISTRY || pipelineConfig.taskRegistryPath;
+  process.env.PO_TASK_REGISTRY ||
+  path.join(pipelineConfig.tasksDir, "index.js");
 const PIPELINE_DEF_PATH =
-  process.env.PO_PIPELINE_PATH || pipelineConfig.pipelinePath;
+  process.env.PO_PIPELINE_PATH || pipelineConfig.pipelineJsonPath;
 
 const jobId = process.argv[2];
 if (!jobId) throw new Error("runner requires jobId as argument");
