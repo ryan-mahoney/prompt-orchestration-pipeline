@@ -93,15 +93,44 @@ describe("orchestrator", () => {
     tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "orch-"));
     process.chdir(tmpDir);
 
+    // Set PO_ROOT so config module finds our test registry
+    process.env.PO_ROOT = tmpDir;
+
     // Create pipeline configuration files needed by pipeline-runner
     const pipelineConfigDir = path.join(tmpDir, "pipeline-config");
     const tasksDir = path.join(pipelineConfigDir, "tasks");
 
     await fs.mkdir(tasksDir, { recursive: true });
 
-    // Create pipeline.json
+    // Create pipeline registry for multi-pipeline architecture
     await fs.writeFile(
-      path.join(pipelineConfigDir, "pipeline.json"),
+      path.join(pipelineConfigDir, "registry.json"),
+      JSON.stringify({
+        defaultSlug: "test",
+        pipelines: {
+          test: {
+            name: "Test Pipeline",
+            description: "Test pipeline for orchestrator tests",
+            pipelineJsonPath: path.join(
+              pipelineConfigDir,
+              "test",
+              "pipeline.json"
+            ),
+            tasksDir: path.join(pipelineConfigDir, "test", "tasks"),
+          },
+        },
+      }),
+      "utf8"
+    );
+
+    // Create test pipeline directory
+    const testPipelineDir = path.join(pipelineConfigDir, "test");
+    const testTasksDir = path.join(testPipelineDir, "tasks");
+    await fs.mkdir(testTasksDir, { recursive: true });
+
+    // Create test pipeline.json
+    await fs.writeFile(
+      path.join(testPipelineDir, "pipeline.json"),
       JSON.stringify({
         name: "test-pipeline",
         version: "1.0.0",
@@ -117,9 +146,9 @@ describe("orchestrator", () => {
       "utf8"
     );
 
-    // Create tasks/index.js
+    // Create test tasks/index.js
     await fs.writeFile(
-      path.join(tasksDir, "index.js"),
+      path.join(testTasksDir, "index.js"),
       `export default {
   noop: "${path.join(tmpDir, "pipeline-tasks", "noop.js")}"
 };`,
@@ -152,8 +181,11 @@ describe("orchestrator", () => {
     // prevent real exit
     exitSpy = vi.spyOn(process, "exit").mockImplementation(() => {});
 
-    // Import and start orchestrator
+    // Clear module cache to ensure config module re-reads from test directory
     vi.resetModules();
+
+    // Clear the config module cache specifically
+    delete require.cache[require.resolve("../src/core/config.js")];
 
     // The module-level mock should already be in place from the vi.mock above
     // Now import the orchestrator which will use the mocked spawn
@@ -193,7 +225,7 @@ describe("orchestrator", () => {
     await fs.mkdir(path.dirname(seedPath), { recursive: true });
     await fs.writeFile(
       seedPath,
-      JSON.stringify({ name: "demo", data: { foo: "bar" } }),
+      JSON.stringify({ name: "demo", pipeline: "test", data: { foo: "bar" } }),
       "utf8"
     );
 
@@ -249,7 +281,11 @@ describe("orchestrator", () => {
     );
     console.log("Status read:", status);
 
-    expect(seedCopy).toEqual({ name: "demo", data: { foo: "bar" } });
+    expect(seedCopy).toEqual({
+      name: "demo",
+      pipeline: "test",
+      data: { foo: "bar" },
+    });
     console.log("Seed copy assertion passed");
 
     expect(status.name).toBe("demo");
@@ -282,7 +318,7 @@ describe("orchestrator", () => {
     await fs.mkdir(path.dirname(seedPath), { recursive: true });
     await fs.writeFile(
       seedPath,
-      JSON.stringify({ name: "x", data: {} }),
+      JSON.stringify({ name: "x", pipeline: "test", data: {} }),
       "utf8"
     );
 
@@ -304,7 +340,7 @@ describe("orchestrator", () => {
     await fs.mkdir(path.dirname(seedPath), { recursive: true });
     await fs.writeFile(
       seedPath,
-      JSON.stringify({ name: "killme", data: {} }),
+      JSON.stringify({ name: "killme", pipeline: "test", data: {} }),
       "utf8"
     );
     const add = getAddHandler();
@@ -343,12 +379,20 @@ describe("orchestrator", () => {
     await fs.mkdir(path.dirname(seed1Path), { recursive: true });
     await fs.writeFile(
       seed1Path,
-      JSON.stringify({ name: "job1", data: { test: "data1" } }),
+      JSON.stringify({
+        name: "job1",
+        pipeline: "test",
+        data: { test: "data1" },
+      }),
       "utf8"
     );
     await fs.writeFile(
       seed2Path,
-      JSON.stringify({ name: "job2", data: { test: "data2" } }),
+      JSON.stringify({
+        name: "job2",
+        pipeline: "test",
+        data: { test: "data2" },
+      }),
       "utf8"
     );
 
@@ -368,8 +412,16 @@ describe("orchestrator", () => {
       await fs.readFile(path.join(job2Dir, "seed.json"), "utf8")
     );
 
-    expect(job1Seed).toEqual({ name: "job1", data: { test: "data1" } });
-    expect(job2Seed).toEqual({ name: "job2", data: { test: "data2" } });
+    expect(job1Seed).toEqual({
+      name: "job1",
+      pipeline: "test",
+      data: { test: "data1" },
+    });
+    expect(job2Seed).toEqual({
+      name: "job2",
+      pipeline: "test",
+      data: { test: "data2" },
+    });
 
     // Verify both pending files were removed
     await expect(fs.access(seed1Path)).rejects.toThrow();
@@ -390,7 +442,11 @@ describe("orchestrator", () => {
       await fs.mkdir(path.dirname(seedPath), { recursive: true });
       await fs.writeFile(
         seedPath,
-        JSON.stringify({ name: "Test Job", data: { foo: "bar" } }),
+        JSON.stringify({
+          name: "Test Job",
+          pipeline: "test",
+          data: { foo: "bar" },
+        }),
         "utf8"
       );
 
@@ -404,7 +460,11 @@ describe("orchestrator", () => {
       const seedCopy = JSON.parse(
         await fs.readFile(path.join(workDir, "seed.json"), "utf8")
       );
-      expect(seedCopy).toEqual({ name: "Test Job", data: { foo: "bar" } });
+      expect(seedCopy).toEqual({
+        name: "Test Job",
+        pipeline: "test",
+        data: { foo: "bar" },
+      });
 
       // Verify tasks-status.json has correct structure
       const status = JSON.parse(
@@ -518,7 +578,7 @@ describe("orchestrator", () => {
       await fs.mkdir(path.dirname(seedPath), { recursive: true });
       await fs.writeFile(
         seedPath,
-        JSON.stringify({ data: { test: "data" } }), // No name field
+        JSON.stringify({ data: { test: "data" }, pipeline: "test" }), // No name field, pipeline required
         "utf8"
       );
 
@@ -544,7 +604,7 @@ describe("orchestrator", () => {
       await fs.mkdir(path.dirname(seedPath), { recursive: true });
       await fs.writeFile(
         seedPath,
-        JSON.stringify({ name: "Complex Job", data: {} }),
+        JSON.stringify({ name: "Complex Job", pipeline: "test", data: {} }),
         "utf8"
       );
 
@@ -576,7 +636,11 @@ describe("orchestrator", () => {
       await fs.mkdir(path.dirname(seedPath), { recursive: true });
       await fs.writeFile(
         seedPath,
-        JSON.stringify({ name: "Step 3 Test", data: { test: "step3" } }),
+        JSON.stringify({
+          name: "Step 3 Test",
+          pipeline: "test",
+          data: { test: "step3" },
+        }),
         "utf8"
       );
 
@@ -601,7 +665,7 @@ describe("orchestrator", () => {
       await fs.mkdir(path.dirname(seedPath), { recursive: true });
       await fs.writeFile(
         seedPath,
-        JSON.stringify({ name: "WorkDir Test", data: {} }),
+        JSON.stringify({ name: "WorkDir Test", pipeline: "test", data: {} }),
         "utf8"
       );
 
@@ -634,7 +698,7 @@ describe("orchestrator", () => {
       await fs.mkdir(path.dirname(seedPath), { recursive: true });
       await fs.writeFile(
         seedPath,
-        JSON.stringify({ name: "Tracking Test", data: {} }),
+        JSON.stringify({ name: "Tracking Test", pipeline: "test", data: {} }),
         "utf8"
       );
 
