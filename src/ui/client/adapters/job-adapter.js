@@ -167,6 +167,8 @@ function clampProgress(n) {
  * - apiJob: object roughly matching docs 0.5 /api/jobs entry.
  * Returns normalized summary object for UI consumption.
  */
+import { derivePipelineMetadata } from "../../../utils/pipelines.js";
+
 export function adaptJobSummary(apiJob = {}) {
   const warnings = [];
 
@@ -235,6 +237,15 @@ export function adaptJobSummary(apiJob = {}) {
     tasks,
   };
 
+  const { pipeline, pipelineLabel } = derivePipelineMetadata(apiJob);
+
+  if (pipeline) {
+    out.pipeline = pipeline;
+  }
+  if (pipelineLabel) {
+    out.pipelineLabel = pipelineLabel;
+  }
+
   if (warnings.length > 0) out.__warnings = warnings;
   return out;
 }
@@ -271,15 +282,39 @@ export function adaptJobDetail(apiDetail = {}) {
     tasks, // pass normalized tasks so progress/status derive consistently
   });
 
+  const { pipeline, pipelineSlug, pipelineLabel } = derivePipelineMetadata({
+    ...apiDetail,
+    pipeline: apiDetail.pipeline ?? summaryLike.pipeline,
+    pipelineLabel: apiDetail.pipelineLabel ?? summaryLike.pipelineLabel,
+  });
+
   const detailOut = {
     ...summaryLike,
-    // Ensure tasks exist as array of normalized task objects
+    // Ensure tasks exist as object of normalized task entries
     tasks,
-    // Preserve pipeline property if present in API response
-    ...(apiDetail.pipeline && { pipeline: apiDetail.pipeline }),
     // Include any metadata or original fields the UI may use (do not include raw artifacts content)
     raw: undefined, // intentional placeholder to indicate raw content is not included
   };
+
+  const pipelineFromApi = apiDetail?.pipeline;
+
+  if (
+    pipelineFromApi &&
+    typeof pipelineFromApi === "object" &&
+    !Array.isArray(pipelineFromApi)
+  ) {
+    detailOut.pipeline = pipelineFromApi;
+  } else if (pipeline != null) {
+    detailOut.pipeline = pipeline;
+  }
+
+  if (pipelineSlug && detailOut.pipelineSlug == null) {
+    detailOut.pipelineSlug = pipelineSlug;
+  }
+
+  if (pipelineLabel && detailOut.pipelineLabel == null) {
+    detailOut.pipelineLabel = pipelineLabel;
+  }
 
   if (warnings.length > 0)
     detailOut.__warnings = (detailOut.__warnings || []).concat(warnings);

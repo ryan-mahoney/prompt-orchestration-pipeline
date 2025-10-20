@@ -31,6 +31,7 @@ export default function JobTable({
         <Table.Header>
           <Table.Row>
             <Table.ColumnHeaderCell>Job Name</Table.ColumnHeaderCell>
+            <Table.ColumnHeaderCell>Pipeline</Table.ColumnHeaderCell>
             <Table.ColumnHeaderCell>Status</Table.ColumnHeaderCell>
             <Table.ColumnHeaderCell>Current Task</Table.ColumnHeaderCell>
             <Table.ColumnHeaderCell>Progress</Table.ColumnHeaderCell>
@@ -105,6 +106,19 @@ export default function JobTable({
                     <Text size="2" weight="medium" className="text-slate-900">
                       {job.name}
                     </Text>
+                  </Flex>
+                </Table.Cell>
+
+                <Table.Cell>
+                  <Flex direction="column" gap="1">
+                    <Text size="2" className="text-slate-900">
+                      {job.pipelineLabel || job.pipeline || "—"}
+                    </Text>
+                    {job.pipelineLabel && job.pipeline && (
+                      <Text size="1" className="text-slate-500">
+                        {job.pipeline}
+                      </Text>
+                    )}
                   </Flex>
                 </Table.Cell>
 
