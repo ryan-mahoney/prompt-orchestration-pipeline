@@ -267,6 +267,29 @@ If present in the project root, this file can provide defaults for the CLI (e.g.
 
 _(Keys and defaults may vary by version; prefer `--help` for authoritative options.)_
 
+### Seed format
+
+All seeds must include a `pipeline` field that references a valid pipeline slug from the registry. The pipeline field is mandatory and no fallbacks are allowed.
+
+**Minimal seed example:**
+
+```json
+{
+  "name": "my-job",
+  "pipeline": "content",
+  "data": {
+    "type": "content-creation",
+    "topic": "AI-Powered Development Tools"
+  }
+}
+```
+
+**Required fields:**
+
+- `name`: Unique identifier for the job (alphanumeric, hyphens, and underscores only)
+- `pipeline`: Valid pipeline slug from `pipeline-config/registry.json`
+- `data`: Object containing the input data for the pipeline
+
 ### Example flow in a consumer project
 
 1. **Initialize**: `npm run pipeline:init` to create the registry and default pipeline structure.

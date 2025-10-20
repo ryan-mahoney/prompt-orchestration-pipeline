@@ -77,6 +77,7 @@ pipeline-data/
 ```json
 {
   "name": "job-name",
+  "pipeline": "pipeline-slug",
   "data": {
     "type": "workflow-type",
     "industry": "Industry name",
@@ -88,6 +89,12 @@ pipeline-data/
 }
 ```
 
+**Required fields**:
+
+- `name`: Unique identifier for the job (alphanumeric, hyphens, and underscores only)
+- `pipeline`: Valid pipeline slug from `pipeline-config/registry.json`
+- `data`: Object containing the input data for the pipeline
+
 **Examples**:
 
 **Market Analysis Seed** (`market-analysis.json`):
@@ -95,6 +102,7 @@ pipeline-data/
 ```json
 {
   "name": "market-analysis",
+  "pipeline": "content",
   "data": {
     "type": "market-research",
     "industry": "Renewable Energy Storage",
@@ -116,6 +124,7 @@ pipeline-data/
 ```json
 {
   "name": "content-generation",
+  "pipeline": "content",
   "data": {
     "type": "content-creation",
     "topic": "AI-Powered Development Tools",
@@ -134,6 +143,7 @@ pipeline-data/
 ```json
 {
   "name": "data-processing",
+  "pipeline": "content",
   "data": {
     "type": "data-extraction",
     "sourceType": "unstructured-text",

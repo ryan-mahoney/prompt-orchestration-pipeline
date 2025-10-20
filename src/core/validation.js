@@ -8,7 +8,7 @@ function getSeedSchema() {
   const config = getConfig();
   return {
     type: "object",
-    required: ["name", "data"],
+    required: ["name", "data", "pipeline"],
     properties: {
       name: {
         type: "string",
@@ -20,6 +20,11 @@ function getSeedSchema() {
       data: {
         type: "object",
         description: "Job data payload",
+      },
+      pipeline: {
+        type: "string",
+        enum: Object.keys(config.pipelines),
+        description: "Pipeline slug from registry",
       },
       metadata: {
         type: "object",

@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import chokidar from "chokidar";
 import { spawn as defaultSpawn } from "node:child_process";
-import { getDefaultPipelineConfig } from "./config.js";
+import { getConfig, getPipelineConfig } from "./config.js";
 
 /**
  * Resolve canonical pipeline directories for the given data root.
@@ -148,7 +148,7 @@ export async function startOrchestrator(opts) {
       await fs.writeFile(statusPath, JSON.stringify(status, null, 2));
     }
     // Spawn runner for this job
-    const child = spawnRunner(jobId, dirs, running, spawn, testMode);
+    const child = spawnRunner(jobId, dirs, running, spawn, testMode, seed);
     // child registered inside spawnRunner
     return child;
   }
@@ -218,8 +218,9 @@ export async function startOrchestrator(opts) {
  * @param {Map<string, import('node:child_process').ChildProcess>} running
  * @param {typeof defaultSpawn} spawn
  * @param {boolean} testMode
+ * @param {Object} seed - Seed data containing pipeline information
  */
-function spawnRunner(jobId, dirs, running, spawn, testMode) {
+function spawnRunner(jobId, dirs, running, spawn, testMode, seed) {
   const runnerPath = path.join(
     process.cwd(),
     "src",
@@ -227,12 +228,53 @@ function spawnRunner(jobId, dirs, running, spawn, testMode) {
     "pipeline-runner.js"
   );
 
-  // Get pipeline configuration from registry (supports environment override)
-  const pipelineConfig = getDefaultPipelineConfig();
-  if (!pipelineConfig) {
-    throw new Error(
-      "No pipeline configuration available. Check your pipeline registry."
+  const configSnapshot = getConfig();
+  const availablePipelines = Object.keys(configSnapshot?.pipelines ?? {});
+  const pipelineSlug = seed?.pipeline;
+
+  console.log("[Orchestrator] spawnRunner invoked", {
+    jobId,
+    pipelineSlug: pipelineSlug ?? null,
+    availablePipelines,
+    seedKeys: seed ? Object.keys(seed) : null,
+  });
+
+  if (!availablePipelines.length) {
+    console.warn(
+      "[Orchestrator] No pipelines registered in config() when spawnRunner invoked"
     );
+  } else if (!availablePipelines.includes(pipelineSlug)) {
+    console.warn(
+      "[Orchestrator] Requested pipeline slug missing from registry snapshot",
+      {
+        jobId,
+        pipelineSlug,
+        availablePipelines,
+      }
+    );
+  }
+
+  if (!pipelineSlug) {
+    console.error("[Orchestrator] Missing pipeline slug in seed", {
+      jobId,
+      seed,
+      availablePipelines,
+    });
+    throw new Error(
+      "Pipeline slug is required in seed data. Include a 'pipeline' field in your seed."
+    );
+  }
+
+  let pipelineConfig;
+  try {
+    pipelineConfig = getPipelineConfig(pipelineSlug);
+  } catch (error) {
+    console.error("[Orchestrator] Pipeline lookup failed", {
+      jobId,
+      pipelineSlug,
+      availablePipelines,
+    });
+    throw error;
   }
 
   // Use environment variables if set, otherwise use pipeline config
@@ -242,10 +284,12 @@ function spawnRunner(jobId, dirs, running, spawn, testMode) {
     PO_PENDING_DIR: dirs.pending,
     PO_CURRENT_DIR: dirs.current,
     PO_COMPLETE_DIR: dirs.complete,
+    PO_PIPELINE_SLUG: pipelineSlug,
     PO_PIPELINE_PATH:
-      process.env.PO_PIPELINE_PATH || pipelineConfig.pipelinePath,
+      process.env.PO_PIPELINE_PATH || pipelineConfig.pipelineJsonPath,
     PO_TASK_REGISTRY:
-      process.env.PO_TASK_REGISTRY || pipelineConfig.taskRegistryPath,
+      process.env.PO_TASK_REGISTRY ||
+      path.join(pipelineConfig.tasksDir, "index.js"),
     // Force mock provider for testing
     PO_DEFAULT_PROVIDER: "mock",
   };

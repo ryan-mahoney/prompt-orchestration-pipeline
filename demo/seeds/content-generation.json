@@ -1,5 +1,6 @@
 {
   "name": "content-generation",
+  "pipeline": "content-generation",
   "data": {
     "type": "content-creation",
     "topic": "AI-Powered Development Tools",

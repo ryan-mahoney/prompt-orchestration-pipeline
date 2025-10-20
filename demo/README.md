@@ -61,6 +61,35 @@ This will:
 - Preserve all existing job data
 - Create manifests for traceability
 
+## Seed Examples
+
+All seeds must include a `pipeline` field that references a valid pipeline slug from the registry. The pipeline field is mandatory and no fallbacks are allowed.
+
+**Example seed for content-generation pipeline:**
+
+```json
+{
+  "name": "my-content-job",
+  "pipeline": "content-generation",
+  "data": {
+    "type": "content-creation",
+    "topic": "AI-Powered Development Tools",
+    "contentType": "blog-post",
+    "targetAudience": "software-developers",
+    "tone": "professional-yet-accessible",
+    "length": "1500-2000 words",
+    "keywords": ["AI", "developer tools", "productivity", "automation"],
+    "outputFormat": "blog-post"
+  }
+}
+```
+
+**Required fields:**
+
+- `name`: Unique identifier for the job (alphanumeric, hyphens, and underscores only)
+- `pipeline`: Valid pipeline slug from `demo/pipeline-config/registry.json` (e.g., "content-generation")
+- `data`: Object containing the input data for the pipeline
+
 ## Usage Notes
 
 - The old `demo/run-demo.js` runner is deprecated. A shim remains for backward compatibility but it simply warns and forwards to the production server.

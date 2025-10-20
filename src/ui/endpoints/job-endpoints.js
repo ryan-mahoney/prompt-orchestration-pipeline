@@ -36,63 +36,59 @@ import { getJobPipelinePath } from "../../config/paths.js";
 export async function handleJobList() {
   console.log("[JobEndpoints] GET /api/jobs called");
 
-  // Instrumentation: log resolved paths and check for pipeline.json presence
-  // Only run in non-test environments when explicitly enabled
-  const shouldInstrument =
-    process.env.NODE_ENV !== "test" &&
-    (process.env.JOB_ENDPOINTS_INSTRUMENT === "1" ||
-      process.env.UI_LOG_LEVEL === "debug");
-
-  if (shouldInstrument) {
-    try {
-      const paths =
-        (typeof configBridge.getPATHS === "function" &&
-          configBridge.getPATHS()) ||
-        configBridge.PATHS ||
-        (typeof configBridge.resolvePipelinePaths === "function" &&
-          (function () {
-            try {
-              return configBridge.resolvePipelinePaths();
-            } catch {
-              return null;
-            }
-          })()) ||
-        null;
-
-      console.log("[JobEndpoints] resolved PATHS:", paths);
-
-      const pipelinePath =
-        (paths && paths.pipeline) ||
-        (typeof configBridge.resolvePipelinePaths === "function"
-          ? (function () {
-              try {
-                return configBridge.resolvePipelinePaths().pipeline;
-              } catch {
-                return null;
-              }
-            })()
-          : null);
-
-      if (pipelinePath) {
-        try {
-          await fs.access(pipelinePath);
-          console.log(`[JobEndpoints] pipeline.json exists at ${pipelinePath}`);
-        } catch (err) {
-          console.warn(
-            `[JobEndpoints] pipeline.json NOT found at ${pipelinePath}: ${err?.message}`
-          );
-        }
-      } else {
-        console.warn("[JobEndpoints] could not resolve pipeline.json path");
-      }
-    } catch (instrErr) {
-      console.error("JobEndpoints instrumentation error:", instrErr);
-    }
-  }
-
   try {
     const currentIds = await listJobs("current");
     const completeIds = await listJobs("complete");
+
+    // Instrumentation: log resolved paths and check for pipeline.json presence
+    // Only run in non-test environments when explicitly enabled
+    const shouldInstrument =
+      process.env.NODE_ENV !== "test" &&
+      (process.env.JOB_ENDPOINTS_INSTRUMENT === "1" ||
+        process.env.UI_LOG_LEVEL === "debug");
+
+    if (shouldInstrument) {
+      try {
+        const paths =
+          (typeof configBridge.getPATHS === "function" &&
+            configBridge.getPATHS()) ||
+          configBridge.PATHS ||
+          (typeof configBridge.resolvePipelinePaths === "function" &&
+            (function () {
+              try {
+                return configBridge.resolvePipelinePaths();
+              } catch {
+                return null;
+              }
+            })()) ||
+          null;
+
+        console.log("[JobEndpoints] resolved PATHS:", paths);
+
+        // Log per-job pipeline snapshots by reading job-scoped pipeline.json files
+        const allJobIds = [...(currentIds || []), ...(completeIds || [])];
+        for (const jobId of allJobIds) {
+          try {
+            const jobPipelinePath = getJobPipelinePath(
+              process.env.PO_ROOT || process.cwd(),
+              jobId,
+              currentIds.includes(jobId) ? "current" : "complete"
+            );
+
+            await fs.access(jobPipelinePath);
+            console.log(
+              `[JobEndpoints] pipeline.json exists for job ${jobId} at ${jobPipelinePath}`
+            );
+          } catch (err) {
+            console.log(
+              `[JobEndpoints] pipeline.json NOT found for job ${jobId}: ${err?.message}`
+            );
+          }
+        }
+      } catch (instrErr) {
+        console.error("JobEndpoints instrumentation error:", instrErr);
+      }
+    }
 
     // Read jobs in two phases to respect precedence and match test expectations:
     // 1) read all currentIds with location "current"
