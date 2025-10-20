@@ -80,8 +80,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 /**
- * Resolves pipeline data paths relative to the project root
- * @returns {Object} Object containing resolved paths
+ * Resolves pipeline data directory roots relative to the project root
+ * @returns {Object} Object containing resolved directory paths (current/complete/pending/rejected)
  */
 export function resolvePipelinePaths(root = path.resolve(__dirname, "../..")) {
   const projectRoot = root;

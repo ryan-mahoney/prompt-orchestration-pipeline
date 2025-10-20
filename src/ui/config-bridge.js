@@ -89,8 +89,8 @@ function getLegacyPipelinePath(base) {
 }
 
 /**
- * Resolves pipeline data paths relative to the project root
- * @returns {Object} Object containing resolved paths
+ * Resolves pipeline data directory roots relative to the project root
+ * @returns {Object} Object containing resolved directory paths (current/complete/pending/rejected)
  */
 export function resolvePipelinePaths() {
   // Prefer an explicit PO_ROOT when provided (e.g. server sets this to the data root).
@@ -99,30 +99,11 @@ export function resolvePipelinePaths() {
     ? path.resolve(process.env.PO_ROOT)
     : path.resolve(__dirname, "../..");
 
-  // Use pipeline configuration registry for pipeline definition path
-  let pipelinePath;
-  try {
-    // Get pipeline slug from environment or use default
-    const pipelineSlug = process.env.PO_PIPELINE_SLUG || "content";
-    const pipelineConfig = getPipelineConfig(pipelineSlug);
-    if (pipelineConfig) {
-      pipelinePath = pipelineConfig.pipelineJsonPath;
-    } else {
-      // Fallback to legacy path for backward compatibility
-      pipelinePath = getLegacyPipelinePath(base);
-    }
-  } catch {
-    // Fallback to legacy path if configuration system fails
-    pipelinePath = getLegacyPipelinePath(base);
-  }
-
   return {
     current: path.join(base, "pipeline-data", "current"),
     complete: path.join(base, "pipeline-data", "complete"),
     pending: path.join(base, "pipeline-data", "pending"),
     rejected: path.join(base, "pipeline-data", "rejected"),
-    // Pipeline definition location from registry or legacy fallback
-    pipeline: pipelinePath,
   };
 }
 
