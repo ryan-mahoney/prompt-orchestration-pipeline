@@ -189,19 +189,18 @@ my-project/
 
 ```json
 {
-  "defaultSlug": "content",
-  "slugs": {
+  "pipelines": {
     "content": {
       "name": "Content Generation Pipeline",
       "description": "Generates and processes content using LLM tasks",
-      "pipelinePath": "pipeline-config/pipelines/content/pipeline.json",
-      "taskRegistryPath": "pipeline-config/pipelines/content/tasks/index.js"
+      "pipelinePath": "pipeline-config/content/pipeline.json",
+      "taskRegistryPath": "pipeline-config/content/tasks/index.js"
     },
     "analytics": {
       "name": "Analytics Pipeline",
       "description": "Processes data for analytics and reporting",
-      "pipelinePath": "pipeline-config/pipelines/analytics/pipeline.json",
-      "taskRegistryPath": "pipeline-config/pipelines/analytics/tasks/index.js"
+      "pipelinePath": "pipeline-config/analytics/pipeline.json",
+      "taskRegistryPath": "pipeline-config/analytics/tasks/index.js"
     }
   }
 }

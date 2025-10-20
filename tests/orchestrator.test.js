@@ -106,7 +106,6 @@ describe("orchestrator", () => {
     await fs.writeFile(
       path.join(pipelineConfigDir, "registry.json"),
       JSON.stringify({
-        defaultSlug: "test",
         pipelines: {
           test: {
             name: "Test Pipeline",

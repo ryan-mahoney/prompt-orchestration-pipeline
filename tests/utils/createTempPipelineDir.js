@@ -75,7 +75,6 @@ export async function createMultiPipelineConfig(baseDir, pipelines = []) {
 
   const pipelineDefs = pipelines.length > 0 ? pipelines : defaultPipelines;
   const registry = {
-    defaultSlug: pipelineDefs[0].slug,
     pipelines: {},
   };
 

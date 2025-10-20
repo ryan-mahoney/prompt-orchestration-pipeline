@@ -84,6 +84,16 @@ async function hydratePipelinesFromRegistry(config) {
     !registryData.pipelines ||
     typeof registryData.pipelines !== "object"
   ) {
+    if (
+      registryData &&
+      typeof registryData === "object" &&
+      registryData.slugs &&
+      typeof registryData.slugs === "object"
+    ) {
+      console.warn(
+        "[config] Detected legacy pipeline registry format using `slugs`. Expected `pipelines` object. Falling back to defaultConfig.pipelines."
+      );
+    }
     return;
   }
 
@@ -95,10 +105,6 @@ async function hydratePipelinesFromRegistry(config) {
 
   if (Object.keys(resolved).length > 0) {
     config.pipelines = resolved;
-  }
-
-  if (registryData.defaultSlug && !config.defaultPipelineSlug) {
-    config.defaultPipelineSlug = registryData.defaultSlug;
   }
 }
 
@@ -129,6 +135,16 @@ function hydratePipelinesFromRegistrySync(config) {
     !registryData.pipelines ||
     typeof registryData.pipelines !== "object"
   ) {
+    if (
+      registryData &&
+      typeof registryData === "object" &&
+      registryData.slugs &&
+      typeof registryData.slugs === "object"
+    ) {
+      console.warn(
+        "[config] Detected legacy pipeline registry format using `slugs`. Expected `pipelines` object. Falling back to defaultConfig.pipelines."
+      );
+    }
     return;
   }
 
@@ -140,10 +156,6 @@ function hydratePipelinesFromRegistrySync(config) {
 
   if (Object.keys(resolved).length > 0) {
     config.pipelines = resolved;
-  }
-
-  if (registryData.defaultSlug && !config.defaultPipelineSlug) {
-    config.defaultPipelineSlug = registryData.defaultSlug;
   }
 }
 

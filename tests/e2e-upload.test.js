@@ -166,7 +166,6 @@ export async function integration(context) {
           tasksDir: "./pipeline-config/test/tasks",
         },
       },
-      defaultSlug: "test",
     };
 
     await fs.writeFile(
