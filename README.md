@@ -409,7 +409,7 @@ The `tasks-status.json` now includes `files.*` arrays:
 
 ```json
 {
-  "pipelineId": "example-pipeline",
+  "id": "example-pipeline",
   "current": "analysis",
   "files": {
     "artifacts": ["raw-research.json", "analysis-output.json", "summary.txt"],

@@ -24,7 +24,6 @@ describe("createTaskFileIO", () => {
     const initialStatus = {
       id: "test-job",
       name: "test-pipeline",
-      pipelineId: "test-pipeline-id",
       createdAt: new Date().toISOString(),
       state: "running",
       tasks: {

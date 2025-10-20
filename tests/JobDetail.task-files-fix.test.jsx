@@ -17,7 +17,6 @@ describe("JobDetail task files fix", () => {
       id: "test-job-123",
       name: "Test Job",
       status: "complete",
-      pipelineId: "test-job-123",
       tasks: [
         {
           name: "research",
@@ -62,7 +61,6 @@ describe("JobDetail task files fix", () => {
       id: "test-job-456",
       name: "Legacy Job",
       status: "complete",
-      pipelineId: "test-job-456",
       tasks: {
         research: {
           name: "research",
@@ -100,7 +98,6 @@ describe("JobDetail task files fix", () => {
       id: "empty-job",
       name: "Empty Job",
       status: "pending",
-      pipelineId: "empty-job",
       tasks: [],
     };
 
@@ -108,7 +105,6 @@ describe("JobDetail task files fix", () => {
       id: "no-tasks-job",
       name: "No Tasks Job",
       status: "pending",
-      pipelineId: "no-tasks-job",
       // no tasks property
     };
 

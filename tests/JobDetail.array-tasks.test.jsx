@@ -49,7 +49,6 @@ describe("JobDetail - Object Tasks Support", () => {
     const job = {
       id: "test-job",
       name: "Test Job",
-      pipelineId: "test-pipeline",
       status: "running",
       tasks: {
         research: { state: "done", config: { model: "gpt-4" } },
@@ -79,7 +78,6 @@ describe("JobDetail - Object Tasks Support", () => {
     const job = {
       id: "test-job",
       name: "Test Job",
-      pipelineId: "test-pipeline",
       status: "running",
       tasks: {
         research: { state: "done" },
@@ -115,7 +113,6 @@ describe("JobDetail - Object Tasks Support", () => {
     const job = {
       id: "test-job",
       name: "Test Job",
-      pipelineId: "test-pipeline",
       status: "running",
       tasks: {
         research: { state: "done" },
@@ -144,7 +141,6 @@ describe("JobDetail - Object Tasks Support", () => {
     const job = {
       id: "test-job",
       name: "Test Job",
-      pipelineId: "test-pipeline",
       status: "pending",
       tasks: {},
     };
@@ -172,7 +168,6 @@ describe("JobDetail - Object Tasks Support", () => {
     const job = {
       id: "test-job",
       name: "Test Job",
-      pipelineId: "test-pipeline",
       status: "pending",
       // No tasks property
     };
@@ -227,7 +222,6 @@ describe("JobDetail - Duration Policy with Task Shape Variants", () => {
     const job = {
       id: "test-job",
       name: "Object Tasks Job",
-      pipelineId: "test-pipeline",
       status: "running",
       tasks: {
         research: {
@@ -267,7 +261,6 @@ describe("JobDetail - Duration Policy with Task Shape Variants", () => {
     const job = {
       id: "test-job",
       name: "Mixed Status Object Job",
-      pipelineId: "test-pipeline",
       status: "running",
       tasks: {
         research: {
@@ -305,7 +298,6 @@ describe("JobDetail - Duration Policy with Task Shape Variants", () => {
     const job = {
       id: "test-job",
       name: "Live Update Job",
-      pipelineId: "test-pipeline",
       status: "running",
       tasks: {
         analysis: {
@@ -356,7 +348,6 @@ describe("JobDetail - Duration Policy with Task Shape Variants", () => {
     const job = {
       id: "test-job",
       name: "Execution Time Job",
-      pipelineId: "test-pipeline",
       status: "completed",
       tasks: {
         analysis: {

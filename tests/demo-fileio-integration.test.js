@@ -16,7 +16,6 @@ describe("Demo Pipeline File I/O Integration", () => {
 
     statusPath = path.join(tempDir, "tasks-status.json");
     const initialStatus = {
-      pipelineId: "demo-pipeline",
       current: "analysis",
       tasks: {
         analysis: {

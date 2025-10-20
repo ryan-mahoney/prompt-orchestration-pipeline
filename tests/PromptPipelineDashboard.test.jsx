@@ -118,7 +118,6 @@ describe("PromptPipelineDashboard (integration-ish)", () => {
         createdAt: "2024-01-01T00:00:00Z",
         location: "current",
         tasks: [{ name: "task-1", state: "running" }],
-        pipelineId: "job-1",
       },
     ];
 
@@ -218,7 +217,6 @@ describe("PromptPipelineDashboard (integration-ish)", () => {
           createdAt: "2024-01-01T00:00:00Z",
           location: "current",
           tasks: [{ name: "task-1", state: "running" }],
-          pipelineId: "job-123",
         },
       ];
 
@@ -257,7 +255,6 @@ describe("PromptPipelineDashboard (integration-ish)", () => {
           createdAt: "2024-01-01T00:00:00Z",
           location: "current",
           tasks: [{ name: "task-1", state: "done" }],
-          pipelineId: "legacy-id",
         },
       ];
 
@@ -330,7 +327,6 @@ describe("PromptPipelineDashboard (integration-ish)", () => {
           createdAt: "2024-01-01T00:00:00Z",
           location: "current",
           tasks: [{ name: "task-1", state: "running" }],
-          pipelineId: "job-456",
         },
       ];
 
@@ -367,7 +363,6 @@ describe("PromptPipelineDashboard (integration-ish)", () => {
           createdAt: "2024-01-01T00:00:00Z",
           location: "current",
           tasks: [{ name: "task-1", state: "running" }],
-          pipelineId: "job-1",
         },
         {
           id: "job-2",
@@ -377,7 +372,6 @@ describe("PromptPipelineDashboard (integration-ish)", () => {
           createdAt: "2024-01-01T00:00:00Z",
           location: "current",
           tasks: [{ name: "task-2", state: "running" }],
-          pipelineId: "job-2",
         },
         {
           id: "job-3",
@@ -387,7 +381,6 @@ describe("PromptPipelineDashboard (integration-ish)", () => {
           createdAt: "2024-01-01T00:00:00Z",
           location: "rejected",
           tasks: [{ name: "task-3", state: "failed" }],
-          pipelineId: "job-3",
         },
         {
           id: "job-4",
@@ -397,7 +390,6 @@ describe("PromptPipelineDashboard (integration-ish)", () => {
           createdAt: "2024-01-01T00:00:00Z",
           location: "complete",
           tasks: [{ name: "task-4", state: "done" }],
-          pipelineId: "job-4",
         },
       ];
 
@@ -433,7 +425,6 @@ describe("PromptPipelineDashboard (integration-ish)", () => {
           createdAt: "2024-01-01T00:00:00Z",
           location: "current",
           tasks: [{ name: "task-1", state: "running" }],
-          pipelineId: "job-1",
         },
         {
           id: "job-2",
@@ -443,7 +434,6 @@ describe("PromptPipelineDashboard (integration-ish)", () => {
           createdAt: "2024-01-01T00:00:00Z",
           location: "rejected",
           tasks: [{ name: "task-2", state: "failed" }],
-          pipelineId: "job-2",
         },
         {
           id: "job-3",
@@ -453,7 +443,6 @@ describe("PromptPipelineDashboard (integration-ish)", () => {
           createdAt: "2024-01-01T00:00:00Z",
           location: "complete",
           tasks: [{ name: "task-3", state: "done" }],
-          pipelineId: "job-3",
         },
       ];
 

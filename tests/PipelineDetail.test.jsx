@@ -310,7 +310,6 @@ describe("PipelineDetail", () => {
   it("renders status badge and job ID in header when data is loaded", () => {
     const mockJob = {
       id: "testjob123",
-      pipelineId: "testjob123",
       name: "Test Running Job",
       status: "running",
       tasks: [

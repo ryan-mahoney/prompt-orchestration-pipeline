@@ -58,7 +58,6 @@ describe("PromptPipelineDashboard - Duration Policy", () => {
       {
         id: "job-1",
         name: "Test Job",
-        pipelineId: "test-pipeline",
         status: "running",
         createdAt: "2025-10-06T00:25:00Z", // 5 minutes ago
         current: "task-1",
@@ -102,7 +101,6 @@ describe("PromptPipelineDashboard - Duration Policy", () => {
       {
         id: "job-1",
         name: "Completed Job",
-        pipelineId: "test-pipeline",
         status: "complete",
         createdAt: "2025-10-06T00:20:00Z",
         current: null,
@@ -145,7 +143,6 @@ describe("PromptPipelineDashboard - Duration Policy", () => {
       {
         id: "job-1",
         name: "Multi-Task Job",
-        pipelineId: "test-pipeline",
         status: "running",
         createdAt: "2025-10-06T00:20:00Z",
         current: "task-2",

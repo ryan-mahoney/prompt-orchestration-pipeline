@@ -266,7 +266,7 @@ export default {
 
 ```json
 {
-  "pipelineId": "unique-pipeline-id",
+  "id": "unique-pipeline-id",
   "name": "job-name",
   "current": "current-task-name",
   "createdAt": "ISO-timestamp",
@@ -298,7 +298,7 @@ export default {
 
 ```json
 {
-  "pipelineId": "pl-2025-10-02T06-37-29-980Z-0d57ec",
+  "id": "pl-2025-10-02T06-37-29-980Z-0d57ec",
   "name": "content-generation",
   "current": "formatting",
   "createdAt": "2025-10-02T06:37:29.984Z",
@@ -430,7 +430,7 @@ Important: On-disk files vs index in tasks-status.json
 ```json
 {
   "name": "job-name",
-  "pipelineId": "unique-pipeline-id",
+  "id": "unique-pipeline-id",
   "finishedAt": "ISO-timestamp",
   "tasks": ["task1", "task2", "task3"],
   "totalExecutionTime": 12345.67,
@@ -444,7 +444,7 @@ Important: On-disk files vs index in tasks-status.json
 ```json
 {
   "name": "content-generation",
-  "pipelineId": "pl-2025-10-02T06-37-29-980Z-0d57ec",
+  "id": "pl-2025-10-02T06-37-29-980Z-0d57ec",
   "finishedAt": "2025-10-02T06:38:32.232Z",
   "tasks": ["research", "analysis", "synthesis", "formatting"],
   "totalExecutionTime": 62143.21,
