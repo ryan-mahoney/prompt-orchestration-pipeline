@@ -605,6 +605,8 @@ Events:
 
 **Purpose**: Centralized configuration management with layered override system
 
+**Important Note**: The global `PATHS.pipeline` field has been removed. Pipeline metadata must now be obtained from job-scoped artifacts (via `getJobPipelinePath()`) or the pipeline registry APIs. This change supports multi-pipeline architectures where each job has its own pipeline configuration.
+
 **Priority Order** (highest to lowest):
 
 1. Environment variables (PO\_\*)
