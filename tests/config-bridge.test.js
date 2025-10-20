@@ -428,5 +428,32 @@ describe("config-bridge", () => {
       expect(CONFIG.useRealData).toBe(false);
       expect(CONFIG.featureFlags.realData).toBe(false);
     });
+
+    it("should not export pathway-specific functions", () => {
+      // Verify that pathway-specific functions are not exported
+      // This confirms the slimmed-down bridge as per PR4 requirements
+      expect(typeof getUIConfig).toBe("function");
+      expect(typeof resolvePipelinePaths).toBe("function");
+
+      // These should not exist as the bridge no longer returns pathway data
+      expect(typeof exports.getPipelinePath).toBe("undefined");
+      expect(typeof exports.getTaskRegistryPath).toBe("undefined");
+      expect(typeof exports.getDefaultPipelineConfig).toBe("undefined");
+    });
+
+    it("should only expose filesystem roots needed for UI", () => {
+      const paths = resolvePipelinePaths();
+
+      // Should expose only the basic filesystem roots
+      expect(paths).toHaveProperty("current");
+      expect(paths).toHaveProperty("complete");
+      expect(paths).toHaveProperty("pending");
+      expect(paths).toHaveProperty("rejected");
+
+      // Should not include pipeline-specific metadata
+      expect(paths).not.toHaveProperty("pipelineConfig");
+      expect(paths).not.toHaveProperty("taskRegistry");
+      expect(paths).not.toHaveProperty("pipelinePath");
+    });
   });
 });

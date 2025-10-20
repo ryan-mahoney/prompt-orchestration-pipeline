@@ -12,12 +12,26 @@ const CURRENT_DIR =
 const COMPLETE_DIR =
   process.env.PO_COMPLETE_DIR || path.join(DATA_DIR, "complete");
 
-// Get pipeline slug from environment or job status
-const pipelineSlug = process.env.PO_PIPELINE_SLUG;
+const jobId = process.argv[2];
+if (!jobId) throw new Error("runner requires jobId as argument");
+
+const workDir = path.join(CURRENT_DIR, jobId);
+
+// Get pipeline slug from environment or fallback to seed.json
+let pipelineSlug = process.env.PO_PIPELINE_SLUG;
 if (!pipelineSlug) {
-  throw new Error(
-    "Pipeline slug is required. Set PO_PIPELINE_SLUG environment variable."
-  );
+  try {
+    const seedPath = path.join(workDir, "seed.json");
+    const seedData = JSON.parse(await fs.readFile(seedPath, "utf8"));
+    pipelineSlug = seedData?.pipeline;
+    if (!pipelineSlug) {
+      throw new Error("No pipeline slug found in seed.json");
+    }
+  } catch (error) {
+    throw new Error(
+      `Pipeline slug is required. Set PO_PIPELINE_SLUG environment variable or ensure seed.json contains a 'pipeline' field. Error: ${error.message}`
+    );
+  }
 }
 
 // Use explicit pipeline configuration
@@ -29,10 +43,6 @@ const TASK_REGISTRY =
 const PIPELINE_DEF_PATH =
   process.env.PO_PIPELINE_PATH || pipelineConfig.pipelineJsonPath;
 
-const jobId = process.argv[2];
-if (!jobId) throw new Error("runner requires jobId as argument");
-
-const workDir = path.join(CURRENT_DIR, jobId);
 const tasksStatusPath = path.join(workDir, "tasks-status.json");
 
 const pipeline = JSON.parse(await fs.readFile(PIPELINE_DEF_PATH, "utf8"));

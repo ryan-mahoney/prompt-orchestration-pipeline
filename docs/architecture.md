@@ -607,6 +607,57 @@ Events:
 
 **Important Note**: The global `PATHS.pipeline` field has been removed. Pipeline metadata must now be obtained from job-scoped artifacts (via `getJobPipelinePath()`) or the pipeline registry APIs. This change supports multi-pipeline architectures where each job has its own pipeline configuration.
 
+### Pipeline Slug Resolution
+
+**Purpose**: Enable multi-pipeline architectures where each job references a specific pipeline configuration by slug.
+
+**Resolution Mechanism**:
+
+Pipeline slug resolution occurs through two primary mechanisms:
+
+1. **Job Metadata Propagation**: When a job is submitted, the `pipeline` slug from the seed is stored in job metadata (`job.json` and `tasks-status.json`) and propagated through the execution chain.
+
+2. **Runtime Resolution**: The pipeline runner resolves pipeline assets at runtime using the `getPipelineConfig(slug)` function from the configuration registry.
+
+**Environment Variable Flow**:
+
+```
+Seed.pipeline → Job Metadata → PO_PIPELINE_SLUG → getPipelineConfig(slug)
+```
+
+**Implementation Details**:
+
+- **Orchestrator**: Passes `PO_PIPELINE_SLUG` (sourced from `job.seed.pipeline`) into the child process environment when spawning the pipeline runner.
+- **Pipeline Runner**: Reads `process.env.PO_PIPELINE_SLUG` and uses `getPipelineConfig(slug)` to resolve `pipelineJsonPath` and `tasksDir`. Falls back to reading `seed.json` from the work directory if the environment variable is absent.
+- **API Layer**: Ensures `pipeline` slug is written to job metadata during submission via `src/api/index.js`.
+
+**Configuration Registry**:
+
+The `getPipelineConfig(slug)` function returns resolved paths for a given pipeline slug:
+
+```javascript
+const config = getPipelineConfig("content-generation");
+// Returns:
+// {
+//   configDir: "pipeline-config/content-generation",
+//   tasksDir: "pipeline-config/content-generation/tasks",
+//   pipelineJsonPath: "pipeline-config/content-generation/pipeline.json"
+// }
+```
+
+**Migration Impact**:
+
+- **Removed**: Legacy fallbacks (`PO_PIPELINE_PATH`, `PO_TASK_REGISTRY`, `getDefaultPipelineConfig`)
+- **Required**: All pipeline resolution must now use explicit slugs via `getPipelineConfig(slug)`
+- **UI Changes**: Config bridge no longer returns pipeline path information, only filesystem roots
+
+**Developer Guidelines**:
+
+- Always use `getPipelineConfig(slug)` for pipeline asset resolution
+- Never rely on global pipeline path assumptions
+- Ensure job metadata includes the `pipeline` slug for proper runtime resolution
+- Test with multiple pipeline slugs to verify proper task registry selection
+
 **Priority Order** (highest to lowest):
 
 1. Environment variables (PO\_\*)

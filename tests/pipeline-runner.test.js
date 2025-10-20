@@ -2,7 +2,8 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import { vi, test, expect, describe } from "vitest";
+import { vi, test, expect, describe, beforeEach, afterEach } from "vitest";
+import { createMultiPipelineTestEnv } from "./utils/createTempPipelineDir.js";
 
 // Mock the task-runner module to avoid dynamic import issues
 vi.mock("../src/core/task-runner.js", () => ({
@@ -201,3 +202,300 @@ test("runs one task and writes artifacts", async () => {
 //     }
 //   });
 // });
+
+describe("Multi-pipeline slug resolution", () => {
+  let testEnv;
+
+  beforeEach(async () => {
+    // Create a multi-pipeline test environment
+    testEnv = await createMultiPipelineTestEnv([
+      {
+        slug: "test-pipeline",
+        name: "Test Pipeline",
+        description: "Test pipeline for testing",
+        tasks: ["noop"],
+        taskConfig: {
+          noop: {
+            model: "test-model",
+            temperature: 0.7,
+            maxTokens: 1000,
+          },
+        },
+      },
+      {
+        slug: "content-generation",
+        name: "Content Generation Pipeline",
+        description: "Pipeline for generating content",
+        tasks: ["analysis", "synthesis"],
+        taskConfig: {
+          analysis: {
+            model: "analysis-model",
+            temperature: 0.5,
+          },
+          synthesis: {
+            model: "synthesis-model",
+            temperature: 0.8,
+          },
+        },
+      },
+    ]);
+
+    // Set PO_ROOT to test environment
+    process.env.PO_ROOT = testEnv.tempDir;
+  });
+
+  afterEach(async () => {
+    // Clean up test environment
+    try {
+      await fs.rm(testEnv.tempDir, { recursive: true, force: true });
+    } catch (error) {
+      // Ignore cleanup errors
+    }
+    delete process.env.PO_ROOT;
+    vi.resetModules();
+  });
+
+  test("runner loads slug-specific tasks for test-pipeline", async () => {
+    const jobId = "test-job-123";
+    const workDir = path.join(testEnv.pipelineDataDir, "current", jobId);
+
+    // Create work directory and seed
+    await fs.mkdir(path.join(workDir, "tasks", "noop"), { recursive: true });
+    await fs.writeFile(
+      path.join(workDir, "seed.json"),
+      JSON.stringify({
+        name: "Test Job",
+        pipeline: "test-pipeline",
+        data: { test: "data" },
+      }),
+      "utf8"
+    );
+
+    // Create tasks-status.json
+    await fs.writeFile(
+      path.join(workDir, "tasks-status.json"),
+      JSON.stringify({
+        id: jobId,
+        name: "Test Job",
+        pipeline: "test-pipeline",
+        pipelineId: "pl-test123",
+        createdAt: new Date().toISOString(),
+        state: "pending",
+        tasks: {},
+      }),
+      "utf8"
+    );
+
+    // Mock process.argv for the runner
+    const originalArgv = process.argv;
+    process.argv = ["node", "pipeline-runner.js", jobId];
+
+    // Mock environment variables
+    const originalEnv = process.env.PO_PIPELINE_SLUG;
+    process.env.PO_PIPELINE_SLUG = "test-pipeline";
+
+    try {
+      // Reset modules to pick up new environment
+      vi.resetModules();
+
+      // Import and test the pipeline configuration resolution
+      const { getPipelineConfig } = await import("../src/core/config.js");
+
+      // Verify that getPipelineConfig works with the slug
+      const config = getPipelineConfig("test-pipeline");
+      expect(config).toBeDefined();
+      expect(config.tasksDir).toContain("test-pipeline");
+      expect(config.pipelineJsonPath).toContain("test-pipeline");
+
+      // Verify the pipeline.json can be read
+      const pipelineJson = JSON.parse(
+        await fs.readFile(config.pipelineJsonPath, "utf8")
+      );
+      expect(pipelineJson.tasks).toEqual(["noop"]);
+      expect(pipelineJson.taskConfig).toHaveProperty("noop");
+    } finally {
+      // Restore original environment
+      process.argv = originalArgv;
+      if (originalEnv) {
+        process.env.PO_PIPELINE_SLUG = originalEnv;
+      } else {
+        delete process.env.PO_PIPELINE_SLUG;
+      }
+    }
+  });
+
+  test("runner loads slug-specific tasks for content-generation pipeline", async () => {
+    const jobId = "content-job-456";
+    const workDir = path.join(testEnv.pipelineDataDir, "current", jobId);
+
+    // Create work directory and seed
+    await fs.mkdir(path.join(workDir, "tasks", "analysis"), {
+      recursive: true,
+    });
+    await fs.writeFile(
+      path.join(workDir, "seed.json"),
+      JSON.stringify({
+        name: "Content Job",
+        pipeline: "content-generation",
+        data: { test: "content" },
+      }),
+      "utf8"
+    );
+
+    // Create tasks-status.json
+    await fs.writeFile(
+      path.join(workDir, "tasks-status.json"),
+      JSON.stringify({
+        id: jobId,
+        name: "Content Job",
+        pipeline: "content-generation",
+        pipelineId: "pl-content456",
+        createdAt: new Date().toISOString(),
+        state: "pending",
+        tasks: {},
+      }),
+      "utf8"
+    );
+
+    // Mock process.argv for the runner
+    const originalArgv = process.argv;
+    process.argv = ["node", "pipeline-runner.js", jobId];
+
+    // Mock environment variables
+    const originalEnv = process.env.PO_PIPELINE_SLUG;
+    process.env.PO_PIPELINE_SLUG = "content-generation";
+
+    try {
+      // Reset modules to pick up new environment
+      vi.resetModules();
+
+      // Import and test the pipeline configuration resolution
+      const { getPipelineConfig } = await import("../src/core/config.js");
+
+      // Verify that getPipelineConfig works with the slug
+      const config = getPipelineConfig("content-generation");
+      expect(config).toBeDefined();
+      expect(config.tasksDir).toContain("content-generation");
+      expect(config.pipelineJsonPath).toContain("content-generation");
+
+      // Verify the pipeline.json can be read
+      const pipelineJson = JSON.parse(
+        await fs.readFile(config.pipelineJsonPath, "utf8")
+      );
+      expect(pipelineJson.tasks).toEqual(["analysis", "synthesis"]);
+      expect(pipelineJson.taskConfig).toHaveProperty("analysis");
+      expect(pipelineJson.taskConfig).toHaveProperty("synthesis");
+    } finally {
+      // Restore original environment
+      process.argv = originalArgv;
+      if (originalEnv) {
+        process.env.PO_PIPELINE_SLUG = originalEnv;
+      } else {
+        delete process.env.PO_PIPELINE_SLUG;
+      }
+    }
+  });
+
+  test("runner falls back to seed.json when PO_PIPELINE_SLUG is not set", async () => {
+    const jobId = "fallback-job-789";
+    const workDir = path.join(testEnv.pipelineDataDir, "current", jobId);
+
+    // Create work directory and seed
+    await fs.mkdir(path.join(workDir, "tasks", "noop"), { recursive: true });
+    await fs.writeFile(
+      path.join(workDir, "seed.json"),
+      JSON.stringify({
+        name: "Fallback Job",
+        pipeline: "test-pipeline", // This should be used as fallback
+        data: { test: "fallback" },
+      }),
+      "utf8"
+    );
+
+    // Create tasks-status.json
+    await fs.writeFile(
+      path.join(workDir, "tasks-status.json"),
+      JSON.stringify({
+        id: jobId,
+        name: "Fallback Job",
+        pipeline: "test-pipeline",
+        pipelineId: "pl-fallback789",
+        createdAt: new Date().toISOString(),
+        state: "pending",
+        tasks: {},
+      }),
+      "utf8"
+    );
+
+    // Mock process.argv for the runner
+    const originalArgv = process.argv;
+    process.argv = ["node", "pipeline-runner.js", jobId];
+
+    // Ensure PO_PIPELINE_SLUG is not set
+    const originalEnv = process.env.PO_PIPELINE_SLUG;
+    delete process.env.PO_PIPELINE_SLUG;
+
+    try {
+      // Reset modules to pick up new environment
+      vi.resetModules();
+
+      // Import and test the pipeline configuration resolution
+      const { getPipelineConfig } = await import("../src/core/config.js");
+
+      // Verify that getPipelineConfig works with the fallback slug
+      const config = getPipelineConfig("test-pipeline");
+      expect(config).toBeDefined();
+      expect(config.tasksDir).toContain("test-pipeline");
+      expect(config.pipelineJsonPath).toContain("test-pipeline");
+    } finally {
+      // Restore original environment
+      process.argv = originalArgv;
+      if (originalEnv) {
+        process.env.PO_PIPELINE_SLUG = originalEnv;
+      }
+    }
+  });
+
+  test("runner throws error when pipeline slug is invalid", async () => {
+    const jobId = "error-job-invalid";
+    const workDir = path.join(testEnv.pipelineDataDir, "current", jobId);
+
+    // Create work directory and seed with invalid pipeline
+    await fs.mkdir(workDir, { recursive: true });
+    await fs.writeFile(
+      path.join(workDir, "seed.json"),
+      JSON.stringify({
+        name: "Error Job",
+        pipeline: "invalid-pipeline", // This doesn't exist
+        data: { test: "error" },
+      }),
+      "utf8"
+    );
+
+    // Mock process.argv for the runner
+    const originalArgv = process.argv;
+    process.argv = ["node", "pipeline-runner.js", jobId];
+
+    // Ensure PO_PIPELINE_SLUG is not set to force fallback
+    const originalEnv = process.env.PO_PIPELINE_SLUG;
+    delete process.env.PO_PIPELINE_SLUG;
+
+    try {
+      // Reset modules to pick up new environment
+      vi.resetModules();
+
+      // Import and test that getPipelineConfig throws for invalid slug
+      const { getPipelineConfig } = await import("../src/core/config.js");
+
+      expect(() => {
+        getPipelineConfig("invalid-pipeline");
+      }).toThrow();
+    } finally {
+      // Restore original environment
+      process.argv = originalArgv;
+      if (originalEnv) {
+        process.env.PO_PIPELINE_SLUG = originalEnv;
+      }
+    }
+  });
+});

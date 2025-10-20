@@ -717,4 +717,199 @@ describe("orchestrator", () => {
       child._emit("exit", 0, null);
     });
   });
+
+  describe("PO_PIPELINE_SLUG environment propagation", () => {
+    it("spawnRunner sets PO_PIPELINE_SLUG from seed pipeline field", async () => {
+      const seedPath = path.join(
+        tmpDir,
+        "pipeline-data",
+        "pending",
+        "slug-test-seed.json"
+      );
+      await fs.mkdir(path.dirname(seedPath), { recursive: true });
+      await fs.writeFile(
+        seedPath,
+        JSON.stringify({
+          name: "Slug Test",
+          pipeline: "test", // This should be set as PO_PIPELINE_SLUG
+          data: { test: "slug-propagation" },
+        }),
+        "utf8"
+      );
+
+      const add = getAddHandler();
+      await add(seedPath);
+
+      // Verify runner was spawned
+      expect(spawnMock).toHaveBeenCalledTimes(1);
+
+      // Get the spawn call arguments
+      const [execPath, args, options] = spawnMock.mock.calls[0];
+
+      // Verify environment includes PO_PIPELINE_SLUG
+      expect(options.env).toBeDefined();
+      expect(options.env.PO_PIPELINE_SLUG).toBe("test");
+
+      // Verify other required environment variables are also set
+      expect(options.env.PO_DATA_DIR).toBe(path.join(tmpDir, "pipeline-data"));
+      expect(options.env.PO_CURRENT_DIR).toBe(
+        path.join(tmpDir, "pipeline-data", "current")
+      );
+      expect(options.env.PO_COMPLETE_DIR).toBe(
+        path.join(tmpDir, "pipeline-data", "complete")
+      );
+      expect(options.env.PO_PENDING_DIR).toBe(
+        path.join(tmpDir, "pipeline-data", "pending")
+      );
+    });
+
+    it("spawnRunner throws error when seed lacks pipeline field", async () => {
+      const seedPath = path.join(
+        tmpDir,
+        "pipeline-data",
+        "pending",
+        "missing-pipeline-seed.json"
+      );
+      await fs.mkdir(path.dirname(seedPath), { recursive: true });
+      await fs.writeFile(
+        seedPath,
+        JSON.stringify({
+          name: "Missing Pipeline Test",
+          // Missing pipeline field - should cause error
+          data: { test: "missing-pipeline" },
+        }),
+        "utf8"
+      );
+
+      const add = getAddHandler();
+
+      // Should throw error due to missing pipeline slug
+      await expect(add(seedPath)).rejects.toThrow(
+        "Pipeline slug is required in seed data. Include a 'pipeline' field in your seed."
+      );
+
+      // Verify no runner was spawned
+      expect(spawnMock).not.toHaveBeenCalled();
+    });
+
+    it("spawnRunner validates pipeline slug against registry", async () => {
+      const seedPath = path.join(
+        tmpDir,
+        "pipeline-data",
+        "pending",
+        "invalid-slug-seed.json"
+      );
+      await fs.mkdir(path.dirname(seedPath), { recursive: true });
+      await fs.writeFile(
+        seedPath,
+        JSON.stringify({
+          name: "Invalid Slug Test",
+          pipeline: "nonexistent-pipeline", // This doesn't exist in registry
+          data: { test: "invalid-slug" },
+        }),
+        "utf8"
+      );
+
+      const add = getAddHandler();
+
+      // Should throw error due to invalid pipeline slug
+      await expect(add(seedPath)).rejects.toThrow();
+
+      // Verify no runner was spawned
+      expect(spawnMock).not.toHaveBeenCalled();
+    });
+
+    it("spawnRunner propagates different pipeline slugs correctly", async () => {
+      // Create another pipeline in the registry for testing
+      const pipelineConfigDir = path.join(tmpDir, "pipeline-config");
+      const altPipelineDir = path.join(pipelineConfigDir, "alt-pipeline");
+      const altTasksDir = path.join(altPipelineDir, "tasks");
+      await fs.mkdir(altTasksDir, { recursive: true });
+
+      // Create alt-pipeline configuration
+      await fs.writeFile(
+        path.join(altPipelineDir, "pipeline.json"),
+        JSON.stringify({
+          name: "alt-pipeline",
+          version: "1.0.0",
+          tasks: ["noop"],
+          taskConfig: {
+            noop: {
+              model: "alt-model",
+              temperature: 0.5,
+            },
+          },
+        }),
+        "utf8"
+      );
+
+      await fs.writeFile(
+        path.join(altTasksDir, "index.js"),
+        `export default {
+  noop: "${path.join(tmpDir, "pipeline-tasks", "alt-noop.js")}"
+};`,
+        "utf8"
+      );
+
+      // Create alt task
+      await fs.writeFile(
+        path.join(tmpDir, "pipeline-tasks", "alt-noop.js"),
+        `export default {
+  ingestion: (ctx) => ({ ...ctx, data: "alt-data" }),
+  preProcessing: (ctx) => ({ ...ctx, processed: true }),
+  promptTemplating: (ctx) => ({ ...ctx, prompt: "alt prompt" }),
+  inference: (ctx) => ({ ...ctx, response: "alt response" }),
+  parsing: (ctx) => ({ ...ctx, parsed: { alt: true } }),
+  validateStructure: (ctx) => ({ ...ctx, validationPassed: true }),
+  validateQuality: (ctx) => ({ ...ctx, qualityPassed: true }),
+  finalValidation: (ctx) => ({ ...ctx, output: { alt: true } })
+};`,
+        "utf8"
+      );
+
+      // Update registry to include alt-pipeline
+      const registryPath = path.join(pipelineConfigDir, "registry.json");
+      const registry = JSON.parse(await fs.readFile(registryPath, "utf8"));
+      registry.pipelines["alt-pipeline"] = {
+        name: "Alt Pipeline",
+        description: "Alternative pipeline for testing",
+        pipelineJsonPath: path.join(altPipelineDir, "pipeline.json"),
+        tasksDir: altTasksDir,
+      };
+      await fs.writeFile(
+        registryPath,
+        JSON.stringify(registry, null, 2),
+        "utf8"
+      );
+
+      // Clear module cache to pick up new registry
+      delete require.cache[require.resolve("../src/core/config.js")];
+
+      const seedPath = path.join(
+        tmpDir,
+        "pipeline-data",
+        "pending",
+        "alt-pipeline-seed.json"
+      );
+      await fs.mkdir(path.dirname(seedPath), { recursive: true });
+      await fs.writeFile(
+        seedPath,
+        JSON.stringify({
+          name: "Alt Pipeline Test",
+          pipeline: "alt-pipeline", // Should be set as PO_PIPELINE_SLUG
+          data: { test: "alt-pipeline" },
+        }),
+        "utf8"
+      );
+
+      const add = getAddHandler();
+      await add(seedPath);
+
+      // Verify runner was spawned with correct slug
+      expect(spawnMock).toHaveBeenCalledTimes(1);
+
+      const [execPath, args, options] = spawnMock.mock.calls[0];
+      expect(options.env.PO_PIPELINE_SLUG).toBe("alt-pipeline");
+    });
+  });
 });

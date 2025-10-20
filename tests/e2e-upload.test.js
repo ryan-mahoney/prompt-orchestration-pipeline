@@ -75,8 +75,13 @@ describe("Upload → SSE → Orchestrator pickup", () => {
     setupTestEnvironment(); // fake timers/polyfills if your env provides them
     dataDir = await createTempDir();
 
-    // Set environment variable to use mock provider in child processes
+    // Set environment variables for testing
     process.env.PO_DEFAULT_PROVIDER = "mock";
+    process.env.PO_ROOT = dataDir;
+
+    // Create a test pipeline configuration directory structure
+    const testPipelineDir = path.join(dataDir, "pipeline-config", "test");
+    await fs.mkdir(testPipelineDir, { recursive: true });
 
     // Create a simple pipeline config for testing that doesn't require LLM calls
     const testPipelineConfig = {
@@ -87,15 +92,14 @@ describe("Upload → SSE → Orchestrator pickup", () => {
       },
     };
 
-    // Override the pipeline config path to use our test config
-    process.env.PO_PIPELINE_PATH = path.join(dataDir, "test-pipeline.json");
+    // Write pipeline.json
     await fs.writeFile(
-      process.env.PO_PIPELINE_PATH,
+      path.join(testPipelineDir, "pipeline.json"),
       JSON.stringify(testPipelineConfig, null, 2)
     );
 
-    // Create simple task modules that don't require LLM
-    const testTasksDir = path.join(dataDir, "test-tasks");
+    // Create tasks directory
+    const testTasksDir = path.join(testPipelineDir, "tasks");
     await fs.mkdir(testTasksDir, { recursive: true });
 
     // Simple ingestion task
@@ -143,14 +147,31 @@ export async function integration(context) {
 
     // Create task registry
     const taskRegistry = {
-      ingestion: path.join(testTasksDir, "ingestion.js"),
-      integration: path.join(testTasksDir, "integration.js"),
+      ingestion: "./ingestion.js",
+      integration: "./integration.js",
     };
 
-    process.env.PO_TASK_REGISTRY = path.join(dataDir, "test-task-registry.js");
     await fs.writeFile(
-      process.env.PO_TASK_REGISTRY,
+      path.join(testTasksDir, "index.js"),
       `export default ${JSON.stringify(taskRegistry, null, 2)};`
+    );
+
+    // Create registry.json
+    const registry = {
+      pipelines: {
+        test: {
+          name: "Test Pipeline",
+          description: "A test pipeline for e2e testing",
+          configDir: "./pipeline-config/test",
+          tasksDir: "./pipeline-config/test/tasks",
+        },
+      },
+      defaultSlug: "test",
+    };
+
+    await fs.writeFile(
+      path.join(dataDir, "pipeline-config", "registry.json"),
+      JSON.stringify(registry, null, 2)
     );
 
     // Instrumentation: capture which pipelines are visible before orchestrator boot
@@ -217,7 +238,7 @@ export async function integration(context) {
     const job = `job-${Date.now()}`;
     const seed = {
       name: job,
-      pipeline: "content",
+      pipeline: "test",
       data: {
         type: "content-creation",
         topic: "Test Topic for E2E Test",

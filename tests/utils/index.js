@@ -2,6 +2,8 @@
 export {
   createTempPipelineDir,
   createTempDir,
+  createMultiPipelineConfig,
+  createMultiPipelineTestEnv,
 } from "./createTempPipelineDir.js";
 export { startServer } from "./startServer.js";
 export { startOrchestrator } from "./startOrchestrator.js";

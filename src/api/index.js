@@ -145,6 +145,7 @@ export const submitJobWithValidation = async ({ dataDir, seedObject }) => {
     const jobMetadata = {
       id: jobId,
       name: validatedSeed.name,
+      pipeline: validatedSeed.pipeline, // Include pipeline slug
       pipelineName: validatedSeed.pipeline,
       createdAt: new Date().toISOString(),
       status: "pending",
