@@ -25,6 +25,7 @@
 
 import * as configBridge from "../config-bridge.browser.js";
 import { normalizeTaskFiles } from "../../utils/task-files.js";
+import { derivePipelineMetadata } from "../../utils/pipelines.js";
 
 // Known/valid task states for basic validation
 const VALID_TASK_STATES = new Set(["pending", "running", "done", "error"]);
@@ -237,6 +238,15 @@ export function transformJobStatus(raw, jobId, location) {
     tasks: tasksArray,
     files: jobFiles,
   };
+
+  const { pipeline, pipelineLabel } = derivePipelineMetadata(raw);
+
+  if (pipeline) {
+    job.pipeline = pipeline;
+  }
+  if (pipelineLabel) {
+    job.pipelineLabel = pipelineLabel;
+  }
 
   if (warnings.length > 0) job.warnings = warnings;
 
