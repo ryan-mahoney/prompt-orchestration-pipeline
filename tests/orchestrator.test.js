@@ -290,8 +290,9 @@ describe("orchestrator", () => {
     expect(status.name).toBe("demo");
     console.log("Status name assertion passed");
 
-    expect(status.pipelineId).toMatch(/^pl-/);
-    console.log("Pipeline ID assertion passed");
+    expect(status.id).toBe("demo");
+    expect(status.pipelineId).toBeUndefined();
+    console.log("ID assertion passed");
 
     await fs.access(path.join(workDir, "tasks"));
     console.log("Tasks directory access passed");
@@ -471,7 +472,7 @@ describe("orchestrator", () => {
       );
       expect(status.id).toBe("abc123");
       expect(status.name).toBe("Test Job");
-      expect(status.pipelineId).toMatch(/^pl-/);
+      expect(status.pipelineId).toBeUndefined();
       expect(status.state).toBe("pending");
       expect(status.tasks).toEqual({});
 
