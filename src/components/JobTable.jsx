@@ -100,11 +100,11 @@ export default function JobTable({
               >
                 <Table.Cell>
                   <Flex direction="column" gap="1">
-                    <Text size="1" className="text-slate-500">
-                      {job.id}
-                    </Text>
                     <Text size="2" weight="medium" className="text-slate-900">
                       {job.name}
+                    </Text>
+                    <Text size="1" className="text-slate-500">
+                      {job.id}
                     </Text>
                   </Flex>
                 </Table.Cell>

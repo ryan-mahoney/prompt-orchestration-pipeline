@@ -19,7 +19,7 @@ function upperFirst(s) {
 function formatStepName(item, idx) {
   const raw = item.title ?? item.id ?? `Step ${idx + 1}`;
   // If item has a title, assume it’s curated and leave unchanged; otherwise capitalize fallback
-  return item.title ? raw : upperFirst(raw);
+  return upperFirst(item.title ? item.title : raw);
 }
 
 /**
