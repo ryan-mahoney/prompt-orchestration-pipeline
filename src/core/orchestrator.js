@@ -140,6 +140,7 @@ export async function startOrchestrator(opts) {
       const status = {
         id: jobId,
         name: seed?.name ?? jobId,
+        pipeline: seed?.pipeline, // Include pipeline slug from seed
         pipelineId,
         createdAt: new Date().toISOString(),
         state: "pending",
@@ -277,7 +278,7 @@ function spawnRunner(jobId, dirs, running, spawn, testMode, seed) {
     throw error;
   }
 
-  // Use environment variables if set, otherwise use pipeline config
+  // Use environment variables with explicit slug propagation
   const env = {
     ...process.env,
     PO_DATA_DIR: dirs.dataDir,
@@ -285,11 +286,6 @@ function spawnRunner(jobId, dirs, running, spawn, testMode, seed) {
     PO_CURRENT_DIR: dirs.current,
     PO_COMPLETE_DIR: dirs.complete,
     PO_PIPELINE_SLUG: pipelineSlug,
-    PO_PIPELINE_PATH:
-      process.env.PO_PIPELINE_PATH || pipelineConfig.pipelineJsonPath,
-    PO_TASK_REGISTRY:
-      process.env.PO_TASK_REGISTRY ||
-      path.join(pipelineConfig.tasksDir, "index.js"),
     // Force mock provider for testing
     PO_DEFAULT_PROVIDER: "mock",
   };
