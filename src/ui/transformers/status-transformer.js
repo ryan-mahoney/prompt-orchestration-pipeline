@@ -209,16 +209,6 @@ export function transformJobStatus(raw, jobId, location) {
 
   const warnings = [];
 
-  // Handle legacy files: populate id from pipelineId when id is missing
-  let effectiveJobId = jobId;
-  if (!("id" in raw) && "pipelineId" in raw) {
-    console.warn(
-      `Legacy job file missing 'id' field, using 'pipelineId' for job ${jobId}. Consider updating the file.`
-    );
-    effectiveJobId = raw.pipelineId;
-    warnings.push(`Legacy file: using pipelineId "${raw.pipelineId}" as id`);
-  }
-
   // ID mismatch warning (tests expect exact substring)
   if ("id" in raw && String(raw.id) !== String(jobId)) {
     const msg = `Job ID mismatch: JSON has "${raw.id}", using directory name "${jobId}"`;

@@ -141,13 +141,10 @@ for (const taskName of pipeline.tasks) {
 await fs.mkdir(COMPLETE_DIR, { recursive: true });
 const dest = path.join(COMPLETE_DIR, jobId);
 await fs.rename(workDir, dest);
-// Use jobId as the canonical identifier, with fallback to legacy pipelineId for compatibility
-const pipelineIdentifier = status.id || status.pipelineId || jobId;
 await appendLine(
   path.join(COMPLETE_DIR, "runs.jsonl"),
   JSON.stringify({
-    jobId: pipelineIdentifier,
-    pipelineId: pipelineIdentifier,
+    id: status.id,
     finishedAt: now(),
     tasks: Object.keys(status.tasks),
     totalExecutionTime: Object.values(status.tasks).reduce(

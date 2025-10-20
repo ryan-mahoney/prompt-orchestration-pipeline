@@ -201,16 +201,8 @@ export function validateJobData(jobData, expectedJobId) {
     return { valid: false, error: "Job data must be an object" };
   }
 
-  // Handle legacy files: check for pipelineId if id is missing
-  if (!("id" in jobData) && "pipelineId" in jobData) {
-    console.warn(
-      `Legacy job file missing 'id' field, using 'pipelineId' for validation. Consider updating the file.`
-    );
-    warnings.push("Legacy file: using pipelineId as id for validation");
-  }
-
-  // Required fields: id (or pipelineId for legacy), name, createdAt, tasks
-  if (!("id" in jobData) && !("pipelineId" in jobData)) {
+  // Required fields: id, name, createdAt, tasks
+  if (!("id" in jobData)) {
     return { valid: false, error: "Missing required field: id" };
   }
 
@@ -226,11 +218,10 @@ export function validateJobData(jobData, expectedJobId) {
     return { valid: false, error: "Missing required field: tasks" };
   }
 
-  const effectiveId = jobData.id || jobData.pipelineId;
-  if (effectiveId !== expectedJobId) {
+  if (jobData.id !== expectedJobId) {
     warnings.push("Job ID mismatch");
     console.warn(
-      `Job ID mismatch: expected ${expectedJobId}, found ${effectiveId}`
+      `Job ID mismatch: expected ${expectedJobId}, found ${jobData.id}`
     );
   }
 

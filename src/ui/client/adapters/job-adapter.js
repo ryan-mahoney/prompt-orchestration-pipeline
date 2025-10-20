@@ -224,8 +224,6 @@ export function adaptJobSummary(apiJob = {}) {
 
   const out = {
     id,
-    // pipelineId is used by UI components as the identity/key; mirror id here
-    pipelineId: id,
     name,
     status,
     progress,

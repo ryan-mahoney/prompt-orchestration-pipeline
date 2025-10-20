@@ -24,7 +24,7 @@ export default function JobDetail({ job, pipeline, onClose, onResume }) {
           : (pipeline.tasks[0].id ?? pipeline.tasks[0].name ?? "")
         : ""
     );
-  }, [job.pipelineId, pipeline?.tasks?.length]);
+  }, [job.id, pipeline?.tasks?.length]);
 
   // job.tasks is expected to be an object keyed by task name; normalize from array if needed
   const taskById = React.useMemo(() => {
