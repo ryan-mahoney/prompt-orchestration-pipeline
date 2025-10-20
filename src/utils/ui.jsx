@@ -17,9 +17,16 @@ export const statusBadge = (status) => {
         </Badge>
       );
     case "completed":
+    case "complete":
       return (
         <Badge variant="success" aria-label="Completed">
           Completed
+        </Badge>
+      );
+    case "pending":
+      return (
+        <Badge variant="default" aria-label="Pending">
+          Pending
         </Badge>
       );
     default:
@@ -30,6 +37,7 @@ export const statusBadge = (status) => {
 export const taskStatusIcon = (state) => {
   switch (state) {
     case "completed":
+    case "complete":
       return <CheckCircle2 className="h-4 w-4 text-success" aria-hidden />;
     case "running":
       return <Loader2 className="h-4 w-4 animate-spin text-info" aria-hidden />;
@@ -60,6 +68,7 @@ export const barColorForState = (state) => {
     case "error":
       return "bg-destructive";
     case "completed":
+    case "complete":
       return "bg-success";
     default:
       return "bg-muted-foreground";
