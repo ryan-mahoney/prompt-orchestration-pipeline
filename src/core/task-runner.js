@@ -79,7 +79,7 @@ export async function runPipeline(modulePath, initialContext = {}) {
   const context = {
     ...initialContext,
     currentStage: null,
-    files: fileIO,
+    io: fileIO,
   };
   const logs = [];
   let needsRefinement = false;

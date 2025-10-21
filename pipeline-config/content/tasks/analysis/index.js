@@ -117,7 +117,7 @@ export async function inference(context) {
 
     console.log("[Analysis:inference] Using model:", model);
 
-    const response = await context.llm.chat({
+    const response = await context.llm.deepseek.chat({
       messages: [
         { role: "system", content: system },
         { role: "user", content: prompt },

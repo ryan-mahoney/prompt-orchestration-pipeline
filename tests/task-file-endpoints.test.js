@@ -62,7 +62,9 @@ describe("Task File Endpoints - Single Lifecycle", () => {
       // Create job directory in current
       const jobDir = path.join(testDataDir, "pipeline-data", "current", jobId);
       const taskDir = path.join(jobDir, "tasks", taskId, type);
+      const filesDir = path.join(jobDir, "files", type);
       await fs.mkdir(taskDir, { recursive: true });
+      await fs.mkdir(filesDir, { recursive: true });
 
       // Create test files
       await fs.writeFile(
@@ -101,7 +103,9 @@ describe("Task File Endpoints - Single Lifecycle", () => {
       // Create job directory in complete only
       const jobDir = path.join(testDataDir, "pipeline-data", "complete", jobId);
       const taskDir = path.join(jobDir, "tasks", taskId, type);
+      const filesDir = path.join(jobDir, "files", type);
       await fs.mkdir(taskDir, { recursive: true });
+      await fs.mkdir(filesDir, { recursive: true });
 
       // Create test files
       await fs.writeFile(

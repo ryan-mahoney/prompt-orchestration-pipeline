@@ -89,7 +89,6 @@ for (const taskName of pipeline.tasks) {
       workDir,
       taskDir,
       seed,
-      artifacts: pipelineArtifacts,
       taskName,
       taskConfig: pipeline.taskConfig?.[taskName] || {},
       statusPath: tasksStatusPath,

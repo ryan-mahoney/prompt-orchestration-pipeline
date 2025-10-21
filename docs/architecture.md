@@ -579,7 +579,7 @@ Events:
 ### LLM Request Flow
 
 ```
-1. Task calls context.llm.chat(options)
+1. Task calls context.llm.deepseek.chat(options)
    ↓
 2. LLM layer emits "llm:request:start"
    ↓
@@ -1067,7 +1067,7 @@ export async function ingestion(context) {
 
 export async function inference(context) {
   // Call LLM
-  const response = await context.llm.chat({...});
+  const response = await context.llm.deepseek.chat({...});
   return { output: response.content };
 }
 

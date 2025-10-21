@@ -12,20 +12,19 @@ import path from "node:path";
  * @param {string} config.statusPath - Path to tasks-status.json file
  * @returns {Object} File I/O interface with curried functions
  */
+
+async function ensureDir(dir) {
+  await fs.mkdir(dir, { recursive: true });
+}
+
 export function createTaskFileIO({ workDir, taskName, getStage, statusPath }) {
   const taskDir = path.join(workDir, "tasks", taskName);
 
-  // Subdirectories for different file types
-  const artifactsDir = path.join(taskDir, "artifacts");
-  const logsDir = path.join(taskDir, "logs");
-  const tmpDir = path.join(taskDir, "tmp");
-
-  /**
-   * Ensures a directory exists, creating it if necessary
-   */
-  async function ensureDir(dirPath) {
-    await fs.mkdir(dirPath, { recursive: true });
-  }
+  // New directory structure: {workDir}/files/{type}
+  const filesRoot = path.join(workDir, "files");
+  const artifactsDir = path.join(filesRoot, "artifacts");
+  const logsDir = path.join(filesRoot, "logs");
+  const tmpDir = path.join(filesRoot, "tmp");
 
   /**
    * Updates tasks-status.json with file information, ensuring de-duplication

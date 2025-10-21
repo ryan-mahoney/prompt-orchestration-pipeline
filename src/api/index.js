@@ -1,7 +1,6 @@
 import { startOrchestrator } from "../core/orchestrator.js";
 import path from "node:path";
 import fs from "node:fs/promises";
-import { validateSeedOrThrow } from "../core/validation.js";
 import { validateSeed } from "./validators/seed.js";
 import { atomicWrite, cleanupOnFailure } from "./files.js";
 import { getPipelineConfig } from "../core/config.js";
@@ -37,20 +36,6 @@ const ensureDirectories = async (paths) => {
   for (const dir of Object.values(paths)) {
     if (dir.endsWith(".json")) continue;
     await fs.mkdir(dir, { recursive: true });
-  }
-};
-
-const loadPipelineDefinition = async (pipelinePath) => {
-  try {
-    const content = await fs.readFile(pipelinePath, "utf8");
-    const definition = JSON.parse(content);
-    definition.__path = pipelinePath;
-    return definition;
-  } catch (error) {
-    if (error.code === "ENOENT") {
-      throw new Error(`Pipeline definition not found at ${pipelinePath}`);
-    }
-    throw error;
   }
 };
 

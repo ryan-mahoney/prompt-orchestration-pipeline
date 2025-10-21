@@ -62,7 +62,7 @@ export async function inference(context) {
 
     console.log("[Research:inference] Using model:", model);
 
-    const response = await context.llm.chat({
+    const response = await context.llm.deepseek.chat({
       messages: [
         { role: "system", content: system },
         { role: "user", content: prompt },
@@ -71,6 +71,8 @@ export async function inference(context) {
       temperature: context.taskConfig?.temperature || 0.7,
       max_tokens: context.taskConfig?.maxTokens || 2000,
     });
+
+    console.log("[Research:inference] ✓ Inference completed:", response);
 
     const result = {
       output: {

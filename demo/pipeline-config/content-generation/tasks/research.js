@@ -1,6 +1,11 @@
 // Research Task - Gather information based on seed input
 
 export async function ingestion(context) {
+  context.io.writeTmp("debug-log.txt", "Ingestion started\n", {
+    mode: "append",
+  });
+
+  console.log(context);
   console.log("[Research:ingestion] Starting data ingestion");
   try {
     const { seed } = context;
@@ -62,7 +67,7 @@ export async function inference(context) {
 
     console.log("[Research:inference] Using model:", model);
 
-    const response = await context.llm.chat({
+    const response = await context.llm.deepseek.chat({
       messages: [
         { role: "system", content: system },
         { role: "user", content: prompt },

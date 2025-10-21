@@ -246,13 +246,6 @@ function extractJsonFromMultipart(raw, contentType) {
 }
 
 /**
- * Send SSE message to a client
- */
-function sendSSE(res, event, data) {
-  res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
-}
-
-/**
  * Broadcast state update to all SSE clients
  *
  * NOTE: Per plan, SSE should emit compact, incremental events rather than
