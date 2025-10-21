@@ -13,7 +13,7 @@ describe("Vitest Setup Verification", () => {
       customField: "test",
     });
 
-    expect(mockContext).toHaveProperty("pipelineId", "test-pipeline-123");
+    expect(mockContext).toHaveProperty("id", "test-pipeline-123");
     expect(mockContext).toHaveProperty("taskId", "test-task-456");
     expect(mockContext).toHaveProperty("timestamp");
     expect(mockContext).toHaveProperty("customField", "test");

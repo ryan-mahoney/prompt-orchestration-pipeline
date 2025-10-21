@@ -93,7 +93,7 @@ export default function PipelineDetail() {
   const headerActions = (
     <Flex align="center" gap="3" className="shrink-0">
       <Text size="2" color="gray">
-        ID: {job.pipelineId || job.id || jobId}
+        ID: {job.id || jobId}
       </Text>
       {statusBadge(job.status)}
     </Flex>

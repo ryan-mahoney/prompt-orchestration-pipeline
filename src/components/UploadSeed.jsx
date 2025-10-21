@@ -30,6 +30,7 @@ export default function UploadSeed({ onUploadSuccess }) {
   // Sample seed file structure for reference
   const sampleSeed = {
     name: "some-name",
+    pipeline: "content-generation",
     data: {
       type: "some-type",
       contentType: "blog-post",

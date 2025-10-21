@@ -1,9 +1,8 @@
 {
-  "defaultSlug": "content-generation",
-  "slugs": {
+  "pipelines": {
     "content-generation": {
       "name": "Content Generation Pipeline",
-      "description": "Generates and processes   content using LLM tasks",
+      "description": "Generates and processes content using LLM tasks",
       "pipelinePath": "demo/pipeline-config/content-generation/pipeline.json",
       "taskRegistryPath": "demo/pipeline-config/content-generation/tasks/index.js"
     }

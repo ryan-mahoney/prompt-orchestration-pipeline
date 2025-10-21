@@ -144,8 +144,7 @@ await fs.rename(workDir, dest);
 await appendLine(
   path.join(COMPLETE_DIR, "runs.jsonl"),
   JSON.stringify({
-    jobId,
-    pipelineId: status.pipelineId,
+    id: status.id,
     finishedAt: now(),
     tasks: Object.keys(status.tasks),
     totalExecutionTime: Object.values(status.tasks).reduce(

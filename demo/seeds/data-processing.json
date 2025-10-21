@@ -1,5 +1,6 @@
 {
   "name": "data-processing",
+  "pipeline": "content-generation",
   "data": {
     "type": "data-extraction",
     "sourceType": "unstructured-text",

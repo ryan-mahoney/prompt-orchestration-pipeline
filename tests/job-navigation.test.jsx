@@ -68,7 +68,6 @@ describe("Job Navigation", () => {
       const mockJob = {
         id: "job-123",
         name: "Test Job",
-        pipelineId: "legacy-slug",
       };
 
       // We'll test this through the existing PromptPipelineDashboard.test.jsx
@@ -76,7 +75,7 @@ describe("Job Navigation", () => {
     });
 
     it("should not navigate when job.id is missing", () => {
-      const mockJob = { name: "Legacy Job", pipelineId: "legacy-slug" };
+      const mockJob = { name: "Legacy Job", id: "legacy-slug" };
 
       // This should not navigate since job.id is missing
       expect(mockNavigate).not.toHaveBeenCalled();
@@ -138,7 +137,6 @@ describe("Job Navigation", () => {
       const jobs = [
         {
           name: "Legacy Job",
-          pipelineId: "legacy-slug",
           status: "running",
           tasks: {},
         },
@@ -165,7 +163,6 @@ describe("Job Navigation", () => {
       const jobs = [
         {
           name: "Legacy Job",
-          pipelineId: "legacy-slug",
           status: "running",
           tasks: {},
         },
@@ -249,7 +246,6 @@ describe("Job Navigation", () => {
     it("should not call onClick for jobs without valid ID", () => {
       const job = {
         name: "Legacy Card Job",
-        pipelineId: "legacy-slug",
         status: "running",
         tasks: {},
       };
@@ -275,7 +271,6 @@ describe("Job Navigation", () => {
     it("should show disabled styling for jobs without valid ID", () => {
       const job = {
         name: "Legacy Card Job",
-        pipelineId: "legacy-slug",
         status: "running",
         tasks: {},
       };

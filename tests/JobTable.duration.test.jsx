@@ -43,7 +43,6 @@ describe("JobTable - Duration Display", () => {
     const jobs = [
       {
         id: "test-job-1",
-        pipelineId: "test-job-1",
         name: "Running Job",
         status: "running",
         current: "task-1",
@@ -78,7 +77,6 @@ describe("JobTable - Duration Display", () => {
     const jobs = [
       {
         id: "test-job-2",
-        pipelineId: "test-job-2",
         name: "Pending Job",
         status: "pending",
         current: "task-1",
@@ -114,7 +112,6 @@ describe("JobTable - Duration Display", () => {
     const jobs = [
       {
         id: "test-job-3",
-        pipelineId: "test-job-3",
         name: "Completed Job",
         status: "completed",
         current: "task-1",
@@ -152,7 +149,6 @@ describe("JobTable - Duration Display", () => {
     const jobs = [
       {
         id: "test-job-4",
-        pipelineId: "test-job-4",
         name: "Live Update Job",
         status: "running",
         current: "task-1",
@@ -215,7 +211,6 @@ describe("JobTable - Duration Display", () => {
     const jobs = [
       {
         id: "test-job-5",
-        pipelineId: "test-job-5",
         name: "No Start Time Job",
         status: "running",
         current: "task-1",
@@ -251,7 +246,6 @@ describe("JobTable - Duration Display", () => {
     const jobs = [
       {
         id: "test-job-6",
-        pipelineId: "test-job-6",
         name: "Rejected Job",
         status: "failed",
         current: "task-1",
@@ -288,7 +282,6 @@ describe("JobTable - Duration Display", () => {
     const jobs = [
       {
         id: "test-job-7",
-        pipelineId: "test-job-7",
         name: "Object Tasks Job",
         status: "running",
         current: "task-1",

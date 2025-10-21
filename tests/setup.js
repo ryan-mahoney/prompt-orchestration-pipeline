@@ -64,7 +64,7 @@ if (!global.EventSource) {
 global.testUtils = {
   // Helper to create mock context for pipeline tests
   createMockContext: (overrides = {}) => ({
-    pipelineId: "test-pipeline-123",
+    id: "test-pipeline-123",
     taskId: "test-task-456",
     timestamp: new Date().toISOString(),
     ...overrides,

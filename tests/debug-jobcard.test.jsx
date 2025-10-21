@@ -46,7 +46,6 @@ describe("JobCard - Debug", () => {
   it("debug duration calculation", () => {
     const job = {
       id: "test-job-1",
-      pipelineId: "test-pipeline",
       name: "Running Job",
       status: "running",
       current: "task-1",

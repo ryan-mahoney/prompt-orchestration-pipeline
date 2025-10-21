@@ -49,7 +49,7 @@ export default function JobCard({
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between gap-2">
           <div>
-            <div className="text-xs text-slate-500">{job.pipelineId}</div>
+            <div className="text-xs text-slate-500">{job.id}</div>
             <CardTitle className="text-lg font-semibold">{job.name}</CardTitle>
           </div>
           <div className="flex items-center gap-2">

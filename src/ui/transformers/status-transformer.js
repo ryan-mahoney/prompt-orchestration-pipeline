@@ -164,6 +164,21 @@ export function transformTasks(rawTasks) {
       // Prefer new files.* schema, fallback to legacy artifacts
       task.files = normalizeTaskFiles(raw?.files);
       if ("artifacts" in raw) task.artifacts = raw.artifacts;
+
+      // Preserve error metadata so the UI can surface failure details
+      if ("error" in raw) {
+        if (
+          raw.error &&
+          typeof raw.error === "object" &&
+          !Array.isArray(raw.error)
+        ) {
+          task.error = { ...raw.error };
+        } else if (raw.error != null) {
+          task.error = { message: String(raw.error) };
+        } else {
+          task.error = null;
+        }
+      }
     }
 
     out.push(task);

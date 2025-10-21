@@ -48,7 +48,6 @@ describe("JobDetail - Detail-Shaped Job with Pipeline from API", () => {
   it("receives detail-shaped job with object tasks and pipeline from API", () => {
     const detailShapedJob = {
       id: "test-job-123",
-      pipelineId: "test-job-123",
       name: "Test Pipeline Job",
       status: "running",
       progress: 60,
@@ -115,7 +114,6 @@ describe("JobDetail - Detail-Shaped Job with Pipeline from API", () => {
   it("uses pipeline from API when provided, even if job has different task order", () => {
     const detailShapedJob = {
       id: "test-job-456",
-      pipelineId: "test-job-456",
       name: "Job with Different Order",
       status: "running",
       tasks: {
@@ -152,7 +150,6 @@ describe("JobDetail - Detail-Shaped Job with Pipeline from API", () => {
   it("handles object tasks natively", () => {
     const detailShapedJob = {
       id: "test-job-789",
-      pipelineId: "test-job-789",
       name: "Object Tasks Test",
       status: "running",
       tasks: {
@@ -189,7 +186,6 @@ describe("JobDetail - Detail-Shaped Job with Pipeline from API", () => {
   it("handles detail-shaped job with missing pipeline gracefully", () => {
     const detailShapedJob = {
       id: "test-job-no-pipeline",
-      pipelineId: "test-job-no-pipeline",
       name: "Job Without Pipeline",
       status: "pending",
       tasks: {
@@ -224,7 +220,6 @@ describe("JobDetail - Detail-Shaped Job with Pipeline from API", () => {
   it("preserves task metadata from detail-shaped job", () => {
     const detailShapedJob = {
       id: "test-job-metadata",
-      pipelineId: "test-job-metadata",
       name: "Metadata Test Job",
       status: "done",
       tasks: {
@@ -277,7 +272,6 @@ describe("JobDetail - Detail-Shaped Job with Pipeline from API", () => {
   it("handles edge case tasks with missing names or invalid states", () => {
     const detailShapedJob = {
       id: "test-job-edge-cases",
-      pipelineId: "test-job-edge-cases",
       name: "Edge Cases Test Job",
       status: "running",
       tasks: [
@@ -325,7 +319,6 @@ describe("JobDetail - Detail-Shaped Job with Pipeline from API", () => {
 
     const detailShapedJob = {
       id: "test-job-with-error",
-      pipelineId: "test-job-with-error",
       name: "Test Job with Error",
       status: "failed",
       tasks: {
@@ -392,7 +385,6 @@ describe("JobDetail - Detail-Shaped Job with Pipeline from API", () => {
 
     const detailShapedJob = {
       id: "test-job-durations",
-      pipelineId: "test-job-durations",
       name: "Duration Policy Test Job",
       status: "running",
       tasks: {
@@ -479,7 +471,6 @@ describe("JobDetail - Detail-Shaped Job with Pipeline from API", () => {
   it("handles tasks without startedAt gracefully", () => {
     const detailShapedJob = {
       id: "test-job-no-start-time",
-      pipelineId: "test-job-no-start-time",
       name: "No Start Time Test Job",
       status: "running",
       tasks: {
@@ -524,7 +515,6 @@ describe("JobDetail - Detail-Shaped Job with Pipeline from API", () => {
 
     const detailShapedJob = {
       id: "test-job-live-update",
-      pipelineId: "test-job-live-update",
       name: "Live Update Test Job",
       status: "running",
       tasks: {

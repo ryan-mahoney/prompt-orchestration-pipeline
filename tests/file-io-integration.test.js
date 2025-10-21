@@ -16,7 +16,6 @@ describe("File I/O Integration Tests", () => {
 
     statusPath = path.join(tempDir, "tasks-status.json");
     const initialStatus = {
-      pipelineId: "test-pipeline",
       current: "test-task",
       tasks: {
         "test-task": {
@@ -208,7 +207,6 @@ describe("File I/O Integration Tests", () => {
 
     // Update status to include analysis task
     const updatedStatus = {
-      pipelineId: "test-pipeline",
       current: "analysis",
       tasks: {
         analysis: {

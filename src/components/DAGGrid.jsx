@@ -9,6 +9,19 @@ import { Callout } from "@radix-ui/themes";
 import { TaskFilePane } from "./TaskFilePane.jsx";
 import { createEmptyTaskFiles } from "../utils/task-files.js";
 
+// Helpers: capitalize fallback step ids (upperFirst only; do not alter provided titles)
+function upperFirst(s) {
+  return typeof s === "string" && s.length > 0
+    ? s.charAt(0).toUpperCase() + s.slice(1)
+    : s;
+}
+
+function formatStepName(item, idx) {
+  const raw = item.title ?? item.id ?? `Step ${idx + 1}`;
+  // If item has a title, assume it’s curated and leave unchanged; otherwise capitalize fallback
+  return upperFirst(item.title ? item.title : raw);
+}
+
 /**
  * DAGGrid component for visualizing pipeline tasks with connectors and slide-over details
  * @param {Object} props
@@ -368,7 +381,7 @@ function DAGGrid({
                 className={`rounded-t-lg px-4 py-2 border-b flex items-center justify-between gap-3 ${getHeaderClasses(status)}`}
               >
                 <div className="font-medium truncate">
-                  {item.title ?? item.id ?? `Step ${idx + 1}`}
+                  {formatStepName(item, idx)}
                 </div>
                 <div className="flex items-center gap-2">
                   {status === "active" ? (
@@ -414,9 +427,7 @@ function DAGGrid({
                 id={`slide-over-title-${openIdx}`}
                 className="text-lg font-semibold truncate"
               >
-                {items[openIdx]?.title ??
-                  items[openIdx]?.id ??
-                  `Step ${openIdx + 1}`}
+                {formatStepName(items[openIdx], openIdx)}
               </div>
               <button
                 ref={closeButtonRef}
@@ -435,7 +446,7 @@ function DAGGrid({
               {/* Error Callout - shown when task has error status and body */}
               {items[openIdx]?.status === "error" && items[openIdx]?.body && (
                 <section aria-label="Error">
-                  <Callout.Root color="red" role="alert" aria-live="assertive">
+                  <Callout.Root role="alert" aria-live="assertive">
                     <Callout.Text className="whitespace-pre-wrap break-words">
                       {items[openIdx].body}
                     </Callout.Text>
