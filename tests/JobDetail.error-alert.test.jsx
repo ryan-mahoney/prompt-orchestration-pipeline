@@ -42,7 +42,6 @@ describe("JobDetail Error Alert Integration", () => {
     mockJob = {
       id: "test-job-123",
       name: "Test Pipeline Job",
-      pipelineId: "test-pipeline-123",
       status: "running",
       tasks: {
         research: {
@@ -120,7 +119,6 @@ describe("JobDetail Error Alert Integration", () => {
     const jobWithMissingError = {
       id: "test-job-no-error",
       name: "Test Job No Error",
-      pipelineId: "test-job-no-error",
       status: "failed",
       tasks: {
         analysis: {
@@ -169,7 +167,6 @@ describe("JobDetail Error Alert Integration", () => {
     const jobWithLongError = {
       id: "test-job-long-error",
       name: "Test Job Long Error",
-      pipelineId: "test-job-long-error",
       status: "failed",
       tasks: {
         analysis: {

@@ -1004,14 +1004,7 @@ See also: `docs/tasks-data-shape.md` — canonical Task[] schema and migration g
 ### Demo Execution
 
 ```bash
-# Run demo with UI
-ENABLE_UI=true node demo/run-demo.js run market-analysis
-
-# Run demo without UI
-node demo/run-demo.js run content-generation
-
-# List available scenarios
-node demo/run-demo.js list
+npm run demo:all
 ```
 
 ## Deprecated: Demo data module (moved to demo/)

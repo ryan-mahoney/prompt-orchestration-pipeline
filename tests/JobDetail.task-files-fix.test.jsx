@@ -17,7 +17,6 @@ describe("JobDetail task files fix", () => {
       id: "test-job-123",
       name: "Test Job",
       status: "complete",
-      pipelineId: "test-job-123",
       tasks: [
         {
           name: "research",
@@ -47,8 +46,8 @@ describe("JobDetail task files fix", () => {
     render(<JobDetail job={job} pipeline={pipeline} />);
 
     // The component should render without errors and show task names
-    expect(screen.getByText("research")).toBeInTheDocument();
-    expect(screen.getByText("analysis")).toBeInTheDocument();
+    expect(screen.getByText("Research")).toBeInTheDocument();
+    expect(screen.getByText("Analysis")).toBeInTheDocument();
 
     // Verify that task files are accessible through the mapping
     // This is tested indirectly through the DAGGrid rendering
@@ -62,7 +61,6 @@ describe("JobDetail task files fix", () => {
       id: "test-job-456",
       name: "Legacy Job",
       status: "complete",
-      pipelineId: "test-job-456",
       tasks: {
         research: {
           name: "research",
@@ -91,8 +89,8 @@ describe("JobDetail task files fix", () => {
 
     render(<JobDetail job={job} pipeline={pipeline} />);
 
-    expect(screen.getByText("research")).toBeInTheDocument();
-    expect(screen.getByText("analysis")).toBeInTheDocument();
+    expect(screen.getByText("Research")).toBeInTheDocument();
+    expect(screen.getByText("Analysis")).toBeInTheDocument();
   });
 
   it("should handle empty or missing tasks gracefully", () => {
@@ -100,7 +98,6 @@ describe("JobDetail task files fix", () => {
       id: "empty-job",
       name: "Empty Job",
       status: "pending",
-      pipelineId: "empty-job",
       tasks: [],
     };
 
@@ -108,7 +105,6 @@ describe("JobDetail task files fix", () => {
       id: "no-tasks-job",
       name: "No Tasks Job",
       status: "pending",
-      pipelineId: "no-tasks-job",
       // no tasks property
     };
 

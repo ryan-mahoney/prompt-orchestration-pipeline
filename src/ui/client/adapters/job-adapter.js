@@ -224,8 +224,6 @@ export function adaptJobSummary(apiJob = {}) {
 
   const out = {
     id,
-    // pipelineId is used by UI components as the identity/key; mirror id here
-    pipelineId: id,
     name,
     status,
     progress,
@@ -237,13 +235,17 @@ export function adaptJobSummary(apiJob = {}) {
     tasks,
   };
 
-  const { pipeline, pipelineLabel } = derivePipelineMetadata(apiJob);
+  const { pipeline, pipelineLabel, pipelineSlug } =
+    derivePipelineMetadata(apiJob);
 
-  if (pipeline) {
+  if (pipeline != null) {
     out.pipeline = pipeline;
   }
-  if (pipelineLabel) {
+  if (pipelineLabel != null) {
     out.pipelineLabel = pipelineLabel;
+  }
+  if (pipelineSlug != null) {
+    out.pipelineSlug = pipelineSlug;
   }
 
   if (warnings.length > 0) out.__warnings = warnings;

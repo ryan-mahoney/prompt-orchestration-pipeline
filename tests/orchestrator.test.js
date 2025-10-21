@@ -106,7 +106,6 @@ describe("orchestrator", () => {
     await fs.writeFile(
       path.join(pipelineConfigDir, "registry.json"),
       JSON.stringify({
-        defaultSlug: "test",
         pipelines: {
           test: {
             name: "Test Pipeline",
@@ -291,8 +290,8 @@ describe("orchestrator", () => {
     expect(status.name).toBe("demo");
     console.log("Status name assertion passed");
 
-    expect(status.pipelineId).toMatch(/^pl-/);
-    console.log("Pipeline ID assertion passed");
+    expect(status.id).toBe("demo");
+    console.log("ID assertion passed");
 
     await fs.access(path.join(workDir, "tasks"));
     console.log("Tasks directory access passed");
@@ -472,7 +471,6 @@ describe("orchestrator", () => {
       );
       expect(status.id).toBe("abc123");
       expect(status.name).toBe("Test Job");
-      expect(status.pipelineId).toMatch(/^pl-/);
       expect(status.state).toBe("pending");
       expect(status.tasks).toEqual({});
 

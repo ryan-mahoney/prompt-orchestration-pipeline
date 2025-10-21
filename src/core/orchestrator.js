@@ -136,12 +136,10 @@ export async function startOrchestrator(opts) {
     try {
       await fs.access(statusPath);
     } catch {
-      const pipelineId = "pl-" + Math.random().toString(36).slice(2, 10);
       const status = {
         id: jobId,
         name: seed?.name ?? jobId,
         pipeline: seed?.pipeline, // Include pipeline slug from seed
-        pipelineId,
         createdAt: new Date().toISOString(),
         state: "pending",
         tasks: {}, // Initialize empty tasks object for pipeline runner

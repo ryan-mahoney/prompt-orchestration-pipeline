@@ -41,7 +41,6 @@ describe("JobCard - Duration Display", () => {
   it("displays duration for running tasks", () => {
     const job = {
       id: "test-job-1",
-      pipelineId: "test-pipeline",
       name: "Running Job",
       status: "running",
       current: "task-1",
@@ -73,7 +72,6 @@ describe("JobCard - Duration Display", () => {
   it("hides duration for pending tasks", () => {
     const job = {
       id: "test-job-2",
-      pipelineId: "test-pipeline",
       name: "Pending Job",
       status: "pending",
       current: "task-1",
@@ -105,7 +103,6 @@ describe("JobCard - Duration Display", () => {
   it("displays duration for completed tasks using executionTime when available", () => {
     const job = {
       id: "test-job-3",
-      pipelineId: "test-pipeline",
       name: "Completed Job",
       status: "completed",
       current: "task-1",
@@ -140,7 +137,6 @@ describe("JobCard - Duration Display", () => {
   it("displays task duration for running tasks", () => {
     const job = {
       id: "test-job-4",
-      pipelineId: "test-pipeline",
       name: "Live Update Job",
       status: "running",
       current: "task-1",
@@ -172,7 +168,6 @@ describe("JobCard - Duration Display", () => {
   it("handles tasks without startedAt gracefully", () => {
     const job = {
       id: "test-job-5",
-      pipelineId: "test-pipeline",
       name: "No Start Time Job",
       status: "running",
       current: "task-1",
@@ -204,7 +199,6 @@ describe("JobCard - Duration Display", () => {
   it("handles rejected tasks correctly", () => {
     const job = {
       id: "test-job-6",
-      pipelineId: "test-pipeline",
       name: "Rejected Job",
       status: "failed",
       current: "task-1",
@@ -237,7 +231,6 @@ describe("JobCard - Duration Display", () => {
   it("handles object-shaped tasks correctly", () => {
     const job = {
       id: "test-job-7",
-      pipelineId: "test-pipeline",
       name: "Object Tasks Job",
       status: "running",
       current: "task-1",
@@ -270,7 +263,6 @@ describe("JobCard - Duration Display", () => {
   it("displays overall elapsed time regardless of current task state", () => {
     const job = {
       id: "test-job-8",
-      pipelineId: "test-pipeline",
       name: "Job with Overall Time",
       status: "pending",
       current: "task-1",

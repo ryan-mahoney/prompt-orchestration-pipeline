@@ -14,7 +14,7 @@
  * Behavior guided by tests in tests/list-transformer.test.js and docs/project-data-display.md
  */
 
-import * as configBridge from "../config-bridge.browser.js";
+import { derivePipelineMetadata } from "../../utils/pipelines.js";
 
 export function getStatusPriority(status) {
   // Map to numeric priority where higher = higher priority
@@ -207,9 +207,8 @@ export function filterJobs(jobs, searchTerm = "", options = {}) {
 /**
  * Transform job list for API: pick only allowed fields and drop nulls
  */
-export function transformJobListForAPI(jobs = []) {
+export function transformJobListForAPI(jobs = [], options = {}) {
   if (!Array.isArray(jobs) || jobs.length === 0) return [];
-
   const allowed = [
     "id",
     "name",
@@ -220,6 +219,8 @@ export function transformJobListForAPI(jobs = []) {
     "location",
   ];
 
+  const { includePipelineMetadata = true } = options;
+
   const out = [];
   for (const job of jobs) {
     if (!job || typeof job !== "object") continue;
@@ -227,6 +228,26 @@ export function transformJobListForAPI(jobs = []) {
     for (const k of allowed) {
       if (k in job) obj[k] = job[k];
     }
+
+    if (includePipelineMetadata) {
+      const { pipeline, pipelineLabel, pipelineSlug } =
+        derivePipelineMetadata(job);
+
+      if (pipelineSlug != null) {
+        obj.pipelineSlug = pipelineSlug;
+      }
+
+      if (pipelineLabel != null) {
+        obj.pipelineLabel = pipelineLabel;
+      }
+
+      if (pipelineSlug != null) {
+        obj.pipeline = pipelineSlug;
+      } else if (typeof pipeline === "string") {
+        obj.pipeline = pipeline;
+      }
+    }
+
     out.push(obj);
   }
 

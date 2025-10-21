@@ -440,6 +440,9 @@ describe("List Transformer", () => {
           location: "current",
           tasks: [{ name: "task-1", state: "running" }], // Should be excluded
           warnings: ["Some warning"], // Should be excluded
+          pipeline: "content-generation",
+          pipelineLabel: "Content Generation",
+          pipelineSlug: "content-generation",
         },
       ];
 
@@ -454,6 +457,158 @@ describe("List Transformer", () => {
           createdAt: "2023-01-01T00:00:00Z",
           updatedAt: "2023-01-01T01:00:00Z",
           location: "current",
+          pipeline: "content-generation",
+          pipelineLabel: "Content Generation",
+          pipelineSlug: "content-generation",
+        },
+      ]);
+    });
+
+    it("should include pipeline metadata when option enabled", () => {
+      const jobs = [
+        {
+          id: "job-1",
+          name: "Job 1",
+          status: "running",
+          progress: 50,
+          createdAt: "2023-01-01T00:00:00Z",
+          updatedAt: "2023-01-01T01:00:00Z",
+          location: "current",
+          pipeline: {
+            name: "Content Generation",
+            id: "content-generation",
+          },
+          pipelineLabel: "Content Generation",
+          pipelineSlug: "content-generation",
+        },
+        {
+          id: "job-2",
+          name: "Job 2",
+          status: "pending",
+          progress: 0,
+          createdAt: "2023-01-02T00:00:00Z",
+          location: "current",
+          pipeline: "data-processing",
+        },
+      ];
+
+      const result = transformJobListForAPI(jobs, {
+        includePipelineMetadata: true,
+      });
+
+      expect(result).toEqual([
+        {
+          id: "job-1",
+          name: "Job 1",
+          status: "running",
+          progress: 50,
+          createdAt: "2023-01-01T00:00:00Z",
+          updatedAt: "2023-01-01T01:00:00Z",
+          location: "current",
+          pipeline: "content-generation",
+          pipelineLabel: "Content Generation",
+          pipelineSlug: "content-generation",
+        },
+        {
+          id: "job-2",
+          name: "Job 2",
+          status: "pending",
+          progress: 0,
+          createdAt: "2023-01-02T00:00:00Z",
+          location: "current",
+          pipeline: "data-processing",
+          pipelineLabel: "Data Processing",
+          pipelineSlug: "data-processing",
+        },
+      ]);
+    });
+
+    it("should exclude pipeline metadata when option disabled", () => {
+      const jobs = [
+        {
+          id: "job-1",
+          name: "Job 1",
+          status: "running",
+          progress: 50,
+          createdAt: "2023-01-01T00:00:00Z",
+          updatedAt: "2023-01-01T01:00:00Z",
+          location: "current",
+          pipeline: {
+            name: "Content Generation",
+            id: "content-generation",
+          },
+          pipelineLabel: "Content Generation",
+          pipelineSlug: "content-generation",
+        },
+        {
+          id: "job-2",
+          name: "Job 2",
+          status: "pending",
+          progress: 0,
+          createdAt: "2023-01-02T00:00:00Z",
+          location: "current",
+          pipeline: "data-processing",
+        },
+      ];
+
+      const result = transformJobListForAPI(jobs, {
+        includePipelineMetadata: false,
+      });
+
+      expect(result).toEqual([
+        {
+          id: "job-1",
+          name: "Job 1",
+          status: "running",
+          progress: 50,
+          createdAt: "2023-01-01T00:00:00Z",
+          updatedAt: "2023-01-01T01:00:00Z",
+          location: "current",
+        },
+        {
+          id: "job-2",
+          name: "Job 2",
+          status: "pending",
+          progress: 0,
+          createdAt: "2023-01-02T00:00:00Z",
+          location: "current",
+        },
+      ]);
+    });
+
+    it("should include pipeline metadata by default", () => {
+      const jobs = [
+        {
+          id: "job-1",
+          name: "Job 1",
+          status: "running",
+          progress: 50,
+          createdAt: "2023-01-01T00:00:00Z",
+          updatedAt: "2023-01-01T01:00:00Z",
+          location: "current",
+          pipeline: {
+            name: "Content Generation",
+            id: "content-generation",
+          },
+          pipelineLabel: "Content Generation",
+          pipelineSlug: "content-generation",
+        },
+      ];
+
+      const result = transformJobListForAPI(jobs);
+
+      expect(result).toEqual([
+        {
+          id: "job-1",
+          name: "Job 1",
+          status: "running",
+          progress: 50,
+          createdAt: "2023-01-01T00:00:00Z",
+          updatedAt: "2023-01-01T01:00:00Z",
+          location: "current",
+          pipeline: "content-generation",
+          pipelineLabel: "Content Generation",
+          pipelineSlug: "content-generation",
         },
       ]);
     });

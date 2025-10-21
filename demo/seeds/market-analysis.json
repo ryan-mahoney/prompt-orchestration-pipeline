@@ -1,5 +1,6 @@
 {
   "name": "market-analysis",
+  "pipeline": "content-generation",
   "data": {
     "type": "market-research",
     "industry": "Renewable Energy Storage",

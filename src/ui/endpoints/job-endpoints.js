@@ -134,7 +134,9 @@ export async function handleJobList() {
 
     const aggregated = aggregateAndSortJobs(currentJobs, completeJobs);
 
-    const payload = transformJobListForAPI(aggregated);
+    const payload = transformJobListForAPI(aggregated, {
+      includePipelineMetadata: true,
+    });
 
     return { ok: true, data: payload };
   } catch (err) {

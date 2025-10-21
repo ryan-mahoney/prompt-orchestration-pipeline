@@ -124,8 +124,8 @@ describe("DAGGrid", () => {
 
     render(<DAGGrid items={itemsWithoutTitles} activeIndex={1} />);
 
-    expect(screen.getByText("task1")).toBeTruthy();
-    expect(screen.getByText("task2")).toBeTruthy();
+    expect(screen.getByText("Task1")).toBeTruthy();
+    expect(screen.getByText("Task2")).toBeTruthy();
   });
 
   it("handles items without subtitles", () => {
@@ -175,5 +175,24 @@ describe("DAGGrid", () => {
 
     // Third card should show "pending" (index > activeIndex)
     expect(cards[2].innerHTML).toContain("pending");
+  });
+
+  it("slide-over header uses capitalized fallback id", () => {
+    const itemsWithoutTitles = [
+      { id: "task1", status: "pending" },
+      { id: "task2", status: "active" },
+    ];
+
+    render(<DAGGrid items={itemsWithoutTitles} activeIndex={0} />);
+
+    // Click the first card to open the slide-over
+    const cards = screen.getAllByRole("listitem");
+    fireEvent.click(cards[0]);
+
+    // Assert the slide-over header shows the capitalized fallback id
+    // Use getByTestId or specific selector to target only the slide-over header
+    expect(screen.getByRole("dialog")).toBeTruthy();
+    const slideOverTitle = document.getElementById("slide-over-title-0");
+    expect(slideOverTitle?.textContent).toBe("Task1");
   });
 });
