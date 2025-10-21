@@ -239,11 +239,10 @@ vi.mock("../src/core/task-runner.js", async () => {
     ...actual,
     runPipeline,
     runPipelineWithModelRouting,
-    selectModel: actual.selectModel,
   };
 });
 
-const { runPipeline, runPipelineWithModelRouting, selectModel } = taskRunner;
+const { runPipeline, runPipelineWithModelRouting } = taskRunner;
 
 describe("Task Runner", () => {
   let mockTasks;
@@ -593,33 +592,6 @@ describe("Task Runner", () => {
       expect(result.ok).toBe(true);
       expect(result.context.availableModels).toEqual(["default"]);
       expect(result.context.currentModel).toBe("default");
-    });
-  });
-
-  describe("selectModel", () => {
-    it("should select simple-fast model for simple task with fast speed", () => {
-      const model = selectModel("classification", "low", "fast");
-      expect(model).toBe("gpt-3.5-turbo");
-    });
-
-    it("should select simple-accurate model for simple task with normal speed", () => {
-      const model = selectModel("classification", "low", "normal");
-      expect(model).toBe("gpt-4");
-    });
-
-    it("should select complex-fast model for complex task with fast speed", () => {
-      const model = selectModel("analysis", "high", "fast");
-      expect(model).toBe("gpt-4");
-    });
-
-    it("should select complex-accurate model for complex task with accurate speed", () => {
-      const model = selectModel("analysis", "high", "accurate");
-      expect(model).toBe("gpt-4-turbo");
-    });
-
-    it("should return default model for unknown combinations", () => {
-      const model = selectModel("unknown", "medium", "normal");
-      expect(model).toBe("gpt-4");
     });
   });
 

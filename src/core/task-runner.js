@@ -275,25 +275,6 @@ export async function runPipelineWithModelRouting(
   return runPipeline(modulePath, context);
 }
 
-export function selectModel(taskType, complexity, speed = "normal") {
-  const modelMap = {
-    "simple-fast": "gpt-3.5-turbo",
-    "simple-accurate": "gpt-4",
-    "complex-fast": "gpt-4",
-    "complex-accurate": "gpt-4-turbo",
-    specialized: "claude-3-opus",
-  };
-  const key =
-    complexity === "high"
-      ? speed === "fast"
-        ? "complex-fast"
-        : "complex-accurate"
-      : speed === "fast"
-        ? "simple-fast"
-        : "simple-accurate";
-  return modelMap[key] || "gpt-4";
-}
-
 function toAbsFileURL(p) {
   if (!path.isAbsolute(p)) {
     throw new Error(
