@@ -21,6 +21,63 @@ const ORDER = [
 ];
 
 /**
+ * Validates that a value is a plain object (not array, null, or class instance).
+ * @param {*} value - The value to check
+ * @returns {boolean} True if the value is a plain object, false otherwise
+ */
+function isPlainObject(value) {
+  if (typeof value !== "object") {
+    return false;
+  }
+  if (value === null) {
+    return false;
+  }
+  if (Array.isArray(value)) {
+    return false;
+  }
+  if (Object.getPrototypeOf(value) === Object.prototype) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Validates stage handler return values conform to { output, flags } contract.
+ * @param {string} stageName - The name of the stage for error reporting
+ * @param {*} result - The result returned by the stage handler
+ * @throws {Error} If the result doesn't conform to the expected contract
+ */
+function assertStageResult(stageName, result) {
+  if (result === null || result === undefined) {
+    throw new Error(`Stage "${stageName}" returned null or undefined`);
+  }
+
+  if (typeof result !== "object") {
+    throw new Error(
+      `Stage "${stageName}" must return an object, got ${typeof result}`
+    );
+  }
+
+  if (!result.hasOwnProperty("output")) {
+    throw new Error(
+      `Stage "${stageName}" result missing required property: output`
+    );
+  }
+
+  if (!result.hasOwnProperty("flags")) {
+    throw new Error(
+      `Stage "${stageName}" result missing required property: flags`
+    );
+  }
+
+  if (!isPlainObject(result.flags)) {
+    throw new Error(
+      `Stage "${stageName}" flags must be a plain object, got ${typeof result.flags}`
+    );
+  }
+}
+
+/**
  * Runs a pipeline by loading a module that exports functions keyed by ORDER.
  */
 export async function runPipeline(modulePath, initialContext = {}) {
