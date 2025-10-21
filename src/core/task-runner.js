@@ -78,6 +78,45 @@ function assertStageResult(stageName, result) {
 }
 
 /**
+ * Validates flag values match declared types in schema.
+ * @param {string} stageName - The name of the stage for error reporting
+ * @param {object} flags - The flags object to validate
+ * @param {object} schema - The schema defining expected types for each flag
+ * @throws {Error} If flag types don't match the schema
+ */
+function validateFlagTypes(stageName, flags, schema) {
+  if (schema === undefined || schema === null) {
+    return;
+  }
+
+  for (const key in schema) {
+    const expectedTypes = schema[key];
+    const actualType = typeof flags[key];
+
+    // Allow undefined flags (they may be optional)
+    if (flags[key] === undefined) {
+      continue;
+    }
+
+    if (typeof expectedTypes === "string") {
+      // Single expected type
+      if (actualType !== expectedTypes) {
+        throw new Error(
+          `Stage "${stageName}" flag "${key}" has type ${actualType}, expected ${expectedTypes}`
+        );
+      }
+    } else if (Array.isArray(expectedTypes)) {
+      // Multiple allowed types
+      if (!expectedTypes.includes(actualType)) {
+        throw new Error(
+          `Stage "${stageName}" flag "${key}" has type ${actualType}, expected one of: ${expectedTypes.join(", ")}`
+        );
+      }
+    }
+  }
+}
+
+/**
  * Runs a pipeline by loading a module that exports functions keyed by ORDER.
  */
 export async function runPipeline(modulePath, initialContext = {}) {
