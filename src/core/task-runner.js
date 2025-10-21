@@ -1,5 +1,6 @@
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import fs from "fs";
 import { createLLM, getLLMEvents } from "../llm/index.js";
 import { loadEnvironment } from "./environment.js";
 import { getConfig } from "./config.js";
@@ -114,6 +115,72 @@ function validateFlagTypes(stageName, flags, schema) {
       }
     }
   }
+}
+
+/**
+ * Detects type conflicts when merging new flags into existing flags.
+ * @param {object} currentFlags - The existing flags object
+ * @param {object} newFlags - The new flags to merge
+ * @param {string} stageName - The name of the stage for error reporting
+ * @throws {Error} If any flag would change type when merged
+ */
+function checkFlagTypeConflicts(currentFlags, newFlags, stageName) {
+  for (const key of Object.keys(newFlags)) {
+    if (key in currentFlags) {
+      const currentType = typeof currentFlags[key];
+      const newType = typeof newFlags[key];
+      if (currentType !== newType) {
+        throw new Error(
+          `Stage "${stageName}" attempted to change flag "${key}" type from ${currentType} to ${newType}`
+        );
+      }
+    }
+  }
+}
+
+/**
+ * Ensures log directory exists before creating log files.
+ * @param {string} workDir - The working directory path
+ * @param {string} jobId - The job ID
+ * @returns {string} The full path to the logs directory
+ */
+function ensureLogDirectory(workDir, jobId) {
+  const logsPath = path.join(workDir, jobId, "files", "logs");
+  fs.mkdirSync(logsPath, { recursive: true });
+  return logsPath;
+}
+
+/**
+ * Redirects console output to a log file for a stage.
+ * @param {string} logPath - The path to the log file
+ * @returns {() => void} A function that restores console output and closes the log stream
+ */
+function captureConsoleOutput(logPath) {
+  const logStream = fs.createWriteStream(logPath, { flags: "w" });
+
+  // Store original console methods
+  const originalLog = console.log;
+  const originalError = console.error;
+  const originalWarn = console.warn;
+  const originalInfo = console.info;
+
+  // Override console methods to write to stream
+  console.log = (...args) => logStream.write(args.join(" ") + "\n");
+  console.error = (...args) =>
+    logStream.write("[ERROR] " + args.join(" ") + "\n");
+  console.warn = (...args) =>
+    logStream.write("[WARN] " + args.join(" ") + "\n");
+  console.info = (...args) =>
+    logStream.write("[INFO] " + args.join(" ") + "\n");
+
+  // Return restoration function
+  return () => {
+    logStream.end();
+    console.log = originalLog;
+    console.error = originalError;
+    console.warn = originalWarn;
+    console.info = originalInfo;
+  };
 }
 
 /**
