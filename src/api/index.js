@@ -312,6 +312,5 @@ export const PipelineOrchestrator = {
 
 // Export the original functions for direct functional usage
 export { runPipeline } from "../core/task-runner.js";
-export { selectModel } from "../core/task-runner.js";
 
 export default PipelineOrchestrator;
