@@ -46,8 +46,8 @@ describe("JobDetail task files fix", () => {
     render(<JobDetail job={job} pipeline={pipeline} />);
 
     // The component should render without errors and show task names
-    expect(screen.getByText("research")).toBeInTheDocument();
-    expect(screen.getByText("analysis")).toBeInTheDocument();
+    expect(screen.getByText("Research")).toBeInTheDocument();
+    expect(screen.getByText("Analysis")).toBeInTheDocument();
 
     // Verify that task files are accessible through the mapping
     // This is tested indirectly through the DAGGrid rendering
@@ -89,8 +89,8 @@ describe("JobDetail task files fix", () => {
 
     render(<JobDetail job={job} pipeline={pipeline} />);
 
-    expect(screen.getByText("research")).toBeInTheDocument();
-    expect(screen.getByText("analysis")).toBeInTheDocument();
+    expect(screen.getByText("Research")).toBeInTheDocument();
+    expect(screen.getByText("Analysis")).toBeInTheDocument();
   });
 
   it("should handle empty or missing tasks gracefully", () => {
