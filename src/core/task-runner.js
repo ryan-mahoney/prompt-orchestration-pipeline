@@ -184,6 +184,59 @@ function captureConsoleOutput(logPath) {
 }
 
 /**
+ * Flag schemas for each pipeline stage.
+ * Defines required flags (prerequisites) and produced flags (outputs) with their types.
+ */
+const FLAG_SCHEMAS = {
+  validateStructure: {
+    requires: {},
+    produces: {
+      validationFailed: "boolean",
+      lastValidationError: ["string", "object", "undefined"],
+    },
+  },
+  critique: {
+    requires: {},
+    produces: {
+      critiqueComplete: "boolean",
+    },
+  },
+  refine: {
+    requires: {
+      validationFailed: "boolean",
+    },
+    produces: {
+      refined: "boolean",
+    },
+  },
+};
+
+/**
+ * Hard-coded pipeline stage execution order and configuration.
+ * Each stage defines its handler, skip predicate, and iteration limits.
+ */
+const PIPELINE_STAGES = [
+  {
+    name: "validateStructure",
+    handler: null, // Will be populated from dynamic module import
+    skipIf: null,
+    maxIterations: null,
+  },
+  {
+    name: "critique",
+    handler: null, // Will be populated from dynamic module import
+    skipIf: (flags) => flags.validationFailed === false,
+    maxIterations: null,
+  },
+  {
+    name: "refine",
+    handler: null, // Will be populated from dynamic module import
+    skipIf: (flags) => flags.validationFailed === false,
+    maxIterations: (seed) => seed.maxRefinements || 1,
+  },
+];
+
+/**
  * Runs a pipeline by loading a module that exports functions keyed by ORDER.
  */
 export async function runPipeline(modulePath, initialContext = {}) {
@@ -208,7 +261,7 @@ export async function runPipeline(modulePath, initialContext = {}) {
   const onLLMComplete = (metric) => {
     llmMetrics.push({
       ...metric,
-      task: context.taskName,
+      task: context.meta.taskName,
       stage: context.currentStage,
     });
   };
@@ -223,6 +276,23 @@ export async function runPipeline(modulePath, initialContext = {}) {
   const modUrl = `${abs.href}?t=${Date.now()}`;
   const mod = await import(modUrl);
   const tasks = mod.default ?? mod;
+
+  // Populate PIPELINE_STAGES handlers from dynamically loaded tasks
+  PIPELINE_STAGES.forEach((stageConfig) => {
+    if (
+      tasks[stageConfig.name] &&
+      typeof tasks[stageConfig.name] === "function"
+    ) {
+      stageConfig.handler = tasks[stageConfig.name];
+    } else {
+      // Create placeholder handler that throws "Not implemented" error
+      stageConfig.handler = async function (context) {
+        throw new Error(
+          `Stage "${stageConfig.name}" is not implemented in the loaded module`
+        );
+      };
+    }
+  });
 
   // Create fileIO singleton if we have the required context
   let fileIO = null;
@@ -239,15 +309,32 @@ export async function runPipeline(modulePath, initialContext = {}) {
     });
   }
 
+  // Extract seed and maxRefinements for new context structure
+  const seed = initialContext.seed || initialContext;
+  const maxRefinements = seed.maxRefinements || 1;
+
+  // Create new context structure with meta, data, flags, logs, currentStage
   const context = {
-    ...initialContext,
+    meta: {
+      taskName: initialContext.taskName,
+      workDir: initialContext.workDir,
+      statusPath: initialContext.statusPath,
+      jobId: initialContext.jobId,
+      llm: initialContext.llm,
+      io: fileIO,
+      envLoaded: initialContext.envLoaded,
+      modelConfig: initialContext.modelConfig,
+    },
+    data: {
+      seed: seed,
+    },
+    flags: {},
+    logs: [],
     currentStage: null,
-    io: fileIO,
   };
   const logs = [];
   let needsRefinement = false;
   let refinementCount = 0;
-  const maxRefinements = config.taskRunner.maxRefinementAttempts;
 
   do {
     needsRefinement = false;
