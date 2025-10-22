@@ -658,7 +658,7 @@ export async function runPipeline(modulePath, initialContext = {}) {
     typeof tasks.validateStructure === "function" ||
     typeof tasks.validateQuality === "function";
 
-  if (context.validationFailed && hasValidation) {
+  if (context.flags.validationFailed && hasValidation) {
     return {
       ok: false,
       failedStage: "final-validation",
