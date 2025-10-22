@@ -164,6 +164,9 @@ export async function validateStructure(context) {
       analysisContent.toLowerCase().includes(section)
     );
 
+    let validationFailed = false;
+    let lastValidationError = undefined;
+
     if (!hasAllSections) {
       const missingSections = requiredSections.filter(
         (section) => !analysisContent.toLowerCase().includes(section)
@@ -172,16 +175,132 @@ export async function validateStructure(context) {
         "[Analysis:validateStructure] ✗ Validation failed: Missing sections:",
         missingSections
       );
-      context.validationFailed = true;
-      context.lastValidationError = "Analysis missing required sections";
+      validationFailed = true;
+      lastValidationError = `Analysis missing required sections: ${missingSections.join(", ")}`;
     } else {
       console.log(
         "[Analysis:validateStructure] ✓ Validation passed: All required sections present"
       );
     }
+
+    return {
+      output: {
+        validationResult: {
+          contentLength: analysisContent?.length || 0,
+          passed: !validationFailed,
+          missingSections: validationFailed
+            ? requiredSections.filter(
+                (section) => !analysisContent.toLowerCase().includes(section)
+              )
+            : [],
+          validatedAt: new Date().toISOString(),
+        },
+      },
+      flags: {
+        validationFailed,
+        lastValidationError,
+      },
+    };
   } catch (error) {
     console.error(
       "[Analysis:validateStructure] ✗ Error during validation:",
+      error.message
+    );
+    throw error;
+  }
+}
+
+export async function critique(context) {
+  console.log("[Analysis:critique] Analyzing analysis content for improvement");
+  try {
+    const { analysisContent } = context.output;
+    const validationError = context.flags.lastValidationError;
+
+    let critiqueComplete = true;
+    let critiqueResult = {
+      hasContent: !!analysisContent,
+      contentLength: analysisContent?.length || 0,
+      hasValidationError: !!validationError,
+      critique: validationError
+        ? `Analysis needs improvement due to validation error: ${validationError}`
+        : "Analysis appears adequate with all required sections present",
+    };
+
+    console.log("[Analysis:critique] ✓ Critique completed:", {
+      contentLength: critiqueResult.contentLength,
+      hasValidationError: critiqueResult.hasValidationError,
+    });
+
+    return {
+      output: {
+        critiqueResult,
+      },
+      flags: {
+        critiqueComplete,
+      },
+    };
+  } catch (error) {
+    console.error(
+      "[Analysis:critique] ✗ Error during critique:",
+      error.message
+    );
+    throw error;
+  }
+}
+
+export async function refine(context) {
+  console.log("[Analysis:refine] Refining analysis content based on feedback");
+  try {
+    const { analysisContent } = context.output;
+    const validationFailed = context.flags.validationFailed;
+    const validationError = context.flags.lastValidationError;
+
+    let refined = false;
+    let refinedContent = analysisContent;
+
+    if (validationFailed && validationError) {
+      console.log(
+        "[Analysis:refine] Attempting to refine content due to validation error"
+      );
+
+      // For demo purposes, we'll add missing sections
+      // In a real implementation, this would use LLM to improve the content
+      const missingSections = validationError.includes("findings")
+        ? "1. Key findings: [Added based on research]\n\n"
+        : "";
+      const trendsSection = validationError.includes("trends")
+        ? "2. Trends and patterns: [Identified from data]\n\n"
+        : "";
+      const recommendationsSection = validationError.includes("recommendations")
+        ? "3. Recommendations: [Proposed actions]\n\n"
+        : "";
+
+      refinedContent = `${missingSections}${trendsSection}${recommendationsSection}${analysisContent}\n\n[Note: Analysis has been refined to address validation issues.]`;
+      refined = true;
+
+      console.log("[Analysis:refine] ✓ Content refined with missing sections");
+    } else {
+      console.log("[Analysis:refine] No refinement needed");
+    }
+
+    return {
+      output: {
+        ...context.output,
+        analysisContent: refinedContent,
+        refineResult: {
+          originalLength: analysisContent?.length || 0,
+          refinedLength: refinedContent?.length || 0,
+          refined,
+          refinedAt: new Date().toISOString(),
+        },
+      },
+      flags: {
+        refined,
+      },
+    };
+  } catch (error) {
+    console.error(
+      "[Analysis:refine] ✗ Error during refinement:",
       error.message
     );
     throw error;
