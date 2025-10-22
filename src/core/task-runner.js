@@ -2,6 +2,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import fs from "fs";
 import { createLLM, getLLMEvents } from "../llm/index.js";
+import { loadFreshModule } from "./module-loader.js";
 import { loadEnvironment } from "./environment.js";
 import { getConfig } from "./config.js";
 import { createTaskFileIO } from "./file-io.js";
@@ -276,9 +277,7 @@ export async function runPipeline(modulePath, initialContext = {}) {
   );
 
   const abs = toAbsFileURL(modulePath);
-  // Add cache busting to force module reload
-  const modUrl = `${abs.href}?t=${Date.now()}`;
-  const mod = await import(modUrl);
+  const mod = await loadFreshModule(abs);
   const tasks = mod.default ?? mod;
 
   // Populate PIPELINE_STAGES handlers from dynamically loaded tasks
@@ -317,15 +316,15 @@ export async function runPipeline(modulePath, initialContext = {}) {
   const seed = initialContext.seed || initialContext;
   const maxRefinements = seed.maxRefinements || 1;
 
-  // Create new context structure with meta, data, flags, logs, currentStage
+  // Create new context structure with io, llm, meta, data, flags, logs, currentStage
   const context = {
+    io: fileIO,
+    llm: initialContext.llm,
     meta: {
       taskName: initialContext.taskName,
       workDir: initialContext.workDir,
       statusPath: initialContext.statusPath,
       jobId: initialContext.jobId,
-      llm: initialContext.llm,
-      io: fileIO,
       envLoaded: initialContext.envLoaded,
       modelConfig: initialContext.modelConfig,
     },
@@ -469,6 +468,8 @@ export async function runPipeline(modulePath, initialContext = {}) {
       const stageFlags = structuredClone(context.flags);
       const stageContext = {
         ...context.meta,
+        io: context.io,
+        llm: context.llm,
         data: stageData,
         flags: stageFlags,
         currentStage: stageName,
@@ -513,7 +514,7 @@ export async function runPipeline(modulePath, initialContext = {}) {
           timestamp: new Date().toISOString(),
         });
 
-        // Persist context.data and context.flags to tasks-status.json
+        // Persist context.data, context.flags, and top-level context to tasks-status.json
         if (context.meta.statusPath) {
           const statusData = {
             data: context.data,
@@ -523,10 +524,15 @@ export async function runPipeline(modulePath, initialContext = {}) {
             refinementCount,
             lastUpdated: new Date().toISOString(),
           };
-          fs.writeFileSync(
-            context.meta.statusPath,
-            JSON.stringify(statusData, null, 2)
-          );
+          try {
+            fs.writeFileSync(
+              context.meta.statusPath,
+              JSON.stringify(statusData, null, 2)
+            );
+          } catch (error) {
+            // Don't fail the pipeline if status file write fails
+            console.warn(`Failed to write status file: ${error.message}`);
+          }
         }
 
         const ms = +(performance.now() - start).toFixed(2);
@@ -544,10 +550,11 @@ export async function runPipeline(modulePath, initialContext = {}) {
           refinementCount < maxRefinements
         ) {
           needsRefinement = true;
-          context.flags.validationFailed = false;
+          // Don't reset validationFailed here - let the refinement cycle handle it
           break;
         }
       } catch (error) {
+        console.error(`Stage ${stageName} failed:`, error);
         const ms = +(performance.now() - start).toFixed(2);
         const errInfo = normalizeError(error);
         logs.push({
@@ -614,7 +621,37 @@ export async function runPipeline(modulePath, initialContext = {}) {
       const start = performance.now();
       try {
         const result = await fn(context);
-        // Legacy Object.assign removed - handlers should use new { output, flags } contract
+
+        // Handle legacy stages that don't return { output, flags } format
+        if (
+          result &&
+          typeof result === "object" &&
+          result.output &&
+          result.flags
+        ) {
+          // New contract: { output, flags }
+          context.data[stage] = result.output;
+          context.flags = { ...context.flags, ...result.flags };
+
+          context.logs.push({
+            stage,
+            action: "completed",
+            outputType: typeof result.output,
+            flagKeys: Object.keys(result.flags),
+            timestamp: new Date().toISOString(),
+          });
+        } else {
+          // Legacy contract: direct return value
+          context.data[stage] = result;
+
+          context.logs.push({
+            stage,
+            action: "completed",
+            outputType: typeof result,
+            flagKeys: [],
+            timestamp: new Date().toISOString(),
+          });
+        }
 
         const ms = +(performance.now() - start).toFixed(2);
         logs.push({ stage, ok: true, ms, refinementCycle: refinementCount });
