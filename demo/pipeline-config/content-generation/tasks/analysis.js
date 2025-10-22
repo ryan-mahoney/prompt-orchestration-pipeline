@@ -1,79 +1,5 @@
 // Analysis Task - Analyze research findings and extract insights
 
-export async function ingestion(context) {
-  console.log("[Analysis:ingestion] Starting data ingestion");
-  try {
-    const { artifacts } = context;
-    const research = artifacts?.research?.research;
-
-    if (!research) {
-      console.error(
-        "[Analysis:ingestion] ✗ Research data not found in artifacts"
-      );
-      throw new Error("Research data not found in artifacts");
-    }
-
-    // Use new file I/O API to log ingestion process
-    if (context.files) {
-      await context.files.writeLog(
-        "ingestion.log",
-        `[${new Date().toISOString()}] Starting data ingestion for ${context.seed.data.type}\n`
-      );
-      await context.files.writeLog(
-        "ingestion.log",
-        `Research content length: ${research.content.length} characters\n`
-      );
-    }
-
-    const result = {
-      output: {
-        researchContent: research.content,
-        analysisType: context.seed.data.type,
-      },
-    };
-
-    // Write raw research data as artifact for reference
-    if (context.files) {
-      await context.files.writeArtifact(
-        "raw-research.json",
-        JSON.stringify(
-          {
-            content: research.content,
-            type: context.seed.data.type,
-            ingestedAt: new Date().toISOString(),
-          },
-          null,
-          2
-        )
-      );
-
-      await context.files.writeLog(
-        "ingestion.log",
-        `[${new Date().toISOString()}] ✓ Successfully ingested data\n`
-      );
-    }
-
-    console.log("[Analysis:ingestion] ✓ Successfully ingested data:", {
-      researchContentLength: research.content.length,
-      analysisType: context.seed.data.type,
-    });
-
-    return result;
-  } catch (error) {
-    if (context.files) {
-      await context.files.writeLog(
-        "ingestion.log",
-        `[${new Date().toISOString()}] ✗ Error during ingestion: ${error.message}\n`
-      );
-    }
-    console.error(
-      "[Analysis:ingestion] ✗ Error during ingestion:",
-      error.message
-    );
-    throw error;
-  }
-}
-
 export async function promptTemplating(context) {
   console.log("[Analysis:promptTemplating] Building prompt template");
   try {
@@ -113,18 +39,12 @@ export async function inference(context) {
   console.log("[Analysis:inference] Starting LLM inference");
   try {
     const { system, prompt } = context.output;
-    const model = context.taskConfig?.model || "gpt-5-nano";
-
-    console.log("[Analysis:inference] Using model:", model);
 
     const response = await context.llm.deepseek.chat({
       messages: [
         { role: "system", content: system },
         { role: "user", content: prompt },
       ],
-      model,
-      temperature: context.taskConfig?.temperature || 0.6,
-      max_tokens: context.taskConfig?.maxTokens || 2500,
     });
 
     const result = {

@@ -156,6 +156,10 @@ function ensureLogDirectory(workDir, jobId) {
  * @returns {() => void} A function that restores console output and closes the log stream
  */
 function captureConsoleOutput(logPath) {
+  // Ensure the directory for the log file exists
+  const logDir = path.dirname(logPath);
+  fs.mkdirSync(logDir, { recursive: true });
+
   const logStream = fs.createWriteStream(logPath, { flags: "w" });
 
   // Store original console methods
@@ -450,12 +454,80 @@ export async function runPipeline(modulePath, initialContext = {}) {
         continue;
       }
 
+      // Add console output capture before stage execution
+      const logPath = path.join(
+        context.meta.workDir,
+        context.meta.jobId,
+        "files",
+        "logs",
+        `stage-${stageName}.log`
+      );
+      const restoreConsole = captureConsoleOutput(logPath);
+
+      // Clone data and flags before stage execution
+      const stageData = structuredClone(context.data);
+      const stageFlags = structuredClone(context.flags);
+      const stageContext = {
+        ...context.meta,
+        data: stageData,
+        flags: stageFlags,
+        currentStage: stageName,
+      };
+
+      // Validate prerequisite flags before stage execution
+      const requiredFlags = FLAG_SCHEMAS[stageName]?.requires;
+      if (requiredFlags && Object.keys(requiredFlags).length > 0) {
+        validateFlagTypes(stageName, context.flags, requiredFlags);
+      }
+
       // Execute the stage
       const start = performance.now();
+      let stageResult;
       try {
-        const result = await stageHandler(context);
-        if (result && typeof result === "object")
-          Object.assign(context, result);
+        stageResult = await stageHandler(stageContext);
+
+        // Validate stage result shape after execution
+        assertStageResult(stageName, stageResult);
+
+        // Validate produced flags against schema
+        const producedFlagsSchema = FLAG_SCHEMAS[stageName]?.produces;
+        if (producedFlagsSchema) {
+          validateFlagTypes(stageName, stageResult.flags, producedFlagsSchema);
+        }
+
+        // Check for flag type conflicts before merging
+        checkFlagTypeConflicts(context.flags, stageResult.flags, stageName);
+
+        // Store stage output in context.data
+        context.data[stageName] = stageResult.output;
+
+        // Merge stage flags into context.flags
+        context.flags = { ...context.flags, ...stageResult.flags };
+
+        // Add audit log entry after stage completes
+        context.logs.push({
+          stage: stageName,
+          action: "completed",
+          outputType: typeof stageResult.output,
+          flagKeys: Object.keys(stageResult.flags),
+          timestamp: new Date().toISOString(),
+        });
+
+        // Persist context.data and context.flags to tasks-status.json
+        if (context.meta.statusPath) {
+          const statusData = {
+            data: context.data,
+            flags: context.flags,
+            logs: context.logs,
+            currentStage: context.currentStage,
+            refinementCount,
+            lastUpdated: new Date().toISOString(),
+          };
+          fs.writeFileSync(
+            context.meta.statusPath,
+            JSON.stringify(statusData, null, 2)
+          );
+        }
 
         const ms = +(performance.now() - start).toFixed(2);
         logs.push({
@@ -504,6 +576,11 @@ export async function runPipeline(modulePath, initialContext = {}) {
           context,
           refinementAttempts: refinementCount,
         };
+      } finally {
+        // Add console output restoration after stage execution
+        if (restoreConsole) {
+          restoreConsole();
+        }
       }
     }
 
