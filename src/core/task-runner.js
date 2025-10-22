@@ -336,24 +336,45 @@ export async function runPipeline(modulePath, initialContext = {}) {
   let needsRefinement = false;
   let refinementCount = 0;
 
+  // Ensure log directory exists before stage execution
+  ensureLogDirectory(context.meta.workDir, context.meta.jobId);
+
   do {
     needsRefinement = false;
     let preRefinedThisCycle = false;
 
-    for (const stage of ORDER) {
-      context.currentStage = stage;
-      const fn = tasks[stage];
-      if (typeof fn !== "function") {
-        logs.push({ stage, skipped: true, refinementCycle: refinementCount });
+    for (const stageConfig of PIPELINE_STAGES) {
+      const stageName = stageConfig.name;
+      const stageHandler = stageConfig.handler;
+
+      // Skip stages when skipIf predicate returns true
+      if (stageConfig.skipIf && stageConfig.skipIf(context.flags)) {
+        context.logs.push({
+          stage: stageName,
+          action: "skipped",
+          reason: "skipIf predicate returned true",
+          timestamp: new Date().toISOString(),
+        });
         continue;
       }
 
+      // Skip if handler is not available (not implemented)
+      if (typeof stageHandler !== "function") {
+        logs.push({
+          stage: stageName,
+          skipped: true,
+          refinementCycle: refinementCount,
+        });
+        continue;
+      }
+
+      // Skip ingestion and preProcessing during refinement cycles
       if (
         refinementCount > 0 &&
-        ["ingestion", "preProcessing"].includes(stage)
+        ["ingestion", "preProcessing"].includes(stageName)
       ) {
         logs.push({
-          stage,
+          stage: stageName,
           skipped: true,
           reason: "refinement-cycle",
           refinementCycle: refinementCount,
@@ -361,15 +382,17 @@ export async function runPipeline(modulePath, initialContext = {}) {
         continue;
       }
 
+      // Handle pre-refinement logic for validation stages
       if (
         refinementCount > 0 &&
         !preRefinedThisCycle &&
-        !context.refined &&
-        (stage === "validateStructure" || stage === "validateQuality")
+        !context.flags.refined &&
+        (stageName === "validateStructure" || stageName === "validateQuality")
       ) {
         for (const s of ["critique", "refine"]) {
-          const f = tasks[s];
-          if (typeof f !== "function") {
+          const sConfig = PIPELINE_STAGES.find((config) => config.name === s);
+          const sHandler = sConfig?.handler;
+          if (typeof sHandler !== "function") {
             logs.push({
               stage: s,
               skipped: true,
@@ -380,7 +403,7 @@ export async function runPipeline(modulePath, initialContext = {}) {
           }
           const sStart = performance.now();
           try {
-            const r = await f(context);
+            const r = await sHandler(context);
             if (r && typeof r === "object") Object.assign(context, r);
             const sMs = +(performance.now() - sStart).toFixed(2);
             logs.push({
@@ -413,11 +436,99 @@ export async function runPipeline(modulePath, initialContext = {}) {
         preRefinedThisCycle = true;
       }
 
-      if (preRefinedThisCycle && (stage === "critique" || stage === "refine")) {
+      // Skip critique and refine if already pre-refined
+      if (
+        preRefinedThisCycle &&
+        (stageName === "critique" || stageName === "refine")
+      ) {
+        logs.push({
+          stage: stageName,
+          skipped: true,
+          reason: "already-pre-refined",
+          refinementCycle: refinementCount,
+        });
+        continue;
+      }
+
+      // Execute the stage
+      const start = performance.now();
+      try {
+        const result = await stageHandler(context);
+        if (result && typeof result === "object")
+          Object.assign(context, result);
+
+        const ms = +(performance.now() - start).toFixed(2);
+        logs.push({
+          stage: stageName,
+          ok: true,
+          ms,
+          refinementCycle: refinementCount,
+        });
+
+        if (
+          (stageName === "validateStructure" ||
+            stageName === "validateQuality") &&
+          context.flags.validationFailed &&
+          refinementCount < maxRefinements
+        ) {
+          needsRefinement = true;
+          context.flags.validationFailed = false;
+          break;
+        }
+      } catch (error) {
+        const ms = +(performance.now() - start).toFixed(2);
+        const errInfo = normalizeError(error);
+        logs.push({
+          stage: stageName,
+          ok: false,
+          ms,
+          error: errInfo,
+          refinementCycle: refinementCount,
+        });
+
+        if (
+          (stageName === "validateStructure" ||
+            stageName === "validateQuality") &&
+          refinementCount < maxRefinements
+        ) {
+          context.flags.lastValidationError = errInfo;
+          needsRefinement = true;
+          break;
+        }
+
+        return {
+          ok: false,
+          failedStage: stageName,
+          error: errInfo,
+          logs,
+          context,
+          refinementAttempts: refinementCount,
+        };
+      }
+    }
+
+    // Handle stages not in PIPELINE_STAGES (legacy stages from ORDER)
+    for (const stage of ORDER) {
+      // Skip if stage is already handled by PIPELINE_STAGES
+      if (PIPELINE_STAGES.some((config) => config.name === stage)) {
+        continue;
+      }
+
+      context.currentStage = stage;
+      const fn = tasks[stage];
+      if (typeof fn !== "function") {
+        logs.push({ stage, skipped: true, refinementCycle: refinementCount });
+        continue;
+      }
+
+      if (
+        refinementCount > 0 &&
+        ["ingestion", "preProcessing"].includes(stage)
+      ) {
         logs.push({
           stage,
           skipped: true,
-          reason: "already-pre-refined",
+          reason: "refinement-cycle",
           refinementCycle: refinementCount,
         });
         continue;
@@ -431,16 +542,6 @@ export async function runPipeline(modulePath, initialContext = {}) {
 
         const ms = +(performance.now() - start).toFixed(2);
         logs.push({ stage, ok: true, ms, refinementCycle: refinementCount });
-
-        if (
-          (stage === "validateStructure" || stage === "validateQuality") &&
-          context.validationFailed &&
-          refinementCount < maxRefinements
-        ) {
-          needsRefinement = true;
-          context.validationFailed = false;
-          break;
-        }
       } catch (error) {
         const ms = +(performance.now() - start).toFixed(2);
         const errInfo = normalizeError(error);
@@ -451,15 +552,6 @@ export async function runPipeline(modulePath, initialContext = {}) {
           error: errInfo,
           refinementCycle: refinementCount,
         });
-
-        if (
-          (stage === "validateStructure" || stage === "validateQuality") &&
-          refinementCount < maxRefinements
-        ) {
-          context.lastValidationError = errInfo;
-          needsRefinement = true;
-          break;
-        }
 
         return {
           ok: false,
