@@ -408,7 +408,7 @@ export async function runPipeline(modulePath, initialContext = {}) {
           const sStart = performance.now();
           try {
             const r = await sHandler(context);
-            if (r && typeof r === "object") Object.assign(context, r);
+            // Legacy Object.assign removed - handlers should use new { output, flags } contract
             const sMs = +(performance.now() - sStart).toFixed(2);
             logs.push({
               stage: s,
@@ -614,8 +614,7 @@ export async function runPipeline(modulePath, initialContext = {}) {
       const start = performance.now();
       try {
         const result = await fn(context);
-        if (result && typeof result === "object")
-          Object.assign(context, result);
+        // Legacy Object.assign removed - handlers should use new { output, flags } contract
 
         const ms = +(performance.now() - start).toFixed(2);
         logs.push({ stage, ok: true, ms, refinementCycle: refinementCount });
@@ -646,7 +645,7 @@ export async function runPipeline(modulePath, initialContext = {}) {
       logs.push({
         stage: "refinement-trigger",
         refinementCycle: refinementCount,
-        reason: context.lastValidationError
+        reason: context.flags.lastValidationError
           ? "validation-error"
           : "validation-failed-flag",
       });

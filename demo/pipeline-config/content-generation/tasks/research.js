@@ -92,19 +92,36 @@ export async function validateStructure(context) {
 
     // Relax validation for demo runs: accept shorter outputs to avoid failing the demo.
     // For production workloads you may keep the stricter threshold.
+    let validationFailed = false;
+    let lastValidationError = undefined;
+
     if (!researchContent || researchContent.length < 20) {
       console.warn(
         "[Research:validateStructure] ⚠ Research content short or missing (demo relaxed)"
       );
       // Do not mark as validationFailed in demo mode to allow pipelines to proceed.
       // If stricter behavior is required, set validationFailed here.
-      // context.validationFailed = true;
-      // context.lastValidationError = "Research content too short or missing";
+      // validationFailed = true;
+      // lastValidationError = "Research content too short or missing";
     } else {
       console.log("[Research:validateStructure] ✓ Validation passed:", {
         contentLength: researchContent.length,
       });
     }
+
+    return {
+      output: {
+        validationResult: {
+          contentLength: researchContent?.length || 0,
+          passed: !validationFailed,
+          validatedAt: new Date().toISOString(),
+        },
+      },
+      flags: {
+        validationFailed,
+        lastValidationError,
+      },
+    };
   } catch (error) {
     console.error(
       "[Research:validateStructure] ✗ Error during validation:",

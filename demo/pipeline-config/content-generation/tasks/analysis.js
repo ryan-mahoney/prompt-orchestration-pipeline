@@ -84,6 +84,9 @@ export async function validateStructure(context) {
       analysisContent.toLowerCase().includes(section)
     );
 
+    let validationFailed = false;
+    let lastValidationError = undefined;
+
     if (!hasAllSections) {
       const missingSections = requiredSections.filter(
         (section) => !analysisContent.toLowerCase().includes(section)
@@ -92,13 +95,32 @@ export async function validateStructure(context) {
         "[Analysis:validateStructure] ✗ Validation failed: Missing sections:",
         missingSections
       );
-      context.validationFailed = true;
-      context.lastValidationError = "Analysis missing required sections";
+      validationFailed = true;
+      lastValidationError = `Analysis missing required sections: ${missingSections.join(", ")}`;
     } else {
       console.log(
         "[Analysis:validateStructure] ✓ Validation passed: All required sections present"
       );
     }
+
+    return {
+      output: {
+        validationResult: {
+          contentLength: analysisContent?.length || 0,
+          passed: !validationFailed,
+          missingSections: validationFailed
+            ? requiredSections.filter(
+                (section) => !analysisContent.toLowerCase().includes(section)
+              )
+            : [],
+          validatedAt: new Date().toISOString(),
+        },
+      },
+      flags: {
+        validationFailed,
+        lastValidationError,
+      },
+    };
   } catch (error) {
     console.error(
       "[Analysis:validateStructure] ✗ Error during validation:",
