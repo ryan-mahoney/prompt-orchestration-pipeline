@@ -422,9 +422,30 @@ describe("Task Runner - New Context Structure", () => {
 
   describe("Error Handling", () => {
     it("should handle handler errors and stop execution", async () => {
-      mockTasksModule.validateStructure.mockRejectedValue(
-        new Error("Validation failed")
-      );
+      // Create a tasks module that throws an error
+      const errorTasksModule = {
+        validateStructure: async (context) => {
+          throw new Error("Validation failed");
+        },
+        critique: async (context) => ({
+          output: { critique: "good" },
+          flags: { critiqueComplete: true },
+        }),
+        refine: async (context) => ({
+          output: { refined: true },
+          flags: { refined: true },
+        }),
+      };
+
+      // Write the error tasks module to a temporary file
+      const errorTaskModulePath = path.join(tempDir, "error-test-tasks.js");
+      const errorModuleContent =
+        Object.entries(errorTasksModule)
+          .map(([name, fn]) => `export const ${name} = ${fn.toString()};`)
+          .join("\n") +
+        "\nexport default { validateStructure, critique, refine };";
+
+      await fs.writeFile(errorTaskModulePath, errorModuleContent);
 
       const initialContext = {
         taskName: "test",
@@ -439,7 +460,7 @@ describe("Task Runner - New Context Structure", () => {
       });
 
       const result = await taskRunner.runPipeline(
-        taskModulePath,
+        errorTaskModulePath,
         initialContext
       );
 
@@ -449,9 +470,33 @@ describe("Task Runner - New Context Structure", () => {
     });
 
     it("should trigger refinement on validation errors", async () => {
-      mockTasksModule.validateStructure.mockRejectedValue(
-        new Error("Schema validation failed")
+      // Create a tasks module that throws a validation error
+      const errorTasksModule = {
+        validateStructure: async (context) => {
+          throw new Error("Schema validation failed");
+        },
+        critique: async (context) => ({
+          output: { critique: "needs improvement" },
+          flags: { critiqueComplete: true },
+        }),
+        refine: async (context) => ({
+          output: { refined: true },
+          flags: { refined: true },
+        }),
+      };
+
+      // Write the error tasks module to a temporary file
+      const errorTaskModulePath = path.join(
+        tempDir,
+        "refinement-error-tasks.js"
       );
+      const errorModuleContent =
+        Object.entries(errorTasksModule)
+          .map(([name, fn]) => `export const ${name} = ${fn.toString()};`)
+          .join("\n") +
+        "\nexport default { validateStructure, critique, refine };";
+
+      await fs.writeFile(errorTaskModulePath, errorModuleContent);
 
       const initialContext = {
         taskName: "test",
@@ -466,13 +511,13 @@ describe("Task Runner - New Context Structure", () => {
       });
 
       const result = await taskRunner.runPipeline(
-        taskModulePath,
+        errorTaskModulePath,
         initialContext
       );
 
       expect(result.refinementAttempts).toBe(1);
-      expect(mockTasksModule.critique).toHaveBeenCalled();
-      expect(mockTasksModule.refine).toHaveBeenCalled();
+      expect(result.ok).toBe(false); // Should fail after refinement attempts
+      expect(result.failedStage).toBe("validateStructure");
     });
   });
 

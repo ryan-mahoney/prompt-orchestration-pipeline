@@ -314,7 +314,7 @@ export async function runPipeline(modulePath, initialContext = {}) {
 
   // Extract seed and maxRefinements for new context structure
   const seed = initialContext.seed || initialContext;
-  const maxRefinements = seed.maxRefinements || 1;
+  const maxRefinements = seed.maxRefinements ?? 0; // Default to 0 (no refinements) unless explicitly set
 
   // Create new context structure with io, llm, meta, data, flags, logs, currentStage
   const context = {
@@ -565,16 +565,20 @@ export async function runPipeline(modulePath, initialContext = {}) {
           refinementCycle: refinementCount,
         });
 
+        // For validation stages, trigger refinement if we haven't exceeded max refinements AND maxRefinements > 0
         if (
           (stageName === "validateStructure" ||
             stageName === "validateQuality") &&
+          maxRefinements > 0 &&
           refinementCount < maxRefinements
         ) {
           context.flags.lastValidationError = errInfo;
+          context.flags.validationFailed = true; // Set the flag to trigger refinement
           needsRefinement = true;
           break;
         }
 
+        // For non-validation stages or when refinements are exhausted, fail immediately
         return {
           ok: false,
           failedStage: stageName,
