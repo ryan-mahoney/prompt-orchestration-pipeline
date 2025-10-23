@@ -280,13 +280,14 @@ export async function runPipeline(modulePath, initialContext = {}) {
   const mod = await loadFreshModule(abs);
   const tasks = mod.default ?? mod;
 
-  // Populate PIPELINE_STAGES handlers from dynamically loaded tasks
+  // Populate PIPELINE_STAGES handlers from dynamically loaded tasks or test override
+  const handlersSource = initialContext.tasksOverride || tasks;
   PIPELINE_STAGES.forEach((stageConfig) => {
     if (
-      tasks[stageConfig.name] &&
-      typeof tasks[stageConfig.name] === "function"
+      handlersSource[stageConfig.name] &&
+      typeof handlersSource[stageConfig.name] === "function"
     ) {
-      stageConfig.handler = tasks[stageConfig.name];
+      stageConfig.handler = handlersSource[stageConfig.name];
     } else {
       // Create placeholder handler that throws "Not implemented" error
       stageConfig.handler = async function (context) {
@@ -314,7 +315,7 @@ export async function runPipeline(modulePath, initialContext = {}) {
 
   // Extract seed and maxRefinements for new context structure
   const seed = initialContext.seed || initialContext;
-  const maxRefinements = seed.maxRefinements ?? 0; // Default to 0 (no refinements) unless explicitly set
+  const maxRefinements = seed.maxRefinements ?? 1; // Default to 1 unless explicitly set
 
   // Create new context structure with io, llm, meta, data, flags, logs, currentStage
   const context = {
@@ -463,13 +464,16 @@ export async function runPipeline(modulePath, initialContext = {}) {
       );
       const restoreConsole = captureConsoleOutput(logPath);
 
+      // Set current stage before execution
+      context.currentStage = stageName;
+
       // Clone data and flags before stage execution
       const stageData = structuredClone(context.data);
       const stageFlags = structuredClone(context.flags);
       const stageContext = {
-        ...context.meta,
         io: context.io,
         llm: context.llm,
+        meta: context.meta,
         data: stageData,
         flags: stageFlags,
         currentStage: stageName,
@@ -603,7 +607,9 @@ export async function runPipeline(modulePath, initialContext = {}) {
       }
 
       context.currentStage = stage;
-      const fn = tasks[stage];
+      const fn =
+        (initialContext.tasksOverride && initialContext.tasksOverride[stage]) ||
+        tasks[stage];
       if (typeof fn !== "function") {
         logs.push({ stage, skipped: true, refinementCycle: refinementCount });
         continue;
@@ -710,6 +716,27 @@ export async function runPipeline(modulePath, initialContext = {}) {
   }
 
   llmEvents.off("llm:request:complete", onLLMComplete);
+
+  // Write final status with currentStage: null to indicate completion
+  if (context.meta.statusPath) {
+    const finalStatusData = {
+      data: context.data,
+      flags: context.flags,
+      logs: context.logs,
+      currentStage: null,
+      refinementCount,
+      lastUpdated: new Date().toISOString(),
+    };
+    try {
+      fs.writeFileSync(
+        context.meta.statusPath,
+        JSON.stringify(finalStatusData, null, 2)
+      );
+    } catch (error) {
+      // Don't fail the pipeline if final status write fails
+      console.warn(`Failed to write final status file: ${error.message}`);
+    }
+  }
 
   return {
     ok: true,
