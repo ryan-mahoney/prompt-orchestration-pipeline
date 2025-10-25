@@ -53,14 +53,14 @@ describe("createTaskFileIO", () => {
   });
 
   describe("directory creation", () => {
-    it("creates task directories on first write", async () => {
+    it("creates files directories on first write", async () => {
       await fileIO.writeArtifact("test.txt", "test content");
 
-      const taskDir = path.join(workDir, "tasks", taskName);
-      const artifactsDir = path.join(taskDir, "artifacts");
+      const filesRoot = path.join(workDir, "files");
+      const artifactsDir = path.join(filesRoot, "artifacts");
 
       // Verify directories were created
-      await expect(fs.stat(taskDir)).resolves.toBeDefined();
+      await expect(fs.stat(filesRoot)).resolves.toBeDefined();
       await expect(fs.stat(artifactsDir)).resolves.toBeDefined();
     });
 
@@ -69,10 +69,10 @@ describe("createTaskFileIO", () => {
       await fileIO.writeLog("log.txt", "log content");
       await fileIO.writeTmp("tmp.txt", "tmp content");
 
-      const taskDir = path.join(workDir, "tasks", taskName);
-      const artifactsDir = path.join(taskDir, "artifacts");
-      const logsDir = path.join(taskDir, "logs");
-      const tmpDir = path.join(taskDir, "tmp");
+      const filesRoot = path.join(workDir, "files");
+      const artifactsDir = path.join(filesRoot, "artifacts");
+      const logsDir = path.join(filesRoot, "logs");
+      const tmpDir = path.join(filesRoot, "tmp");
 
       await expect(fs.stat(artifactsDir)).resolves.toBeDefined();
       await expect(fs.stat(logsDir)).resolves.toBeDefined();
@@ -229,13 +229,7 @@ describe("createTaskFileIO", () => {
 
   describe("atomic writes", () => {
     it("writes files atomically", async () => {
-      const filePath = path.join(
-        workDir,
-        "tasks",
-        taskName,
-        "artifacts",
-        "test.txt"
-      );
+      const filePath = path.join(workDir, "files", "artifacts", "test.txt");
 
       // Start the write operation
       const writePromise = fileIO.writeArtifact("test.txt", "content");

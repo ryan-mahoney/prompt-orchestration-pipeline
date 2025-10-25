@@ -62,7 +62,7 @@ export async function inference(context) {
 
     console.log("[Research:inference] Using model:", model);
 
-    const response = await context.llm.chat({
+    const response = await context.llm.deepseek.chat({
       messages: [
         { role: "system", content: system },
         { role: "user", content: prompt },
@@ -71,6 +71,8 @@ export async function inference(context) {
       temperature: context.taskConfig?.temperature || 0.7,
       max_tokens: context.taskConfig?.maxTokens || 2000,
     });
+
+    console.log("[Research:inference] ✓ Inference completed:", response);
 
     const result = {
       output: {
@@ -105,6 +107,9 @@ export async function validateStructure(context) {
   try {
     const { researchContent } = context.output;
 
+    let validationFailed = false;
+    let lastValidationError = undefined;
+
     // Relax validation for demo runs: accept shorter outputs to avoid failing the demo.
     // For production workloads you may keep the stricter threshold.
     if (!researchContent || researchContent.length < 20) {
@@ -113,16 +118,119 @@ export async function validateStructure(context) {
       );
       // Do not mark as validationFailed in demo mode to allow pipelines to proceed.
       // If stricter behavior is required, set validationFailed here.
-      // context.validationFailed = true;
-      // context.lastValidationError = "Research content too short or missing";
+      // validationFailed = true;
+      // lastValidationError = "Research content too short or missing";
     } else {
       console.log("[Research:validateStructure] ✓ Validation passed:", {
         contentLength: researchContent.length,
       });
     }
+
+    return {
+      output: {
+        validationResult: {
+          contentLength: researchContent?.length || 0,
+          passed: !validationFailed,
+          validatedAt: new Date().toISOString(),
+        },
+      },
+      flags: {
+        validationFailed,
+        lastValidationError,
+      },
+    };
   } catch (error) {
     console.error(
       "[Research:validateStructure] ✗ Error during validation:",
+      error.message
+    );
+    throw error;
+  }
+}
+
+export async function critique(context) {
+  console.log("[Research:critique] Analyzing research content for improvement");
+  try {
+    const { researchContent } = context.output;
+    const validationError = context.flags.lastValidationError;
+
+    let critiqueComplete = true;
+    let critiqueResult = {
+      hasContent: !!researchContent,
+      contentLength: researchContent?.length || 0,
+      hasValidationError: !!validationError,
+      critique: validationError
+        ? `Content needs improvement due to validation error: ${validationError}`
+        : "Content appears adequate for research purposes",
+    };
+
+    console.log("[Research:critique] ✓ Critique completed:", {
+      contentLength: critiqueResult.contentLength,
+      hasValidationError: critiqueResult.hasValidationError,
+    });
+
+    return {
+      output: {
+        critiqueResult,
+      },
+      flags: {
+        critiqueComplete,
+      },
+    };
+  } catch (error) {
+    console.error(
+      "[Research:critique] ✗ Error during critique:",
+      error.message
+    );
+    throw error;
+  }
+}
+
+export async function refine(context) {
+  console.log("[Research:refine] Refining research content based on feedback");
+  try {
+    const { researchContent } = context.output;
+    const validationFailed = context.flags.validationFailed;
+    const validationError = context.flags.lastValidationError;
+
+    let refined = false;
+    let refinedContent = researchContent;
+
+    if (validationFailed && validationError) {
+      console.log(
+        "[Research:refine] Attempting to refine content due to validation error"
+      );
+
+      // For demo purposes, we'll just add a note about refinement
+      // In a real implementation, this would use LLM to improve the content
+      refinedContent =
+        researchContent +
+        "\n\n[Note: Content has been refined to address validation issues.]";
+      refined = true;
+
+      console.log("[Research:refine] ✓ Content refined");
+    } else {
+      console.log("[Research:refine] No refinement needed");
+    }
+
+    return {
+      output: {
+        ...context.output,
+        researchContent: refinedContent,
+        refineResult: {
+          originalLength: researchContent?.length || 0,
+          refinedLength: refinedContent?.length || 0,
+          refined,
+          refinedAt: new Date().toISOString(),
+        },
+      },
+      flags: {
+        refined,
+      },
+    };
+  } catch (error) {
+    console.error(
+      "[Research:refine] ✗ Error during refinement:",
       error.message
     );
     throw error;

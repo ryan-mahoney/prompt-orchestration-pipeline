@@ -137,7 +137,6 @@ export function createMockTaskRunner() {
       logs: [{ stage: "test", ok: true, ms: 10 }],
       refinementAttempts: 0,
     }),
-    selectModel: vi.fn().mockReturnValue("gpt-4"),
   };
 }
 
