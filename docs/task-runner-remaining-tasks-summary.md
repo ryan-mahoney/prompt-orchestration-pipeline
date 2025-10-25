@@ -1,10 +1,53 @@
 # Task Runner Test Fixes - Remaining Engineering Tasks
 
+## Critical Bug: JobId Missing from Context (NEW)
+
+### Observed Failure
+
+The demo pipeline fails during execution of `runPipeline()` when `ensureLogDirectory()` attempts to invoke `path.join(workDir, jobId, ...)` with `jobId` undefined.
+
+**Stack Trace Evidence** (from `demo/pipeline-data/current/RfjMWOulaMCf/tasks-status.json`):
+
+```json
+{
+  "error": {
+    "name": "TypeError",
+    "message": "The \"path\" argument must be of type string. Received undefined",
+    "stack": "TypeError [ERR_INVALID_ARG_TYPE]: The \"path\" argument must be of type string. Received undefined\n    at Object.join (node:path:1339:7)\n    at ensureLogDirectory (file:///Users/ryanmahoney/Documents/prompt-orchestration-pipeline/src/core/task-runner.js:149:25)\n    at runPipeline (file:///Users/ryanmahoney/Documents/prompt-orchestration-pipeline/src/core/task-runner.js:355:3)\n    at async file:///Users/ryanmahoney/Documents/prompt-orchestration-pipeline/src/core/pipeline-runner.js:102:20"
+  }
+}
+```
+
+### Root Cause Analysis
+
+**Location**: `src/core/pipeline-runner.js:85-110`
+
+- Pipeline runner constructs context passed to `runPipeline()` without supplying `jobId`
+- Runner receives `jobId` via `process.argv[2]` but doesn't include it in the context object
+- Consequently, `context.meta.jobId` is undefined when `ensureLogDirectory()` runs
+- No other subsystems mutate the metadata before the failure occurs
+
+### Expected Behavior
+
+Logs directory should be created under `<workDir>/<jobId>/files/logs` structure, enabling proper console output capture for each pipeline stage.
+
+### Engineering Plan
+
+1. ✅ **Capture failure recap** - Document observed stack trace and expected behavior
+2. **Propagate jobId from pipeline runner** - Add `jobId` to the `ctx` object supplied to `runPipeline()`
+3. **Harden log directory guard** - Update `ensureLogDirectory()` to validate presence of `workDir` and `jobId`
+4. **Add regression coverage** - Introduce tests confirming `jobId` appears in `context.meta`
+5. **Validate end to end** - Re-run demo pipeline to verify log files appear in expected location
+
+---
+
 ## Current Status
 
 **Progress**: 34/55 tests passing (62% success rate, up from 49%)
 **Completed**: Error handling tests (2/2) now passing
 **Remaining**: 21 failing tests across multiple categories
+
+**PRIORITY**: Fix jobId propagation first as it blocks all console capture functionality.
 
 ## Analysis of Remaining Issues
 
