@@ -8,19 +8,29 @@ import { createMultiPipelineTestEnv } from "./utils/createTempPipelineDir.js";
 // Mock the task-runner module to avoid dynamic import issues
 vi.mock("../src/core/task-runner.js", () => ({
   runPipeline: vi.fn().mockImplementation(async (taskPath, ctx) => {
-    // Simulate the pipeline execution
+    // Simulate the pipeline execution with new context structure
     const result = {
       ok: true,
       context: {
-        ...ctx,
-        output: { x: 1 },
-        data: "test",
-        processed: true,
-        prompt: "test prompt",
-        response: "test response",
-        parsed: { x: 1 },
-        validationPassed: true,
-        qualityPassed: true,
+        meta: {
+          taskName: ctx.taskName || "test-task",
+          workDir: ctx.workDir,
+          jobId: ctx.jobId || "test-job",
+          statusPath: ctx.statusPath,
+        },
+        data: {
+          seed: ctx.seed || {},
+          validateStructure: { validationPassed: true },
+          validateQuality: { qualityPassed: true },
+          finalValidation: { x: 1 },
+        },
+        flags: {
+          validationFailed: false,
+          validationPassed: true,
+          qualityPassed: true,
+        },
+        logs: [],
+        currentStage: null,
       },
       logs: [
         { stage: "ingestion", ms: 10 },
@@ -35,10 +45,10 @@ vi.mock("../src/core/task-runner.js", () => ({
       refinementAttempts: 0,
     };
 
-    // Write output.json
+    // Write output.json (using finalValidation output)
     await fs.writeFile(
       path.join(ctx.taskDir, "output.json"),
-      JSON.stringify(result.context.output, null, 2)
+      JSON.stringify(result.context.data.finalValidation, null, 2)
     );
 
     // Write execution-logs.json
@@ -81,7 +91,7 @@ test("runs one task and writes artifacts", async () => {
 
   // Verify the result
   expect(result.ok).toBe(true);
-  expect(result.context.output).toEqual({ x: 1 });
+  expect(result.context.data.finalValidation).toEqual({ x: 1 });
 
   // Verify artifacts were written
   const outputPath = path.join(workDir, "tasks", "hello", "output.json");

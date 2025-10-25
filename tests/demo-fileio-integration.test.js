@@ -11,8 +11,8 @@ describe("Demo Pipeline File I/O Integration", () => {
 
   beforeEach(async () => {
     tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "demo-fileio-test-"));
-    taskDir = path.join(tempDir, "tasks", "analysis");
-    await fs.mkdir(taskDir, { recursive: true });
+    const filesRoot = path.join(tempDir, "files");
+    await fs.mkdir(filesRoot, { recursive: true });
 
     statusPath = path.join(tempDir, "tasks-status.json");
     const initialStatus = {
@@ -117,8 +117,9 @@ Key findings: Market is growing, Trends: Digital transformation, Recommendations
     );
 
     // Verify all files exist in correct subdirectories
-    const artifactsDir = path.join(taskDir, "artifacts");
-    const logsDir = path.join(taskDir, "logs");
+    const filesRoot = path.join(tempDir, "files");
+    const artifactsDir = path.join(filesRoot, "artifacts");
+    const logsDir = path.join(filesRoot, "logs");
 
     const rawResearchPath = path.join(artifactsDir, "raw-research.json");
     const analysisOutputPath = path.join(artifactsDir, "analysis-output.json");

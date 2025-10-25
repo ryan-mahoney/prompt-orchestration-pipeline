@@ -11,8 +11,8 @@ describe("File I/O Integration Tests", () => {
 
   beforeEach(async () => {
     tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "fileio-test-"));
-    taskDir = path.join(tempDir, "tasks", "test-task");
-    await fs.mkdir(taskDir, { recursive: true });
+    const filesRoot = path.join(tempDir, "files");
+    await fs.mkdir(filesRoot, { recursive: true });
 
     statusPath = path.join(tempDir, "tasks-status.json");
     const initialStatus = {
@@ -73,9 +73,14 @@ describe("File I/O Integration Tests", () => {
     await fileIO.writeTmp("temp-data.txt", "temporary content");
 
     // Verify files exist in correct subdirectories
-    const artifactPath = path.join(taskDir, "artifacts", "test-artifact.json");
-    const logPath = path.join(taskDir, "logs", "process.log");
-    const tmpPath = path.join(taskDir, "tmp", "temp-data.txt");
+    const filesRoot = path.join(tempDir, "files");
+    const artifactPath = path.join(
+      filesRoot,
+      "artifacts",
+      "test-artifact.json"
+    );
+    const logPath = path.join(filesRoot, "logs", "process.log");
+    const tmpPath = path.join(filesRoot, "tmp", "temp-data.txt");
 
     expect(
       await fs
@@ -201,9 +206,9 @@ describe("File I/O Integration Tests", () => {
   });
 
   it("should simulate demo task usage patterns", async () => {
-    // Create analysis task directory
-    const analysisTaskDir = path.join(tempDir, "tasks", "analysis");
-    await fs.mkdir(analysisTaskDir, { recursive: true });
+    // Create files directory structure
+    const filesRoot = path.join(tempDir, "files");
+    await fs.mkdir(filesRoot, { recursive: true });
 
     // Update status to include analysis task
     const updatedStatus = {
@@ -320,7 +325,7 @@ Key findings: Market is growing`
     // Verify file contents
     const rawResearch = JSON.parse(
       await fs.readFile(
-        path.join(analysisTaskDir, "artifacts", "raw-research.json"),
+        path.join(filesRoot, "artifacts", "raw-research.json"),
         "utf8"
       )
     );
@@ -328,14 +333,14 @@ Key findings: Market is growing`
 
     const analysisOutput = JSON.parse(
       await fs.readFile(
-        path.join(analysisTaskDir, "artifacts", "analysis-output.json"),
+        path.join(filesRoot, "artifacts", "analysis-output.json"),
         "utf8"
       )
     );
     expect(analysisOutput.metadata.tokens).toBe(150);
 
     const ingestionLog = await fs.readFile(
-      path.join(analysisTaskDir, "logs", "ingestion.log"),
+      path.join(filesRoot, "logs", "ingestion.log"),
       "utf8"
     );
     expect(ingestionLog).toContain("Starting data ingestion");

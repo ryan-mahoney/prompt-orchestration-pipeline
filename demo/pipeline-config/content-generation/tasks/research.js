@@ -1,7 +1,7 @@
 // Research Task - Gather information based on seed input
 
+// Step 1: Load and prepare input data
 export async function ingestion(context) {
-  console.log("[Research:ingestion] Starting data ingestion");
   try {
     const { seed } = context;
     const result = {
@@ -11,10 +11,7 @@ export async function ingestion(context) {
         requirements: seed.data,
       },
     };
-    console.log("[Research:ingestion] ✓ Successfully ingested data:", {
-      topic: result.output.topic,
-      focusAreasCount: result.output.focusAreas.length,
-    });
+
     return result;
   } catch (error) {
     console.error(
@@ -25,6 +22,7 @@ export async function ingestion(context) {
   }
 }
 
+// Step 3: Build LLM prompts
 export async function promptTemplating(context) {
   console.log("[Research:promptTemplating] Building prompt template");
   try {
@@ -54,43 +52,29 @@ Provide detailed, factual information with sources where possible.`,
   }
 }
 
+// Step 4: Call LLM with prompt
 export async function inference(context) {
   console.log("[Research:inference] Starting LLM inference");
   try {
     const { system, prompt } = context.output;
-    const model = context.taskConfig?.model || "gpt-5-nano";
 
-    console.log("[Research:inference] Using model:", model);
-
-    const response = await context.llm.chat({
+    const response = await context.llm.deepseek.chat({
       messages: [
         { role: "system", content: system },
         { role: "user", content: prompt },
       ],
-      model,
-      temperature: context.taskConfig?.temperature || 0.7,
-      max_tokens: context.taskConfig?.maxTokens || 2000,
     });
 
-    const result = {
-      output: {
-        ...context.output,
-        researchContent: response.content,
-        metadata: {
-          model: response.model,
-          tokens: response.usage?.total_tokens,
-          finishReason: response.finish_reason,
+    context.io.logArtifact(
+      "research-output.json",
+      JSON.stringify(
+        {
+          content: response.content,
         },
-      },
-    };
-
-    console.log("[Research:inference] ✓ Inference completed:", {
-      model: result.output.metadata.model,
-      tokens: result.output.metadata.tokens,
-      contentLength: response.content.length,
-    });
-
-    return result;
+        null,
+        2
+      )
+    );
   } catch (error) {
     console.error(
       "[Research:inference] ✗ Error during inference:",
@@ -100,6 +84,7 @@ export async function inference(context) {
   }
 }
 
+// Step 6: Validate prompt response structure and completeness
 export async function validateStructure(context) {
   console.log("[Research:validateStructure] Validating research content");
   try {
@@ -107,19 +92,36 @@ export async function validateStructure(context) {
 
     // Relax validation for demo runs: accept shorter outputs to avoid failing the demo.
     // For production workloads you may keep the stricter threshold.
+    let validationFailed = false;
+    let lastValidationError = undefined;
+
     if (!researchContent || researchContent.length < 20) {
       console.warn(
         "[Research:validateStructure] ⚠ Research content short or missing (demo relaxed)"
       );
       // Do not mark as validationFailed in demo mode to allow pipelines to proceed.
       // If stricter behavior is required, set validationFailed here.
-      // context.validationFailed = true;
-      // context.lastValidationError = "Research content too short or missing";
+      // validationFailed = true;
+      // lastValidationError = "Research content too short or missing";
     } else {
       console.log("[Research:validateStructure] ✓ Validation passed:", {
         contentLength: researchContent.length,
       });
     }
+
+    return {
+      output: {
+        validationResult: {
+          contentLength: researchContent?.length || 0,
+          passed: !validationFailed,
+          validatedAt: new Date().toISOString(),
+        },
+      },
+      flags: {
+        validationFailed,
+        lastValidationError,
+      },
+    };
   } catch (error) {
     console.error(
       "[Research:validateStructure] ✗ Error during validation:",
@@ -129,6 +131,7 @@ export async function validateStructure(context) {
   }
 }
 
+// Step 11: Integrate results into final output format
 export async function integration(context) {
   console.log("[Research:integration] Integrating research output");
   try {
