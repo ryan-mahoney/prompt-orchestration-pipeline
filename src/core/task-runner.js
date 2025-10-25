@@ -146,7 +146,7 @@ function checkFlagTypeConflicts(currentFlags, newFlags, stageName) {
  * @returns {string} The full path to the logs directory
  */
 function ensureLogDirectory(workDir, jobId) {
-  const logsPath = path.join(workDir, jobId, "files", "logs");
+  const logsPath = path.join(workDir, "files", "logs");
   fs.mkdirSync(logsPath, { recursive: true });
   return logsPath;
 }
@@ -457,11 +457,16 @@ export async function runPipeline(modulePath, initialContext = {}) {
       // Add console output capture before stage execution
       const logPath = path.join(
         context.meta.workDir,
-        context.meta.jobId,
         "files",
         "logs",
         `stage-${stageName}.log`
       );
+      console.debug("[task-runner] stage log path resolution", {
+        stage: stageName,
+        workDir: context.meta.workDir,
+        jobId: context.meta.jobId,
+        logPath,
+      });
       const restoreConsole = captureConsoleOutput(logPath);
 
       // Set current stage before execution
