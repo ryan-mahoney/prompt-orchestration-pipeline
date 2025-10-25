@@ -147,3 +147,6 @@ tmp-payload.json
 
 # Cline temporary workflow files
 .clinerules/workflows/pr-*
+
+# Temporary task modules
+.tmp-task-modules
