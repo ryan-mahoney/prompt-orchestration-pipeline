@@ -3,9 +3,15 @@ import * as taskRunner from "../src/core/task-runner.js";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import os from "node:os";
+import { fileURLToPath } from "node:url";
 
-// Test the actual implementation without mocking the entire module
-describe("Task Runner - New Context Structure", () => {
+// Get absolute path to the dummy tasks module
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const dummyTasksPath = path.resolve(__dirname, "./fixtures/dummy-tasks.js");
+
+// Test without mocking the entire module
+describe("Task Runner - Real Implementation", () => {
   let tempDir;
   let mockTasksModule;
 
@@ -76,13 +82,10 @@ describe("Task Runner - New Context Structure", () => {
         maxRefinements: 2,
       };
 
-      const result = await taskRunner.runPipeline(
-        "/tmp/test-modules/dummy.js",
-        {
-          ...initialContext,
-          tasksOverride: mockTasksModule,
-        }
-      );
+      const result = await taskRunner.runPipeline(dummyTasksPath, {
+        ...initialContext,
+        tasksOverride: mockTasksModule,
+      });
 
       if (!result.ok) {
         console.log("Pipeline failed:", result);
@@ -127,13 +130,10 @@ describe("Task Runner - New Context Structure", () => {
         recursive: true,
       });
 
-      const result = await taskRunner.runPipeline(
-        "/tmp/test-modules/dummy.js",
-        {
-          ...initialContext,
-          tasksOverride: mockTasksModule,
-        }
-      );
+      const result = await taskRunner.runPipeline(dummyTasksPath, {
+        ...initialContext,
+        tasksOverride: mockTasksModule,
+      });
 
       expect(result.context.data.validateStructure).toEqual({
         validationPassed: true,
@@ -156,13 +156,10 @@ describe("Task Runner - New Context Structure", () => {
         recursive: true,
       });
 
-      const result = await taskRunner.runPipeline(
-        "/tmp/test-modules/dummy.js",
-        {
-          ...initialContext,
-          tasksOverride: mockTasksModule,
-        }
-      );
+      const result = await taskRunner.runPipeline(dummyTasksPath, {
+        ...initialContext,
+        tasksOverride: mockTasksModule,
+      });
 
       expect(result.context.flags).toEqual({
         validationFailed: false,
@@ -184,12 +181,12 @@ describe("Task Runner - New Context Structure", () => {
         recursive: true,
       });
 
-      await taskRunner.runPipeline("/tmp/test-modules/dummy.js", {
+      await taskRunner.runPipeline(dummyTasksPath, {
         ...initialContext,
         tasksOverride: mockTasksModule,
       });
 
-      // Read the status file
+      // Read status file
       const statusContent = await fs.readFile(statusPath, "utf8");
       const statusData = JSON.parse(statusContent);
 
@@ -224,13 +221,10 @@ describe("Task Runner - New Context Structure", () => {
         recursive: true,
       });
 
-      const result = await taskRunner.runPipeline(
-        "/tmp/test-modules/dummy.js",
-        {
-          ...initialContext,
-          tasksOverride: mockTasksModule,
-        }
-      );
+      const result = await taskRunner.runPipeline(dummyTasksPath, {
+        ...initialContext,
+        tasksOverride: mockTasksModule,
+      });
 
       expect(result.ok).toBe(true);
       expect(mockTasksModule.validateStructure).toHaveBeenCalled();
@@ -272,12 +266,12 @@ describe("Task Runner - New Context Structure", () => {
         recursive: true,
       });
 
-      await taskRunner.runPipeline("/tmp/test-modules/dummy.js", {
+      await taskRunner.runPipeline(dummyTasksPath, {
         ...initialContext,
         tasksOverride: mockTasksModule,
       });
 
-      // Verify the original context wasn't modified by the handler
+      // Verify that the original context wasn't modified by the handler
       expect(initialContext.seed.original).toBe(true);
       expect(initialContext.modified).toBeUndefined();
     });
@@ -301,7 +295,7 @@ describe("Task Runner - New Context Structure", () => {
         recursive: true,
       });
 
-      await taskRunner.runPipeline("/tmp/test-modules/dummy.js", {
+      await taskRunner.runPipeline(dummyTasksPath, {
         ...initialContext,
         tasksOverride: mockTasksModule,
       });
@@ -335,13 +329,10 @@ describe("Task Runner - New Context Structure", () => {
         recursive: true,
       });
 
-      const result = await taskRunner.runPipeline(
-        "/tmp/test-modules/dummy.js",
-        {
-          ...initialContext,
-          tasksOverride: mockTasksModule,
-        }
-      );
+      const result = await taskRunner.runPipeline(dummyTasksPath, {
+        ...initialContext,
+        tasksOverride: mockTasksModule,
+      });
 
       expect(result.refinementAttempts).toBe(1);
       expect(callCount).toBe(2); // Should be called twice: initial + refinement
@@ -367,13 +358,10 @@ describe("Task Runner - New Context Structure", () => {
         recursive: true,
       });
 
-      const result = await taskRunner.runPipeline(
-        "/tmp/test-modules/dummy.js",
-        {
-          ...initialContext,
-          tasksOverride: mockTasksModule,
-        }
-      );
+      const result = await taskRunner.runPipeline(dummyTasksPath, {
+        ...initialContext,
+        tasksOverride: mockTasksModule,
+      });
 
       expect(result.refinementAttempts).toBe(2);
       expect(mockTasksModule.validateStructure).toHaveBeenCalledTimes(3); // initial + 2 refinements
@@ -397,13 +385,10 @@ describe("Task Runner - New Context Structure", () => {
         recursive: true,
       });
 
-      const result = await taskRunner.runPipeline(
-        "/tmp/test-modules/dummy.js",
-        {
-          ...initialContext,
-          tasksOverride: mockTasksModule,
-        }
-      );
+      const result = await taskRunner.runPipeline(dummyTasksPath, {
+        ...initialContext,
+        tasksOverride: mockTasksModule,
+      });
 
       expect(result.refinementAttempts).toBe(1);
       expect(mockTasksModule.validateStructure).toHaveBeenCalledTimes(2); // initial + 1 refinement
@@ -433,13 +418,10 @@ describe("Task Runner - New Context Structure", () => {
         recursive: true,
       });
 
-      const result = await taskRunner.runPipeline(
-        "/tmp/test-modules/dummy.js",
-        {
-          ...initialContext,
-          tasksOverride: mockTasksModule,
-        }
-      );
+      const result = await taskRunner.runPipeline(dummyTasksPath, {
+        ...initialContext,
+        tasksOverride: mockTasksModule,
+      });
 
       // Verify pipeline completed successfully
       expect(result.ok).toBe(true);
@@ -571,7 +553,7 @@ describe("Task Runner - New Context Structure", () => {
       });
 
       const result = await taskRunner.runPipelineWithModelRouting(
-        "/tmp/test-modules/dummy.js",
+        dummyTasksPath,
         initialContext,
         modelConfig
       );
@@ -643,7 +625,7 @@ describe("Pipeline Stage Skip Predicate Tests", () => {
       recursive: true,
     });
 
-    const result = await taskRunner.runPipeline("/tmp/test-modules/dummy.js", {
+    const result = await taskRunner.runPipeline(dummyTasksPath, {
       ...initialContext,
       tasksOverride: mockTasksModule,
     });
@@ -691,7 +673,7 @@ describe("Pipeline Stage Skip Predicate Tests", () => {
       recursive: true,
     });
 
-    const result = await taskRunner.runPipeline("/tmp/test-modules/dummy.js", {
+    const result = await taskRunner.runPipeline(dummyTasksPath, {
       ...initialContext,
       tasksOverride: mockTasksModule,
     });
@@ -725,7 +707,7 @@ describe("Pipeline Stage Skip Predicate Tests", () => {
       recursive: true,
     });
 
-    const result = await taskRunner.runPipeline("/tmp/test-modules/dummy.js", {
+    const result = await taskRunner.runPipeline(dummyTasksPath, {
       ...initialContext,
       tasksOverride: mockTasksModule,
     });
@@ -791,7 +773,7 @@ describe("Refinement Limit Tests", () => {
       recursive: true,
     });
 
-    const result = await taskRunner.runPipeline("/tmp/test-modules/dummy.js", {
+    const result = await taskRunner.runPipeline(dummyTasksPath, {
       ...initialContext,
       tasksOverride: mockTasksModule,
     });
@@ -820,7 +802,7 @@ describe("Refinement Limit Tests", () => {
       recursive: true,
     });
 
-    const result = await taskRunner.runPipeline("/tmp/test-modules/dummy.js", {
+    const result = await taskRunner.runPipeline(dummyTasksPath, {
       ...initialContext,
       tasksOverride: mockTasksModule,
     });
@@ -849,12 +831,12 @@ describe("Refinement Limit Tests", () => {
       recursive: true,
     });
 
-    const result = await taskRunner.runPipeline("/tmp/test-modules/dummy.js", {
+    const result = await taskRunner.runPipeline(dummyTasksPath, {
       ...initialContext,
       tasksOverride: mockTasksModule,
     });
 
-    // Verify refinement never exceeds the limit
+    // Verify refinement never exceeds limit
     expect(result.refinementAttempts).toBeLessThanOrEqual(3);
     expect(result.refinementAttempts).toBe(3);
 
@@ -896,7 +878,7 @@ describe("Refinement Limit Tests", () => {
       recursive: true,
     });
 
-    const result = await taskRunner.runPipeline("/tmp/test-modules/dummy.js", {
+    const result = await taskRunner.runPipeline(dummyTasksPath, {
       ...initialContext,
       tasksOverride: mockTasksModule,
     });
@@ -979,7 +961,7 @@ describe("Status Persistence Tests", () => {
     const logsDir = path.join(tempDir, jobId, "files", "logs");
     await fs.mkdir(logsDir, { recursive: true });
 
-    await taskRunner.runPipeline("/tmp/test-modules/dummy.js", {
+    await taskRunner.runPipeline(dummyTasksPath, {
       ...initialContext,
       tasksOverride: mockTasksModule,
     });
@@ -996,7 +978,7 @@ describe("Status Persistence Tests", () => {
     expect(statusData).toHaveProperty("refinementCount");
     expect(statusData).toHaveProperty("lastUpdated");
 
-    // Verify data object contains seed and all stage outputs
+    // Verify the data object contains seed and all stage outputs
     expect(statusData.data).toMatchObject({
       seed: {
         testData: "initial seed",
@@ -1008,13 +990,13 @@ describe("Status Persistence Tests", () => {
       },
     });
 
-    // Verify flags object contains all accumulated flags
+    // Verify the flags object contains all accumulated flags
     expect(statusData.flags).toMatchObject({
       validationFailed: false,
       validationTimestamp: expect.any(Number),
     });
 
-    // Verify logs array contains stage completion entries
+    // Verify the logs array contains stage completion entries
     expect(Array.isArray(statusData.logs)).toBe(true);
     expect(statusData.logs.length).toBeGreaterThan(0);
 
@@ -1068,13 +1050,10 @@ describe("Status Persistence Tests", () => {
     });
 
     // Start the pipeline but don't await it immediately
-    const pipelinePromise = taskRunner.runPipeline(
-      "/tmp/test-modules/dummy.js",
-      {
-        ...initialContext,
-        tasksOverride: mockTasksModule,
-      }
-    );
+    const pipelinePromise = taskRunner.runPipeline(dummyTasksPath, {
+      ...initialContext,
+      tasksOverride: mockTasksModule,
+    });
 
     // Wait a bit and check if status file has been updated
     await new Promise((resolve) => setTimeout(resolve, 50));
@@ -1139,7 +1118,7 @@ describe("Status Persistence Tests", () => {
       }
     });
 
-    await taskRunner.runPipeline("/tmp/test-modules/dummy.js", {
+    await taskRunner.runPipeline(dummyTasksPath, {
       ...initialContext,
       tasksOverride: mockTasksModule,
     });
@@ -1166,7 +1145,7 @@ describe("Status Persistence Tests", () => {
       (log) => log.stage === "refinement-trigger"
     );
 
-    // For now, just verify the test completed successfully
+    // For now, just verify that test completed successfully
     expect(statusData.refinementCount).toBe(2);
     expect(mockTasksModule.critique).toHaveBeenCalledTimes(2);
     expect(mockTasksModule.refine).toHaveBeenCalledTimes(2);
@@ -1195,7 +1174,7 @@ describe("Status Persistence Tests", () => {
     const logsDir = path.join(tempDir, jobId, "files", "logs");
     await fs.mkdir(logsDir, { recursive: true });
 
-    await taskRunner.runPipeline("/tmp/test-modules/dummy.js", {
+    await taskRunner.runPipeline(dummyTasksPath, {
       ...initialContext,
       tasksOverride: mockTasksModule,
     });
@@ -1233,7 +1212,7 @@ describe("Status Persistence Tests", () => {
     await fs.mkdir(logsDir, { recursive: true });
 
     // Pipeline should still execute successfully even if status file fails to write
-    const result = await taskRunner.runPipeline("/tmp/test-modules/dummy.js", {
+    const result = await taskRunner.runPipeline(dummyTasksPath, {
       ...initialContext,
       tasksOverride: mockTasksModule,
     });
