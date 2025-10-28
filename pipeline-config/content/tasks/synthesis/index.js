@@ -3,14 +3,24 @@
 export async function ingestion(context) {
   console.log("[Synthesis:ingestion] Starting data ingestion");
   try {
-    const { artifacts } = context;
+    // Read from context.data instead of direct context properties
+    const { data = {} } = context;
+    const {
+      seed = {},
+      research: researchStage = {},
+      analysis: analysisStage = {},
+    } = data;
+    const { outputFormat = "executive-summary" } = seed.data || {};
+    const research = researchStage.research?.research?.content;
+    const analysis = analysisStage.analysis?.analysis?.content;
 
     const result = {
       output: {
-        research: artifacts?.research?.research?.content,
-        analysis: artifacts?.analysis?.analysis?.content,
-        outputFormat: context.seed.data.outputFormat,
+        research,
+        analysis,
+        outputFormat,
       },
+      flags: {},
     };
 
     console.log("[Synthesis:ingestion] ✓ Successfully ingested data:", {
@@ -49,6 +59,7 @@ ${analysis}
 
 Create a well-structured, comprehensive output that combines these insights.`,
       },
+      flags: {},
     };
 
     console.log("[Synthesis:promptTemplating] ✓ Prompt template created");
@@ -89,6 +100,7 @@ export async function inference(context) {
           tokens: response.usage?.total_tokens,
         },
       },
+      flags: {},
     };
 
     console.log("[Synthesis:inference] ✓ Inference completed:", {
@@ -123,6 +135,7 @@ export async function integration(context) {
           timestamp: new Date().toISOString(),
         },
       },
+      flags: {},
     };
 
     console.log("[Synthesis:integration] ✓ Integration completed:", {

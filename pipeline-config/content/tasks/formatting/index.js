@@ -3,15 +3,19 @@
 export async function ingestion(context) {
   console.log("[Formatting:ingestion] Starting data ingestion");
   try {
-    const { artifacts } = context;
-    const synthesis = artifacts?.synthesis?.synthesis;
+    // Read from context.data instead of direct context properties
+    const { data = {} } = context;
+    const { seed = {}, synthesis: synthesisStage = {} } = data;
+    const { outputFormat = "executive-summary" } = seed.data || {};
+    const synthesis = synthesisStage.synthesis?.synthesis;
 
     const result = {
       output: {
         content: synthesis?.content,
-        outputFormat: context.seed.data.outputFormat,
+        outputFormat,
         metadata: synthesis?.metadata,
       },
+      flags: {},
     };
 
     console.log("[Formatting:ingestion] ✓ Successfully ingested data:", {
@@ -55,6 +59,7 @@ export async function preProcessing(context) {
         formatSpec:
           formatSpecs[outputFormat] || formatSpecs["executive-summary"],
       },
+      flags: {},
     };
 
     console.log(
@@ -95,6 +100,7 @@ ${JSON.stringify(formatSpec, null, 2)}
 
 Provide the formatted output with proper structure, headings, and styling.`,
       },
+      flags: {},
     };
 
     console.log("[Formatting:promptTemplating] ✓ Prompt template created");
@@ -135,6 +141,7 @@ export async function inference(context) {
           tokens: response.usage?.total_tokens,
         },
       },
+      flags: {},
     };
 
     console.log("[Formatting:inference] ✓ Inference completed:", {
@@ -158,6 +165,9 @@ export async function finalValidation(context) {
   try {
     const { formattedContent, formatSpec } = context.output;
 
+    let validationFailed = false;
+    let lastValidationError = undefined;
+
     if (formatSpec.sections) {
       const missingSections = formatSpec.sections.filter(
         (section) => !formattedContent.includes(section)
@@ -168,8 +178,8 @@ export async function finalValidation(context) {
           "[Formatting:finalValidation] ✗ Validation failed: Missing sections:",
           missingSections
         );
-        context.validationFailed = true;
-        context.lastValidationError = `Missing sections: ${missingSections.join(", ")}`;
+        validationFailed = true;
+        lastValidationError = `Missing sections: ${missingSections.join(", ")}`;
       } else {
         console.log(
           "[Formatting:finalValidation] ✓ Validation passed: All required sections present"
@@ -180,6 +190,25 @@ export async function finalValidation(context) {
         "[Formatting:finalValidation] ✓ No section validation required"
       );
     }
+
+    return {
+      output: {
+        validationResult: {
+          contentLength: formattedContent?.length || 0,
+          passed: !validationFailed,
+          missingSections: validationFailed
+            ? formatSpec.sections.filter(
+                (section) => !formattedContent.includes(section)
+              )
+            : [],
+          validatedAt: new Date().toISOString(),
+        },
+      },
+      flags: {
+        validationFailed,
+        lastValidationError,
+      },
+    };
   } catch (error) {
     console.error(
       "[Formatting:finalValidation] ✗ Error during validation:",
@@ -207,6 +236,7 @@ export async function integration(context) {
           timestamp: new Date().toISOString(),
         },
       },
+      flags: {},
     };
 
     console.log("[Formatting:integration] ✓ Integration completed:", {
