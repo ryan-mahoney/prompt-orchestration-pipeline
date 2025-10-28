@@ -3,13 +3,18 @@
 export async function ingestion(context) {
   console.log("[Research:ingestion] Starting data ingestion");
   try {
-    const { seed } = context;
+    // Fix: Access seed from context.data instead of context directly
+    const { data = {} } = context;
+    const { seed = {} } = data;
+    const { data: seedData = {} } = seed;
+
     const result = {
       output: {
-        topic: seed.data.topic || seed.data.industry,
-        focusAreas: seed.data.focusAreas || [],
-        requirements: seed.data,
+        topic: seedData.topic || seedData.industry || "Unknown topic",
+        focusAreas: seedData.focusAreas || [],
+        requirements: seedData,
       },
+      flags: {},
     };
     console.log("[Research:ingestion] ✓ Successfully ingested data:", {
       topic: result.output.topic,
@@ -28,11 +33,13 @@ export async function ingestion(context) {
 export async function promptTemplating(context) {
   console.log("[Research:promptTemplating] Building prompt template");
   try {
-    const { topic, focusAreas } = context.output;
+    // Use default values to make more robust
+    const output = context.output || {};
+    const { topic = "Unknown topic", focusAreas = [] } = output;
 
     const result = {
       output: {
-        ...context.output,
+        ...output,
         system:
           "You are a research assistant specializing in comprehensive information gathering.",
         prompt: `Research the following topic: ${topic}
@@ -42,6 +49,7 @@ ${focusAreas.map((area) => `- ${area}`).join("\n")}
 
 Provide detailed, factual information with sources where possible.`,
       },
+      flags: {},
     };
     console.log("[Research:promptTemplating] ✓ Prompt template created");
     return result;
@@ -57,12 +65,22 @@ Provide detailed, factual information with sources where possible.`,
 export async function inference(context) {
   console.log("[Research:inference] Starting LLM inference");
   try {
-    const { system, prompt } = context.output;
+    // Use default values to make more robust
+    const output = context.output || {};
+    const { system = "", prompt = "" } = output;
     const model = context.taskConfig?.model || "gpt-5-nano";
 
     console.log("[Research:inference] Using model:", model);
 
-    const response = await context.llm.deepseek.chat({
+    // Make LLM provider access more robust - check if deepseek exists
+    const llmProvider = context.llm?.deepseek;
+    if (!llmProvider) {
+      throw new Error(
+        "Deepseek LLM provider not available in context.llm.deepseek"
+      );
+    }
+
+    const response = await llmProvider.chat({
       messages: [
         { role: "system", content: system },
         { role: "user", content: prompt },
@@ -76,7 +94,7 @@ export async function inference(context) {
 
     const result = {
       output: {
-        ...context.output,
+        ...output,
         researchContent: response.content,
         metadata: {
           model: response.model,
@@ -84,6 +102,7 @@ export async function inference(context) {
           finishReason: response.finish_reason,
         },
       },
+      flags: {},
     };
 
     console.log("[Research:inference] ✓ Inference completed:", {
@@ -105,7 +124,9 @@ export async function inference(context) {
 export async function validateStructure(context) {
   console.log("[Research:validateStructure] Validating research content");
   try {
-    const { researchContent } = context.output;
+    // Use default values to make more robust
+    const output = context.output || {};
+    const { researchContent = "" } = output;
 
     let validationFailed = false;
     let lastValidationError = undefined;
@@ -151,16 +172,19 @@ export async function validateStructure(context) {
 export async function critique(context) {
   console.log("[Research:critique] Analyzing research content for improvement");
   try {
-    const { researchContent } = context.output;
-    const validationError = context.flags.lastValidationError;
+    // Use default values to make more robust
+    const output = context.output || {};
+    const flags = context.flags || {};
+    const { researchContent = "" } = output;
+    const { lastValidationError } = flags;
 
     let critiqueComplete = true;
     let critiqueResult = {
       hasContent: !!researchContent,
       contentLength: researchContent?.length || 0,
-      hasValidationError: !!validationError,
-      critique: validationError
-        ? `Content needs improvement due to validation error: ${validationError}`
+      hasValidationError: !!lastValidationError,
+      critique: lastValidationError
+        ? `Content needs improvement due to validation error: ${lastValidationError}`
         : "Content appears adequate for research purposes",
     };
 
@@ -189,14 +213,16 @@ export async function critique(context) {
 export async function refine(context) {
   console.log("[Research:refine] Refining research content based on feedback");
   try {
-    const { researchContent } = context.output;
-    const validationFailed = context.flags.validationFailed;
-    const validationError = context.flags.lastValidationError;
+    // Use default values to make more robust
+    const output = context.output || {};
+    const flags = context.flags || {};
+    const { researchContent = "" } = output;
+    const { validationFailed = false, lastValidationError } = flags;
 
     let refined = false;
     let refinedContent = researchContent;
 
-    if (validationFailed && validationError) {
+    if (validationFailed && lastValidationError) {
       console.log(
         "[Research:refine] Attempting to refine content due to validation error"
       );
@@ -215,7 +241,7 @@ export async function refine(context) {
 
     return {
       output: {
-        ...context.output,
+        ...output,
         researchContent: refinedContent,
         refineResult: {
           originalLength: researchContent?.length || 0,
@@ -240,16 +266,19 @@ export async function refine(context) {
 export async function integration(context) {
   console.log("[Research:integration] Integrating research output");
   try {
-    const { researchContent, metadata } = context.output;
+    // Use default values to make more robust
+    const output = context.output || {};
+    const { researchContent, metadata } = output;
 
     const result = {
       output: {
         research: {
-          content: researchContent,
-          metadata,
+          content: researchContent || "",
+          metadata: metadata || {},
           timestamp: new Date().toISOString(),
         },
       },
+      flags: {}, // Add missing flags property as required by contract
     };
 
     console.log("[Research:integration] ✓ Integration completed");
