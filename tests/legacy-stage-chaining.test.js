@@ -1,44 +1,56 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { runPipeline } from "../src/core/task-runner.js";
+import { promises as fs } from "node:fs";
+import path from "node:path";
+import os from "node:os";
+import * as taskRunner from "../src/core/task-runner.js";
+import { fileURLToPath } from "node:url";
+
+// Get absolute path to the dummy tasks module
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const dummyTasksPath = path.resolve(__dirname, "./fixtures/dummy-tasks.js");
 
 describe("Legacy Stage Chaining", () => {
-  let mockTasks;
+  let tempDir;
+  let mockTasksModule;
 
-  beforeEach(() => {
-    // Mock environment loading
-    vi.mock("../src/core/environment.js", () => ({
-      loadEnvironment: vi.fn().mockResolvedValue(undefined),
-    }));
+  beforeEach(async () => {
+    // Create a temporary directory for test files
+    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "legacy-chaining-test-"));
 
-    // Mock LLM creation
-    vi.mock("../src/llm/index.js", () => ({
-      createLLM: vi.fn().mockReturnValue({
-        openai: { chat: vi.fn() },
-        deepseek: { chat: vi.fn() },
-      }),
-      getLLMEvents: vi.fn().mockReturnValue({
-        on: vi.fn(),
-        off: vi.fn(),
-      }),
-    }));
-
-    // Mock config
-    vi.mock("../src/core/config.js", () => ({
-      getConfig: vi.fn().mockReturnValue({}),
-    }));
-
-    // Mock file IO
-    vi.mock("../src/core/file-io.js", () => ({
-      createTaskFileIO: vi.fn().mockReturnValue({
-        readFile: vi.fn(),
-        writeFile: vi.fn(),
-        listFiles: vi.fn(),
-      }),
-    }));
+    // Create logs directory for testing
+    await fs.mkdir(path.join(tempDir, "test-job-123", "files", "logs"), {
+      recursive: true,
+    });
 
     // Create mock tasks that simulate legacy behavior
-    mockTasks = {
-      // Legacy ingestion stage - expects context.seed.data
+    mockTasksModule = {
+      // Required for validation - make it pass so no refinement is triggered
+      validateStructure: vi.fn((context) => {
+        expect(context.data.seed).toBeDefined();
+        expect(context.data.seed.data).toEqual({ test: "data" });
+        return {
+          output: { validationPassed: true },
+          flags: { validationFailed: false },
+        };
+      }),
+
+      // Required for refinement - include empty implementations to prevent errors
+      critique: vi.fn((context) => {
+        return {
+          output: { critique: "no critique needed" },
+          flags: { critiqueComplete: true },
+        };
+      }),
+
+      refine: vi.fn((context) => {
+        return {
+          output: { refined: false },
+          flags: { refined: false },
+        };
+      }),
+
+      // Legacy ingestion stage - expects context.data.seed
       ingestion: vi.fn((context) => {
         // Should read from context.data.seed (new structure)
         expect(context.data.seed).toBeDefined();
@@ -60,40 +72,54 @@ describe("Legacy Stage Chaining", () => {
         return { output: "inferred", flags: {} };
       }),
     };
+
+    // Create vi.fn() spies for each function to track calls
+    Object.keys(mockTasksModule).forEach((name) => {
+      mockTasksModule[name] = vi.fn().mockImplementation(mockTasksModule[name]);
+    });
+
+    // Mock performance.now()
+    vi.spyOn(performance, "now").mockReturnValue(1000);
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     vi.restoreAllMocks();
+    if (tempDir) {
+      await fs.rm(tempDir, { recursive: true, force: true });
+    }
   });
 
   it("should populate stageContext.output from previous stage for legacy stages", async () => {
-    const modulePath = "/fake/path/to/tasks.js";
-
-    // Mock module loading to return our mock tasks
-    vi.doMock("/fake/path/to/tasks.js", () => mockTasks, { virtual: true });
-
     const initialContext = {
       seed: { data: { test: "data" } },
       taskName: "test-task",
-      workDir: "/tmp/test",
-      statusPath: "/tmp/test/status.json",
+      workDir: tempDir,
+      statusPath: path.join(tempDir, "status.json"),
       jobId: "test-job-123",
     };
 
-    const result = await runPipeline(modulePath, initialContext);
+    const result = await taskRunner.runPipeline(dummyTasksPath, {
+      ...initialContext,
+      tasksOverride: mockTasksModule,
+    });
+
+    if (!result.ok) {
+      console.log("Pipeline failed:", result);
+    }
 
     expect(result.ok).toBe(true);
 
     // Verify all legacy stages were called
-    expect(mockTasks.ingestion).toHaveBeenCalled();
-    expect(mockTasks.promptTemplating).toHaveBeenCalled();
-    expect(mockTasks.inference).toHaveBeenCalled();
+    expect(mockTasksModule.ingestion).toHaveBeenCalled();
+    expect(mockTasksModule.promptTemplating).toHaveBeenCalled();
+    expect(mockTasksModule.inference).toHaveBeenCalled();
 
     // Verify stage chaining worked correctly
-    const promptTemplatingCall = mockTasks.promptTemplating.mock.calls[0][0];
+    const promptTemplatingCall =
+      mockTasksModule.promptTemplating.mock.calls[0][0];
     expect(promptTemplatingCall.output).toBe("ingested");
 
-    const inferenceCall = mockTasks.inference.mock.calls[0][0];
+    const inferenceCall = mockTasksModule.inference.mock.calls[0][0];
     expect(inferenceCall.output).toBe("templated");
 
     // Verify outputs are stored in context.data
@@ -103,10 +129,26 @@ describe("Legacy Stage Chaining", () => {
   });
 
   it("should handle missing previous stage gracefully", async () => {
-    const modulePath = "/fake/path/to/tasks.js";
-
-    // Mock tasks with only promptTemplating (no ingestion before it)
+    // Mock tasks with only promptTemplating (no ingestion before it) plus required stages
     const partialMockTasks = {
+      validateStructure: vi.fn((context) => {
+        return {
+          output: { validationPassed: true },
+          flags: { validationFailed: false },
+        };
+      }),
+      critique: vi.fn((context) => {
+        return {
+          output: { critique: "no critique needed" },
+          flags: { critiqueComplete: true },
+        };
+      }),
+      refine: vi.fn((context) => {
+        return {
+          output: { refined: false },
+          flags: { refined: false },
+        };
+      }),
       promptTemplating: vi.fn((context) => {
         // Should not have context.output when no previous stage
         expect(context.output).toBeUndefined();
@@ -114,19 +156,27 @@ describe("Legacy Stage Chaining", () => {
       }),
     };
 
-    vi.doMock("/fake/path/to/tasks.js", () => partialMockTasks, {
-      virtual: true,
+    // Create logs directory for this test too
+    await fs.mkdir(path.join(tempDir, "test-job-123", "files", "logs"), {
+      recursive: true,
     });
 
     const initialContext = {
       seed: { data: { test: "data" } },
       taskName: "test-task",
-      workDir: "/tmp/test",
-      statusPath: "/tmp/test/status.json",
+      workDir: tempDir,
+      statusPath: path.join(tempDir, "status.json"),
       jobId: "test-job-123",
     };
 
-    const result = await runPipeline(modulePath, initialContext);
+    const result = await taskRunner.runPipeline(dummyTasksPath, {
+      ...initialContext,
+      tasksOverride: partialMockTasks,
+    });
+
+    if (!result.ok) {
+      console.log("Pipeline failed:", result);
+    }
 
     expect(result.ok).toBe(true);
     expect(partialMockTasks.promptTemplating).toHaveBeenCalled();
@@ -136,10 +186,26 @@ describe("Legacy Stage Chaining", () => {
   });
 
   it("should find nearest previous stage when intermediate stage is missing", async () => {
-    const modulePath = "/fake/path/to/tasks.js";
-
-    // Mock tasks with ingestion, missing promptTemplating, but having inference
+    // Mock tasks with ingestion, missing promptTemplating, but having inference plus required stages
     const gapMockTasks = {
+      validateStructure: vi.fn((context) => {
+        return {
+          output: { validationPassed: true },
+          flags: { validationFailed: false },
+        };
+      }),
+      critique: vi.fn((context) => {
+        return {
+          output: { critique: "no critique needed" },
+          flags: { critiqueComplete: true },
+        };
+      }),
+      refine: vi.fn((context) => {
+        return {
+          output: { refined: false },
+          flags: { refined: false },
+        };
+      }),
       ingestion: vi.fn((context) => {
         return { output: "ingested", flags: {} };
       }),
@@ -151,17 +217,27 @@ describe("Legacy Stage Chaining", () => {
       }),
     };
 
-    vi.doMock("/fake/path/to/tasks.js", () => gapMockTasks, { virtual: true });
+    // Create logs directory for this test too
+    await fs.mkdir(path.join(tempDir, "test-job-123", "files", "logs"), {
+      recursive: true,
+    });
 
     const initialContext = {
       seed: { data: { test: "data" } },
       taskName: "test-task",
-      workDir: "/tmp/test",
-      statusPath: "/tmp/test/status.json",
+      workDir: tempDir,
+      statusPath: path.join(tempDir, "status.json"),
       jobId: "test-job-123",
     };
 
-    const result = await runPipeline(modulePath, initialContext);
+    const result = await taskRunner.runPipeline(dummyTasksPath, {
+      ...initialContext,
+      tasksOverride: gapMockTasks,
+    });
+
+    if (!result.ok) {
+      console.log("Pipeline failed:", result);
+    }
 
     expect(result.ok).toBe(true);
     expect(gapMockTasks.ingestion).toHaveBeenCalled();

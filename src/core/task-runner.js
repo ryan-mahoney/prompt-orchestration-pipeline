@@ -339,6 +339,8 @@ export async function runPipeline(modulePath, initialContext = {}) {
   const logs = [];
   let needsRefinement = false;
   let refinementCount = 0;
+  let lastStageOutput = context.data.seed;
+  let lastStageName = "seed";
 
   // Ensure log directory exists before stage execution
   ensureLogDirectory(context.meta.workDir, context.meta.jobId);
@@ -482,6 +484,12 @@ export async function runPipeline(modulePath, initialContext = {}) {
         data: stageData,
         flags: stageFlags,
         currentStage: stageName,
+        output: structuredClone(
+          lastStageOutput !== undefined
+            ? lastStageOutput
+            : (context.data.seed ?? null)
+        ),
+        previousStage: lastStageName,
       };
 
       // Validate prerequisite flags before stage execution
@@ -510,6 +518,8 @@ export async function runPipeline(modulePath, initialContext = {}) {
 
         // Store stage output in context.data
         context.data[stageName] = stageResult.output;
+        lastStageOutput = stageResult.output;
+        lastStageName = stageName;
 
         // Merge stage flags into context.flags
         context.flags = { ...context.flags, ...stageResult.flags };
@@ -604,6 +614,11 @@ export async function runPipeline(modulePath, initialContext = {}) {
       }
     }
 
+    // Reset chaining baseline to seed for legacy ORDER stages
+    lastStageOutput = structuredClone(context.data.seed);
+    lastStageName = "seed";
+    const orderedExecutionHistory = [];
+
     // Handle stages not in PIPELINE_STAGES (legacy stages from ORDER)
     for (const stage of ORDER) {
       // Skip if stage is already handled by PIPELINE_STAGES
@@ -634,27 +649,26 @@ export async function runPipeline(modulePath, initialContext = {}) {
       }
 
       // Create stageContext for legacy stages with populated output from previous stage
+      const previousStage =
+        orderedExecutionHistory.length === 0
+          ? "seed"
+          : orderedExecutionHistory[orderedExecutionHistory.length - 1];
+      const previousOutputSource =
+        previousStage === "seed" ? undefined : context.data[previousStage];
+
       const stageContext = {
         io: context.io,
         llm: context.llm,
         meta: context.meta,
-        data: context.data,
-        flags: context.flags,
+        data: structuredClone(context.data),
+        flags: structuredClone(context.flags),
         currentStage: stage,
+        output:
+          previousOutputSource === undefined
+            ? undefined
+            : structuredClone(previousOutputSource),
+        previousStage,
       };
-
-      // Populate output from previous stage for stage chaining compatibility
-      const stageIndex = ORDER.indexOf(stage);
-      if (stageIndex > 0) {
-        // Find previous stage in ORDER that has data in context.data
-        for (let i = stageIndex - 1; i >= 0; i--) {
-          const previousStage = ORDER[i];
-          if (context.data[previousStage] !== undefined) {
-            stageContext.output = context.data[previousStage];
-            break;
-          }
-        }
-      }
 
       const start = performance.now();
       try {
@@ -670,6 +684,9 @@ export async function runPipeline(modulePath, initialContext = {}) {
           // New contract: { output, flags }
           context.data[stage] = result.output;
           context.flags = { ...context.flags, ...result.flags };
+          lastStageOutput = context.data[stage];
+          lastStageName = stage;
+          orderedExecutionHistory.push(stage);
 
           context.logs.push({
             stage,
@@ -681,6 +698,9 @@ export async function runPipeline(modulePath, initialContext = {}) {
         } else {
           // Legacy contract: direct return value
           context.data[stage] = result;
+          lastStageOutput = context.data[stage];
+          lastStageName = stage;
+          orderedExecutionHistory.push(stage);
 
           context.logs.push({
             stage,
