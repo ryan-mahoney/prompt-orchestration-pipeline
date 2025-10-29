@@ -633,9 +633,32 @@ export async function runPipeline(modulePath, initialContext = {}) {
         continue;
       }
 
+      // Create stageContext for legacy stages with populated output from previous stage
+      const stageContext = {
+        io: context.io,
+        llm: context.llm,
+        meta: context.meta,
+        data: context.data,
+        flags: context.flags,
+        currentStage: stage,
+      };
+
+      // Populate output from previous stage for stage chaining compatibility
+      const stageIndex = ORDER.indexOf(stage);
+      if (stageIndex > 0) {
+        // Find previous stage in ORDER that has data in context.data
+        for (let i = stageIndex - 1; i >= 0; i--) {
+          const previousStage = ORDER[i];
+          if (context.data[previousStage] !== undefined) {
+            stageContext.output = context.data[previousStage];
+            break;
+          }
+        }
+      }
+
       const start = performance.now();
       try {
-        const result = await fn(context);
+        const result = await fn(stageContext);
 
         // Handle legacy stages that don't return { output, flags } format
         if (
