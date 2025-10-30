@@ -330,11 +330,11 @@ describe("Content Pipeline Integration Tests", () => {
         return { output: "ingested-data", flags: {} };
       }),
 
-      // Legacy-style stage that expects context.output
+      // New-style stage that expects context.output
       promptTemplating: vi.fn((context) => {
         expect(context.previousStage).toBe("ingestion");
         expect(context.output).toBe("ingested-data");
-        return "templated-data"; // Legacy return format
+        return { output: "templated-data", flags: {} }; // New return format
       }),
 
       // New-style stage

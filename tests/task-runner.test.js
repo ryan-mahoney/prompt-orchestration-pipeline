@@ -40,15 +40,39 @@ describe("Task Runner - Real Implementation", () => {
       validateStructure,
       critique,
       refine,
-      // Legacy stages for backward compatibility testing
-      ingestion: vi.fn().mockResolvedValue({ data: "ingested" }),
-      preProcessing: vi.fn().mockResolvedValue({ processed: true }),
-      promptTemplating: vi.fn().mockResolvedValue({ prompt: "template" }),
-      inference: vi.fn().mockResolvedValue({ result: "inferred" }),
-      parsing: vi.fn().mockResolvedValue({ parsed: true }),
-      validateQuality: vi.fn().mockResolvedValue({ qualityPassed: true }),
-      finalValidation: vi.fn().mockResolvedValue({ output: { x: 1 } }),
-      integration: vi.fn().mockResolvedValue({ integrated: true }),
+      // Modern stages with { output, flags } format
+      ingestion: vi.fn().mockImplementation(async (context) => ({
+        output: { ingested: true, data: context.output },
+        flags: { ingestionComplete: true },
+      })),
+      preProcessing: vi.fn().mockImplementation(async (context) => ({
+        output: { preProcessed: true, data: context.output },
+        flags: { preProcessingComplete: true },
+      })),
+      promptTemplating: vi.fn().mockImplementation(async (context) => ({
+        output: { template: "test-template", data: context.output },
+        flags: { templateReady: true },
+      })),
+      inference: vi.fn().mockImplementation(async (context) => ({
+        output: { result: "test-inference", data: context.output },
+        flags: { inferenceComplete: true },
+      })),
+      parsing: vi.fn().mockImplementation(async (context) => ({
+        output: { parsed: true, data: context.output },
+        flags: { parsingComplete: true },
+      })),
+      validateQuality: vi.fn().mockImplementation(async (context) => ({
+        output: { qualityValid: true, data: context.output },
+        flags: { qualityValidationPassed: true },
+      })),
+      finalValidation: vi.fn().mockImplementation(async (context) => ({
+        output: { finalResult: true, data: context.output },
+        flags: { finalValidationPassed: true },
+      })),
+      integration: vi.fn().mockImplementation(async (context) => ({
+        output: { integrated: true, data: context.output },
+        flags: { integrationComplete: true },
+      })),
     };
 
     // Mock performance.now()
@@ -161,8 +185,17 @@ describe("Task Runner - Real Implementation", () => {
         tasksOverride: mockTasksModule,
       });
 
-      expect(result.context.flags).toEqual({
+      expect(result.context.flags).toMatchObject({
         validationFailed: false,
+        // All modern stages should have their flags set since they execute
+        ingestionComplete: true,
+        preProcessingComplete: true,
+        templateReady: true,
+        inferenceComplete: true,
+        parsingComplete: true,
+        qualityValidationPassed: true,
+        finalValidationPassed: true,
+        integrationComplete: true,
         // critiqueComplete and refined won't be set since stages are skipped
       });
     });

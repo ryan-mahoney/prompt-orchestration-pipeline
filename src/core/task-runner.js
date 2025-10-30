@@ -207,7 +207,43 @@ const FLAG_SCHEMAS = {
  */
 const PIPELINE_STAGES = [
   {
+    name: "ingestion",
+    handler: null, // Will be populated from dynamic module import
+    skipIf: null,
+    maxIterations: null,
+  },
+  {
+    name: "preProcessing",
+    handler: null, // Will be populated from dynamic module import
+    skipIf: null,
+    maxIterations: null,
+  },
+  {
+    name: "promptTemplating",
+    handler: null, // Will be populated from dynamic module import
+    skipIf: null,
+    maxIterations: null,
+  },
+  {
+    name: "inference",
+    handler: null, // Will be populated from dynamic module import
+    skipIf: null,
+    maxIterations: null,
+  },
+  {
+    name: "parsing",
+    handler: null, // Will be populated from dynamic module import
+    skipIf: null,
+    maxIterations: null,
+  },
+  {
     name: "validateStructure",
+    handler: null, // Will be populated from dynamic module import
+    skipIf: null,
+    maxIterations: null,
+  },
+  {
+    name: "validateQuality",
     handler: null, // Will be populated from dynamic module import
     skipIf: null,
     maxIterations: null,
@@ -223,6 +259,18 @@ const PIPELINE_STAGES = [
     handler: null, // Will be populated from dynamic module import
     skipIf: (flags) => flags.validationFailed === false,
     maxIterations: (seed) => seed.maxRefinements || 1,
+  },
+  {
+    name: "finalValidation",
+    handler: null, // Will be populated from dynamic module import
+    skipIf: null,
+    maxIterations: null,
+  },
+  {
+    name: "integration",
+    handler: null, // Will be populated from dynamic module import
+    skipIf: null,
+    maxIterations: null,
   },
 ];
 
@@ -322,6 +370,7 @@ export async function runPipeline(modulePath, initialContext = {}) {
   let refinementCount = 0;
   let lastStageOutput = context.data.seed;
   let lastStageName = "seed";
+  let lastExecutedStageName = "seed";
 
   // Ensure log directory exists before stage execution
   ensureLogDirectory(context.meta.workDir, context.meta.jobId);
@@ -470,7 +519,7 @@ export async function runPipeline(modulePath, initialContext = {}) {
             ? lastStageOutput
             : (context.data.seed ?? null)
         ),
-        previousStage: lastStageName,
+        previousStage: lastExecutedStageName,
       };
 
       // Validate prerequisite flags before stage execution
@@ -499,8 +548,20 @@ export async function runPipeline(modulePath, initialContext = {}) {
 
         // Store stage output in context.data
         context.data[stageName] = stageResult.output;
-        lastStageOutput = stageResult.output;
         lastStageName = stageName;
+
+        // Only update lastStageOutput and lastExecutedStageName for non-validation stages
+        // This ensures previousStage and context.output skip validation stages
+        const validationStages = [
+          "validateStructure",
+          "validateQuality",
+          "validateFinal",
+          "finalValidation",
+        ];
+        if (!validationStages.includes(stageName)) {
+          lastStageOutput = stageResult.output;
+          lastExecutedStageName = stageName;
+        }
 
         // Merge stage flags into context.flags
         context.flags = { ...context.flags, ...stageResult.flags };
