@@ -275,7 +275,7 @@ const PIPELINE_STAGES = [
 ];
 
 /**
- * Runs a pipeline by loading a module that exports functions keyed by ORDER.
+ * Runs a pipeline by loading a module that exports functions keyed by stage name.
  */
 export async function runPipeline(modulePath, initialContext = {}) {
   if (!initialContext.envLoaded) {
@@ -440,7 +440,6 @@ export async function runPipeline(modulePath, initialContext = {}) {
           const sStart = performance.now();
           try {
             const r = await sHandler(context);
-            // Legacy Object.assign removed - handlers should use new { output, flags } contract
             const sMs = +(performance.now() - sStart).toFixed(2);
             logs.push({
               stage: s,
