@@ -7,21 +7,6 @@ import { loadEnvironment } from "./environment.js";
 import { getConfig } from "./config.js";
 import { createTaskFileIO } from "./file-io.js";
 
-/** Canonical order using the field terms we discussed */
-const ORDER = [
-  "ingestion",
-  "preProcessing",
-  "promptTemplating",
-  "inference",
-  "parsing",
-  "validateStructure",
-  "validateQuality",
-  "critique",
-  "refine",
-  "finalValidation",
-  "integration",
-];
-
 /**
  * Validates that a value is a plain object (not array, null, or class instance).
  * @param {*} value - The value to check
@@ -289,12 +274,8 @@ export async function runPipeline(modulePath, initialContext = {}) {
     ) {
       stageConfig.handler = handlersSource[stageConfig.name];
     } else {
-      // Create placeholder handler that throws "Not implemented" error
-      stageConfig.handler = async function (context) {
-        throw new Error(
-          `Stage "${stageConfig.name}" is not implemented in the loaded module`
-        );
-      };
+      // Set handler to null when not available - will be skipped
+      stageConfig.handler = null;
     }
   });
 
@@ -611,153 +592,6 @@ export async function runPipeline(modulePath, initialContext = {}) {
         if (restoreConsole) {
           restoreConsole();
         }
-      }
-    }
-
-    // Reset chaining baseline to seed for legacy ORDER stages
-    lastStageOutput = structuredClone(context.data.seed);
-    lastStageName = "seed";
-    const orderedExecutionHistory = [];
-
-    // Handle stages not in PIPELINE_STAGES (legacy stages from ORDER)
-    for (const stage of ORDER) {
-      // Skip if stage is already handled by PIPELINE_STAGES
-      if (PIPELINE_STAGES.some((config) => config.name === stage)) {
-        continue;
-      }
-
-      context.currentStage = stage;
-      const fn =
-        (initialContext.tasksOverride && initialContext.tasksOverride[stage]) ||
-        tasks[stage];
-      if (typeof fn !== "function") {
-        logs.push({ stage, skipped: true, refinementCycle: refinementCount });
-        continue;
-      }
-
-      if (
-        refinementCount > 0 &&
-        ["ingestion", "preProcessing"].includes(stage)
-      ) {
-        logs.push({
-          stage,
-          skipped: true,
-          reason: "refinement-cycle",
-          refinementCycle: refinementCount,
-        });
-        continue;
-      }
-
-      // Create stageContext for legacy stages with populated output from previous stage
-      const previousStage =
-        orderedExecutionHistory.length === 0
-          ? "seed"
-          : orderedExecutionHistory[orderedExecutionHistory.length - 1];
-      const previousOutputSource =
-        previousStage === "seed"
-          ? context.data.seed
-          : context.data[previousStage];
-
-      const handlerSource =
-        initialContext.tasksOverride &&
-        Object.prototype.hasOwnProperty.call(
-          initialContext.tasksOverride,
-          stage
-        )
-          ? "tasksOverride"
-          : Object.prototype.hasOwnProperty.call(tasks, stage)
-            ? "module"
-            : "unresolved";
-
-      const stageContext = {
-        io: context.io,
-        llm: context.llm,
-        meta: context.meta,
-        data: structuredClone(context.data),
-        flags: structuredClone(context.flags),
-        currentStage: stage,
-        output:
-          previousOutputSource === undefined
-            ? undefined
-            : structuredClone(previousOutputSource),
-        previousStage,
-      };
-
-      if (previousStage === "seed") {
-        const seedSummary = stageContext.data?.seed
-          ? Object.keys(stageContext.data.seed)
-          : [];
-        console.debug("[diagnostic][runPipeline] legacy stage init", {
-          stage,
-          handlerSource,
-          hasSeedOutput: stageContext.output !== undefined,
-          previousStage,
-          seedSummary,
-        });
-      }
-
-      const start = performance.now();
-      try {
-        const result = await fn(stageContext);
-
-        // Handle legacy stages that don't return { output, flags } format
-        if (
-          result &&
-          typeof result === "object" &&
-          result.output &&
-          result.flags
-        ) {
-          // New contract: { output, flags }
-          context.data[stage] = result.output;
-          context.flags = { ...context.flags, ...result.flags };
-          lastStageOutput = context.data[stage];
-          lastStageName = stage;
-          orderedExecutionHistory.push(stage);
-
-          context.logs.push({
-            stage,
-            action: "completed",
-            outputType: typeof result.output,
-            flagKeys: Object.keys(result.flags),
-            timestamp: new Date().toISOString(),
-          });
-        } else {
-          // Legacy contract: direct return value
-          context.data[stage] = result;
-          lastStageOutput = context.data[stage];
-          lastStageName = stage;
-          orderedExecutionHistory.push(stage);
-
-          context.logs.push({
-            stage,
-            action: "completed",
-            outputType: typeof result,
-            flagKeys: [],
-            timestamp: new Date().toISOString(),
-          });
-        }
-
-        const ms = +(performance.now() - start).toFixed(2);
-        logs.push({ stage, ok: true, ms, refinementCycle: refinementCount });
-      } catch (error) {
-        const ms = +(performance.now() - start).toFixed(2);
-        const errInfo = normalizeError(error);
-        logs.push({
-          stage,
-          ok: false,
-          ms,
-          error: errInfo,
-          refinementCycle: refinementCount,
-        });
-
-        return {
-          ok: false,
-          failedStage: stage,
-          error: errInfo,
-          logs,
-          context,
-          refinementAttempts: refinementCount,
-        };
       }
     }
 
