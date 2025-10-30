@@ -654,7 +654,20 @@ export async function runPipeline(modulePath, initialContext = {}) {
           ? "seed"
           : orderedExecutionHistory[orderedExecutionHistory.length - 1];
       const previousOutputSource =
-        previousStage === "seed" ? undefined : context.data[previousStage];
+        previousStage === "seed"
+          ? context.data.seed
+          : context.data[previousStage];
+
+      const handlerSource =
+        initialContext.tasksOverride &&
+        Object.prototype.hasOwnProperty.call(
+          initialContext.tasksOverride,
+          stage
+        )
+          ? "tasksOverride"
+          : Object.prototype.hasOwnProperty.call(tasks, stage)
+            ? "module"
+            : "unresolved";
 
       const stageContext = {
         io: context.io,
@@ -669,6 +682,19 @@ export async function runPipeline(modulePath, initialContext = {}) {
             : structuredClone(previousOutputSource),
         previousStage,
       };
+
+      if (previousStage === "seed") {
+        const seedSummary = stageContext.data?.seed
+          ? Object.keys(stageContext.data.seed)
+          : [];
+        console.debug("[diagnostic][runPipeline] legacy stage init", {
+          stage,
+          handlerSource,
+          hasSeedOutput: stageContext.output !== undefined,
+          previousStage,
+          seedSummary,
+        });
+      }
 
       const start = performance.now();
       try {
