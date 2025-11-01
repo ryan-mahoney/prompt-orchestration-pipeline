@@ -202,8 +202,10 @@ const FLAG_SCHEMAS = {
 };
 
 /**
- * Hard-coded pipeline stage execution order and configuration.
+ * Canonical pipeline stage execution order for the modern pipeline.
  * Each stage defines its handler, skip predicate, and iteration limits.
+ * Stages with missing handlers are automatically skipped during execution.
+ * This is the single, unified pipeline with no legacy execution paths.
  */
 const PIPELINE_STAGES = [
   {

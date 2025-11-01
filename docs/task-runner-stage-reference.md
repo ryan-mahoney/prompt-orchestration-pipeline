@@ -2,7 +2,7 @@
 
 ## 1. Purpose and Scope
 
-This document describes the task-stage execution flow implemented by [`runPipeline()`](src/core/task-runner.js:26). It explains which stage functions may execute, the order in which they are considered, what contextual data they consume, and how their outputs influence subsequent processing. All observations are deduced solely from [`src/core/task-runner.js:8-261`](src/core/task-runner.js:8).
+This document describes the task-stage execution flow implemented by [`runPipeline()`](src/core/task-runner.js:26). It explains which stage functions may execute, the order in which they are considered, what contextual data they consume, and how their outputs influence subsequent processing.
 
 ## 2. Primary Sources
 
@@ -23,7 +23,7 @@ This document describes the task-stage execution flow implemented by [`runPipeli
 ### 3.2 Configuration and Metrics
 
 - [`getConfig()`](src/core/task-runner.js:41) supplies `config.taskRunner.maxRefinementAttempts`.
-- An array `llmMetrics` captures events emitted via [`getLLMEvents()`](src/core/task-runner.js:43). Each recorded metric is augmented with the active `context.taskName` and `context.currentStage`.
+- An array `llmMetrics` captures events emitted via [`getLLMEvents()`](src/core/task-runner.js:43). Each recorded metric is augmented with the active `context.meta.taskName` and `context.currentStage`.
 - Event listeners: `"llm:request:complete"` and `"llm:request:error"` (the latter marks entries with `failed: true`).
 
 ### 3.3 Task Module Loading
@@ -38,15 +38,16 @@ This document describes the task-stage execution flow implemented by [`runPipeli
 
 ### 3.5 Context Object
 
-`context` starts as `{ ...initialContext, currentStage: null, io: fileIO }` ([`src/core/task-runner.js:79-83`](src/core/task-runner.js:79)). As stages execute:
+`context` starts with the modern structure including `meta`, `data`, `flags`, `logs`, `io`, and `llm` sections. As stages execute:
 
 - `currentStage` tracks the active stage.
-- Any stage returning an object merges it into `context` via `Object.assign()` ([`src/core/task-runner.js:178-180`](src/core/task-runner.js:178)).
-- Other properties referenced in control flow include `validationFailed`, `lastValidationError`, `refined`, and `taskName`.
+- Stage results are stored in `context.data[stageName]`.
+- Control flags are merged into `context.flags`.
+- Validation state is managed through `context.flags.validationFailed` and related flags.
 
 ## 4. Canonical Stage Order
 
-The fixed stage sequence is defined by [`ORDER`](src/core/task-runner.js:8):
+The fixed stage sequence is defined by [`PIPELINE_STAGES`](src/core/task-runner.js):
 
 1. ingestion
 2. preProcessing
@@ -60,40 +61,39 @@ The fixed stage sequence is defined by [`ORDER`](src/core/task-runner.js:8):
 10. finalValidation
 11. integration
 
-Each loop iteration sets `context.currentStage` before attempting the stage handler.
+Each loop iteration sets `context.currentStage` before attempting the stage handler. Stages are optional and skipped cleanly if their handlers are not implemented.
 
 ## 5. Stage Execution Summary
 
-| Stage             | Invocation Conditions                                                                                  | Inputs from Context                                  | Output Handling                                    | Skip / Early Exit                                                                                                        |
-| ----------------- | ------------------------------------------------------------------------------------------------------ | ---------------------------------------------------- | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| ingestion         | First pass only. Function must exist. ([`src/core/task-runner.js:93-139`](src/core/task-runner.js:93)) | Shared `context` (includes environment, LLM, IO).    | Returned objects merged into `context`.            | Skipped if handler missing or any refinement cycle (`refinementCount > 0`).                                              |
-| preProcessing     | Same as ingestion during initial cycle.                                                                | Same as above.                                       | Same as above.                                     | Skipped if handler missing or in refinement cycle.                                                                       |
-| promptTemplating  | Every cycle if handler exists.                                                                         | `context` plus prior stage mutations.                | Merged into `context`.                             | Skipped if handler missing.                                                                                              |
-| inference         | Every cycle if handler exists.                                                                         | Access to `context.llm` and prior data.              | Merged into `context`.                             | On error, pipeline returns failure immediately.                                                                          |
-| parsing           | Every cycle if handler exists.                                                                         | Consumes inference outputs via `context`.            | Merged into `context`.                             | Failure aborts pipeline.                                                                                                 |
-| validateStructure | Every cycle if handler exists.                                                                         | Uses `context`, including parsing results.           | May set `context.validationFailed`.                | If validation fails and retries remain, triggers refinement loop.                                                        |
-| validateQuality   | Executed after `validateStructure`.                                                                    | Same input pattern.                                  | Same output pattern.                               | Shares refinement trigger logic with `validateStructure`.                                                                |
-| critique          | Normally runs once per cycle if handler exists.                                                        | Receives `context`.                                  | Merged outputs (e.g., may flag `context.refined`). | During refinement cycles, may run early as a pre-validation step and then be skipped when encountering its regular slot. |
-| refine            | Follows `critique`.                                                                                    | Receives `context` potentially enriched by critique. | Merged outputs.                                    | Same pre-refinement skip behavior as `critique`.                                                                         |
-| finalValidation   | Runs after refinement loop completes.                                                                  | Uses all collected context.                          | Merged outputs.                                    | Only skipped when handler missing.                                                                                       |
-| integration       | Final stage.                                                                                           | Uses final context state.                            | Merged outputs.                                    | Only skipped when handler missing.                                                                                       |
+| Stage             | Handler Required | Inputs from Context                             | Output Handling                          | Skip Conditions                                                                                               |
+| ----------------- | ---------------- | ----------------------------------------------- | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| ingestion         | Optional         | `context.output` (from seed) + shared resources | `{ output, flags }` merged into context  | No handler or refinement cycle (`refinementCount > 0`)                                                        |
+| preProcessing     | Optional         | Same as ingestion                               | `{ output, flags }` merged into context  | No handler or refinement cycle                                                                                |
+| promptTemplating  | Optional         | `context.output` + prior stage data             | `{ output, flags }` merged into context  | No handler                                                                                                    |
+| inference         | Optional         | `context.llm` + prior data                      | `{ output, flags }` merged into context  | No handler; errors abort pipeline immediately                                                                 |
+| parsing           | Optional         | `context` (consumes inference outputs)          | `{ output, flags }` merged into context  | No handler; failures abort pipeline                                                                           |
+| validateStructure | Optional         | `context` + parsing results                     | May set `context.flags.validationFailed` | No handler; may trigger refinement                                                                            |
+| validateQuality   | Optional         | Same input pattern as validateStructure         | Same as validateStructure                | No handler; may trigger refinement                                                                            |
+| critique          | Optional         | `context`                                       | `{ output, flags }` merged into context  | No handler or skipIf predicate (`flags.validationFailed === false`); may run pre-validation during refinement |
+| refine            | Optional         | `context` (potentially enriched by critique)    | `{ output, flags }` merged into context  | No handler or skipIf predicate; may run pre-validation during refinement                                      |
+| finalValidation   | Optional         | Final context state                             | `{ output, flags }` merged into context  | No handler                                                                                                    |
+| integration       | Optional         | Final context state                             | `{ output, flags }` merged into context  | No handler                                                                                                    |
 
 ### Notes:
 
-- If a stage handler is not a function, the stage is logged as skipped ([`src/core/task-runner.js:96-99`](src/core/task-runner.js:96)).
-- Stage duration is measured with `performance.now()` and logged as `ms`.
+- Stage handlers must return `{ output, flags }` objects conforming to the contract enforced by `assertStageResult()`.
+- Flag types are validated against `FLAG_SCHEMAS` to ensure consistency.
+- Stage duration is measured with `performance.now()` and logged.
+- Console output is captured per stage for debugging purposes.
 
 ## 6. Refinement Cycle Mechanics
 
 1. The main loop is wrapped in a `do ... while` that repeats when `needsRefinement` is set ([`src/core/task-runner.js:89-235`](src/core/task-runner.js:89)).
 2. When `refinementCount > 0`, `ingestion` and `preProcessing` are automatically skipped ([`src/core/task-runner.js:101-112`](src/core/task-runner.js:101)).
-3. Before `validateStructure` or `validateQuality` in refinement cycles, if `context.refined` is falsy and no pre-refinement has occurred, the runner invokes `critique` and `refine` immediately ([`src/core/task-runner.js:114-164`](src/core/task-runner.js:114)). Each invocation:
-   - Logs success or failure.
-   - Merges returned objects into `context`.
-   - On error, aborts the pipeline with failure metadata.
+3. Before `validateStructure` or `validateQuality` in refinement cycles, if `context.flags.refined` is falsy and no pre-refinement has occurred, the runner invokes `critique` and `refine` immediately ([`src/core/task-runner.js:114-164`](src/core/task-runner.js:114)).
 4. After pre-refinement, the normal pass over `critique` or `refine` logs a skip reason (`"already-pre-refined"`) ([`src/core/task-runner.js:166-174`](src/core/task-runner.js:166)).
-5. If a validation stage sets `context.validationFailed` and `refinementCount < maxRefinements`, the flag is cleared, `needsRefinement` becomes `true`, and the loop breaks to start another cycle ([`src/core/task-runner.js:185-193`](src/core/task-runner.js:185)).
-6. Validation errors captured in `normalizeError()` are stored as `context.lastValidationError` when retries remain ([`src/core/task-runner.js:205-211`](src/core/task-runner.js:205)).
+5. If a validation stage sets `context.flags.validationFailed` and `refinementCount < maxRefinements`, `needsRefinement` becomes `true` and the loop breaks to start another cycle ([`src/core/task-runner.js:185-193`](src/core/task-runner.js:185)).
+6. Validation errors captured in `normalizeError()` are stored as `context.flags.lastValidationError` when retries remain ([`src/core/task-runner.js:205-211`](src/core/task-runner.js:205)).
 7. Each refinement cycle increments `refinementCount` and logs a `refinement-trigger` entry with the reason (`"validation-error"` or `"validation-failed-flag"`) ([`src/core/task-runner.js:225-234`](src/core/task-runner.js:225)).
 
 The loop terminates when either:
@@ -106,11 +106,11 @@ The loop terminates when either:
 ### 7.1 Stage Failures
 
 - On any thrown error during a stage, the error is normalized and logged; the pipeline returns `{ ok: false, failedStage, error, logs, context, refinementAttempts }` ([`src/core/task-runner.js:194-221`](src/core/task-runner.js:194)).
-- For validation stages, errors may instead trigger refinement if attempts remain.
+- For validation stages, errors may trigger refinement if attempts remain.
 
 ### 7.2 Final Validation Failure
 
-- If `context.validationFailed` remains truthy after all attempts and at least one validation handler existed, the pipeline returns a failure summary with `failedStage: "final-validation"` ([`src/core/task-runner.js:238-250`](src/core/task-runner.js:238)).
+- If `context.flags.validationFailed` remains truthy after all attempts and at least one validation handler existed, the pipeline returns a failure summary with `failedStage: "final-validation"` ([`src/core/task-runner.js:238-250`](src/core/task-runner.js:238)).
 
 ### 7.3 Success Path
 
@@ -141,7 +141,8 @@ Each stage interaction pushes a log object containing:
 - `modelConfig` copy
 - `availableModels` defaulting to `modelConfig.models` or `["default"]`
 - `currentModel` defaulting to `modelConfig.defaultModel` or `"default"`
-  It forwards the augmented context into [`runPipeline()`](src/core/task-runner.js:275).
+
+It forwards the augmented context into [`runPipeline()`](src/core/task-runner.js:275).
 
 ## 10. Execution Flow Diagram
 
@@ -200,7 +201,8 @@ _Note: Nodes represent potential handler invocations. Skips and early exits are 
 
 ## 12. Key Takeaways
 
-- Stage invocation strictly follows `ORDER`, with conditional skips for missing handlers and refinement rules.
-- `context` is the sole data carrier between stages; any object returned by a handler is merged in-place.
+- Stage invocation strictly follows the canonical order, with clean skips for missing handlers.
+- Stages are chained via the last successful stage output; validation stages are excluded from chaining.
+- All stage handlers must conform to the `{ output, flags }` contract with type validation.
 - Validation stages control refinement loops, optionally invoking critique and refine ahead of validation during retries.
-- All conclusions here are anchored to observable behavior in [`src/core/task-runner.js`](src/core/task-runner.js:8).
+- The pipeline is designed for flexibility with optional stages and robust error handling.
