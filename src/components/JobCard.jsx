@@ -20,7 +20,7 @@ export default function JobCard({
     ? taskDisplayDurationMs(currentTask, now)
     : 0;
   const totalCompleted = countCompleted(job);
-  const hasValidId = Boolean(job.jobId);
+  const hasValidId = Boolean(job.id);
   const jobTitle = job.title || job.name; // Fallback for backward compatibility
 
   return (

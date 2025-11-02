@@ -763,7 +763,7 @@ async function handleTaskFileListRequest(req, res, { jobId, taskId, type }) {
 
   // Use single lifecycle directory
   const jobDir = getJobDirectoryPath(dataDir, jobId, lifecycle);
-  const taskDir = path.join(jobDir, "tasks", taskId, type);
+  const taskDir = path.join(jobDir, "files", type);
 
   // Use path.relative for stricter jail enforcement
   const resolvedPath = path.resolve(taskDir);

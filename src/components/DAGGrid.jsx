@@ -567,20 +567,24 @@ function DAGGrid({
                       );
                     }
 
-                    return filesForTab.map((name) => (
-                      <div
-                        key={`${filePaneType}-${name}`}
-                        className="flex items-center justify-between p-2 rounded border border-gray-200 hover:border-gray-300 hover:bg-gray-50 cursor-pointer transition-colors"
-                        onClick={() => {
-                          setFilePaneFilename(name);
-                          setFilePaneOpen(true);
-                        }}
-                      >
-                        <div className="flex items-center space-x-2">
-                          <span className="text-sm text-gray-700">{name}</span>
+                    return filesForTab.map((name) => {
+                      return (
+                        <div
+                          key={`${filePaneType}-${name}`}
+                          className="flex items-center justify-between p-2 rounded border border-gray-200 hover:border-gray-300 hover:bg-gray-50 cursor-pointer transition-colors"
+                          onClick={() => {
+                            setFilePaneFilename(name);
+                            setFilePaneOpen(true);
+                          }}
+                        >
+                          <div className="flex items-center space-x-2">
+                            <span className="text-sm text-gray-700">
+                              {name}
+                            </span>
+                          </div>
                         </div>
-                      </div>
-                    ));
+                      );
+                    });
                   })()}
                 </div>
               </div>
