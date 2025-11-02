@@ -10,10 +10,10 @@ export const statusBadge = (status) => {
           Running
         </Badge>
       );
-    case "error":
+    case "failed":
       return (
-        <Badge variant="error" aria-label="Error">
-          Error
+        <Badge variant="error" aria-label="Failed">
+          Failed
         </Badge>
       );
     case "completed":
@@ -41,7 +41,7 @@ export const taskStatusIcon = (state) => {
       return <CheckCircle2 className="h-4 w-4 text-success" aria-hidden />;
     case "running":
       return <Loader2 className="h-4 w-4 animate-spin text-info" aria-hidden />;
-    case "error":
+    case "failed":
       return <AlertTriangle className="h-4 w-4 text-destructive" aria-hidden />;
     default:
       return <Circle className="h-4 w-4 text-slate-500" aria-hidden />;
@@ -52,7 +52,7 @@ export const progressClasses = (status) => {
   switch (status) {
     case "running":
       return "bg-info/20 [&>div]:bg-info";
-    case "error":
+    case "failed":
       return "bg-destructive/20 [&>div]:bg-destructive";
     case "completed":
       return "bg-success/20 [&>div]:bg-success";
@@ -65,7 +65,7 @@ export const barColorForState = (state) => {
   switch (state) {
     case "running":
       return "bg-info";
-    case "error":
+    case "failed":
       return "bg-destructive";
     case "completed":
     case "complete":

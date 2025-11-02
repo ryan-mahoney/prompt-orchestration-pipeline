@@ -389,8 +389,6 @@ function DAGGrid({
           const status = getStatus(idx);
           const isActive = idx === activeIndex;
 
-          console.log("Rendering item:", { idx, status, isActive, item });
-
           return (
             <div
               key={item.id ?? idx}
@@ -438,6 +436,14 @@ function DAGGrid({
                   ) : (
                     <span className="text-[11px] uppercase tracking-wide opacity-80">
                       {status}
+                      {status === "failed" && item.stage && (
+                        <span
+                          className="text-[11px] font-medium opacity-80 truncate ml-2"
+                          title={item.stage}
+                        >
+                          ({formatStageLabel(item.stage)})
+                        </span>
+                      )}
                     </span>
                   )}
                 </div>

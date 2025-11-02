@@ -1,6 +1,6 @@
 import { derivePipelineMetadata } from "../../../utils/pipelines.js";
 
-const ALLOWED_STATES = new Set(["pending", "running", "done", "error"]);
+const ALLOWED_STATES = new Set(["pending", "running", "done", "failed"]);
 
 /**
  * Normalize a raw task state into canonical enum.
@@ -125,15 +125,15 @@ function computeProgressFromTasks(tasks) {
 /**
  * Derive status from tasks when status is missing/invalid.
  * Rules:
- * - error if any task state === 'error'
- * - running if >=1 running and none error
+ * - failed if any task state === 'failed'
+ * - running if >=1 running and none failed
  * - complete if all done
  * - pending otherwise
  */
 function deriveStatusFromTasks(tasks) {
   const taskList = Object.values(tasks);
   if (!Array.isArray(taskList) || taskList.length === 0) return "pending";
-  if (taskList.some((t) => t.state === "error")) return "error";
+  if (taskList.some((t) => t.state === "failed")) return "failed";
   if (taskList.some((t) => t.state === "running")) return "running";
   if (taskList.every((t) => t.state === "done")) return "complete";
   return "pending";

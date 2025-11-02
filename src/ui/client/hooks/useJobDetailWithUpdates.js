@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import { adaptJobDetail } from "../adapters/job-adapter.js";
 
 // Export debounce constant for tests
 export const REFRESH_DEBOUNCE_MS = 200;
@@ -25,7 +26,7 @@ async function fetchJobDetail(jobId, { signal } = {}) {
     throw new Error(result.message || "Failed to load job");
   }
 
-  return result.data;
+  return adaptJobDetail(result.data);
 }
 
 /**

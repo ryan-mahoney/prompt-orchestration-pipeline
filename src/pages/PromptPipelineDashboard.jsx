@@ -47,7 +47,7 @@ export default function PromptPipelineDashboard({ isConnected }) {
     const src = Array.isArray(apiJobs) ? apiJobs : [];
 
     // Do not fall back to in-memory demo data. On error, return an empty list so
-    // the UI shows a neutral empty/error state rather than demo jobs.
+    // UI shows a neutral empty/error state rather than demo jobs.
     if (error) {
       return [];
     }
@@ -62,7 +62,7 @@ export default function PromptPipelineDashboard({ isConnected }) {
   const now = useTicker(1000);
 
   const errorCount = useMemo(
-    () => jobs.filter((j) => j.status === "error").length,
+    () => jobs.filter((j) => j.status === "failed").length,
     [jobs]
   );
   const currentCount = useMemo(
@@ -79,7 +79,7 @@ export default function PromptPipelineDashboard({ isConnected }) {
       case "current":
         return jobs.filter((j) => j.status === "running");
       case "errors":
-        return jobs.filter((j) => j.status === "error");
+        return jobs.filter((j) => j.status === "failed");
       case "complete":
         return jobs.filter((j) => j.status === "complete");
       default:
@@ -153,7 +153,7 @@ export default function PromptPipelineDashboard({ isConnected }) {
     };
   }, [seedUploadTimer]);
 
-  // Header actions for the Layout
+  // Header actions for Layout
   const headerActions = runningJobs.length > 0 && (
     <Flex align="center" gap="2" className="text-gray-11">
       <Text size="1" weight="medium">

@@ -11,7 +11,7 @@
  */
 
 import { readFileWithRetry } from "./file-reader.js";
-import * as configBridge from "./config-bridge.js";
+import * as configBridge from "./config-bridge.node.js";
 import path from "node:path";
 
 /**
@@ -34,22 +34,10 @@ export async function readJob(jobId) {
 
   for (const location of locations) {
     console.log(`readJob: checking location ${location} for ${jobId}`);
-    // Prefer using resolvePipelinePaths (tests spy on this) to derive paths.
-    // Fall back to getJobPath/getTasksStatusPath if resolvePipelinePaths is not available.
-    let jobDir;
-    let tasksPath;
-    if (typeof configBridge.resolvePipelinePaths === "function") {
-      const paths = configBridge.resolvePipelinePaths();
-      jobDir = path.join(paths[location], jobId);
-      tasksPath = path.join(paths[location], jobId, "tasks-status.json");
-    } else if (typeof configBridge.getJobPath === "function") {
-      jobDir = configBridge.getJobPath(jobId, location);
-      tasksPath = configBridge.getTasksStatusPath(jobId, location);
-    } else {
-      // As a last resort, build paths relative to cwd
-      jobDir = path.join(process.cwd(), "pipeline-data", location, jobId);
-      tasksPath = path.join(jobDir, "tasks-status.json");
-    }
+    // Prefer using getPATHS() to get paths with PO_ROOT support
+    const paths = configBridge.getPATHS();
+    const jobDir = path.join(paths[location], jobId);
+    const tasksPath = path.join(paths[location], jobId, "tasks-status.json");
 
     // Debug: trace lock checks and reading steps
     console.log(
@@ -87,11 +75,11 @@ export async function readJob(jobId) {
       // Note: we intentionally do not wait or re-check here to avoid flaky timing.
     }
 
-    // Try reading the tasks-status.json with retry for parse-race conditions
+    // Try reading tasks-status.json with retry for parse-race conditions
     const result = await readFileWithRetry(tasksPath);
 
     if (!result.ok) {
-      // Log a warning for failed reads of the tasks-status.json in this location
+      // Log a warning for failed reads of tasks-status.json in this location
       console.warn(
         `Failed to read tasks-status.json for job ${jobId} in ${location}`,
         result
@@ -112,7 +100,7 @@ export async function readJob(jobId) {
     }
 
     // Validate job shape minimally (validation function exists separately)
-    // Return the successful read
+    // Return successful read
     return {
       ok: true,
       data: result.data,
@@ -233,7 +221,7 @@ export function validateJobData(jobData, expectedJobId) {
     };
   }
 
-  // Get the actual ID for validation
+  // Get actual ID for validation
   const actualId = jobData.jobId ?? jobData.id;
   if (actualId !== expectedJobId) {
     warnings.push("Job ID mismatch");

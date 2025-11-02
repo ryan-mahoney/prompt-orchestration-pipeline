@@ -260,12 +260,18 @@ function broadcastStateUpdate(currentState) {
       currentState &&
       currentState.recentChanges &&
       currentState.recentChanges[0];
+    console.debug("[Server] Broadcasting state update:", {
+      latest,
+      currentState,
+    });
     if (latest) {
       // Emit only the most recent change as a compact, typed event
-      sseRegistry.broadcast({ type: "state:change", data: latest });
+      const eventData = { type: "state:change", data: latest };
+      console.debug("[Server] Broadcasting event:", eventData);
+      sseRegistry.broadcast(eventData);
     } else {
       // Fallback: emit a minimal summary so clients can observe a state "tick"
-      sseRegistry.broadcast({
+      const eventData = {
         type: "state:summary",
         data: {
           changeCount:
@@ -273,11 +279,14 @@ function broadcastStateUpdate(currentState) {
               ? currentState.changeCount
               : 0,
         },
-      });
+      };
+      console.debug("[Server] Broadcasting summary event:", eventData);
+      sseRegistry.broadcast(eventData);
     }
   } catch (err) {
     // Defensive: if something unexpected happens, fall back to a lightweight notification
     try {
+      console.error("[Server] Error in broadcastStateUpdate:", err);
       sseRegistry.broadcast({
         type: "state:summary",
         data: {
