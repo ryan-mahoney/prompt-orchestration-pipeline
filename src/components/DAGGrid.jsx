@@ -389,6 +389,8 @@ function DAGGrid({
           const status = getStatus(idx);
           const isActive = idx === activeIndex;
 
+          console.log("Rendering item:", { idx, status, isActive, item });
+
           return (
             <div
               key={item.id ?? idx}

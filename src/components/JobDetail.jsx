@@ -24,7 +24,7 @@ export default function JobDetail({ job, pipeline, onClose, onResume }) {
           : (pipeline.tasks[0].id ?? pipeline.tasks[0].name ?? "")
         : ""
     );
-  }, [job.id, pipeline?.tasks?.length]);
+  }, [job.jobId, pipeline?.tasks?.length]);
 
   // job.tasks is expected to be an object keyed by task name; normalize from array if needed
   const taskById = React.useMemo(() => {
@@ -56,6 +56,16 @@ export default function JobDetail({ job, pipeline, onClose, onResume }) {
 
   // Compute DAG items and active index for visualization
   const dagItems = computeDagItems(job, computedPipeline).map((item) => {
+    if (process.env.NODE_ENV !== "test") {
+      console.debug("[JobDetail] computed DAG item", {
+        id: item.id,
+        status: item.status,
+        stage: item.stage,
+        jobHasTasks: !!job?.tasks,
+        taskKeys: job?.tasks ? Object.keys(job.tasks) : null,
+      });
+    }
+
     const task = taskById[item.id];
     const taskConfig = task?.config || {};
 
@@ -101,7 +111,7 @@ export default function JobDetail({ job, pipeline, onClose, onResume }) {
       <DAGGrid
         items={dagItems}
         activeIndex={activeIndex}
-        jobId={job.id}
+        jobId={job.jobId}
         filesByTypeForItem={filesByTypeForItem}
       />
     </div>

@@ -79,7 +79,7 @@ function TestComp({ jobId }) {
       <div data-testid="status">{connectionStatus}</div>
       <div data-testid="loading">{String(loading)}</div>
       <div data-testid="error">{error || ""}</div>
-      <div data-testid="job-id">{data?.id || ""}</div>
+      <div data-testid="job-id">{data?.jobId || ""}</div>
       <div data-testid="job-status">{data?.status || ""}</div>
     </div>
   );
@@ -87,12 +87,12 @@ function TestComp({ jobId }) {
 
 describe("useJobDetailWithUpdates", () => {
   const mockJobData = {
-    id: "test-job-1",
-    name: "Test Job",
+    jobId: "test-job-1",
+    title: "Test Job",
     status: "pending",
-    tasks: [
-      { name: "task1", status: "pending" },
-      { name: "task2", status: "pending" },
+    tasksStatus: [
+      { name: "task1", state: "pending" },
+      { name: "task2", state: "pending" },
     ],
     pipeline: { tasks: ["task1", "task2"] },
   };
@@ -147,7 +147,7 @@ describe("useJobDetailWithUpdates", () => {
     act(() => {
       es.dispatchEvent("job:updated", {
         data: JSON.stringify({
-          id: "other-job-2",
+          jobId: "other-job-2",
           status: "running",
         }),
       });
@@ -160,7 +160,7 @@ describe("useJobDetailWithUpdates", () => {
     act(() => {
       es.dispatchEvent("job:updated", {
         data: JSON.stringify({
-          id: "test-job-1",
+          jobId: "test-job-1",
           status: "running",
         }),
       });
@@ -188,7 +188,7 @@ describe("useJobDetailWithUpdates", () => {
     act(() => {
       es.dispatchEvent("job:updated", {
         data: JSON.stringify({
-          id: "test-job-1",
+          jobId: "test-job-1",
           status: "running",
         }),
       });
@@ -284,7 +284,7 @@ describe("useJobDetailWithUpdates", () => {
     act(() => {
       es.dispatchEvent("job:updated", {
         data: JSON.stringify({
-          id: "test-job-1",
+          jobId: "test-job-1",
           status: "running",
           progress: 25,
         }),
@@ -298,7 +298,7 @@ describe("useJobDetailWithUpdates", () => {
     act(() => {
       es.dispatchEvent("job:updated", {
         data: JSON.stringify({
-          id: "test-job-1",
+          jobId: "test-job-1",
           status: "completed",
           progress: 100,
         }),

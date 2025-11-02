@@ -43,24 +43,24 @@ function applyJobEvent(prev = null, event, jobId) {
   const p = event.payload || {};
 
   // If this event is for a different job, return unchanged
-  if (p.id && prev && p.id !== prev.id) {
+  if (p.jobId && prev && p.jobId !== prev.jobId) {
     return prev;
   }
 
   switch (event.type) {
     case "job:created": {
-      if (!p.id) return prev;
+      if (!p.jobId) return prev;
       // If we don't have a job yet, or this matches our job, use it
-      if (!prev || prev.id === p.id) {
+      if (!prev || prev.jobId === p.jobId) {
         return { ...p };
       }
       return prev;
     }
 
     case "job:updated": {
-      if (!p.id) return prev;
+      if (!p.jobId) return prev;
       // Only update if this matches our job
-      if (!prev || prev.id !== p.id) {
+      if (!prev || prev.jobId !== p.jobId) {
         return prev;
       }
       const merged = { ...prev, ...p };
@@ -71,17 +71,17 @@ function applyJobEvent(prev = null, event, jobId) {
     }
 
     case "job:removed": {
-      if (!p.id) return prev;
+      if (!p.jobId) return prev;
       // If this is our job, return null to indicate it was removed
-      if (prev && prev.id === p.id) {
+      if (prev && prev.jobId === p.jobId) {
         return null;
       }
       return prev;
     }
 
     case "status:changed": {
-      if (!p.id) return prev;
-      if (!prev || prev.id !== p.id) return prev;
+      if (!p.jobId) return prev;
+      if (!prev || prev.jobId !== p.jobId) return prev;
       const updated = { ...prev, status: p.status };
       try {
         if (JSON.stringify(updated) === JSON.stringify(prev)) return prev;
@@ -90,9 +90,14 @@ function applyJobEvent(prev = null, event, jobId) {
     }
 
     case "state:change": {
-      // Direct-apply only (id-present). Path-only handling is done by the event handler
+      // Direct-apply only (jobId-present). Path-only handling is done by event handler
       const data = p.data || p;
-      if (data.id && data.id === jobId && prev && prev.id === data.id) {
+      if (
+        data.jobId &&
+        data.jobId === jobId &&
+        prev &&
+        prev.jobId === data.jobId
+      ) {
         const merged = { ...prev, ...data };
         try {
           if (JSON.stringify(merged) === JSON.stringify(prev)) return prev;
@@ -109,10 +114,12 @@ function applyJobEvent(prev = null, event, jobId) {
 
 function matchesJobTasksStatusPath(path, jobId) {
   try {
+    // Normalize path: convert backslashes to "/", trim whitespace, allow optional leading "/"
+    const normalizedPath = path.replace(/\\/g, "/").trim();
     const re = new RegExp(
-      `/pipeline-data/(current|complete|pending|rejected)/${jobId}/tasks-status\\.json$`
+      `^/?pipeline-data/(current|complete|pending|rejected)/${jobId}/`
     );
-    return re.test(path);
+    return re.test(normalizedPath);
   } catch {
     return false;
   }
@@ -145,8 +152,11 @@ export function useJobDetailWithUpdates(jobId) {
     if (refetchTimerRef.current) clearTimeout(refetchTimerRef.current);
     refetchTimerRef.current = setTimeout(async () => {
       if (!mountedRef.current || !hydratedRef.current) return;
+      const abortController = new AbortController();
       try {
-        const jobData = await fetchJobDetail(jobId);
+        const jobData = await fetchJobDetail(jobId, {
+          signal: abortController.signal,
+        });
         if (mountedRef.current) {
           setData(jobData);
           setError(null);
@@ -194,12 +204,11 @@ export function useJobDetailWithUpdates(jobId) {
             if (ev.type === "state:change") {
               const d = (ev.payload && (ev.payload.data || ev.payload)) || {};
               if (
-                !d.id &&
                 typeof d.path === "string" &&
                 matchesJobTasksStatusPath(d.path, jobId)
               ) {
                 queuedNeedsRefetch = true;
-                continue; // don’t apply to data
+                continue; // don't apply to data
               }
             }
             finalData = applyJobEvent(finalData, ev, jobId);
@@ -307,8 +316,8 @@ export function useJobDetailWithUpdates(jobId) {
           const payload = evt && evt.data ? JSON.parse(evt.data) : null;
           const eventObj = { type, payload };
 
-          // Filter events by jobId - only process events for our job when id is present
-          if (payload && payload.id && payload.id !== jobId) {
+          // Filter events by jobId - only process events for our job when jobId is present
+          if (payload && payload.jobId && payload.jobId !== jobId) {
             return; // Ignore events for other jobs
           }
 
@@ -318,11 +327,10 @@ export function useJobDetailWithUpdates(jobId) {
             return;
           }
 
-          // Path-only state:change → schedule debounced refetch
+          // Path-matching state:change → schedule debounced refetch
           if (type === "state:change") {
             const d = (payload && (payload.data || payload)) || {};
             if (
-              !d.id &&
               typeof d.path === "string" &&
               matchesJobTasksStatusPath(d.path, jobId)
             ) {

@@ -12,6 +12,7 @@
 
 import { listAllJobs } from "./job-scanner.js";
 import { readJob } from "./job-reader.js";
+import { transformJobStatus } from "./transformers/status-transformer.js";
 import * as configBridge from "./config-bridge.js";
 
 /**
@@ -62,11 +63,20 @@ export class JobIndex {
           }
 
           if (result && result.ok) {
-            this.jobsById.set(jobId, {
-              ...result.data,
-              location: result.location,
-              path: result.path,
-            });
+            // Transform to canonical schema before caching
+            const canonicalJob = transformJobStatus(
+              result.data,
+              jobId,
+              result.location
+            );
+
+            if (canonicalJob) {
+              this.jobsById.set(jobId, {
+                ...canonicalJob,
+                location: result.location,
+                path: result.path,
+              });
+            }
           }
         } catch (error) {
           console.warn(
@@ -164,12 +174,19 @@ export class JobIndex {
    * Useful for real-time updates
    */
   updateJob(jobId, jobData, location, path) {
-    this.jobsById.set(jobId, {
-      ...jobData,
-      location,
-      path,
-    });
-    console.log(`[JobIndex] Updated job ${jobId} in cache`);
+    // Transform to canonical schema before caching
+    const canonicalJob = transformJobStatus(jobData, jobId, location);
+
+    if (canonicalJob) {
+      this.jobsById.set(jobId, {
+        ...canonicalJob,
+        location,
+        path,
+      });
+      console.log(`[JobIndex] Updated job ${jobId} in cache`);
+    } else {
+      console.warn(`[JobIndex] Failed to transform job ${jobId} for cache`);
+    }
   }
 
   /**

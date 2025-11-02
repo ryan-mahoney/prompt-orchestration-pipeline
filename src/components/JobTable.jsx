@@ -43,6 +43,7 @@ export default function JobTable({
 
         <Table.Body>
           {jobs.map((job) => {
+            const jobTitle = job.title || job.name; // Fallback for backward compatibility
             const taskById = Array.isArray(job.tasks)
               ? Object.fromEntries(
                   (job.tasks || []).map((t) => {
@@ -71,10 +72,10 @@ export default function JobTable({
                 (currentTask?.config || pipeline?.taskConfig?.[job.current])) ||
               {};
 
-            const hasValidId = Boolean(job.id);
+            const hasValidId = Boolean(job.jobId);
             return (
               <Table.Row
-                key={job.id}
+                key={job.jobId}
                 className={`group transition-colors ${
                   hasValidId
                     ? "cursor-pointer hover:bg-slate-50/50"
@@ -89,8 +90,8 @@ export default function JobTable({
                 tabIndex={hasValidId ? 0 : -1}
                 aria-label={
                   hasValidId
-                    ? `Open ${job.name}`
-                    : `${job.name} - No valid job ID, cannot open details`
+                    ? `Open ${jobTitle}`
+                    : `${jobTitle} - No valid job ID, cannot open details`
                 }
                 title={
                   hasValidId
@@ -101,10 +102,10 @@ export default function JobTable({
                 <Table.Cell>
                   <Flex direction="column" gap="1">
                     <Text size="2" weight="medium" className="text-slate-900">
-                      {job.name}
+                      {jobTitle}
                     </Text>
                     <Text size="1" className="text-slate-500">
-                      {job.id}
+                      {job.jobId}
                     </Text>
                   </Flex>
                 </Table.Cell>
@@ -185,7 +186,7 @@ export default function JobTable({
                     variant="ghost"
                     size="1"
                     className="opacity-0 group-hover:opacity-100 transition-opacity text-slate-500 hover:text-slate-700"
-                    aria-label={`View details for ${job.name}`}
+                    aria-label={`View details for ${jobTitle}`}
                   >
                     <ChevronRight className="h-4 w-4" />
                   </Button>

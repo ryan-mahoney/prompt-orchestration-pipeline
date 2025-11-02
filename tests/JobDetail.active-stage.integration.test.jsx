@@ -1,22 +1,78 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import React from "react";
-import { render, screen, cleanup } from "@testing-library/react";
+import { render, screen, cleanup, act, waitFor } from "@testing-library/react";
 import JobDetail from "../src/components/JobDetail.jsx";
+import { useParams } from "react-router-dom";
 
 // Mock useTicker hook to provide stable time
 vi.mock("../src/ui/client/hooks/useTicker.js", () => ({
   useTicker: vi.fn(() => new Date("2024-01-01T00:00:00.000Z").getTime()),
 }));
 
+// Mock useParams for PipelineDetail
+vi.mock("react-router-dom", () => ({
+  useParams: vi.fn(),
+  // Don't mock other Router components to avoid import issues
+}));
+
+// Mock fetch for job detail API
+const mockFetch = vi.fn();
+global.fetch = mockFetch;
+
+// Fake EventSource for SSE testing
+class FakeEventSource {
+  constructor(url) {
+    this.url = url;
+    this.readyState = 0;
+    this._listeners = Object.create(null);
+    FakeEventSource.instances.push(this);
+  }
+
+  addEventListener(name, cb) {
+    if (!this._listeners[name]) this._listeners[name] = [];
+    this._listeners[name].push(cb);
+  }
+
+  removeEventListener(name, cb) {
+    if (!this._listeners[name]) return;
+    this._listeners[name] = this._listeners[name].filter((f) => f !== cb);
+  }
+
+  close() {
+    this.readyState = 2;
+  }
+
+  dispatchEvent(name, evt = {}) {
+    const list = this._listeners[name] || [];
+    list.forEach((fn) => {
+      try {
+        fn(evt);
+      } catch (e) {
+        // swallow
+      }
+    });
+  }
+}
+FakeEventSource.instances = [];
+let __OriginalEventSource;
+
 describe("JobDetail Active Stage Integration", () => {
   beforeEach(() => {
     vi.useFakeTimers();
+    __OriginalEventSource = global.EventSource;
+    FakeEventSource.instances = [];
+    global.EventSource = vi.fn((url) => new FakeEventSource(url));
+    mockFetch.mockClear();
+
+    // Mock useParams to return job ID
+    vi.mocked(useParams).mockReturnValue({ jobId: "sse-test-job" });
   });
 
   afterEach(() => {
     cleanup();
     vi.restoreAllMocks();
     vi.useRealTimers();
+    global.EventSource = __OriginalEventSource;
   });
 
   it("should preserve and render stage property from job data", () => {
@@ -230,7 +286,7 @@ describe("JobDetail Active Stage Integration", () => {
   });
 
   it("should handle mixed per-task and root currentStage preferences correctly", () => {
-    // Test the complete preference order: per-task currentStage > job.currentStage > failedStage > error.debug.stage
+    // Test complete preference order: per-task currentStage > job.currentStage > failedStage > error.debug.stage
     const job = {
       id: "test-job-4",
       current: "task1",
@@ -261,5 +317,285 @@ describe("JobDetail Active Stage Integration", () => {
     // Task 1 should show per-task currentStage (highest priority)
     expect(screen.getByTitle("taskStage")).toBeInTheDocument();
     expect(screen.getByTitle("taskStage")).toHaveTextContent("Task stage");
+  });
+
+  describe("End-to-End UI Update for Active Stage", () => {
+    it("should update active stage when tasks-status.json changes via SSE", async () => {
+      // Test the complete flow: tasks-status.json change → SSE event → refetch → UI update
+      const initialJob = {
+        id: "sse-test-job",
+        current: "analysis",
+        currentStage: "inference",
+        status: "running",
+        tasks: {
+          analysis: {
+            state: "running",
+            currentStage: "inference",
+          },
+        },
+      };
+
+      const updatedJob = {
+        ...initialJob,
+        currentStage: "dataProcessing",
+        status: "running",
+        tasks: {
+          analysis: {
+            state: "running",
+            currentStage: "dataProcessing", // Stage changed
+          },
+        },
+      };
+
+      // Mock initial fetch
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          ok: true,
+          data: initialJob,
+        }),
+      });
+
+      // Import PipelineDetail (which uses useJobDetailWithUpdates hook) for full integration test
+      const { PipelineDetail } = await import(
+        "../src/pages/PipelineDetail.jsx"
+      );
+
+      // Render with job ID
+      const { container } = render(
+        <PipelineDetail params={{ jobId: "sse-test-job" }} />
+      );
+
+      // Wait for initial load and verify initial stage
+      await waitFor(() => {
+        expect(screen.getByTitle("inference")).toBeInTheDocument();
+        expect(screen.getByTitle("inference")).toHaveTextContent("Inference");
+      });
+
+      // Mock the refetch response (after SSE event)
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          ok: true,
+          data: updatedJob,
+        }),
+      });
+
+      const es =
+        FakeEventSource.instances[FakeEventSource.instances.length - 1];
+
+      // Simulate tasks-status.json change via SSE
+      act(() => {
+        es.dispatchEvent("state:change", {
+          data: JSON.stringify({
+            path: "pipeline-data/current/sse-test-job/tasks-status.json",
+            type: "modified",
+          }),
+        });
+      });
+
+      // Wait for debounced refetch and UI update
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 250));
+      });
+
+      // Verify stage updated in UI without manual refresh
+      await waitFor(() => {
+        expect(screen.getByTitle("dataProcessing")).toBeInTheDocument();
+        expect(screen.getByTitle("dataProcessing")).toHaveTextContent(
+          "Data processing"
+        );
+      });
+
+      // Verify exactly 2 fetches occurred (initial + refetch)
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+      expect(mockFetch).toHaveBeenLastCalledWith("/api/jobs/sse-test-job", {
+        signal: expect.any(AbortSignal),
+      });
+    });
+
+    it("should handle per-task currentStage changes via SSE events", async () => {
+      // Test per-task currentStage preference when root currentStage is null
+      const initialJob = {
+        id: "sse-test-job-2",
+        current: "analysis",
+        currentStage: null, // No root level stage
+        status: "running",
+        tasks: {
+          analysis: {
+            state: "running",
+            currentStage: "inference", // Only per-task stage
+          },
+        },
+      };
+
+      const updatedJob = {
+        ...initialJob,
+        currentStage: null,
+        status: "running",
+        tasks: {
+          analysis: {
+            state: "running",
+            currentStage: "promptTemplating", // Per-task stage changed
+          },
+        },
+      };
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          ok: true,
+          data: initialJob,
+        }),
+      });
+
+      const { PipelineDetail } = await import(
+        "../src/pages/PipelineDetail.jsx"
+      );
+      render(<PipelineDetail params={{ jobId: "sse-test-job-2" }} />);
+
+      // Wait for initial load
+      await waitFor(() => {
+        expect(screen.getByTitle("inference")).toBeInTheDocument();
+        expect(screen.getByTitle("inference")).toHaveTextContent("Inference");
+      });
+
+      // Mock the refetch response
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          ok: true,
+          data: updatedJob,
+        }),
+      });
+
+      const es =
+        FakeEventSource.instances[FakeEventSource.instances.length - 1];
+
+      // Simulate tasks-status.json change
+      act(() => {
+        es.dispatchEvent("state:change", {
+          data: JSON.stringify({
+            path: "pipeline-data/current/sse-test-job-2/tasks-status.json",
+            type: "modified",
+          }),
+        });
+      });
+
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 250));
+      });
+
+      // Verify UI updated with new per-task stage
+      await waitFor(() => {
+        expect(screen.getByTitle("promptTemplating")).toBeInTheDocument();
+        expect(screen.getByTitle("promptTemplating")).toHaveTextContent(
+          "Prompt templating"
+        );
+      });
+    });
+
+    it("should debounce multiple rapid SSE events into single UI update", async () => {
+      // Test that multiple rapid events result in single refetch and UI update
+      const initialJob = {
+        id: "sse-test-job-3",
+        current: "analysis",
+        currentStage: "inference",
+        status: "running",
+        tasks: {
+          analysis: {
+            state: "running",
+            currentStage: "inference",
+          },
+        },
+      };
+
+      const finalJob = {
+        ...initialJob,
+        currentStage: "validation",
+        status: "completed",
+        tasks: {
+          analysis: {
+            state: "completed",
+            currentStage: "validation",
+          },
+        },
+      };
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          ok: true,
+          data: initialJob,
+        }),
+      });
+
+      const { PipelineDetail } = await import(
+        "../src/pages/PipelineDetail.jsx"
+      );
+      render(<PipelineDetail params={{ jobId: "sse-test-job-3" }} />);
+
+      await waitFor(() => {
+        expect(screen.getByTitle("inference")).toBeInTheDocument();
+      });
+
+      // Mock only one refetch response (despite multiple events)
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          ok: true,
+          data: finalJob,
+        }),
+      });
+
+      const es =
+        FakeEventSource.instances[FakeEventSource.instances.length - 1];
+
+      // Send multiple rapid events
+      act(() => {
+        es.dispatchEvent("state:change", {
+          data: JSON.stringify({
+            path: "pipeline-data/current/sse-test-job-3/tasks-status.json",
+            type: "modified",
+          }),
+        });
+      });
+
+      setTimeout(() => {
+        act(() => {
+          es.dispatchEvent("state:change", {
+            data: JSON.stringify({
+              path: "pipeline-data/current/sse-test-job-3/tasks-status.json",
+              type: "modified",
+            }),
+          });
+        });
+      }, 50);
+
+      setTimeout(() => {
+        act(() => {
+          es.dispatchEvent("state:change", {
+            data: JSON.stringify({
+              path: "pipeline-data/current/sse-test-job-3/tasks-status.json",
+              type: "modified",
+            }),
+          });
+        });
+      }, 100);
+
+      // Wait past debounce window
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 300));
+      });
+
+      // Should only have 2 fetches (initial + 1 debounced)
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+
+      // UI should show final state
+      await waitFor(() => {
+        expect(screen.getByTitle("validation")).toBeInTheDocument();
+        expect(screen.getByTitle("validation")).toHaveTextContent("Validation");
+      });
+    });
   });
 });

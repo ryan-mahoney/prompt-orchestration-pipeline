@@ -6,6 +6,7 @@ import { loadFreshModule } from "./module-loader.js";
 import { loadEnvironment } from "./environment.js";
 import { getConfig } from "./config.js";
 import { createTaskFileIO } from "./file-io.js";
+import { writeJobStatus } from "./status-writer.js";
 
 /**
  * Validates that a value is a plain object (not array, null, or class instance).
@@ -570,9 +571,30 @@ export async function runPipeline(modulePath, initialContext = {}) {
       // Set current stage before execution
       context.currentStage = stageName;
 
+      // Write stage start status using writeJobStatus
+      if (context.meta.workDir && context.meta.taskName) {
+        try {
+          await writeJobStatus(context.meta.workDir, (snapshot) => {
+            snapshot.current = context.meta.taskName;
+            snapshot.currentStage = stageName;
+            snapshot.lastUpdated = new Date().toISOString();
+
+            // Ensure task exists and update task-specific fields
+            if (!snapshot.tasks[context.meta.taskName]) {
+              snapshot.tasks[context.meta.taskName] = {};
+            }
+            snapshot.tasks[context.meta.taskName].currentStage = stageName;
+            snapshot.tasks[context.meta.taskName].state = "running";
+          });
+        } catch (error) {
+          // Don't fail the pipeline if status write fails
+          console.warn(`Failed to write stage start status: ${error.message}`);
+        }
+      }
+
       // Clone data and flags before stage execution
-      const stageData = structuredClone(context.data);
-      const stageFlags = structuredClone(context.flags);
+      const stageData = JSON.parse(JSON.stringify(context.data));
+      const stageFlags = JSON.parse(JSON.stringify(context.flags));
       const stageContext = {
         io: context.io,
         llm: context.llm,
@@ -580,10 +602,12 @@ export async function runPipeline(modulePath, initialContext = {}) {
         data: stageData,
         flags: stageFlags,
         currentStage: stageName,
-        output: structuredClone(
-          lastStageOutput !== undefined
-            ? lastStageOutput
-            : (context.data.seed ?? null)
+        output: JSON.parse(
+          JSON.stringify(
+            lastStageOutput !== undefined
+              ? lastStageOutput
+              : (context.data.seed ?? null)
+          )
         ),
         previousStage: lastExecutedStageName,
       };
@@ -672,21 +696,27 @@ export async function runPipeline(modulePath, initialContext = {}) {
           timestamp: new Date().toISOString(),
         });
 
-        // Persist context.data, context.flags, and top-level context to tasks-status.json
-        if (context.meta.statusPath) {
-          const statusData = {
-            data: context.data,
-            flags: context.flags,
-            logs: context.logs,
-            currentStage: context.currentStage,
-            refinementCount,
-            lastUpdated: new Date().toISOString(),
-          };
+        // Write stage completion status
+        if (context.meta.workDir && context.meta.taskName) {
           try {
-            persistStatusSnapshot(context.meta.statusPath, statusData);
+            await writeJobStatus(context.meta.workDir, (snapshot) => {
+              // Keep current task and stage as-is since we're still within the same task
+              snapshot.current = context.meta.taskName;
+              snapshot.currentStage = stageName;
+              snapshot.lastUpdated = new Date().toISOString();
+
+              // Ensure task exists and update task-specific fields
+              if (!snapshot.tasks[context.meta.taskName]) {
+                snapshot.tasks[context.meta.taskName] = {};
+              }
+              snapshot.tasks[context.meta.taskName].currentStage = stageName;
+              snapshot.tasks[context.meta.taskName].state = "running";
+            });
           } catch (error) {
-            // Don't fail the pipeline if status file write fails
-            console.warn(`Failed to write status file: ${error.message}`);
+            // Don't fail the pipeline if status write fails
+            console.warn(
+              `Failed to write stage completion status: ${error.message}`
+            );
           }
         }
 
@@ -751,6 +781,29 @@ export async function runPipeline(modulePath, initialContext = {}) {
           break;
         }
 
+        // Write failure status using writeJobStatus
+        if (context.meta.workDir && context.meta.taskName) {
+          try {
+            await writeJobStatus(context.meta.workDir, (snapshot) => {
+              snapshot.current = context.meta.taskName;
+              snapshot.currentStage = stageName;
+              snapshot.state = "failed";
+              snapshot.lastUpdated = new Date().toISOString();
+
+              // Ensure task exists and update task-specific fields
+              if (!snapshot.tasks[context.meta.taskName]) {
+                snapshot.tasks[context.meta.taskName] = {};
+              }
+              snapshot.tasks[context.meta.taskName].state = "failed";
+              snapshot.tasks[context.meta.taskName].failedStage = stageName;
+              snapshot.tasks[context.meta.taskName].currentStage = stageName;
+            });
+          } catch (error) {
+            // Don't fail the pipeline if status write fails
+            console.warn(`Failed to write failure status: ${error.message}`);
+          }
+        }
+
         // For non-validation stages or when refinements are exhausted, fail immediately
         return {
           ok: false,
@@ -799,20 +852,24 @@ export async function runPipeline(modulePath, initialContext = {}) {
   llmEvents.off("llm:request:complete", onLLMComplete);
 
   // Write final status with currentStage: null to indicate completion
-  if (context.meta.statusPath) {
-    const finalStatusData = {
-      data: context.data,
-      flags: context.flags,
-      logs: context.logs,
-      currentStage: null,
-      refinementCount,
-      lastUpdated: new Date().toISOString(),
-    };
+  if (context.meta.workDir && context.meta.taskName) {
     try {
-      persistStatusSnapshot(context.meta.statusPath, finalStatusData);
+      await writeJobStatus(context.meta.workDir, (snapshot) => {
+        snapshot.current = null;
+        snapshot.currentStage = null;
+        snapshot.state = "done";
+        snapshot.lastUpdated = new Date().toISOString();
+
+        // Update task state to done
+        if (!snapshot.tasks[context.meta.taskName]) {
+          snapshot.tasks[context.meta.taskName] = {};
+        }
+        snapshot.tasks[context.meta.taskName].state = "done";
+        snapshot.tasks[context.meta.taskName].currentStage = null;
+      });
     } catch (error) {
       // Don't fail the pipeline if final status write fails
-      console.warn(`Failed to write final status file: ${error.message}`);
+      console.warn(`Failed to write final status: ${error.message}`);
     }
   }
 

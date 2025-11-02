@@ -188,6 +188,7 @@ export function getJobReadingStats(jobIds = [], results = []) {
 
 /**
  * Validate job data conforms to minimal schema and expected job id.
+ * Supports both legacy (id, name, tasks) and canonical (jobId, title, tasksStatus) fields.
  * Returns { valid: boolean, warnings: string[], error?: string }
  */
 export function validateJobData(jobData, expectedJobId) {
@@ -201,35 +202,49 @@ export function validateJobData(jobData, expectedJobId) {
     return { valid: false, error: "Job data must be an object" };
   }
 
-  // Required fields: id, name, createdAt, tasks
-  if (!("id" in jobData)) {
-    return { valid: false, error: "Missing required field: id" };
+  // Support both legacy and canonical field names
+  const hasLegacyId = "id" in jobData;
+  const hasCanonicalId = "jobId" in jobData;
+  const hasLegacyName = "name" in jobData;
+  const hasCanonicalName = "title" in jobData;
+  const hasLegacyTasks = "tasks" in jobData;
+  const hasCanonicalTasks = "tasksStatus" in jobData;
+
+  // Required: at least one ID field
+  if (!hasLegacyId && !hasCanonicalId) {
+    return { valid: false, error: "Missing required field: id or jobId" };
   }
 
-  if (!("name" in jobData)) {
-    return { valid: false, error: "Missing required field: name" };
+  // Required: at least one name field
+  if (!hasLegacyName && !hasCanonicalName) {
+    return { valid: false, error: "Missing required field: name or title" };
   }
 
+  // Required: createdAt
   if (!("createdAt" in jobData)) {
     return { valid: false, error: "Missing required field: createdAt" };
   }
 
-  if (!("tasks" in jobData)) {
-    return { valid: false, error: "Missing required field: tasks" };
+  // Required: at least one tasks field
+  if (!hasLegacyTasks && !hasCanonicalTasks) {
+    return {
+      valid: false,
+      error: "Missing required field: tasks or tasksStatus",
+    };
   }
 
-  if (jobData.id !== expectedJobId) {
+  // Get the actual ID for validation
+  const actualId = jobData.jobId ?? jobData.id;
+  if (actualId !== expectedJobId) {
     warnings.push("Job ID mismatch");
     console.warn(
-      `Job ID mismatch: expected ${expectedJobId}, found ${jobData.id}`
+      `Job ID mismatch: expected ${expectedJobId}, found ${actualId}`
     );
   }
 
-  if (
-    typeof jobData.tasks !== "object" ||
-    jobData.tasks === null ||
-    Array.isArray(jobData.tasks)
-  ) {
+  // Validate tasks (prefer canonical, fallback to legacy)
+  const tasks = jobData.tasksStatus ?? jobData.tasks;
+  if (typeof tasks !== "object" || tasks === null || Array.isArray(tasks)) {
     return { valid: false, error: "Tasks must be an object" };
   }
 
@@ -240,7 +255,7 @@ export function validateJobData(jobData, expectedJobId) {
     "error",
   ];
 
-  for (const [taskName, task] of Object.entries(jobData.tasks)) {
+  for (const [taskName, task] of Object.entries(tasks)) {
     if (!task || typeof task !== "object") {
       return { valid: false, error: `Task ${taskName} missing state field` };
     }
@@ -254,6 +269,17 @@ export function validateJobData(jobData, expectedJobId) {
       warnings.push(`Unknown state: ${state}`);
       console.warn(`Unknown task state for ${taskName}: ${state}`);
     }
+  }
+
+  // Add warnings for legacy field usage
+  if (hasLegacyId && hasCanonicalId) {
+    warnings.push("Both id and jobId present, using jobId");
+  }
+  if (hasLegacyName && hasCanonicalName) {
+    warnings.push("Both name and title present, using title");
+  }
+  if (hasLegacyTasks && hasCanonicalTasks) {
+    warnings.push("Both tasks and tasksStatus present, using tasksStatus");
   }
 
   return { valid: true, warnings };

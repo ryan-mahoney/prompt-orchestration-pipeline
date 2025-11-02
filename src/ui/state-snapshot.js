@@ -33,23 +33,24 @@ export function composeStateSnapshot(options = {}) {
     if (typeof transformJob === "function") {
       const t = transformJob(j) || {};
       return {
-        id: t.id != null ? String(t.id) : null,
+        jobId: t.jobId != null ? String(t.jobId) : null,
         status: t.status ?? null,
-        summary: t.summary ?? null,
+        title: t.title ?? null,
         updatedAt: t.updatedAt ?? t.lastUpdated ?? null,
       };
     }
 
     // Best-effort normalization for common fields seen in this repo.
-    const rawId = j?.id ?? j?.jobId ?? j?.uid ?? j?.job_id ?? j?.jobID ?? null;
+    // Prefer canonical fields, fallback to legacy fields.
+    const rawId = j?.jobId ?? j?.id ?? j?.uid ?? j?.job_id ?? j?.jobID ?? null;
     const rawStatus = j?.status ?? j?.state ?? j?.s ?? null;
-    const rawSummary = j?.summary ?? j?.title ?? j?.name ?? null;
+    const rawTitle = j?.title ?? j?.name ?? j?.summary ?? null;
     const rawUpdated = j?.updatedAt ?? j?.lastUpdated ?? j?.updated_at ?? null;
 
     return {
-      id: rawId != null ? String(rawId) : null,
+      jobId: rawId != null ? String(rawId) : null,
       status: rawStatus ?? null,
-      summary: rawSummary ?? null,
+      title: rawTitle ?? null,
       updatedAt: rawUpdated ?? null,
     };
   });
@@ -231,10 +232,10 @@ export async function buildSnapshotFromFilesystem(deps = {}) {
     return String(a.id).localeCompare(String(b.id));
   });
 
-  // 6) Map to minimal snapshot fields
+  // 6) Map to minimal snapshot fields (canonical schema)
   const snapshotJobs = deduped.map((j) => ({
-    id: j.id,
-    name: j.name || "Unnamed Job",
+    jobId: j.jobId || j.id,
+    title: j.title || j.name || "Unnamed Job",
     status: j.status || "pending",
     progress:
       typeof j.progress === "number" && Number.isFinite(j.progress)

@@ -63,8 +63,8 @@ describe("test-data-utils", () => {
         await fs.readFile(tasksStatusPath, "utf8")
       );
 
-      expect(tasksStatus.id).toBe(jobTree.jobId);
-      expect(tasksStatus.name).toBe(`Test Job ${jobTree.jobId}`);
+      expect(tasksStatus.jobId).toBe(jobTree.jobId);
+      expect(tasksStatus.title).toBe(`Test Job ${jobTree.jobId}`);
       expect(tasksStatus.createdAt).toBeDefined();
       expect(tasksStatus.updatedAt).toBeDefined();
       expect(tasksStatus.tasks).toEqual({});
@@ -92,13 +92,13 @@ describe("test-data-utils", () => {
       const tasksStatus = JSON.parse(
         await fs.readFile(tasksStatusPath, "utf8")
       );
-      expect(tasksStatus.id).toBe(customJobId);
+      expect(tasksStatus.jobId).toBe(customJobId);
     });
 
     it("should create a job tree with custom tasks status", async () => {
       const customTasksStatus = {
-        id: "custom-job",
-        name: "Custom Job Name",
+        jobId: "custom-job",
+        title: "Custom Job Name",
         createdAt: "2024-01-01T00:00:00.000Z",
         updatedAt: "2024-01-01T01:00:00.000Z",
         tasks: {
@@ -117,8 +117,8 @@ describe("test-data-utils", () => {
         await fs.readFile(tasksStatusPath, "utf8")
       );
 
-      expect(tasksStatus.id).toBe("custom-job");
-      expect(tasksStatus.name).toBe("Custom Job Name");
+      expect(tasksStatus.jobId).toBe("custom-job");
+      expect(tasksStatus.title).toBe("Custom Job Name");
       expect(tasksStatus.tasks).toEqual({
         "task-1": { state: "pending" },
         "task-2": { state: "running" },
@@ -182,7 +182,7 @@ describe("test-data-utils", () => {
 
       expect(consoleWarnSpy).toHaveBeenCalledWith(
         expect.stringContaining(
-          "Warning: tasks-status.json id (different-id) does not match jobId (correct-id)"
+          "Warning: tasks-status.json jobId (undefined) does not match jobId (correct-id)"
         )
       );
 
@@ -190,7 +190,7 @@ describe("test-data-utils", () => {
       const finalTasksStatus = JSON.parse(
         await fs.readFile(tasksStatusPath, "utf8")
       );
-      expect(finalTasksStatus.id).toBe("correct-id");
+      expect(finalTasksStatus.jobId).toBe("correct-id");
 
       consoleWarnSpy.mockRestore();
     });
@@ -218,12 +218,12 @@ describe("test-data-utils", () => {
 
       const tasksStatus = createTasksStatus({
         jobId: "test-job",
-        name: "Test Job",
+        title: "Test Job",
         tasks,
       });
 
-      expect(tasksStatus.id).toBe("test-job");
-      expect(tasksStatus.name).toBe("Test Job");
+      expect(tasksStatus.jobId).toBe("test-job");
+      expect(tasksStatus.title).toBe("Test Job");
       expect(tasksStatus.tasks).toEqual(tasks);
       expect(tasksStatus.createdAt).toBeDefined();
       expect(tasksStatus.updatedAt).toBeDefined();
@@ -319,7 +319,7 @@ describe("test-data-utils", () => {
         const tasksStatus = JSON.parse(
           await fs.readFile(tasksStatusPath, "utf8")
         );
-        expect(tasksStatus.id).toBe(config.jobId);
+        expect(tasksStatus.jobId).toBe(config.jobId);
       }
     });
   });

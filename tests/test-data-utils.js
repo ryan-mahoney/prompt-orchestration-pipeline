@@ -66,8 +66,8 @@ export async function createJobTree(options = {}) {
 
   // Generate default tasks-status.json if not provided
   const defaultTasksStatus = {
-    id: jobId,
-    name: `Test Job ${jobId}`,
+    jobId: jobId,
+    title: `Test Job ${jobId}`,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     tasks: {},
@@ -75,12 +75,12 @@ export async function createJobTree(options = {}) {
 
   const finalTasksStatus = tasksStatus || defaultTasksStatus;
 
-  // Ensure ID matches jobId (prefer jobId per global contracts)
-  if (finalTasksStatus.id !== jobId) {
+  // Ensure jobId matches (prefer jobId per global contracts)
+  if (finalTasksStatus.jobId !== jobId) {
     console.warn(
-      `Warning: tasks-status.json id (${finalTasksStatus.id}) does not match jobId (${jobId}). Preferring jobId.`
+      `Warning: tasks-status.json jobId (${finalTasksStatus.jobId}) does not match jobId (${jobId}). Preferring jobId.`
     );
-    finalTasksStatus.id = jobId;
+    finalTasksStatus.jobId = jobId;
   }
 
   // Write tasks-status.json
@@ -152,7 +152,7 @@ export async function createJobTree(options = {}) {
 export function createTasksStatus(options) {
   const {
     jobId,
-    name = `Job ${jobId}`,
+    title = `Job ${jobId}`,
     tasks = {},
     createdAt = new Date().toISOString(),
     updatedAt = new Date().toISOString(),
@@ -173,8 +173,8 @@ export function createTasksStatus(options) {
   }
 
   return {
-    id: jobId,
-    name,
+    jobId,
+    title,
     createdAt,
     updatedAt,
     tasks,

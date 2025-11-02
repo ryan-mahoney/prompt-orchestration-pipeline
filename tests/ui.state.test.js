@@ -29,9 +29,9 @@ describe("composeStateSnapshot", () => {
     const res = composeStateSnapshot({ jobs: input });
     const job = res.jobs[0];
 
-    expect(job.id).toBe("123");
+    expect(job.jobId).toBe("123");
     expect(job.status).toBe("running");
-    expect(job.summary).toBe("Test job");
+    expect(job.title).toBe("Test job");
     expect(job.updatedAt).toBe("2020-01-01T00:00:00Z");
   });
 
@@ -57,13 +57,13 @@ describe("composeStateSnapshot", () => {
     const jobs = [{ uid: "a", s: "ok" }];
     const res = composeStateSnapshot({
       jobs,
-      transformJob: (j) => ({ id: j.uid, status: j.s, summary: "" }),
+      transformJob: (j) => ({ jobId: j.uid, status: j.s, title: "" }),
     });
 
     expect(res.jobs[0]).toEqual({
-      id: "a",
+      jobId: "a",
       status: "ok",
-      summary: "",
+      title: "",
       updatedAt: null,
     });
   });

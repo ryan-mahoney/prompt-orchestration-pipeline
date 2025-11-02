@@ -87,19 +87,32 @@ export function computeJobStatus(tasksInput) {
 }
 
 /**
- * Transform raw tasks object -> ordered array of task objects.
- * - Returns [] for invalid inputs
- * - Missing or invalid state -> "pending" and console.warn with:
- *   Invalid task state "invalid-state"
+ * Transform raw task input into a canonical object keyed by task name.
+ * - Returns {} for invalid inputs
+ * - Missing or invalid state -> "pending" with console.warn for invalid values
  */
 export function transformTasks(rawTasks) {
-  if (!rawTasks || typeof rawTasks !== "object" || Array.isArray(rawTasks)) {
-    return [];
+  if (!rawTasks) return {};
+
+  let entries = [];
+
+  if (Array.isArray(rawTasks)) {
+    entries = rawTasks.map((raw, index) => {
+      const inferredName =
+        raw?.name || raw?.id || raw?.taskId || `task-${index + 1}`;
+      return [inferredName, raw];
+    });
+  } else if (typeof rawTasks === "object") {
+    entries = Object.entries(rawTasks);
+  } else {
+    return {};
   }
 
-  const out = [];
+  const normalized = {};
 
-  for (const [name, raw] of Object.entries(rawTasks || {})) {
+  for (const [name, raw] of entries) {
+    if (typeof name !== "string" || name.length === 0) continue;
+
     const rawState =
       raw && typeof raw === "object" && "state" in raw ? raw.state : undefined;
     const mappedState =
@@ -112,16 +125,11 @@ export function transformTasks(rawTasks) {
     if (mappedState != null && VALID_TASK_STATES.has(mappedState)) {
       finalState = mappedState;
     } else if (rawState != null && !VALID_TASK_STATES.has(mappedState)) {
-      // Invalid state value provided
       console.warn(`Invalid task state "${rawState}"`);
-      finalState = "pending";
-    } else {
-      // missing state -> pending (no warn required by tests)
       finalState = "pending";
     }
 
     const task = {
-      name,
       state: finalState,
     };
 
@@ -130,8 +138,11 @@ export function transformTasks(rawTasks) {
       if ("endedAt" in raw) task.endedAt = raw.endedAt;
       if ("attempts" in raw) task.attempts = raw.attempts;
       if ("executionTimeMs" in raw) task.executionTimeMs = raw.executionTimeMs;
+      if ("refinementAttempts" in raw)
+        task.refinementAttempts = raw.refinementAttempts;
+      if ("stageLogPath" in raw) task.stageLogPath = raw.stageLogPath;
+      if ("errorContext" in raw) task.errorContext = raw.errorContext;
 
-      // Preserve stage metadata for DAG visualization
       if (typeof raw.currentStage === "string" && raw.currentStage.length > 0) {
         task.currentStage = raw.currentStage;
       }
@@ -139,11 +150,9 @@ export function transformTasks(rawTasks) {
         task.failedStage = raw.failedStage;
       }
 
-      // Prefer new files.* schema, fallback to legacy artifacts
       task.files = normalizeTaskFiles(raw?.files);
       if ("artifacts" in raw) task.artifacts = raw.artifacts;
 
-      // Preserve error metadata so UI can surface failure details
       if ("error" in raw) {
         if (
           raw.error &&
@@ -157,91 +166,89 @@ export function transformTasks(rawTasks) {
           task.error = null;
         }
       }
+    } else {
+      task.files = normalizeTaskFiles();
     }
 
-    out.push(task);
+    task.name =
+      raw && typeof raw === "object" && "name" in raw ? raw.name : name;
+
+    normalized[name] = task;
   }
 
-  return out;
+  return normalized;
 }
 
 /**
- * Transform a single raw job payload into the canonical job object expected by UI/tests.
+ * Transform a single raw job payload into canonical job object expected by UI/tests.
  *
- * Tests expect:
- *  - Signature transformJobStatus(rawJobData, jobId, location)
- *  - Return null for invalid raw inputs (null/undefined/non-object)
- *  - On ID mismatch, include a warnings array containing:
- *      'Job ID mismatch: JSON has "different-id", using directory name "job-123"'
- *  - Fallbacks:
- *      name => "Unnamed Job"
- *      updatedAt => createdAt
- *  - tasks normalized via transformTasks
- *  - status/progress via computeJobStatus (operate on the raw tasks object)
- *
- * Note: older code returned { ok: true, job } style; tests expect a plain job object.
+ * Output schema:
+ *  - jobId: string
+ *  - title: string
+ *  - status: canonical job status
+ *  - progress: number 0-100
+ *  - createdAt / updatedAt: ISO strings | null
+ *  - location: lifecycle bucket
+ *  - current / currentStage: stage metadata (optional)
+ *  - tasksStatus: object keyed by task name
+ *  - files: normalized job-level files
  */
 export function transformJobStatus(raw, jobId, location) {
-  // Validate raw input: tests expect null for invalid raw
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
 
   const warnings = [];
 
-  // ID mismatch warning (tests expect exact substring)
-  if ("id" in raw && String(raw.id) !== String(jobId)) {
-    const msg = `Job ID mismatch: JSON has "${raw.id}", using directory name "${jobId}"`;
+  // Check for job ID mismatch (supports both legacy and canonical)
+  const rawJobId = raw.jobId || raw.id;
+  if (rawJobId && String(rawJobId) !== String(jobId)) {
+    const msg = `Job ID mismatch: JSON has "${rawJobId}", using directory name "${jobId}"`;
     warnings.push(msg);
     console.warn(msg);
   }
 
-  // name fallback
-  const name = raw.name || "Unnamed Job";
-
-  // createdAt/updatedAt handling
+  const title = raw.title || raw.name || "Unnamed Job";
   const createdAt = raw.createdAt || null;
-  const updatedAt = raw.updatedAt || createdAt || null;
+  const updatedAt = raw.updatedAt || raw.lastUpdated || createdAt || null;
+  const resolvedLocation = location || raw.location || null;
 
-  // Tasks normalization
-  let tasksArray = [];
-  if (
-    !("tasks" in raw) ||
-    typeof raw.tasks !== "object" ||
-    raw.tasks === null
-  ) {
-    // tests expect that invalid tasks are treated as empty array (not an error)
-    tasksArray = [];
-  } else {
-    tasksArray = transformTasks(raw.tasks);
-  }
+  // Support both canonical (tasksStatus) and legacy (tasks) schema
+  const tasksStatus = transformTasks(raw.tasksStatus || raw.tasks);
+  const jobStatusObj = computeJobStatus(tasksStatus);
 
-  // Compute status/progress based on the raw tasks mapping (so computeJobStatus sees unknown states)
-  const jobStatusObj = computeJobStatus(raw.tasks);
-
-  // Attach job-level files with safe defaults
   const jobFiles = normalizeTaskFiles(raw.files);
 
   const job = {
-    id: jobId,
-    name,
+    jobId,
+    title,
     status: jobStatusObj.status,
     progress: jobStatusObj.progress,
     createdAt,
     updatedAt,
-    location,
-    tasks: tasksArray,
+    location: resolvedLocation,
+    tasksStatus,
     files: jobFiles,
   };
 
+  if (raw.current != null) job.current = raw.current;
+  if (raw.currentStage != null) job.currentStage = raw.currentStage;
+  if (raw.lastUpdated && !job.updatedAt) job.updatedAt = raw.lastUpdated;
+
   const { pipeline, pipelineLabel } = derivePipelineMetadata(raw);
 
-  if (pipeline) {
+  if (pipeline != null) {
     job.pipeline = pipeline;
   }
-  if (pipelineLabel) {
+  if (pipelineLabel != null) {
     job.pipelineLabel = pipelineLabel;
   }
 
-  if (warnings.length > 0) job.warnings = warnings;
+  if (raw.pipelineConfig) {
+    job.pipelineConfig = raw.pipelineConfig;
+  }
+
+  if (warnings.length > 0) {
+    job.warnings = warnings;
+  }
 
   return job;
 }
@@ -262,10 +269,10 @@ export function transformMultipleJobs(jobReadResults = []) {
   const out = [];
   for (const r of jobReadResults) {
     if (!r || r.ok !== true) continue;
-    // r.data is expected to be the raw job JSON
+    // r.data is expected to be raw job JSON
     const raw = r.data || {};
-    // jobId and location metadata may be present on the read result (tests attach them)
-    const jobId = r.jobId || (raw && raw.id) || undefined;
+    // jobId and location metadata may be present on read result (tests attach them)
+    const jobId = r.jobId || (raw && (raw.jobId || raw.id)) || undefined;
     const location = r.location || raw.location || undefined;
     // If jobId is missing, skip (defensive)
     if (!jobId) continue;
