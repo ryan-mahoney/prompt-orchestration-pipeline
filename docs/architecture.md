@@ -1034,6 +1034,59 @@ Testing guidance
 
 The demo content under `demo/` is intended as an on-disk seed only — not a UI fallback.
 
+## Canonical Data Schema (v0.5+)
+
+### Job Schema
+
+```javascript
+{
+  jobId: string,           // Job identifier
+  title: string,           // Human-readable job name
+  tasksStatus: object,      // Task data keyed by task name
+  location: string,         // Storage location (current, complete, etc.)
+  current?: string,         // Currently executing task name
+  currentStage?: string,    // Current task's stage for DAG visualization
+  createdAt?: string,       // ISO timestamp
+  updatedAt?: string,       // ISO timestamp
+}
+```
+
+### Task Schema
+
+```javascript
+{
+  state: "pending"|"running"|"done"|"error",  // Task state
+  currentStage?: string,    // Current stage for DAG visualization
+  failedStage?: string,     // Failed stage for DAG visualization
+  startedAt?: string,      // ISO timestamp
+  endedAt?: string,        // ISO timestamp
+  attempts?: number,        // Number of execution attempts
+  executionTimeMs?: number,  // Execution time in milliseconds
+  files: {                // File artifacts structure
+    artifacts: string[],    // Generated artifacts
+    logs: string[],         // Execution logs
+    tmp: string[]           // Temporary files
+  },
+  artifacts?: string[],      // Legacy artifacts (fallback)
+  error?: {               // Error metadata
+    message: string,
+    debug?: {
+      stage: string       // Failed stage from debug info
+    }
+  }
+}
+```
+
+### Stage Metadata Flow
+
+Stage metadata (`currentStage`, `failedStage`) flows through the entire pipeline:
+
+1. **Task Runner** - Sets stage during execution
+2. **Status Transformer** - Preserves stage in `transformTasks()`
+3. **Job Adapter** - Preserves stage in `normalizeTasks()`
+4. **DAG Utility** - Computes stage in `computeTaskStage()`
+5. **UI Components** - Displays stage in DAG visualization
+
 ## Pipeline Configuration
 
 ### Pipeline Definition (`pipeline-config/pipeline.json`)
