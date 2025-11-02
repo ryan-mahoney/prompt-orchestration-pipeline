@@ -179,16 +179,19 @@ export function adaptJobSummary(apiJob) {
   const currentStage = apiJob.currentStage;
 
   const { tasks, warnings } = normalizeTasks(rawTasks);
-  const { status, progress, doneCount, taskCount } =
-    computeJobSummaryStats(tasks);
+
+  // Use API status and progress as source of truth, fall back to task-based computation only when missing
+  const apiStatus = apiJob.status;
+  const apiProgress = apiJob.progress;
+  const derivedStats = computeJobSummaryStats(tasks);
 
   const job = {
     id,
     name,
-    status,
-    progress,
-    taskCount,
-    doneCount,
+    status: apiStatus || derivedStats.status,
+    progress: apiProgress ?? derivedStats.progress,
+    taskCount: derivedStats.taskCount,
+    doneCount: derivedStats.doneCount,
     location,
     tasks,
   };
@@ -224,16 +227,19 @@ export function adaptJobDetail(apiDetail) {
   const currentStage = apiDetail.currentStage;
 
   const { tasks, warnings } = normalizeTasks(rawTasks);
-  const { status, progress, doneCount, taskCount } =
-    computeJobSummaryStats(tasks);
+
+  // Use API status and progress as source of truth, fall back to task-based computation only when missing
+  const apiStatus = apiDetail.status;
+  const apiProgress = apiDetail.progress;
+  const derivedStats = computeJobSummaryStats(tasks);
 
   const detail = {
     id,
     name,
-    status,
-    progress,
-    taskCount,
-    doneCount,
+    status: apiStatus || derivedStats.status,
+    progress: apiProgress ?? derivedStats.progress,
+    taskCount: derivedStats.taskCount,
+    doneCount: derivedStats.doneCount,
     location,
     tasks,
   };
