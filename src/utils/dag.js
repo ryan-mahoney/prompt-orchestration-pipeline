@@ -54,10 +54,43 @@ function normalizeJobTasks(tasks) {
 }
 
 /**
+ * Computes the stage for a specific task based on job data
+ * @param {Object|null} job - Job object containing current task and stage info
+ * @param {string} taskId - ID of the task to compute stage for
+ * @returns {string|undefined} Stage name if available, undefined otherwise
+ */
+export function computeTaskStage(job, taskId) {
+  const tasks = normalizeJobTasks(job?.tasks);
+
+  // Active task: job.currentStage when job.current equals the task id/name
+  if (
+    job?.current === taskId &&
+    typeof job?.currentStage === "string" &&
+    job.currentStage.length > 0
+  ) {
+    return job.currentStage;
+  }
+
+  const t = tasks?.[taskId];
+
+  // Failed stage from task
+  if (t?.failedStage) {
+    return t.failedStage;
+  }
+
+  // Failed stage from error debug info
+  if (t?.error?.debug?.stage) {
+    return t.error.debug.stage;
+  }
+
+  return undefined;
+}
+
+/**
  * Computes DAG items from job and pipeline data with deterministic ordering
  * @param {Object|null} job - Job object containing tasks
  * @param {Object|null} pipeline - Pipeline object containing canonical task order
- * @returns {Array} Array of DAG items with id, status, and source metadata
+ * @returns {Array} Array of DAG items with id, status, source, and stage metadata
  */
 export function computeDagItems(job, pipeline) {
   const jobTasks = normalizeJobTasks(job?.tasks);
@@ -70,6 +103,7 @@ export function computeDagItems(job, pipeline) {
       id: taskId,
       status: jobTask ? mapJobStateToDagState(jobTask.state) : "pending",
       source: "pipeline",
+      stage: computeTaskStage(job, taskId),
     };
   });
 
@@ -86,6 +120,7 @@ export function computeDagItems(job, pipeline) {
       id: taskId,
       status: mapJobStateToDagState(jobTask.state),
       source: "job-extra",
+      stage: computeTaskStage(job, taskId),
     };
   });
 

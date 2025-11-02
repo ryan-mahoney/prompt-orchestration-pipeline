@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { computeDagItems, computeActiveIndex } from "../src/utils/dag.js";
+import {
+  computeDagItems,
+  computeActiveIndex,
+  computeTaskStage,
+} from "../src/utils/dag.js";
 
 describe("computeDagItems", () => {
   it("maps status values correctly", () => {
@@ -375,5 +379,144 @@ describe("computeActiveIndex", () => {
 
     // Should select first active
     expect(computeActiveIndex(items)).toBe(0);
+  });
+});
+
+describe("computeTaskStage", () => {
+  it("derives stage from job.currentStage when current matches task", () => {
+    const job = {
+      current: "analysis",
+      currentStage: "inference",
+      tasks: {
+        analysis: { state: "running" },
+      },
+    };
+
+    const stage = computeTaskStage(job, "analysis");
+    expect(stage).toBe("inference");
+  });
+
+  it("derives stage from task.failedStage", () => {
+    const job = {
+      tasks: {
+        analysis: { state: "error", failedStage: "promptTemplating" },
+      },
+    };
+
+    const stage = computeTaskStage(job, "analysis");
+    expect(stage).toBe("promptTemplating");
+  });
+
+  it("derives stage from error.debug.stage as fallback", () => {
+    const job = {
+      tasks: {
+        analysis: {
+          state: "error",
+          error: {
+            debug: {
+              stage: "validate_structure",
+            },
+          },
+        },
+      },
+    };
+
+    const stage = computeTaskStage(job, "analysis");
+    expect(stage).toBe("validate_structure");
+  });
+
+  it("returns undefined when no stage information is available", () => {
+    const job = {
+      tasks: {
+        analysis: { state: "pending" },
+      },
+    };
+
+    const stage = computeTaskStage(job, "analysis");
+    expect(stage).toBeUndefined();
+  });
+
+  it("prioritizes currentStage over failedStage for active task", () => {
+    const job = {
+      current: "analysis",
+      currentStage: "inference",
+      tasks: {
+        analysis: { state: "running", failedStage: "promptTemplating" },
+      },
+    };
+
+    const stage = computeTaskStage(job, "analysis");
+    expect(stage).toBe("inference");
+  });
+
+  it("prioritizes failedStage over error.debug.stage", () => {
+    const job = {
+      tasks: {
+        analysis: {
+          state: "error",
+          failedStage: "promptTemplating",
+          error: {
+            debug: {
+              stage: "validate_structure",
+            },
+          },
+        },
+      },
+    };
+
+    const stage = computeTaskStage(job, "analysis");
+    expect(stage).toBe("promptTemplating");
+  });
+});
+
+describe("computeDagItems stage integration", () => {
+  it("includes stage for active mapping", () => {
+    const job = {
+      current: "analysis",
+      currentStage: "inference",
+      tasks: {
+        analysis: { state: "running" },
+      },
+    };
+
+    const pipeline = {
+      tasks: ["analysis", "synthesis"],
+    };
+
+    const items = computeDagItems(job, pipeline);
+    const analysisItem = items.find((item) => item.id === "analysis");
+    expect(analysisItem.stage).toBe("inference");
+  });
+
+  it("includes stage for failed mapping", () => {
+    const job = {
+      tasks: {
+        analysis: { state: "error", failedStage: "inference" },
+      },
+    };
+
+    const pipeline = {
+      tasks: ["analysis", "synthesis"],
+    };
+
+    const items = computeDagItems(job, pipeline);
+    const analysisItem = items.find((item) => item.id === "analysis");
+    expect(analysisItem.stage).toBe("inference");
+  });
+
+  it("includes undefined stage when no stage information available", () => {
+    const job = {
+      tasks: {
+        analysis: { state: "pending" },
+      },
+    };
+
+    const pipeline = {
+      tasks: ["analysis", "synthesis"],
+    };
+
+    const items = computeDagItems(job, pipeline);
+    const analysisItem = items.find((item) => item.id === "analysis");
+    expect(analysisItem.stage).toBeUndefined();
   });
 });
