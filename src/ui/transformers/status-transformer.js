@@ -1,39 +1,9 @@
-/**
- * Status transformer
- *
- * Responsibilities:
- *  - Normalize a raw tasks-status.json object into a job detail shape used by the UI
- *  - Compute job-level status and progress per docs/project-data-display.md (0.2)
- *  - Emit a warnings array (e.g., job id mismatch) but do not throw
- *
- * Exports expected by tests:
- *  - transformJobStatus(rawJobData, jobId, location) -> job object | null
- *  - computeJobStatus(tasks) -> { status, progress }
- *  - transformTasks(rawTasks) -> Array<task>
- *  - transformMultipleJobs(jobReadResults) -> Array<job>
- *  - getTransformationStats(readResults, transformedJobs) -> stats object
- *
- * Notes:
- *  - jobId is the directory name and is authoritative; raw.id may mismatch
- *  - Progress calculation: round(100 * done_count / max(1, total_tasks))
- *  - Job status rules:
- *      - error if any task error
- *      - running if any task running and none error
- *      - complete if all tasks done
- *      - pending otherwise
- */
-
 import * as configBridge from "../config-bridge.browser.js";
 import { normalizeTaskFiles } from "../../utils/task-files.js";
 import { derivePipelineMetadata } from "../../utils/pipelines.js";
 
-// Known/valid task states for basic validation
 const VALID_TASK_STATES = new Set(["pending", "running", "done", "error"]);
-
-// Legacy/alternative states mapping -> canonical
-const LEGACY_STATE_MAP = {
-  failed: "error",
-};
+const LEGACY_STATE_MAP = { failed: "error" };
 
 /**
  * Compute progress percentage from tasks mapping.

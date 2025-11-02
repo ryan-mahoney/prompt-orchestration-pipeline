@@ -1,47 +1,5 @@
-/**
- * Job Adapter
- *
- * Purpose:
- * - Normalize API payloads (/api/jobs and /api/jobs/:id) into a stable UI-facing shape.
- * - Provide sensible defaults for missing optional fields.
- * - Read canonical demo schema fields only.
- *
- * Canonical Demo Schema (v0.5+):
- * - jobId (string) - Job identifier
- * - title (string) - Human-readable job name
- * - tasksStatus (object) - Task data keyed by task name
- * - location (string) - Storage location (current, complete, etc.)
- * - current (string, optional) - Currently executing task name
- * - currentStage (string, optional) - Current task's stage
- * - createdAt/updatedAt (ISO string, optional) - Timestamps
- *
- * Task Schema:
- * - state ('pending'|'running'|'done'|'error')
- * - currentStage (string, optional) - Current stage for DAG visualization
- * - failedStage (string, optional) - Failed stage for DAG visualization
- * - startedAt/endedAt (ISO string, optional)
- * - attempts (number, optional)
- * - executionTimeMs (number, optional)
- * - artifacts/files (array/object, optional)
- *
- * Normalization rules:
- * - Task state mapping: only allowed states; unknown -> 'pending'
- * - Progress computed if missing: round(100 * done_count / max(1, total_tasks))
- * - Tasks always returned as object keyed by task name
- * - Stage metadata preserved for DAG visualization
- *
- * Exports:
- * - adaptJobSummary(apiJob) -> summary props for lists
- * - adaptJobDetail(apiDetail) -> full job detail props for details view
- *
- * Implementation notes:
- * - Pure functions, no IO.
- * - Returns normalized object; includes optional `__warnings` array for non-fatal issues.
- */
-
 import { derivePipelineMetadata } from "../../../utils/pipelines.js";
 
-const ID_REGEX = /^[A-Za-z0-9-_]+$/;
 const ALLOWED_STATES = new Set(["pending", "running", "done", "error"]);
 
 /**
