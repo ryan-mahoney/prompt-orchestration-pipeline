@@ -3,9 +3,10 @@
  *
  * Exports:
  *  - detectJobChange(filePath) -> { jobId, category, filePath } | null
- *  - getJobLocation(filePath) -> 'current' | 'complete' | null
+ *  - getJobLocation(filePath) -> 'current' | 'complete' | 'pending' | 'rejected' | null
  *
  * Normalizes Windows backslashes to forward slashes for detection.
+ * Supports absolute paths and all lifecycle directories.
  */
 
 const JOB_ID_RE = /^[A-Za-z0-9-_]+$/;
@@ -19,11 +20,14 @@ function normalizePath(p) {
 }
 
 /**
- * Determine the job location ('current'|'complete') from a path, or null.
+ * Determine the job location ('current'|'complete'|'pending'|'rejected') from a path, or null.
+ * Accepts both relative and absolute paths, always returns the lifecycle name.
  */
 export function getJobLocation(filePath) {
   const p = normalizePath(filePath);
-  const m = p.match(/^pipeline-data\/(current|complete)\/([^/]+)\/?/);
+  const m = p.match(
+    /^.*?pipeline-data\/(current|complete|pending|rejected)\/([^/]+)\/?/
+  );
   if (!m) return null;
   return m[1] || null;
 }
@@ -31,13 +35,15 @@ export function getJobLocation(filePath) {
 /**
  * Given a file path, determine whether it belongs to a job and what category the change is.
  * Categories: 'status' (tasks-status.json), 'task' (anything under tasks/**), 'seed' (seed.json)
- * Returns normalized filePath (with forward slashes).
+ * Accepts absolute paths and returns normalized filePath (always starting with "pipeline-data/...").
  */
 export function detectJobChange(filePath) {
   const p = normalizePath(filePath);
 
-  // Must start with pipeline-data/{current|complete}/{jobId}/...
-  const m = p.match(/^pipeline-data\/(current|complete)\/([^/]+)\/(.*)$/);
+  // Must start with optional prefix + pipeline-data/{current|complete|pending|rejected}/{jobId}/...
+  const m = p.match(
+    /^.*?pipeline-data\/(current|complete|pending|rejected)\/([^/]+)\/(.*)$/
+  );
   if (!m) return null;
 
   const [, location, jobId, rest] = m;
