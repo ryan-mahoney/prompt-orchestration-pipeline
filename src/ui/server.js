@@ -1476,32 +1476,65 @@ function createServer() {
 let watcher = null;
 
 function initializeWatcher() {
-  // Resolve watched paths to absolute paths based on configured data directory (PO_ROOT or fallback)
-  const base = process.env.PO_ROOT || DATA_DIR;
-  const absolutePaths = WATCHED_PATHS.map((p) =>
-    path.isAbsolute(p) ? p : path.join(base, p)
-  );
+  // Require PO_ROOT for non-test runs
+  const base = process.env.PO_ROOT;
+  if (!base) {
+    if (process.env.NODE_ENV !== "test") {
+      console.error(
+        "ERROR: PO_ROOT environment variable is required for non-test runs"
+      );
+      throw new Error(
+        "PO_ROOT environment variable is required for non-test runs"
+      );
+    } else {
+      console.warn(
+        "WARNING: PO_ROOT not set, using process.cwd() in test mode"
+      );
+    }
+  }
+
+  const effectiveBase = base || process.cwd();
+
+  // Derive paths via resolvePipelinePaths to obtain absolute dirs for pipeline lifecycle directories
+  const paths = resolvePipelinePaths(effectiveBase);
+
+  // Build absolute paths array including pipeline-config and all lifecycle directories
+  const absolutePaths = [
+    path.join(effectiveBase, "pipeline-config"),
+    paths.current,
+    paths.complete,
+    paths.pending,
+    paths.rejected,
+  ];
+
+  // Log effective configuration
+  console.log(`Watching directories under PO_ROOT=${effectiveBase}`);
+  console.log("Final absolute paths:", absolutePaths);
 
   // Keep original WATCHED_PATHS in state for display/tests; watcher receives absolute paths.
   state.setWatchedPaths(WATCHED_PATHS);
 
-  watcher = startWatcher(absolutePaths, (changes) => {
-    // Update state for each change and capture the last returned state.
-    // Prefer broadcasting the state returned by recordChange (if available)
-    // to ensure tests and callers receive an up-to-date snapshot without
-    // relying on mocked module-level getState behavior.
-    let lastState = null;
-    changes.forEach(({ path, type }) => {
-      try {
-        lastState = state.recordChange(path, type);
-      } catch (err) {
-        // Don't let a single change handler error prevent broadcasting
-      }
-    });
+  watcher = startWatcher(
+    absolutePaths,
+    (changes) => {
+      // Update state for each change and capture the last returned state.
+      // Prefer broadcasting the state returned by recordChange (if available)
+      // to ensure tests and callers receive an up-to-date snapshot without
+      // relying on mocked module-level getState behavior.
+      let lastState = null;
+      changes.forEach(({ path, type }) => {
+        try {
+          lastState = state.recordChange(path, type);
+        } catch (err) {
+          // Don't let a single change handler error prevent broadcasting
+        }
+      });
 
-    // Broadcast updated state: prefer the result returned by recordChange when available
-    broadcastStateUpdate(lastState || state.getState());
-  });
+      // Broadcast updated state: prefer the result returned by recordChange when available
+      broadcastStateUpdate(lastState || state.getState());
+    },
+    { baseDir: effectiveBase, debounceMs: 200 }
+  );
 }
 
 /**
@@ -1556,6 +1589,23 @@ async function startServer({ dataDir, port: customPort }) {
     // Set the data directory environment variable
     if (dataDir) {
       process.env.PO_ROOT = dataDir;
+    }
+
+    // Require PO_ROOT for non-test runs
+    if (!process.env.PO_ROOT) {
+      if (process.env.NODE_ENV !== "test") {
+        console.error(
+          "ERROR: PO_ROOT environment variable is required for non-test runs"
+        );
+        throw new Error(
+          "PO_ROOT environment variable is required for non-test runs"
+        );
+      } else {
+        console.warn(
+          "WARNING: PO_ROOT not set, using process.cwd() in test mode"
+        );
+        process.env.PO_ROOT = process.cwd();
+      }
     }
 
     // Use customPort if provided, otherwise use PORT env var, otherwise use 0 for ephemeral port

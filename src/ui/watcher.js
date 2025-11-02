@@ -4,8 +4,18 @@
  */
 
 import chokidar from "chokidar";
+import path from "node:path";
 import { detectJobChange } from "./job-change-detector.js";
 import { sseEnhancer } from "./sse-enhancer.js";
+
+/**
+ * Normalize path separators to forward slash and trim
+ * Reuses the same logic from job-change-detector
+ */
+function normalizePath(p) {
+  if (!p || typeof p !== "string") return "";
+  return p.replace(/\\/g, "/").replace(/\/\/+/g, "/");
+}
 
 /**
  * Start watching specified paths for file changes
@@ -13,10 +23,15 @@ import { sseEnhancer } from "./sse-enhancer.js";
  * @param {Function} onChange - Callback function to handle file changes
  * @param {Object} options - Configuration options
  * @param {number} options.debounceMs - Debounce time in milliseconds (default: 200)
+ * @param {string} options.baseDir - Base directory for path normalization (required)
  * @returns {Object} Watcher instance with close method
  */
 export function start(paths, onChange, options = {}) {
-  const debounceMs = options.debounceMs || 200;
+  if (!options.baseDir) {
+    throw new Error("options.baseDir is required");
+  }
+
+  const { baseDir, debounceMs = 200 } = options;
   let debounceTimer = null;
   let pendingChanges = [];
 
@@ -44,34 +59,49 @@ export function start(paths, onChange, options = {}) {
   };
 
   // Handle file events
-  watcher.on("add", (path) => {
-    pendingChanges.push({ path, type: "created" });
+  watcher.on("add", (rawPath) => {
+    // Compute relative path from baseDir and normalize
+    const rel = normalizePath(path.relative(baseDir, rawPath));
+    // Always use relative path for consistency with tests
+    const normalizedPath = rel;
+
+    pendingChanges.push({ path: normalizedPath, type: "created" });
     scheduleFlush();
 
-    // Check for job-specific changes
-    const jobChange = detectJobChange(path);
+    // Check for job-specific changes with normalized path
+    const jobChange = detectJobChange(normalizedPath);
     if (jobChange) {
       sseEnhancer.handleJobChange(jobChange);
     }
   });
 
-  watcher.on("change", (path) => {
-    pendingChanges.push({ path, type: "modified" });
+  watcher.on("change", (rawPath) => {
+    // Compute relative path from baseDir and normalize
+    const rel = normalizePath(path.relative(baseDir, rawPath));
+    // Always use relative path for consistency with tests
+    const normalizedPath = rel;
+
+    pendingChanges.push({ path: normalizedPath, type: "modified" });
     scheduleFlush();
 
-    // Check for job-specific changes
-    const jobChange = detectJobChange(path);
+    // Check for job-specific changes with normalized path
+    const jobChange = detectJobChange(normalizedPath);
     if (jobChange) {
       sseEnhancer.handleJobChange(jobChange);
     }
   });
 
-  watcher.on("unlink", (path) => {
-    pendingChanges.push({ path, type: "deleted" });
+  watcher.on("unlink", (rawPath) => {
+    // Compute relative path from baseDir and normalize
+    const rel = normalizePath(path.relative(baseDir, rawPath));
+    // Always use relative path for consistency with tests
+    const normalizedPath = rel;
+
+    pendingChanges.push({ path: normalizedPath, type: "deleted" });
     scheduleFlush();
 
-    // Check for job-specific changes
-    const jobChange = detectJobChange(path);
+    // Check for job-specific changes with normalized path
+    const jobChange = detectJobChange(normalizedPath);
     if (jobChange) {
       sseEnhancer.handleJobChange(jobChange);
     }

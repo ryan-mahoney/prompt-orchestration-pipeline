@@ -91,6 +91,52 @@ describe("Job Change Detector", () => {
           "pipeline-data/current/job-123/tasks/analysis/subtask/letter.json",
       });
     });
+
+    it("should handle absolute paths and return normalized path", () => {
+      const path =
+        "/Users/alice/project/demo/pipeline-data/current/abc123/tasks-status.json";
+      const result = detectJobChange(path);
+
+      expect(result).toEqual({
+        jobId: "abc123",
+        category: "status",
+        filePath: "pipeline-data/current/abc123/tasks-status.json",
+      });
+    });
+
+    it("should detect status changes in pending directory", () => {
+      const path = "pipeline-data/pending/job-456/tasks-status.json";
+      const result = detectJobChange(path);
+
+      expect(result).toEqual({
+        jobId: "job-456",
+        category: "status",
+        filePath: "pipeline-data/pending/job-456/tasks-status.json",
+      });
+    });
+
+    it("should detect seed changes in rejected directory", () => {
+      const path = "pipeline-data/rejected/job-789/seed.json";
+      const result = detectJobChange(path);
+
+      expect(result).toEqual({
+        jobId: "job-789",
+        category: "seed",
+        filePath: "pipeline-data/rejected/job-789/seed.json",
+      });
+    });
+
+    it("should handle absolute paths with Windows separators", () => {
+      const path =
+        "C:\\Users\\bob\\project\\demo\\pipeline-data\\complete\\jobXYZ\\tasks\\analysis\\output.json";
+      const result = detectJobChange(path);
+
+      expect(result).toEqual({
+        jobId: "jobXYZ",
+        category: "task",
+        filePath: "pipeline-data/complete/jobXYZ/tasks/analysis/output.json",
+      });
+    });
   });
 
   describe("getJobLocation", () => {
@@ -127,6 +173,60 @@ describe("Job Change Detector", () => {
       const location = getJobLocation(path);
 
       expect(location).toBeNull();
+    });
+
+    it("should return 'pending' for pending directory paths", () => {
+      const path = "pipeline-data/pending/job-456/tasks-status.json";
+      const location = getJobLocation(path);
+
+      expect(location).toBe("pending");
+    });
+
+    it("should return 'rejected' for rejected directory paths", () => {
+      const path = "pipeline-data/rejected/job-789/seed.json";
+      const location = getJobLocation(path);
+
+      expect(location).toBe("rejected");
+    });
+
+    it("should handle absolute paths and return location", () => {
+      const path =
+        "/Users/alice/project/demo/pipeline-data/current/job-123/tasks-status.json";
+      const location = getJobLocation(path);
+
+      expect(location).toBe("current");
+    });
+
+    it("should handle absolute paths with complete lifecycle", () => {
+      const path =
+        "/Users/bob/workspace/project/pipeline-data/complete/job-456/seed.json";
+      const location = getJobLocation(path);
+
+      expect(location).toBe("complete");
+    });
+
+    it("should handle absolute paths with pending lifecycle", () => {
+      const path =
+        "/Users/carol/dev/app/pipeline-data/pending/job-789/tasks-status.json";
+      const location = getJobLocation(path);
+
+      expect(location).toBe("pending");
+    });
+
+    it("should handle absolute paths with rejected lifecycle", () => {
+      const path =
+        "/Users/david/project/pipeline-data/rejected/job-999/seed.json";
+      const location = getJobLocation(path);
+
+      expect(location).toBe("rejected");
+    });
+
+    it("should handle absolute paths with mixed separators and return location", () => {
+      const path =
+        "C:\\Users\\eve\\project\\pipeline-data\\current\\job-abc\\tasks\\analysis\\output.json";
+      const location = getJobLocation(path);
+
+      expect(location).toBe("current");
     });
   });
 });
