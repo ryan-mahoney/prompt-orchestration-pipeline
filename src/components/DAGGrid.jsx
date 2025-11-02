@@ -267,12 +267,12 @@ function DAGGrid({
   const getStatus = (index) => {
     const item = items[index];
     const s = item?.status;
-    if (s === "error") return "error";
-    if (s === "succeeded") return "succeeded";
-    if (s === "active") return "active";
+    if (s === "failed") return "failed";
+    if (s === "done") return "done";
+    if (s === "running") return "running";
     if (typeof activeIndex === "number") {
-      if (index < activeIndex) return "succeeded";
-      if (index === activeIndex) return "active";
+      if (index < activeIndex) return "done";
+      if (index === activeIndex) return "running";
       return "pending";
     }
     return "pending";
@@ -281,11 +281,11 @@ function DAGGrid({
   // Get CSS classes for card header based on status
   const getHeaderClasses = (status) => {
     switch (status) {
-      case "succeeded":
+      case "done":
         return "bg-green-50 border-green-200 text-green-700";
-      case "active":
+      case "running":
         return "bg-amber-50 border-amber-200 text-amber-700";
-      case "error":
+      case "failed":
         return "bg-pink-50 border-pink-200 text-pink-700";
       default:
         return "bg-gray-100 border-gray-200 text-gray-700";
@@ -419,10 +419,10 @@ function DAGGrid({
                   {formatStepName(item, idx)}
                 </div>
                 <div className="flex items-center gap-2">
-                  {status === "active" ? (
+                  {status === "running" ? (
                     <>
-                      <div className="relative h-4 w-4" aria-label="Active">
-                        <span className="sr-only">Active</span>
+                      <div className="relative h-4 w-4" aria-label="Running">
+                        <span className="sr-only">Running</span>
                         <span className="absolute inset-0 rounded-full border-2 border-amber-200" />
                         <span className="absolute inset-0 rounded-full border-2 border-transparent border-t-amber-600 animate-spin" />
                       </div>
@@ -489,7 +489,7 @@ function DAGGrid({
             </div>
             <div className="p-6 space-y-8 overflow-y-auto h-full">
               {/* Error Callout - shown when task has error status and body */}
-              {items[openIdx]?.status === "error" && items[openIdx]?.body && (
+              {items[openIdx]?.status === "failed" && items[openIdx]?.body && (
                 <section aria-label="Error">
                   <Callout.Root role="alert" aria-live="assertive">
                     <Callout.Text className="whitespace-pre-wrap break-words">

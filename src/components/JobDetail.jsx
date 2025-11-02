@@ -84,7 +84,7 @@ export default function JobDetail({ job, pipeline, onClose, onResume }) {
 
     // Include error message in body when task status is error
     const errorMsg = task?.error?.message;
-    const body = item.status === "error" && errorMsg ? errorMsg : null;
+    const body = item.status === "failed" && errorMsg ? errorMsg : null;
 
     return {
       ...item,

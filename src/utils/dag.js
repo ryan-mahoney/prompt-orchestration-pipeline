@@ -1,27 +1,3 @@
-function mapJobStateToDagState(jobState) {
-  switch (jobState) {
-    case "done":
-      return "succeeded";
-    case "running":
-    case "processing":
-    case "in_progress":
-    case "active":
-      return "active";
-    case "error":
-    case "failed":
-      return "error";
-    case "pending":
-    case "queued":
-    case "created":
-      return "pending";
-    case "skipped":
-    case "canceled":
-      return "succeeded";
-    default:
-      return "pending";
-  }
-}
-
 function normalizeJobTasks(tasks) {
   if (!tasks) return {};
 
@@ -41,9 +17,12 @@ export function computeTaskStage(job, taskId) {
   const tasks = normalizeJobTasks(job?.tasks);
   const t = tasks?.[taskId];
 
+  // Priority 1: Task-level currentStage (most specific)
   if (typeof t?.currentStage === "string" && t.currentStage.length > 0) {
     return t.currentStage;
   }
+
+  // Priority 2: Job-level currentStage ONLY if this task IS the current task
   if (
     job?.current === taskId &&
     typeof job?.currentStage === "string" &&
@@ -51,12 +30,18 @@ export function computeTaskStage(job, taskId) {
   ) {
     return job.currentStage;
   }
-  if (t?.failedStage) {
+
+  // Priority 3: failedStage for failed tasks
+  if (typeof t?.failedStage === "string" && t.failedStage.length > 0) {
     return t.failedStage;
   }
-  if (t?.error?.debug?.stage) {
+
+  // Priority 4: Error debug info
+  if (typeof t?.error?.debug?.stage === "string") {
     return t.error.debug.stage;
   }
+
+  // No stage information available
   return undefined;
 }
 
@@ -68,7 +53,7 @@ export function computeDagItems(job, pipeline) {
     const jobTask = jobTasks[taskId];
     return {
       id: taskId,
-      status: jobTask ? mapJobStateToDagState(jobTask.state) : "pending",
+      status: jobTask ? jobTask.state : "pending",
       source: "pipeline",
       stage: computeTaskStage(job, taskId),
     };
@@ -83,7 +68,7 @@ export function computeDagItems(job, pipeline) {
     const jobTask = jobTasks[taskId];
     return {
       id: taskId,
-      status: mapJobStateToDagState(jobTask.state),
+      status: jobTask.state,
       source: "job-extra",
       stage: computeTaskStage(job, taskId),
     };
@@ -95,17 +80,22 @@ export function computeDagItems(job, pipeline) {
 export function computeActiveIndex(items) {
   if (!items || items.length === 0) return 0;
 
-  const firstActiveIndex = items.findIndex((item) => item.status === "active");
-  if (firstActiveIndex !== -1) return firstActiveIndex;
+  // Find first running task
+  const firstRunningIndex = items.findIndex(
+    (item) => item.status === "running"
+  );
+  if (firstRunningIndex !== -1) return firstRunningIndex;
 
-  const firstErrorIndex = items.findIndex((item) => item.status === "error");
-  if (firstErrorIndex !== -1) return firstErrorIndex;
+  // Find first failed task
+  const firstFailedIndex = items.findIndex((item) => item.status === "failed");
+  if (firstFailedIndex !== -1) return firstFailedIndex;
 
-  let lastSucceededIndex = -1;
+  // Find last completed task
+  let lastDoneIndex = -1;
   items.forEach((item, index) => {
-    if (item.status === "succeeded") lastSucceededIndex = index;
+    if (item.status === "done") lastDoneIndex = index;
   });
 
-  if (lastSucceededIndex !== -1) return lastSucceededIndex;
+  if (lastDoneIndex !== -1) return lastDoneIndex;
   return 0;
 }
