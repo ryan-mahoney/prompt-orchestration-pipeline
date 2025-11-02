@@ -196,5 +196,37 @@ describe("Job Change Detector", () => {
 
       expect(location).toBe("current");
     });
+
+    it("should handle absolute paths with complete lifecycle", () => {
+      const path =
+        "/Users/bob/workspace/project/pipeline-data/complete/job-456/seed.json";
+      const location = getJobLocation(path);
+
+      expect(location).toBe("complete");
+    });
+
+    it("should handle absolute paths with pending lifecycle", () => {
+      const path =
+        "/Users/carol/dev/app/pipeline-data/pending/job-789/tasks-status.json";
+      const location = getJobLocation(path);
+
+      expect(location).toBe("pending");
+    });
+
+    it("should handle absolute paths with rejected lifecycle", () => {
+      const path =
+        "/Users/david/project/pipeline-data/rejected/job-999/seed.json";
+      const location = getJobLocation(path);
+
+      expect(location).toBe("rejected");
+    });
+
+    it("should handle absolute paths with mixed separators and return location", () => {
+      const path =
+        "C:\\Users\\eve\\project\\pipeline-data\\current\\job-abc\\tasks\\analysis\\output.json";
+      const location = getJobLocation(path);
+
+      expect(location).toBe("current");
+    });
   });
 });

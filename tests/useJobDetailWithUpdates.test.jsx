@@ -310,6 +310,354 @@ describe("useJobDetailWithUpdates", () => {
     });
   });
 
-  // TODO: Fix state:change tests - they're hanging due to timer/async issues
-  // The functionality is implemented and working, tests need refactoring
+  describe("state:change event handling", () => {
+    it("should trigger refetch on matching state:change events", async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          ok: true,
+          data: mockJobData,
+        }),
+      });
+
+      render(<TestComp jobId="test-job-1" />);
+
+      // Wait for hydration
+      await waitFor(() => {
+        expect(screen.getByTestId("loading").textContent).toBe("false");
+      });
+
+      const es =
+        FakeEventSource.instances[FakeEventSource.instances.length - 1];
+
+      // Set up mock for the refetch
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          ok: true,
+          data: { ...mockJobData, status: "completed" },
+        }),
+      });
+
+      // Send state:change event for this job
+      act(() => {
+        es.dispatchEvent("state:change", {
+          data: JSON.stringify({
+            path: "pipeline-data/current/test-job-1/tasks-status.json",
+            type: "modified",
+          }),
+        });
+      });
+
+      // Wait for debounced refetch (200ms)
+      await waitFor(
+        () => {
+          expect(mockFetch).toHaveBeenCalledTimes(2);
+        },
+        { timeout: 500 }
+      );
+
+      expect(mockFetch).toHaveBeenLastCalledWith("/api/jobs/test-job-1", {
+        signal: expect.any(AbortSignal),
+      });
+
+      // Status should update after refetch
+      await waitFor(() => {
+        expect(screen.getByTestId("job-status").textContent).toBe("completed");
+      });
+    });
+
+    it("should ignore state:change events for different jobs", async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          ok: true,
+          data: mockJobData,
+        }),
+      });
+
+      render(<TestComp jobId="test-job-1" />);
+
+      // Wait for hydration
+      await waitFor(() => {
+        expect(screen.getByTestId("loading").textContent).toBe("false");
+      });
+
+      const es =
+        FakeEventSource.instances[FakeEventSource.instances.length - 1];
+
+      // Send state:change event for different job
+      act(() => {
+        es.dispatchEvent("state:change", {
+          data: JSON.stringify({
+            path: "pipeline-data/current/other-job-123/tasks-status.json",
+            type: "modified",
+          }),
+        });
+      });
+
+      // Wait past debounce time
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 300));
+      });
+
+      // Should not have triggered additional fetch
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      expect(screen.getByTestId("job-status").textContent).toBe("pending");
+    });
+
+    it("should handle state:change events for all lifecycle directories", async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          ok: true,
+          data: mockJobData,
+        }),
+      });
+
+      render(<TestComp jobId="test-job-1" />);
+
+      // Wait for hydration
+      await waitFor(() => {
+        expect(screen.getByTestId("loading").textContent).toBe("false");
+      });
+
+      const es =
+        FakeEventSource.instances[FakeEventSource.instances.length - 1];
+
+      // Test complete lifecycle
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          ok: true,
+          data: { ...mockJobData, status: "completed" },
+        }),
+      });
+
+      act(() => {
+        es.dispatchEvent("state:change", {
+          data: JSON.stringify({
+            path: "pipeline-data/complete/test-job-1/seed.json",
+            type: "modified",
+          }),
+        });
+      });
+
+      await waitFor(
+        () => {
+          expect(mockFetch).toHaveBeenCalledTimes(2);
+        },
+        { timeout: 500 }
+      );
+
+      // Test pending lifecycle
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          ok: true,
+          data: { ...mockJobData, status: "pending" },
+        }),
+      });
+
+      act(() => {
+        es.dispatchEvent("state:change", {
+          data: JSON.stringify({
+            path: "pipeline-data/pending/test-job-1/tasks-status.json",
+            type: "modified",
+          }),
+        });
+      });
+
+      await waitFor(
+        () => {
+          expect(mockFetch).toHaveBeenCalledTimes(3);
+        },
+        { timeout: 500 }
+      );
+
+      // Test rejected lifecycle
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          ok: true,
+          data: { ...mockJobData, status: "rejected" },
+        }),
+      });
+
+      act(() => {
+        es.dispatchEvent("state:change", {
+          data: JSON.stringify({
+            path: "pipeline-data/rejected/test-job-1/tasks/analysis/output.json",
+            type: "modified",
+          }),
+        });
+      });
+
+      await waitFor(
+        () => {
+          expect(mockFetch).toHaveBeenCalledTimes(4);
+        },
+        { timeout: 500 }
+      );
+    });
+
+    it("should debounce multiple state:change events", async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          ok: true,
+          data: mockJobData,
+        }),
+      });
+
+      render(<TestComp jobId="test-job-1" />);
+
+      // Wait for hydration
+      await waitFor(() => {
+        expect(screen.getByTestId("loading").textContent).toBe("false");
+      });
+
+      const es =
+        FakeEventSource.instances[FakeEventSource.instances.length - 1];
+
+      // Set up mock for the debounced refetch
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          ok: true,
+          data: { ...mockJobData, status: "completed" },
+        }),
+      });
+
+      // Send multiple rapid state:change events
+      act(() => {
+        es.dispatchEvent("state:change", {
+          data: JSON.stringify({
+            path: "pipeline-data/current/test-job-1/tasks-status.json",
+            type: "modified",
+          }),
+        });
+      });
+
+      // Send another event quickly (within debounce window)
+      setTimeout(() => {
+        act(() => {
+          es.dispatchEvent("state:change", {
+            data: JSON.stringify({
+              path: "pipeline-data/current/test-job-1/tasks-status.json",
+              type: "modified",
+            }),
+          });
+        });
+      }, 50);
+
+      // Send another event quickly
+      setTimeout(() => {
+        act(() => {
+          es.dispatchEvent("state:change", {
+            data: JSON.stringify({
+              path: "pipeline-data/current/test-job-1/tasks-status.json",
+              type: "modified",
+            }),
+          });
+        });
+      }, 100);
+
+      // Wait past debounce window (200ms + buffer)
+      await waitFor(
+        () => {
+          expect(mockFetch).toHaveBeenCalledTimes(2);
+        },
+        { timeout: 500 }
+      );
+
+      // Should only have triggered one additional fetch (debounced)
+      expect(screen.getByTestId("job-status").textContent).toBe("completed");
+    });
+
+    it("should ignore state:change events for non-pipeline-data paths", async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          ok: true,
+          data: mockJobData,
+        }),
+      });
+
+      render(<TestComp jobId="test-job-1" />);
+
+      // Wait for hydration
+      await waitFor(() => {
+        expect(screen.getByTestId("loading").textContent).toBe("false");
+      });
+
+      const es =
+        FakeEventSource.instances[FakeEventSource.instances.length - 1];
+
+      // Send state:change event for non-pipeline-data path
+      act(() => {
+        es.dispatchEvent("state:change", {
+          data: JSON.stringify({
+            path: "config/settings.json",
+            type: "modified",
+          }),
+        });
+      });
+
+      // Wait past debounce time
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 300));
+      });
+
+      // Should not have triggered additional fetch
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      expect(screen.getByTestId("job-status").textContent).toBe("pending");
+    });
+
+    it("should handle malformed state:change events gracefully", async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          ok: true,
+          data: mockJobData,
+        }),
+      });
+
+      render(<TestComp jobId="test-job-1" />);
+
+      // Wait for hydration
+      await waitFor(() => {
+        expect(screen.getByTestId("loading").textContent).toBe("false");
+      });
+
+      const es =
+        FakeEventSource.instances[FakeEventSource.instances.length - 1];
+
+      // Send malformed JSON event
+      act(() => {
+        es.dispatchEvent("state:change", {
+          data: "invalid json{",
+        });
+      });
+
+      // Send event without path field
+      act(() => {
+        es.dispatchEvent("state:change", {
+          data: JSON.stringify({
+            type: "modified",
+            // Missing path field
+          }),
+        });
+      });
+
+      // Wait past debounce time
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 300));
+      });
+
+      // Should not have triggered additional fetch
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      expect(screen.getByTestId("job-status").textContent).toBe("pending");
+    });
+  });
 });
