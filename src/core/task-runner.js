@@ -7,21 +7,6 @@ import { loadEnvironment } from "./environment.js";
 import { getConfig } from "./config.js";
 import { createTaskFileIO } from "./file-io.js";
 
-/** Canonical order using the field terms we discussed */
-const ORDER = [
-  "ingestion",
-  "preProcessing",
-  "promptTemplating",
-  "inference",
-  "parsing",
-  "validateStructure",
-  "validateQuality",
-  "critique",
-  "refine",
-  "finalValidation",
-  "integration",
-];
-
 /**
  * Validates that a value is a plain object (not array, null, or class instance).
  * @param {*} value - The value to check
@@ -152,6 +137,24 @@ function ensureLogDirectory(workDir, jobId) {
 }
 
 /**
+ * Writes a compact pre-execution snapshot for debugging stage inputs.
+ * Safe: does not throw on write failure; logs warnings instead.
+ * @param {string} stageName - Name of the stage
+ * @param {object} snapshot - Summary data to persist
+ * @param {string} logsDir - Directory to write the snapshot into
+ */
+function writePreExecutionSnapshot(stageName, snapshot, logsDir) {
+  const snapshotPath = path.join(logsDir, `stage-${stageName}-context.json`);
+  try {
+    fs.writeFileSync(snapshotPath, JSON.stringify(snapshot, null, 2));
+  } catch (error) {
+    console.warn(
+      `[task-runner] Failed to write pre-execution snapshot for ${stageName}: ${error.message}`
+    );
+  }
+}
+
+/**
  * Redirects console output to a log file for a stage.
  * @param {string} logPath - The path to the log file
  * @returns {() => void} A function that restores console output and closes the log stream
@@ -168,6 +171,7 @@ function captureConsoleOutput(logPath) {
   const originalError = console.error;
   const originalWarn = console.warn;
   const originalInfo = console.info;
+  const originalDebug = console.debug;
 
   // Override console methods to write to stream
   console.log = (...args) => logStream.write(args.join(" ") + "\n");
@@ -177,6 +181,8 @@ function captureConsoleOutput(logPath) {
     logStream.write("[WARN] " + args.join(" ") + "\n");
   console.info = (...args) =>
     logStream.write("[INFO] " + args.join(" ") + "\n");
+  console.debug = (...args) =>
+    logStream.write("[DEBUG] " + args.join(" ") + "\n");
 
   // Return restoration function
   return () => {
@@ -185,7 +191,59 @@ function captureConsoleOutput(logPath) {
     console.error = originalError;
     console.warn = originalWarn;
     console.info = originalInfo;
+    console.debug = originalDebug;
   };
+}
+
+function readStatusSnapshot(statusPath) {
+  try {
+    if (!statusPath || !fs.existsSync(statusPath)) {
+      return null;
+    }
+    const raw = fs.readFileSync(statusPath, "utf8");
+    if (!raw) {
+      return null;
+    }
+    return JSON.parse(raw);
+  } catch (error) {
+    console.warn(
+      `[task-runner] Failed to read existing status file at ${statusPath}: ${error.message}`
+    );
+    return null;
+  }
+}
+
+function mergeStatusSnapshot(existing, updates) {
+  const base =
+    existing && typeof existing === "object" && !Array.isArray(existing)
+      ? { ...existing }
+      : {};
+
+  if (updates?.data) {
+    base.data = { ...(existing?.data || {}), ...updates.data };
+  }
+  if (updates?.flags) {
+    base.flags = { ...(existing?.flags || {}), ...updates.flags };
+  }
+  if (Object.prototype.hasOwnProperty.call(updates || {}, "logs")) {
+    base.logs = updates.logs;
+  }
+
+  for (const [key, value] of Object.entries(updates || {})) {
+    if (key === "data" || key === "flags" || key === "logs") continue;
+    base[key] = value;
+  }
+
+  return base;
+}
+
+function persistStatusSnapshot(statusPath, updates) {
+  if (!statusPath || !updates) {
+    return;
+  }
+  const existing = readStatusSnapshot(statusPath);
+  const merged = mergeStatusSnapshot(existing, updates);
+  fs.writeFileSync(statusPath, JSON.stringify(merged, null, 2));
 }
 
 /**
@@ -217,12 +275,50 @@ const FLAG_SCHEMAS = {
 };
 
 /**
- * Hard-coded pipeline stage execution order and configuration.
+ * Canonical pipeline stage execution order for the modern pipeline.
  * Each stage defines its handler, skip predicate, and iteration limits.
+ * Stages with missing handlers are automatically skipped during execution.
+ * This is the single, unified pipeline with no legacy execution paths.
  */
 const PIPELINE_STAGES = [
   {
+    name: "ingestion",
+    handler: null, // Will be populated from dynamic module import
+    skipIf: null,
+    maxIterations: null,
+  },
+  {
+    name: "preProcessing",
+    handler: null, // Will be populated from dynamic module import
+    skipIf: null,
+    maxIterations: null,
+  },
+  {
+    name: "promptTemplating",
+    handler: null, // Will be populated from dynamic module import
+    skipIf: null,
+    maxIterations: null,
+  },
+  {
+    name: "inference",
+    handler: null, // Will be populated from dynamic module import
+    skipIf: null,
+    maxIterations: null,
+  },
+  {
+    name: "parsing",
+    handler: null, // Will be populated from dynamic module import
+    skipIf: null,
+    maxIterations: null,
+  },
+  {
     name: "validateStructure",
+    handler: null, // Will be populated from dynamic module import
+    skipIf: null,
+    maxIterations: null,
+  },
+  {
+    name: "validateQuality",
     handler: null, // Will be populated from dynamic module import
     skipIf: null,
     maxIterations: null,
@@ -239,10 +335,22 @@ const PIPELINE_STAGES = [
     skipIf: (flags) => flags.validationFailed === false,
     maxIterations: (seed) => seed.maxRefinements || 1,
   },
+  {
+    name: "finalValidation",
+    handler: null, // Will be populated from dynamic module import
+    skipIf: null,
+    maxIterations: null,
+  },
+  {
+    name: "integration",
+    handler: null, // Will be populated from dynamic module import
+    skipIf: null,
+    maxIterations: null,
+  },
 ];
 
 /**
- * Runs a pipeline by loading a module that exports functions keyed by ORDER.
+ * Runs a pipeline by loading a module that exports functions keyed by stage name.
  */
 export async function runPipeline(modulePath, initialContext = {}) {
   if (!initialContext.envLoaded) {
@@ -250,16 +358,8 @@ export async function runPipeline(modulePath, initialContext = {}) {
     initialContext.envLoaded = true;
   }
 
-  if (!initialContext.llm) {
-    initialContext.llm = createLLM({
-      defaultProvider:
-        initialContext.modelConfig?.defaultProvider ||
-        process.env.PO_DEFAULT_PROVIDER ||
-        "openai",
-    });
-  }
+  if (!initialContext.llm) initialContext.llm = createLLM();
 
-  const config = getConfig();
   const llmMetrics = [];
   const llmEvents = getLLMEvents();
 
@@ -289,12 +389,8 @@ export async function runPipeline(modulePath, initialContext = {}) {
     ) {
       stageConfig.handler = handlersSource[stageConfig.name];
     } else {
-      // Create placeholder handler that throws "Not implemented" error
-      stageConfig.handler = async function (context) {
-        throw new Error(
-          `Stage "${stageConfig.name}" is not implemented in the loaded module`
-        );
-      };
+      // Set handler to null when not available - will be skipped
+      stageConfig.handler = null;
     }
   });
 
@@ -339,9 +435,12 @@ export async function runPipeline(modulePath, initialContext = {}) {
   const logs = [];
   let needsRefinement = false;
   let refinementCount = 0;
+  let lastStageOutput = context.data.seed;
+  let lastStageName = "seed";
+  let lastExecutedStageName = "seed";
 
   // Ensure log directory exists before stage execution
-  ensureLogDirectory(context.meta.workDir, context.meta.jobId);
+  const logsDir = ensureLogDirectory(context.meta.workDir, context.meta.jobId);
 
   do {
     needsRefinement = false;
@@ -408,7 +507,6 @@ export async function runPipeline(modulePath, initialContext = {}) {
           const sStart = performance.now();
           try {
             const r = await sHandler(context);
-            // Legacy Object.assign removed - handlers should use new { output, flags } contract
             const sMs = +(performance.now() - sStart).toFixed(2);
             logs.push({
               stage: s,
@@ -482,7 +580,37 @@ export async function runPipeline(modulePath, initialContext = {}) {
         data: stageData,
         flags: stageFlags,
         currentStage: stageName,
+        output: structuredClone(
+          lastStageOutput !== undefined
+            ? lastStageOutput
+            : (context.data.seed ?? null)
+        ),
+        previousStage: lastExecutedStageName,
       };
+
+      // Write pre-execution snapshot for debugging inputs
+      const snapshot = {
+        meta: { taskName: context.meta.taskName, jobId: context.meta.jobId },
+        previousStage: lastExecutedStageName,
+        refinementCycle: refinementCount,
+        dataSummary: {
+          keys: Object.keys(context.data),
+          hasSeed: !!context.data?.seed,
+          seedKeys: Object.keys(context.data?.seed || {}),
+          seedHasData: context.data?.seed?.data !== undefined,
+        },
+        flagsSummary: {
+          keys: Object.keys(context.flags),
+        },
+        outputSummary: {
+          type: typeof stageContext.output,
+          keys:
+            stageContext.output && typeof stageContext.output === "object"
+              ? Object.keys(stageContext.output).slice(0, 20)
+              : [],
+        },
+      };
+      writePreExecutionSnapshot(stageName, snapshot, logsDir);
 
       // Validate prerequisite flags before stage execution
       const requiredFlags = FLAG_SCHEMAS[stageName]?.requires;
@@ -494,6 +622,13 @@ export async function runPipeline(modulePath, initialContext = {}) {
       const start = performance.now();
       let stageResult;
       try {
+        context.logs.push({
+          stage: stageName,
+          action: "debugging",
+          data: stageContext,
+        });
+
+        console.log("STAGE CONTEXT", JSON.stringify(stageContext, null, 2));
         stageResult = await stageHandler(stageContext);
 
         // Validate stage result shape after execution
@@ -510,6 +645,20 @@ export async function runPipeline(modulePath, initialContext = {}) {
 
         // Store stage output in context.data
         context.data[stageName] = stageResult.output;
+        lastStageName = stageName;
+
+        // Only update lastStageOutput and lastExecutedStageName for non-validation stages
+        // This ensures previousStage and context.output skip validation stages
+        const validationStages = [
+          "validateStructure",
+          "validateQuality",
+          "validateFinal",
+          "finalValidation",
+        ];
+        if (!validationStages.includes(stageName)) {
+          lastStageOutput = stageResult.output;
+          lastExecutedStageName = stageName;
+        }
 
         // Merge stage flags into context.flags
         context.flags = { ...context.flags, ...stageResult.flags };
@@ -534,10 +683,7 @@ export async function runPipeline(modulePath, initialContext = {}) {
             lastUpdated: new Date().toISOString(),
           };
           try {
-            fs.writeFileSync(
-              context.meta.statusPath,
-              JSON.stringify(statusData, null, 2)
-            );
+            persistStatusSnapshot(context.meta.statusPath, statusData);
           } catch (error) {
             // Don't fail the pipeline if status file write fails
             console.warn(`Failed to write status file: ${error.message}`);
@@ -566,6 +712,24 @@ export async function runPipeline(modulePath, initialContext = {}) {
         console.error(`Stage ${stageName} failed:`, error);
         const ms = +(performance.now() - start).toFixed(2);
         const errInfo = normalizeError(error);
+
+        // Attach debug metadata to the error envelope for richer diagnostics
+        errInfo.debug = {
+          stage: stageName,
+          previousStage: lastExecutedStageName,
+          refinementCycle: refinementCount,
+          logPath: path.join(
+            context.meta.workDir,
+            "files",
+            "logs",
+            `stage-${stageName}.log`
+          ),
+          snapshotPath: path.join(logsDir, `stage-${stageName}-context.json`),
+          dataHasSeed: !!context.data?.seed,
+          seedHasData: context.data?.seed?.data !== undefined,
+          flagsKeys: Object.keys(context.flags || {}),
+        };
+
         logs.push({
           stage: stageName,
           ok: false,
@@ -601,94 +765,6 @@ export async function runPipeline(modulePath, initialContext = {}) {
         if (restoreConsole) {
           restoreConsole();
         }
-      }
-    }
-
-    // Handle stages not in PIPELINE_STAGES (legacy stages from ORDER)
-    for (const stage of ORDER) {
-      // Skip if stage is already handled by PIPELINE_STAGES
-      if (PIPELINE_STAGES.some((config) => config.name === stage)) {
-        continue;
-      }
-
-      context.currentStage = stage;
-      const fn =
-        (initialContext.tasksOverride && initialContext.tasksOverride[stage]) ||
-        tasks[stage];
-      if (typeof fn !== "function") {
-        logs.push({ stage, skipped: true, refinementCycle: refinementCount });
-        continue;
-      }
-
-      if (
-        refinementCount > 0 &&
-        ["ingestion", "preProcessing"].includes(stage)
-      ) {
-        logs.push({
-          stage,
-          skipped: true,
-          reason: "refinement-cycle",
-          refinementCycle: refinementCount,
-        });
-        continue;
-      }
-
-      const start = performance.now();
-      try {
-        const result = await fn(context);
-
-        // Handle legacy stages that don't return { output, flags } format
-        if (
-          result &&
-          typeof result === "object" &&
-          result.output &&
-          result.flags
-        ) {
-          // New contract: { output, flags }
-          context.data[stage] = result.output;
-          context.flags = { ...context.flags, ...result.flags };
-
-          context.logs.push({
-            stage,
-            action: "completed",
-            outputType: typeof result.output,
-            flagKeys: Object.keys(result.flags),
-            timestamp: new Date().toISOString(),
-          });
-        } else {
-          // Legacy contract: direct return value
-          context.data[stage] = result;
-
-          context.logs.push({
-            stage,
-            action: "completed",
-            outputType: typeof result,
-            flagKeys: [],
-            timestamp: new Date().toISOString(),
-          });
-        }
-
-        const ms = +(performance.now() - start).toFixed(2);
-        logs.push({ stage, ok: true, ms, refinementCycle: refinementCount });
-      } catch (error) {
-        const ms = +(performance.now() - start).toFixed(2);
-        const errInfo = normalizeError(error);
-        logs.push({
-          stage,
-          ok: false,
-          ms,
-          error: errInfo,
-          refinementCycle: refinementCount,
-        });
-
-        return {
-          ok: false,
-          failedStage: stage,
-          error: errInfo,
-          logs,
-          context,
-          refinementAttempts: refinementCount,
-        };
       }
     }
 
@@ -733,10 +809,7 @@ export async function runPipeline(modulePath, initialContext = {}) {
       lastUpdated: new Date().toISOString(),
     };
     try {
-      fs.writeFileSync(
-        context.meta.statusPath,
-        JSON.stringify(finalStatusData, null, 2)
-      );
+      persistStatusSnapshot(context.meta.statusPath, finalStatusData);
     } catch (error) {
       // Don't fail the pipeline if final status write fails
       console.warn(`Failed to write final status file: ${error.message}`);

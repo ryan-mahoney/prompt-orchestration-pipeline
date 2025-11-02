@@ -7,10 +7,10 @@ import {
 
 export async function deepseekChat({
   messages,
-  model = "deepseek-reasoner",
+  model = "deepseek-chat",
   temperature = 0.7,
   maxTokens,
-  responseFormat,
+  responseFormat = "json",
   topP,
   frequencyPenalty,
   presencePenalty,
@@ -71,21 +71,9 @@ export async function deepseekChat({
       const data = await response.json();
       const content = data.choices[0].message.content;
 
-      // Try to parse JSON if expected
-      let parsed = null;
-      if (responseFormat?.type === "json_object" || responseFormat === "json") {
-        parsed = tryParseJSON(content);
-        if (!parsed && attempt < maxRetries) {
-          lastError = new Error("Failed to parse JSON response");
-          continue;
-        }
-      }
-
       return {
-        content: parsed || content,
-        text: content,
+        content: tryParseJSON(content),
         usage: data.usage,
-        raw: data,
       };
     } catch (error) {
       lastError = error;

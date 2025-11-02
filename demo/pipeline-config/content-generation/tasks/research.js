@@ -1,159 +1,134 @@
 // Research Task - Gather information based on seed input
 
 // Step 1: Load and prepare input data
-export async function ingestion(context) {
-  try {
-    const { seed } = context;
-    const result = {
-      output: {
-        topic: seed.data.topic || seed.data.industry,
-        focusAreas: seed.data.focusAreas || [],
-        requirements: seed.data,
-      },
-    };
-
-    return result;
-  } catch (error) {
-    console.error(
-      "[Research:ingestion] ✗ Error during ingestion:",
-      error.message
-    );
-    throw error;
-  }
-}
+export const ingestion = ({
+  io,
+  llm,
+  data: {
+    seed: {
+      data: { topic, focusAreas, requirements },
+    },
+  },
+  meta,
+  flags,
+}) => ({
+  output: {
+    topic,
+    focusAreas,
+    requirements,
+  },
+  flags,
+});
 
 // Step 3: Build LLM prompts
-export async function promptTemplating(context) {
-  console.log("[Research:promptTemplating] Building prompt template");
-  try {
-    const { topic, focusAreas } = context.output;
-
-    const result = {
-      output: {
-        ...context.output,
-        system:
-          "You are a research assistant specializing in comprehensive information gathering.",
-        prompt: `Research the following topic: ${topic}
+export const promptTemplating = ({
+  io,
+  llm,
+  data: {
+    ingestion: { focusAreas, topic },
+  },
+  meta,
+  flags,
+}) => {
+  return {
+    output: {
+      system:
+        "You are a research assistant specializing in comprehensive information gathering. Always respond with valid JSON only.",
+      prompt: `Research the following topic: ${topic}
 
 Focus areas:
 ${focusAreas.map((area) => `- ${area}`).join("\n")}
 
-Provide detailed, factual information with sources where possible.`,
-      },
-    };
-    console.log("[Research:promptTemplating] ✓ Prompt template created");
-    return result;
-  } catch (error) {
-    console.error(
-      "[Research:promptTemplating] ✗ Error creating prompt:",
-      error.message
-    );
-    throw error;
-  }
+Provide detailed, factual information with sources where possible.
+
+IMPORTANT: You must respond with a valid JSON object only. Do not include any text before or after the JSON. Your response should follow this exact structure:
+
+{
+  "researchSummary": "Brief overview of the research findings",
+  "keyFindings": [
+    {
+      "area": "name of focus area",
+      "findings": "detailed information about this area",
+      "sources": ["source1", "source2"] (optional)
+    }
+  ],
+  "additionalInsights": "any other relevant information",
+  "researchCompleteness": "assessment of how thoroughly the topic was covered"
 }
+
+Ensure your JSON is properly formatted with:
+- All strings properly quoted
+- No trailing commas
+- Properly nested brackets and braces
+- Valid escape sequences for special characters
+
+Now provide your research findings in the specified JSON format:`,
+    },
+    flags,
+  };
+};
 
 // Step 4: Call LLM with prompt
-export async function inference(context) {
-  console.log("[Research:inference] Starting LLM inference");
-  try {
-    const { system, prompt } = context.output;
+export const inference = async ({
+  io,
+  llm: { deepseek },
+  data: {
+    promptTemplating: { system, prompt },
+  },
+  meta,
+  flags,
+}) => {
+  const response = await deepseek.chat({
+    messages: [
+      { role: "system", content: system },
+      { role: "user", content: prompt },
+    ],
+  });
 
-    const response = await context.llm.deepseek.chat({
-      messages: [
-        { role: "system", content: system },
-        { role: "user", content: prompt },
-      ],
-    });
+  await io.writeArtifact(
+    "research-output.json",
+    JSON.stringify(response.content)
+  );
 
-    context.io.logArtifact(
-      "research-output.json",
-      JSON.stringify(
-        {
-          content: response.content,
-        },
-        null,
-        2
-      )
-    );
-  } catch (error) {
-    console.error(
-      "[Research:inference] ✗ Error during inference:",
-      error.message
-    );
-    throw error;
-  }
-}
+  return {
+    output: {},
+    flags,
+  };
+};
 
 // Step 6: Validate prompt response structure and completeness
-export async function validateStructure(context) {
-  console.log("[Research:validateStructure] Validating research content");
+export const validateStructure = async ({ io, llm, data, meta, flags }) => {
+  const researchContent = await io.readArtifact("research-output.json");
+  let jsonValid = false;
+  let structureValid = false;
+
   try {
-    const { researchContent } = context.output;
+    const parsedContent = JSON.parse(researchContent);
+    jsonValid = true;
 
-    // Relax validation for demo runs: accept shorter outputs to avoid failing the demo.
-    // For production workloads you may keep the stricter threshold.
-    let validationFailed = false;
-    let lastValidationError = undefined;
-
-    if (!researchContent || researchContent.length < 20) {
-      console.warn(
-        "[Research:validateStructure] ⚠ Research content short or missing (demo relaxed)"
-      );
-      // Do not mark as validationFailed in demo mode to allow pipelines to proceed.
-      // If stricter behavior is required, set validationFailed here.
-      // validationFailed = true;
-      // lastValidationError = "Research content too short or missing";
+    // Validate required fields
+    const requiredFields = [
+      "researchSummary",
+      "keyFindings",
+      "additionalInsights",
+      "researchCompleteness",
+    ];
+    const missingFields = requiredFields.filter(
+      (field) => !parsedContent.hasOwnProperty(field)
+    );
+    if (missingFields.length > 0) {
+      structureValid = false;
     } else {
-      console.log("[Research:validateStructure] ✓ Validation passed:", {
-        contentLength: researchContent.length,
-      });
+      structureValid = true;
     }
-
-    return {
-      output: {
-        validationResult: {
-          contentLength: researchContent?.length || 0,
-          passed: !validationFailed,
-          validatedAt: new Date().toISOString(),
-        },
-      },
-      flags: {
-        validationFailed,
-        lastValidationError,
-      },
-    };
-  } catch (error) {
-    console.error(
-      "[Research:validateStructure] ✗ Error during validation:",
-      error.message
+  } catch (parseError) {
+    console.warn(
+      `[Research:validateStructure] ⚠ JSON parsing failed: ${parseError.message}`
     );
-    throw error;
   }
-}
 
-// Step 11: Integrate results into final output format
-export async function integration(context) {
-  console.log("[Research:integration] Integrating research output");
-  try {
-    const { researchContent, metadata } = context.output;
-
-    const result = {
-      output: {
-        research: {
-          content: researchContent,
-          metadata,
-          timestamp: new Date().toISOString(),
-        },
-      },
-    };
-
-    console.log("[Research:integration] ✓ Integration completed");
-    return result;
-  } catch (error) {
-    console.error(
-      "[Research:integration] ✗ Error during integration:",
-      error.message
-    );
-    throw error;
-  }
-}
+  return {
+    output: {},
+    flags: { ...flags, validationFailed: !(jsonValid && structureValid) },
+  };
+};

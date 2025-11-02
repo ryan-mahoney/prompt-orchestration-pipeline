@@ -40,15 +40,39 @@ describe("Task Runner - Real Implementation", () => {
       validateStructure,
       critique,
       refine,
-      // Legacy stages for backward compatibility testing
-      ingestion: vi.fn().mockResolvedValue({ data: "ingested" }),
-      preProcessing: vi.fn().mockResolvedValue({ processed: true }),
-      promptTemplating: vi.fn().mockResolvedValue({ prompt: "template" }),
-      inference: vi.fn().mockResolvedValue({ result: "inferred" }),
-      parsing: vi.fn().mockResolvedValue({ parsed: true }),
-      validateQuality: vi.fn().mockResolvedValue({ qualityPassed: true }),
-      finalValidation: vi.fn().mockResolvedValue({ output: { x: 1 } }),
-      integration: vi.fn().mockResolvedValue({ integrated: true }),
+      // Modern stages with { output, flags } format
+      ingestion: vi.fn().mockImplementation(async (context) => ({
+        output: { ingested: true, data: context.output },
+        flags: { ingestionComplete: true },
+      })),
+      preProcessing: vi.fn().mockImplementation(async (context) => ({
+        output: { preProcessed: true, data: context.output },
+        flags: { preProcessingComplete: true },
+      })),
+      promptTemplating: vi.fn().mockImplementation(async (context) => ({
+        output: { template: "test-template", data: context.output },
+        flags: { templateReady: true },
+      })),
+      inference: vi.fn().mockImplementation(async (context) => ({
+        output: { result: "test-inference", data: context.output },
+        flags: { inferenceComplete: true },
+      })),
+      parsing: vi.fn().mockImplementation(async (context) => ({
+        output: { parsed: true, data: context.output },
+        flags: { parsingComplete: true },
+      })),
+      validateQuality: vi.fn().mockImplementation(async (context) => ({
+        output: { qualityValid: true, data: context.output },
+        flags: { qualityValidationPassed: true },
+      })),
+      finalValidation: vi.fn().mockImplementation(async (context) => ({
+        output: { finalResult: true, data: context.output },
+        flags: { finalValidationPassed: true },
+      })),
+      integration: vi.fn().mockImplementation(async (context) => ({
+        output: { integrated: true, data: context.output },
+        flags: { integrationComplete: true },
+      })),
     };
 
     // Mock performance.now()
@@ -161,8 +185,17 @@ describe("Task Runner - Real Implementation", () => {
         tasksOverride: mockTasksModule,
       });
 
-      expect(result.context.flags).toEqual({
+      expect(result.context.flags).toMatchObject({
         validationFailed: false,
+        // All modern stages should have their flags set since they execute
+        ingestionComplete: true,
+        preProcessingComplete: true,
+        templateReady: true,
+        inferenceComplete: true,
+        parsingComplete: true,
+        qualityValidationPassed: true,
+        finalValidationPassed: true,
+        integrationComplete: true,
         // critiqueComplete and refined won't be set since stages are skipped
       });
     });
@@ -1160,6 +1193,9 @@ describe("Status Persistence Tests", () => {
       existingField: "should be preserved",
       legacyData: { old: "structure" },
       lastModified: "2023-01-01T00:00:00.000Z",
+      tasks: {
+        research: { state: "pending", attempts: 0 },
+      },
     };
     await fs.writeFile(statusPath, JSON.stringify(initialStatus, null, 2));
 
@@ -1187,12 +1223,16 @@ describe("Status Persistence Tests", () => {
     expect(statusData).toHaveProperty("data");
     expect(statusData).toHaveProperty("flags");
     expect(statusData).toHaveProperty("logs");
+    expect(statusData).toHaveProperty("currentStage");
+    expect(statusData).toHaveProperty("refinementCount");
+    expect(statusData).toHaveProperty("lastUpdated");
 
-    // Note: The current implementation overwrites the entire file,
-    // so existing fields are not preserved. This test documents the current behavior.
-    // If preservation is needed, the implementation would need to be updated.
-    expect(statusData.existingField).toBeUndefined();
-    expect(statusData.legacyData).toBeUndefined();
+    // Existing fields should be preserved
+    expect(statusData.existingField).toBe(initialStatus.existingField);
+    expect(statusData.legacyData).toEqual(initialStatus.legacyData);
+
+    // Tasks map seeded by orchestrator should remain intact
+    expect(statusData.tasks).toEqual(initialStatus.tasks);
   });
 
   it("should handle status file write errors gracefully", async () => {

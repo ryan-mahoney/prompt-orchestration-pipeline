@@ -59,10 +59,31 @@ export async function setupMockPipeline(overrides = {}) {
   // Create task module
   await fs.writeFile(path.join(tasksDir, "test-task.js"), config.taskModule);
 
+  // Create status file
+  const statusPath = path.join(tempDir, "tasks-status.json");
+  await fs.writeFile(
+    statusPath,
+    JSON.stringify(
+      {
+        id: "test-job",
+        current: null,
+        tasks: {},
+      },
+      null,
+      2
+    )
+  );
+
+  // Create files/logs directory
+  const logsDir = path.join(tempDir, "files", "logs");
+  await fs.mkdir(logsDir, { recursive: true });
+
   return {
     tempDir,
     configDir,
     tasksDir,
+    statusPath,
+    absoluteModulePath: path.resolve(tasksDir, "test-task.js"),
     cleanup: async () => {
       try {
         await fs.rm(tempDir, { recursive: true, force: true });
