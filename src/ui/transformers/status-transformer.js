@@ -161,11 +161,19 @@ export function transformTasks(rawTasks) {
       if ("attempts" in raw) task.attempts = raw.attempts;
       if ("executionTimeMs" in raw) task.executionTimeMs = raw.executionTimeMs;
 
+      // Preserve stage metadata for DAG visualization
+      if (typeof raw.currentStage === "string" && raw.currentStage.length > 0) {
+        task.currentStage = raw.currentStage;
+      }
+      if (typeof raw.failedStage === "string" && raw.failedStage.length > 0) {
+        task.failedStage = raw.failedStage;
+      }
+
       // Prefer new files.* schema, fallback to legacy artifacts
       task.files = normalizeTaskFiles(raw?.files);
       if ("artifacts" in raw) task.artifacts = raw.artifacts;
 
-      // Preserve error metadata so the UI can surface failure details
+      // Preserve error metadata so UI can surface failure details
       if ("error" in raw) {
         if (
           raw.error &&
