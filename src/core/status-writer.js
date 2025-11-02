@@ -16,6 +16,31 @@ async function getSSERegistry() {
   return sseRegistry;
 }
 
+// Instrumentation helper for status writer
+const createStatusWriterLogger = (jobId) => {
+  const prefix = `[StatusWriter:${jobId || "unknown"}]`;
+  return {
+    log: (message, data = null) => {
+      console.log(`${prefix} ${message}`, data ? data : "");
+    },
+    warn: (message, data = null) => {
+      console.warn(`${prefix} ${message}`, data ? data : "");
+    },
+    error: (message, data = null) => {
+      console.error(`${prefix} ${message}`, data ? data : "");
+    },
+    group: (label) => console.group(`${prefix} ${label}`),
+    groupEnd: () => console.groupEnd(),
+    sse: (eventType, eventData) => {
+      console.log(
+        `%c${prefix} SSE Broadcast: ${eventType}`,
+        "color: #cc6600; font-weight: bold;",
+        eventData
+      );
+    },
+  };
+};
+
 /**
  * Atomic status writer utility for tasks-status.json
  *
@@ -159,9 +184,15 @@ export async function writeJobStatus(jobDir, updateFn) {
 
   const statusPath = path.join(jobDir, "tasks-status.json");
   const jobId = path.basename(jobDir);
+  const logger = createStatusWriterLogger(jobId);
+
+  logger.group("Status Write Operation");
+  logger.log(`Updating status for job: ${jobId}`);
+  logger.log(`Status file path: ${statusPath}`);
 
   // Read existing status or create default
   let snapshot = await readStatusFile(statusPath, jobId);
+  logger.log("Current status snapshot:", snapshot);
 
   // Validate basic structure
   snapshot = validateStatusSnapshot(snapshot);
@@ -169,11 +200,13 @@ export async function writeJobStatus(jobDir, updateFn) {
   // Apply user updates
   try {
     const result = updateFn(snapshot);
-    // If updateFn returns a value, use it as the new snapshot
+    // If updateFn returns a value, use it as new snapshot
     if (result !== undefined) {
       snapshot = result;
     }
+    logger.log("Status after update function:", snapshot);
   } catch (error) {
+    logger.error("Update function failed:", error);
     throw new Error(`Update function failed: ${error.message}`);
   }
 
@@ -185,24 +218,32 @@ export async function writeJobStatus(jobDir, updateFn) {
 
   // Atomic write
   await atomicWrite(statusPath, snapshot);
+  logger.log("Status file written successfully");
 
   // Emit SSE event for tasks-status.json change
   const registry = await getSSERegistry();
   if (registry) {
     try {
-      registry.broadcast({
+      const eventData = {
         type: "state:change",
         data: {
           path: path.join(jobDir, "tasks-status.json"),
           id: jobId,
         },
-      });
+      };
+      registry.broadcast(eventData);
+      logger.sse("state:change", eventData.data);
+      logger.log("SSE event broadcasted successfully");
     } catch (error) {
       // Don't fail the write if SSE emission fails
+      logger.error("Failed to emit SSE event:", error);
       console.warn(`Failed to emit SSE event: ${error.message}`);
     }
+  } else {
+    logger.warn("SSE registry not available - no event broadcasted");
   }
 
+  logger.groupEnd();
   return snapshot;
 }
 

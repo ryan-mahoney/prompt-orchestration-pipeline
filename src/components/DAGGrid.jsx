@@ -65,6 +65,28 @@ function formatStepName(item, idx) {
  * @param {string} props.jobId - Job ID for file operations
  * @param {Function} props.filesByTypeForItem - Selector returning { artifacts, logs, tmp }
  */
+// Instrumentation helper for DAGGrid
+const createDAGGridLogger = (jobId) => {
+  const prefix = `[DAGGrid:${jobId || "unknown"}]`;
+  return {
+    log: (message, data = null) => {
+      console.log(`${prefix} ${message}`, data ? data : "");
+    },
+    warn: (message, data = null) => {
+      console.warn(`${prefix} ${message}`, data ? data : "");
+    },
+    error: (message, data = null) => {
+      console.error(`${prefix} ${message}`, data ? data : "");
+    },
+    group: (label) => console.group(`${prefix} ${label}`),
+    groupEnd: () => console.groupEnd(),
+    table: (data, title) => {
+      console.log(`${prefix} ${title}:`);
+      console.table(data);
+    },
+  };
+};
+
 function DAGGrid({
   items,
   cols = 3,
@@ -73,6 +95,8 @@ function DAGGrid({
   jobId,
   filesByTypeForItem = () => createEmptyTaskFiles(),
 }) {
+  const logger = React.useMemo(() => createDAGGridLogger(jobId), [jobId]);
+
   const overlayRef = useRef(null);
   const gridRef = useRef(null);
   const nodeRefs = useRef([]);
@@ -83,6 +107,19 @@ function DAGGrid({
   const [filePaneOpen, setFilePaneOpen] = useState(false);
   const [filePaneType, setFilePaneType] = useState("artifacts");
   const [filePaneFilename, setFilePaneFilename] = useState(null);
+
+  // Log component props and state changes
+  React.useEffect(() => {
+    logger.group("Component Render");
+    logger.log("Props received:", {
+      itemCount: items?.length,
+      cols,
+      activeIndex,
+      jobId,
+    });
+    logger.log("Items data:", items);
+    logger.groupEnd();
+  }, [items, cols, activeIndex, jobId, logger]);
 
   // Create refs for each node
   nodeRefs.current = useMemo(
