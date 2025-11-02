@@ -16,6 +16,30 @@ function upperFirst(s) {
     : s;
 }
 
+// Format stage token into human-readable label
+function formatStageLabel(s) {
+  if (typeof s !== "string" || s.length === 0) return s;
+
+  // Replace underscores and hyphens with spaces first
+  let processed = s.replace(/[_-]/g, " ");
+
+  // Add space before capital letters that follow lowercase letters
+  processed = processed.replace(/([a-z])([A-Z])/g, "$1 $2");
+
+  // Split into words and clean up
+  const words = processed.trim().split(/\s+/).filter(Boolean);
+
+  if (words.length === 0) return s;
+
+  // Lower-case all words except first (which gets upperFirst)
+  const [first, ...rest] = words;
+  return (
+    upperFirst(first.toLowerCase()) +
+    " " +
+    rest.map((w) => w.toLowerCase()).join(" ")
+  );
+}
+
 function formatStepName(item, idx) {
   const raw = item.title ?? item.id ?? `Step ${idx + 1}`;
   // If item has a title, assume it’s curated and leave unchanged; otherwise capitalize fallback
@@ -385,11 +409,21 @@ function DAGGrid({
                 </div>
                 <div className="flex items-center gap-2">
                   {status === "active" ? (
-                    <div className="relative h-4 w-4" aria-label="Active">
-                      <span className="sr-only">Active</span>
-                      <span className="absolute inset-0 rounded-full border-2 border-amber-200" />
-                      <span className="absolute inset-0 rounded-full border-2 border-transparent border-t-amber-600 animate-spin" />
-                    </div>
+                    <>
+                      <div className="relative h-4 w-4" aria-label="Active">
+                        <span className="sr-only">Active</span>
+                        <span className="absolute inset-0 rounded-full border-2 border-amber-200" />
+                        <span className="absolute inset-0 rounded-full border-2 border-transparent border-t-amber-600 animate-spin" />
+                      </div>
+                      {item.stage && (
+                        <span
+                          className="text-[11px] font-medium opacity-80 truncate"
+                          title={item.stage}
+                        >
+                          {formatStageLabel(item.stage)}
+                        </span>
+                      )}
+                    </>
                   ) : (
                     <span className="text-[11px] uppercase tracking-wide opacity-80">
                       {status}
