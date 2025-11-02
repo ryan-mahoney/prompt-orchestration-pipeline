@@ -2,6 +2,7 @@ import { openaiChat } from "../providers/openai.js";
 import { deepseekChat } from "../providers/deepseek.js";
 import { EventEmitter } from "node:events";
 import { getConfig } from "../core/config.js";
+import fs from "node:fs";
 
 // Global mock provider instance (for demo/testing)
 let mockProviderInstance = null;
@@ -111,6 +112,12 @@ export async function chat(options) {
   const userMessages = messages.filter((m) => m.role === "user");
   const userMsg = userMessages.map((m) => m.content).join("\n");
 
+  // DEBUG write the messages to /tmp/messages.log for debugging
+  fs.writeFileSync(
+    "/tmp/messages.log",
+    JSON.stringify({ messages, systemMsg, userMsg, provider, model }, null, 2)
+  );
+
   // Emit request start event
   llmEvents.emit("llm:request:start", {
     id: requestId,
@@ -173,18 +180,24 @@ export async function chat(options) {
       };
     } else if (provider === "deepseek") {
       const result = await deepseekChat(
-        systemMsg,
-        userMsg,
-        model || "deepseek-reasoner"
+        {
+          messages,
+          model: "deepseek-chat",
+        }
+
+        // systemMsg,
+        // userMsg,
+        // model || "deepseek-reasoner"
       );
 
       response = {
-        content: typeof result === "string" ? result : JSON.stringify(result),
-        raw: result,
+        content: result.content,
       };
 
       const promptTokens = estimateTokens(systemMsg + userMsg);
-      const completionTokens = estimateTokens(response.content);
+      const completionTokens = estimateTokens(
+        typeof result === "string" ? result : JSON.stringify(result)
+      );
       usage = {
         promptTokens,
         completionTokens,
@@ -210,10 +223,7 @@ export async function chat(options) {
     });
 
     // Return clean response - no metrics attached!
-    return {
-      ...response,
-      usage,
-    };
+    return response;
   } catch (error) {
     const duration = Date.now() - startTime;
 
@@ -396,16 +406,12 @@ export async function parallel(workerFn, items, concurrency = 5) {
 }
 
 // Create a bound LLM interface - for named-models tests, only return provider functions
-export function createLLM(options = {}) {
+export function createLLM() {
   const config = getConfig();
-  const defaultProvider = options.defaultProvider || config.llm.defaultProvider;
 
   // Build functions from registry
   const providerFunctions = buildProviderFunctions(config.llm.models);
 
-  // Check if this is being called from the named-models test context
-  // For now, we'll default to the provider-only interface to match existing tests
-  // TODO: Add a flag or option to enable high-level interface when needed
   return providerFunctions;
 }
 

@@ -3,7 +3,7 @@
   "pipeline": "content-generation",
   "data": {
     "type": "market-research",
-    "industry": "Renewable Energy Storage",
+    "topic": "Renewable Energy Storage",
     "region": "North America",
     "timeframe": "2024-2025",
     "focusAreas": [

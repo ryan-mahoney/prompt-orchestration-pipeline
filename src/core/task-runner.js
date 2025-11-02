@@ -137,6 +137,24 @@ function ensureLogDirectory(workDir, jobId) {
 }
 
 /**
+ * Writes a compact pre-execution snapshot for debugging stage inputs.
+ * Safe: does not throw on write failure; logs warnings instead.
+ * @param {string} stageName - Name of the stage
+ * @param {object} snapshot - Summary data to persist
+ * @param {string} logsDir - Directory to write the snapshot into
+ */
+function writePreExecutionSnapshot(stageName, snapshot, logsDir) {
+  const snapshotPath = path.join(logsDir, `stage-${stageName}-context.json`);
+  try {
+    fs.writeFileSync(snapshotPath, JSON.stringify(snapshot, null, 2));
+  } catch (error) {
+    console.warn(
+      `[task-runner] Failed to write pre-execution snapshot for ${stageName}: ${error.message}`
+    );
+  }
+}
+
+/**
  * Redirects console output to a log file for a stage.
  * @param {string} logPath - The path to the log file
  * @returns {() => void} A function that restores console output and closes the log stream
@@ -153,6 +171,7 @@ function captureConsoleOutput(logPath) {
   const originalError = console.error;
   const originalWarn = console.warn;
   const originalInfo = console.info;
+  const originalDebug = console.debug;
 
   // Override console methods to write to stream
   console.log = (...args) => logStream.write(args.join(" ") + "\n");
@@ -162,6 +181,8 @@ function captureConsoleOutput(logPath) {
     logStream.write("[WARN] " + args.join(" ") + "\n");
   console.info = (...args) =>
     logStream.write("[INFO] " + args.join(" ") + "\n");
+  console.debug = (...args) =>
+    logStream.write("[DEBUG] " + args.join(" ") + "\n");
 
   // Return restoration function
   return () => {
@@ -170,7 +191,59 @@ function captureConsoleOutput(logPath) {
     console.error = originalError;
     console.warn = originalWarn;
     console.info = originalInfo;
+    console.debug = originalDebug;
   };
+}
+
+function readStatusSnapshot(statusPath) {
+  try {
+    if (!statusPath || !fs.existsSync(statusPath)) {
+      return null;
+    }
+    const raw = fs.readFileSync(statusPath, "utf8");
+    if (!raw) {
+      return null;
+    }
+    return JSON.parse(raw);
+  } catch (error) {
+    console.warn(
+      `[task-runner] Failed to read existing status file at ${statusPath}: ${error.message}`
+    );
+    return null;
+  }
+}
+
+function mergeStatusSnapshot(existing, updates) {
+  const base =
+    existing && typeof existing === "object" && !Array.isArray(existing)
+      ? { ...existing }
+      : {};
+
+  if (updates?.data) {
+    base.data = { ...(existing?.data || {}), ...updates.data };
+  }
+  if (updates?.flags) {
+    base.flags = { ...(existing?.flags || {}), ...updates.flags };
+  }
+  if (Object.prototype.hasOwnProperty.call(updates || {}, "logs")) {
+    base.logs = updates.logs;
+  }
+
+  for (const [key, value] of Object.entries(updates || {})) {
+    if (key === "data" || key === "flags" || key === "logs") continue;
+    base[key] = value;
+  }
+
+  return base;
+}
+
+function persistStatusSnapshot(statusPath, updates) {
+  if (!statusPath || !updates) {
+    return;
+  }
+  const existing = readStatusSnapshot(statusPath);
+  const merged = mergeStatusSnapshot(existing, updates);
+  fs.writeFileSync(statusPath, JSON.stringify(merged, null, 2));
 }
 
 /**
@@ -285,16 +358,8 @@ export async function runPipeline(modulePath, initialContext = {}) {
     initialContext.envLoaded = true;
   }
 
-  if (!initialContext.llm) {
-    initialContext.llm = createLLM({
-      defaultProvider:
-        initialContext.modelConfig?.defaultProvider ||
-        process.env.PO_DEFAULT_PROVIDER ||
-        "openai",
-    });
-  }
+  if (!initialContext.llm) initialContext.llm = createLLM();
 
-  const config = getConfig();
   const llmMetrics = [];
   const llmEvents = getLLMEvents();
 
@@ -375,7 +440,7 @@ export async function runPipeline(modulePath, initialContext = {}) {
   let lastExecutedStageName = "seed";
 
   // Ensure log directory exists before stage execution
-  ensureLogDirectory(context.meta.workDir, context.meta.jobId);
+  const logsDir = ensureLogDirectory(context.meta.workDir, context.meta.jobId);
 
   do {
     needsRefinement = false;
@@ -523,6 +588,30 @@ export async function runPipeline(modulePath, initialContext = {}) {
         previousStage: lastExecutedStageName,
       };
 
+      // Write pre-execution snapshot for debugging inputs
+      const snapshot = {
+        meta: { taskName: context.meta.taskName, jobId: context.meta.jobId },
+        previousStage: lastExecutedStageName,
+        refinementCycle: refinementCount,
+        dataSummary: {
+          keys: Object.keys(context.data),
+          hasSeed: !!context.data?.seed,
+          seedKeys: Object.keys(context.data?.seed || {}),
+          seedHasData: context.data?.seed?.data !== undefined,
+        },
+        flagsSummary: {
+          keys: Object.keys(context.flags),
+        },
+        outputSummary: {
+          type: typeof stageContext.output,
+          keys:
+            stageContext.output && typeof stageContext.output === "object"
+              ? Object.keys(stageContext.output).slice(0, 20)
+              : [],
+        },
+      };
+      writePreExecutionSnapshot(stageName, snapshot, logsDir);
+
       // Validate prerequisite flags before stage execution
       const requiredFlags = FLAG_SCHEMAS[stageName]?.requires;
       if (requiredFlags && Object.keys(requiredFlags).length > 0) {
@@ -533,6 +622,13 @@ export async function runPipeline(modulePath, initialContext = {}) {
       const start = performance.now();
       let stageResult;
       try {
+        context.logs.push({
+          stage: stageName,
+          action: "debugging",
+          data: stageContext,
+        });
+
+        console.log("STAGE CONTEXT", JSON.stringify(stageContext, null, 2));
         stageResult = await stageHandler(stageContext);
 
         // Validate stage result shape after execution
@@ -587,10 +683,7 @@ export async function runPipeline(modulePath, initialContext = {}) {
             lastUpdated: new Date().toISOString(),
           };
           try {
-            fs.writeFileSync(
-              context.meta.statusPath,
-              JSON.stringify(statusData, null, 2)
-            );
+            persistStatusSnapshot(context.meta.statusPath, statusData);
           } catch (error) {
             // Don't fail the pipeline if status file write fails
             console.warn(`Failed to write status file: ${error.message}`);
@@ -619,6 +712,24 @@ export async function runPipeline(modulePath, initialContext = {}) {
         console.error(`Stage ${stageName} failed:`, error);
         const ms = +(performance.now() - start).toFixed(2);
         const errInfo = normalizeError(error);
+
+        // Attach debug metadata to the error envelope for richer diagnostics
+        errInfo.debug = {
+          stage: stageName,
+          previousStage: lastExecutedStageName,
+          refinementCycle: refinementCount,
+          logPath: path.join(
+            context.meta.workDir,
+            "files",
+            "logs",
+            `stage-${stageName}.log`
+          ),
+          snapshotPath: path.join(logsDir, `stage-${stageName}-context.json`),
+          dataHasSeed: !!context.data?.seed,
+          seedHasData: context.data?.seed?.data !== undefined,
+          flagsKeys: Object.keys(context.flags || {}),
+        };
+
         logs.push({
           stage: stageName,
           ok: false,
@@ -698,10 +809,7 @@ export async function runPipeline(modulePath, initialContext = {}) {
       lastUpdated: new Date().toISOString(),
     };
     try {
-      fs.writeFileSync(
-        context.meta.statusPath,
-        JSON.stringify(finalStatusData, null, 2)
-      );
+      persistStatusSnapshot(context.meta.statusPath, finalStatusData);
     } catch (error) {
       // Don't fail the pipeline if final status write fails
       console.warn(`Failed to write final status file: ${error.message}`);

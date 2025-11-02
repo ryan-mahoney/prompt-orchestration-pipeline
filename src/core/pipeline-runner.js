@@ -103,9 +103,49 @@ for (const taskName of pipeline.tasks) {
     const result = await runPipeline(absoluteModulePath, ctx);
 
     if (!result.ok) {
-      throw new Error(
-        `${taskName} failed after ${result.refinementAttempts || 0} attempts: ${result.error?.message || "unknown"}`
+      // Persist execution-logs.json and failure-details.json on task failure
+      if (result.logs) {
+        await atomicWrite(
+          path.join(taskDir, "execution-logs.json"),
+          JSON.stringify(result.logs, null, 2)
+        );
+      }
+      const failureDetails = {
+        failedStage: result.failedStage,
+        error: result.error,
+        logs: result.logs,
+        context: result.context,
+        refinementAttempts: result.refinementAttempts || 0,
+      };
+      await atomicWrite(
+        path.join(taskDir, "failure-details.json"),
+        JSON.stringify(failureDetails, null, 2)
       );
+
+      // Update tasks-status.json with enriched failure context
+      await updateStatus(taskName, {
+        state: "failed",
+        endedAt: now(),
+        error: result.error, // Don't double-normalize - use result.error as-is
+        failedStage: result.failedStage,
+        refinementAttempts: result.refinementAttempts || 0,
+        stageLogPath: path.join(
+          workDir,
+          "files",
+          "logs",
+          `stage-${result.failedStage}.log`
+        ),
+        errorContext: {
+          previousStage: result.context?.previousStage || "seed",
+          dataHasSeed: !!result.context?.data?.seed,
+          seedHasData: result.context?.data?.seed?.data !== undefined,
+          flagsKeys: Object.keys(result.context?.flags || {}),
+        },
+      });
+
+      // Exit with non-zero status but do not throw to keep consistent flow
+      process.exitCode = 1;
+      process.exit(1);
     }
 
     // The file I/O system automatically handles writing outputs and updating tasks-status.json
@@ -164,6 +204,7 @@ function now() {
 async function updateStatus(taskName, patch) {
   const current = JSON.parse(await fs.readFile(tasksStatusPath, "utf8"));
   current.current = taskName;
+  current.tasks = current.tasks || {};
   current.tasks[taskName] = { ...(current.tasks[taskName] || {}), ...patch };
   await atomicWrite(tasksStatusPath, JSON.stringify(current, null, 2));
   Object.assign(status, current);
@@ -181,6 +222,11 @@ async function atomicWrite(file, data) {
 }
 
 function normalizeError(e) {
+  // If it's already a structured error object with a message string, pass it through
+  if (e && typeof e === "object" && typeof e.message === "string") {
+    return e;
+  }
+
   if (e instanceof Error)
     return { name: e.name, message: e.message, stack: e.stack };
   return { message: String(e) };

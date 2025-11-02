@@ -117,7 +117,13 @@ Provide:
 export async function inference(context) {
   console.log("[Analysis:inference] Starting LLM inference");
   try {
-    const { system, prompt } = context.output;
+    const pt = context.data?.promptTemplating;
+    if (!pt?.system || !pt?.prompt) {
+      throw new Error(
+        "promptTemplating output missing required fields: system/prompt"
+      );
+    }
+    const { system, prompt } = pt;
     const model = context.taskConfig?.model || "gpt-5-nano";
 
     console.log("[Analysis:inference] Using model:", model);
@@ -345,7 +351,9 @@ Model: ${metadata.model}
 Tokens: ${metadata.tokens}
 
 Content Preview:
-${analysisContent.substring(0, 500)}${analysisContent.length > 500 ? "..." : ""}`
+${analysisContent.substring(0, 500)}${
+          analysisContent.length > 500 ? "..." : ""
+        }`
       );
 
       // Log integration completion

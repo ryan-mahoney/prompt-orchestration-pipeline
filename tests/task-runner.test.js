@@ -1193,6 +1193,9 @@ describe("Status Persistence Tests", () => {
       existingField: "should be preserved",
       legacyData: { old: "structure" },
       lastModified: "2023-01-01T00:00:00.000Z",
+      tasks: {
+        research: { state: "pending", attempts: 0 },
+      },
     };
     await fs.writeFile(statusPath, JSON.stringify(initialStatus, null, 2));
 
@@ -1220,12 +1223,16 @@ describe("Status Persistence Tests", () => {
     expect(statusData).toHaveProperty("data");
     expect(statusData).toHaveProperty("flags");
     expect(statusData).toHaveProperty("logs");
+    expect(statusData).toHaveProperty("currentStage");
+    expect(statusData).toHaveProperty("refinementCount");
+    expect(statusData).toHaveProperty("lastUpdated");
 
-    // Note: The current implementation overwrites the entire file,
-    // so existing fields are not preserved. This test documents the current behavior.
-    // If preservation is needed, the implementation would need to be updated.
-    expect(statusData.existingField).toBeUndefined();
-    expect(statusData.legacyData).toBeUndefined();
+    // Existing fields should be preserved
+    expect(statusData.existingField).toBe(initialStatus.existingField);
+    expect(statusData.legacyData).toEqual(initialStatus.legacyData);
+
+    // Tasks map seeded by orchestrator should remain intact
+    expect(statusData.tasks).toEqual(initialStatus.tasks);
   });
 
   it("should handle status file write errors gracefully", async () => {

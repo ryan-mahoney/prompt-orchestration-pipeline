@@ -1,45 +1,95 @@
 // Research Task - Gather information based on seed input
 
+// Step 1: Load and prepare input data
 export async function ingestion(context) {
   console.log("[Research:ingestion] Starting data ingestion");
+
+  const contextSnapshot = {
+    hasSeed: Boolean(context && "seed" in context),
+    hasData: Boolean(context && "data" in context),
+    topLevelKeys: context ? Object.keys(context) : [],
+    seedKeys: context && context.seed ? Object.keys(context.seed) : [],
+    dataKeys: context && context.data ? Object.keys(context.data) : [],
+  };
+  console.log(
+    "[Research:ingestion] Context summary:",
+    JSON.stringify(contextSnapshot, null, 2)
+  );
+
+  let seedSource = "none";
+
   try {
-    // Fix: Access seed from context.data instead of context directly
-    const { data = {} } = context;
-    const { seed = {} } = data;
-    const { data: seedData = {} } = seed;
+    const rawSeed = context?.data?.seed ?? context?.seed;
+    seedSource = context?.data?.seed
+      ? "context.data.seed"
+      : context?.seed
+        ? "context.seed"
+        : "none";
+
+    if (!rawSeed) {
+      throw new Error("Seed payload missing from context");
+    }
+
+    const seedData =
+      typeof rawSeed === "object" && rawSeed !== null
+        ? (rawSeed.data ?? rawSeed)
+        : {};
 
     const result = {
       output: {
-        topic: seedData.topic || seedData.industry || "Unknown topic",
-        focusAreas: seedData.focusAreas || [],
+        topic:
+          seedData.topic ||
+          seedData.industry ||
+          seedData.subject ||
+          "Unknown topic",
+        focusAreas: Array.isArray(seedData.focusAreas)
+          ? seedData.focusAreas
+          : [],
         requirements: seedData,
       },
       flags: {},
     };
-    console.log("[Research:ingestion] ✓ Successfully ingested data:", {
-      topic: result.output.topic,
-      focusAreasCount: result.output.focusAreas.length,
-    });
+
+    console.log(
+      "[Research:ingestion] Seed source:",
+      seedSource,
+      JSON.stringify(
+        {
+          requirementsKeys: Object.keys(result.output.requirements || {}),
+          focusAreasCount: result.output.focusAreas.length,
+        },
+        null,
+        2
+      )
+    );
+
     return result;
   } catch (error) {
     console.error(
       "[Research:ingestion] ✗ Error during ingestion:",
-      error.message
+      JSON.stringify(
+        {
+          message: error.message,
+          seedSource,
+          snapshot: contextSnapshot,
+        },
+        null,
+        2
+      )
     );
     throw error;
   }
 }
 
+// Step 3: Build LLM prompts
 export async function promptTemplating(context) {
   console.log("[Research:promptTemplating] Building prompt template");
   try {
-    // Use default values to make more robust
-    const output = context.output || {};
-    const { topic = "Unknown topic", focusAreas = [] } = output;
+    const { topic, focusAreas } = context.output;
 
     const result = {
       output: {
-        ...output,
+        ...context.output,
         system:
           "You are a research assistant specializing in comprehensive information gathering.",
         prompt: `Research the following topic: ${topic}
@@ -62,56 +112,41 @@ Provide detailed, factual information with sources where possible.`,
   }
 }
 
+// Step 4: Call LLM with prompt
 export async function inference(context) {
   console.log("[Research:inference] Starting LLM inference");
   try {
-    // Use default values to make more robust
-    const output = context.output || {};
-    const { system = "", prompt = "" } = output;
-    const model = context.taskConfig?.model || "gpt-5-nano";
-
-    console.log("[Research:inference] Using model:", model);
-
-    // Make LLM provider access more robust - check if deepseek exists
-    const llmProvider = context.llm?.deepseek;
-    if (!llmProvider) {
+    const pt = context.data?.promptTemplating;
+    if (!pt?.system || !pt?.prompt) {
       throw new Error(
-        "Deepseek LLM provider not available in context.llm.deepseek"
+        "promptTemplating output missing required fields: system/prompt"
       );
     }
+    const { system, prompt } = pt;
 
-    const response = await llmProvider.chat({
+    const response = await context.llm.deepseek.chat({
       messages: [
         { role: "system", content: system },
         { role: "user", content: prompt },
       ],
-      model,
-      temperature: context.taskConfig?.temperature || 0.7,
-      max_tokens: context.taskConfig?.maxTokens || 2000,
     });
 
-    console.log("[Research:inference] ✓ Inference completed:", response);
-
-    const result = {
-      output: {
-        ...output,
-        researchContent: response.content,
-        metadata: {
-          model: response.model,
-          tokens: response.usage?.total_tokens,
-          finishReason: response.finish_reason,
+    context.io.writeArtifact(
+      "research-output.json",
+      JSON.stringify(
+        {
+          content: response.content,
         },
-      },
+        null,
+        2
+      )
+    );
+
+    // Return prior context.output with empty flags to satisfy contract
+    return {
+      output: context.output,
       flags: {},
     };
-
-    console.log("[Research:inference] ✓ Inference completed:", {
-      model: result.output.metadata.model,
-      tokens: result.output.metadata.tokens,
-      contentLength: response.content.length,
-    });
-
-    return result;
   } catch (error) {
     console.error(
       "[Research:inference] ✗ Error during inference:",
@@ -121,18 +156,17 @@ export async function inference(context) {
   }
 }
 
+// Step 6: Validate prompt response structure and completeness
 export async function validateStructure(context) {
   console.log("[Research:validateStructure] Validating research content");
   try {
-    // Use default values to make more robust
-    const output = context.output || {};
-    const { researchContent = "" } = output;
-
-    let validationFailed = false;
-    let lastValidationError = undefined;
+    const { researchContent } = context.output;
 
     // Relax validation for demo runs: accept shorter outputs to avoid failing the demo.
     // For production workloads you may keep the stricter threshold.
+    let validationFailed = false;
+    let lastValidationError = undefined;
+
     if (!researchContent || researchContent.length < 20) {
       console.warn(
         "[Research:validateStructure] ⚠ Research content short or missing (demo relaxed)"
@@ -142,9 +176,16 @@ export async function validateStructure(context) {
       // validationFailed = true;
       // lastValidationError = "Research content too short or missing";
     } else {
-      console.log("[Research:validateStructure] ✓ Validation passed:", {
-        contentLength: researchContent.length,
-      });
+      console.log(
+        "[Research:validateStructure] ✓ Validation passed:",
+        JSON.stringify(
+          {
+            contentLength: researchContent.length,
+          },
+          null,
+          2
+        )
+      );
     }
 
     return {
@@ -169,116 +210,21 @@ export async function validateStructure(context) {
   }
 }
 
-export async function critique(context) {
-  console.log("[Research:critique] Analyzing research content for improvement");
-  try {
-    // Use default values to make more robust
-    const output = context.output || {};
-    const flags = context.flags || {};
-    const { researchContent = "" } = output;
-    const { lastValidationError } = flags;
-
-    let critiqueComplete = true;
-    let critiqueResult = {
-      hasContent: !!researchContent,
-      contentLength: researchContent?.length || 0,
-      hasValidationError: !!lastValidationError,
-      critique: lastValidationError
-        ? `Content needs improvement due to validation error: ${lastValidationError}`
-        : "Content appears adequate for research purposes",
-    };
-
-    console.log("[Research:critique] ✓ Critique completed:", {
-      contentLength: critiqueResult.contentLength,
-      hasValidationError: critiqueResult.hasValidationError,
-    });
-
-    return {
-      output: {
-        critiqueResult,
-      },
-      flags: {
-        critiqueComplete,
-      },
-    };
-  } catch (error) {
-    console.error(
-      "[Research:critique] ✗ Error during critique:",
-      error.message
-    );
-    throw error;
-  }
-}
-
-export async function refine(context) {
-  console.log("[Research:refine] Refining research content based on feedback");
-  try {
-    // Use default values to make more robust
-    const output = context.output || {};
-    const flags = context.flags || {};
-    const { researchContent = "" } = output;
-    const { validationFailed = false, lastValidationError } = flags;
-
-    let refined = false;
-    let refinedContent = researchContent;
-
-    if (validationFailed && lastValidationError) {
-      console.log(
-        "[Research:refine] Attempting to refine content due to validation error"
-      );
-
-      // For demo purposes, we'll just add a note about refinement
-      // In a real implementation, this would use LLM to improve the content
-      refinedContent =
-        researchContent +
-        "\n\n[Note: Content has been refined to address validation issues.]";
-      refined = true;
-
-      console.log("[Research:refine] ✓ Content refined");
-    } else {
-      console.log("[Research:refine] No refinement needed");
-    }
-
-    return {
-      output: {
-        ...output,
-        researchContent: refinedContent,
-        refineResult: {
-          originalLength: researchContent?.length || 0,
-          refinedLength: refinedContent?.length || 0,
-          refined,
-          refinedAt: new Date().toISOString(),
-        },
-      },
-      flags: {
-        refined,
-      },
-    };
-  } catch (error) {
-    console.error(
-      "[Research:refine] ✗ Error during refinement:",
-      error.message
-    );
-    throw error;
-  }
-}
-
+// Step 11: Integrate results into final output format
 export async function integration(context) {
   console.log("[Research:integration] Integrating research output");
   try {
-    // Use default values to make more robust
-    const output = context.output || {};
-    const { researchContent, metadata } = output;
+    const { researchContent, metadata } = context.output;
 
     const result = {
       output: {
         research: {
-          content: researchContent || "",
-          metadata: metadata || {},
+          content: researchContent,
+          metadata,
           timestamp: new Date().toISOString(),
         },
       },
-      flags: {}, // Add missing flags property as required by contract
+      flags: {},
     };
 
     console.log("[Research:integration] ✓ Integration completed");
