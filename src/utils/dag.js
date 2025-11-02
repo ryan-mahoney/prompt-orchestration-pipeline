@@ -13,6 +13,9 @@ function mapJobStateToDagState(jobState) {
     case "done":
       return "succeeded";
     case "running":
+    case "processing":
+    case "in_progress":
+    case "active":
       return "active";
     case "error":
     case "failed":
@@ -61,8 +64,14 @@ function normalizeJobTasks(tasks) {
  */
 export function computeTaskStage(job, taskId) {
   const tasks = normalizeJobTasks(job?.tasks);
+  const t = tasks?.[taskId];
 
-  // Active task: job.currentStage when job.current equals the task id/name
+  // Priority 1: Per-task currentStage
+  if (typeof t?.currentStage === "string" && t.currentStage.length > 0) {
+    return t.currentStage;
+  }
+
+  // Priority 2: Job-level currentStage when job.current equals the task id/name
   if (
     job?.current === taskId &&
     typeof job?.currentStage === "string" &&
@@ -71,14 +80,12 @@ export function computeTaskStage(job, taskId) {
     return job.currentStage;
   }
 
-  const t = tasks?.[taskId];
-
-  // Failed stage from task
+  // Priority 3: Failed stage from task
   if (t?.failedStage) {
     return t.failedStage;
   }
 
-  // Failed stage from error debug info
+  // Priority 4: Failed stage from error debug info
   if (t?.error?.debug?.stage) {
     return t.error.debug.stage;
   }
