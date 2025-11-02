@@ -72,10 +72,10 @@ export default function JobTable({
                 (currentTask?.config || pipeline?.taskConfig?.[job.current])) ||
               {};
 
-            const hasValidId = Boolean(job.jobId);
+            const hasValidId = Boolean(job.id);
             return (
               <Table.Row
-                key={job.jobId}
+                key={job.id}
                 className={`group transition-colors ${
                   hasValidId
                     ? "cursor-pointer hover:bg-slate-50/50"
@@ -105,7 +105,7 @@ export default function JobTable({
                       {jobTitle}
                     </Text>
                     <Text size="1" className="text-slate-500">
-                      {job.jobId}
+                      {job.id}
                     </Text>
                   </Flex>
                 </Table.Cell>
