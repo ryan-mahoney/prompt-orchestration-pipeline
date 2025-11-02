@@ -31,8 +31,17 @@ function formatStageLabel(s) {
 
   if (words.length === 0) return s;
 
+  // Handle consecutive capitals by treating them as a single word
+  const normalizedWords = words.map((word) => {
+    // If word is all caps or mostly caps, treat it as an acronym
+    if (word.length > 1 && word === word.toUpperCase()) {
+      return word;
+    }
+    return word;
+  });
+
   // Lower-case all words except first (which gets upperFirst)
-  const [first, ...rest] = words;
+  const [first, ...rest] = normalizedWords;
   return (
     upperFirst(first.toLowerCase()) +
     " " +
