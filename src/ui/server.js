@@ -1586,6 +1586,11 @@ async function startServer({ dataDir, port: customPort }) {
       customPort
     );
 
+    // Initialize config-bridge paths early to ensure consistent path resolution
+    // This prevents path caching issues when dataDir changes between tests
+    const { initPATHS } = await import("./config-bridge.node.js");
+    initPATHS(dataDir);
+
     // Set the data directory environment variable
     if (dataDir) {
       process.env.PO_ROOT = dataDir;

@@ -1,9 +1,7 @@
-import * as configBridge from "../config-bridge.browser.js";
 import { normalizeTaskFiles } from "../../utils/task-files.js";
 import { derivePipelineMetadata } from "../../utils/pipelines.js";
 
-const VALID_TASK_STATES = new Set(["pending", "running", "done", "error"]);
-const LEGACY_STATE_MAP = { failed: "error" };
+const VALID_TASK_STATES = new Set(["pending", "running", "done", "failed"]);
 
 /**
  * Compute progress percentage from tasks mapping.
@@ -28,7 +26,7 @@ export function determineJobStatus(tasks = {}) {
 
   const states = names.map((n) => tasks[n]?.state);
 
-  if (states.includes("error")) return "error";
+  if (states.includes("failed")) return "failed";
   if (states.includes("running")) return "running";
   if (states.every((s) => s === "done")) return "complete";
   return "pending";
@@ -59,19 +57,14 @@ export function computeJobStatus(tasksInput) {
   for (const name of names) {
     const t = tasksInput[name];
     const state = t && typeof t === "object" ? t.state : undefined;
-    const effectiveState =
-      state != null &&
-      Object.prototype.hasOwnProperty.call(LEGACY_STATE_MAP, state)
-        ? LEGACY_STATE_MAP[state]
-        : state;
 
-    if (effectiveState == null || !VALID_TASK_STATES.has(effectiveState)) {
-      if (state != null && !VALID_TASK_STATES.has(effectiveState)) {
+    if (state == null || !VALID_TASK_STATES.has(state)) {
+      if (state != null && !VALID_TASK_STATES.has(state)) {
         unknownStatesFound.add(state);
       }
       normalized[name] = { state: "pending" };
     } else {
-      normalized[name] = { state: effectiveState };
+      normalized[name] = { state };
     }
   }
 
@@ -115,16 +108,11 @@ export function transformTasks(rawTasks) {
 
     const rawState =
       raw && typeof raw === "object" && "state" in raw ? raw.state : undefined;
-    const mappedState =
-      rawState != null &&
-      Object.prototype.hasOwnProperty.call(LEGACY_STATE_MAP, rawState)
-        ? LEGACY_STATE_MAP[rawState]
-        : rawState;
 
     let finalState = "pending";
-    if (mappedState != null && VALID_TASK_STATES.has(mappedState)) {
-      finalState = mappedState;
-    } else if (rawState != null && !VALID_TASK_STATES.has(mappedState)) {
+    if (rawState != null && VALID_TASK_STATES.has(rawState)) {
+      finalState = rawState;
+    } else if (rawState != null && !VALID_TASK_STATES.has(rawState)) {
       console.warn(`Invalid task state "${rawState}"`);
       finalState = "pending";
     }
@@ -217,15 +205,24 @@ export function transformJobStatus(raw, jobId, location) {
 
   const jobFiles = normalizeTaskFiles(raw.files);
 
+  // Convert tasksStatus object to tasks array for API compatibility
+  const tasks = Object.entries(tasksStatus).map(([name, task]) => ({
+    name,
+    ...task,
+  }));
+
   const job = {
-    jobId,
-    title,
+    id: jobId, // API expects 'id' not 'jobId'
+    name: title, // API expects 'name' not 'title'
+    jobId, // Keep jobId for backward compatibility
+    title, // Keep title for backward compatibility
     status: jobStatusObj.status,
     progress: jobStatusObj.progress,
     createdAt,
     updatedAt,
     location: resolvedLocation,
-    tasksStatus,
+    tasksStatus, // Keep tasksStatus for backward compatibility
+    tasks, // API expects 'tasks' array
     files: jobFiles,
   };
 
