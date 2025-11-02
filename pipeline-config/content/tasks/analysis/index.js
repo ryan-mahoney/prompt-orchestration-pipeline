@@ -3,21 +3,24 @@
 export async function ingestion(context) {
   console.log("[Analysis:ingestion] Starting data ingestion");
   try {
-    const { artifacts } = context;
-    const research = artifacts?.research?.research;
+    // Read from context.data instead of direct context properties
+    const { data = {} } = context;
+    const { seed = {}, research: researchStage = {} } = data;
+    const { type: analysisType = "unknown" } = seed.data || {};
+    const research = researchStage.research?.research;
 
     if (!research) {
       console.error(
-        "[Analysis:ingestion] ✗ Research data not found in artifacts"
+        "[Analysis:ingestion] ✗ Research data not found in context.data"
       );
-      throw new Error("Research data not found in artifacts");
+      throw new Error("Research data not found in context.data");
     }
 
     // Use new file I/O API to log ingestion process
     if (context.files) {
       await context.files.writeLog(
         "ingestion.log",
-        `[${new Date().toISOString()}] Starting data ingestion for ${context.seed.data.type}\n`
+        `[${new Date().toISOString()}] Starting data ingestion for ${analysisType}\n`
       );
       await context.files.writeLog(
         "ingestion.log",
@@ -28,8 +31,9 @@ export async function ingestion(context) {
     const result = {
       output: {
         researchContent: research.content,
-        analysisType: context.seed.data.type,
+        analysisType,
       },
+      flags: {},
     };
 
     // Write raw research data as artifact for reference
@@ -39,7 +43,7 @@ export async function ingestion(context) {
         JSON.stringify(
           {
             content: research.content,
-            type: context.seed.data.type,
+            type: analysisType,
             ingestedAt: new Date().toISOString(),
           },
           null,
@@ -55,7 +59,7 @@ export async function ingestion(context) {
 
     console.log("[Analysis:ingestion] ✓ Successfully ingested data:", {
       researchContentLength: research.content.length,
-      analysisType: context.seed.data.type,
+      analysisType,
     });
 
     return result;
@@ -96,6 +100,7 @@ Provide:
 3. Opportunities and challenges
 4. Recommendations`,
       },
+      flags: {},
     };
 
     console.log("[Analysis:promptTemplating] ✓ Prompt template created");
@@ -112,7 +117,13 @@ Provide:
 export async function inference(context) {
   console.log("[Analysis:inference] Starting LLM inference");
   try {
-    const { system, prompt } = context.output;
+    const pt = context.data?.promptTemplating;
+    if (!pt?.system || !pt?.prompt) {
+      throw new Error(
+        "promptTemplating output missing required fields: system/prompt"
+      );
+    }
+    const { system, prompt } = pt;
     const model = context.taskConfig?.model || "gpt-5-nano";
 
     console.log("[Analysis:inference] Using model:", model);
@@ -136,6 +147,7 @@ export async function inference(context) {
           tokens: response.usage?.total_tokens,
         },
       },
+      flags: {},
     };
 
     console.log("[Analysis:inference] ✓ Inference completed:", {
@@ -339,7 +351,9 @@ Model: ${metadata.model}
 Tokens: ${metadata.tokens}
 
 Content Preview:
-${analysisContent.substring(0, 500)}${analysisContent.length > 500 ? "..." : ""}`
+${analysisContent.substring(0, 500)}${
+          analysisContent.length > 500 ? "..." : ""
+        }`
       );
 
       // Log integration completion
@@ -361,6 +375,7 @@ ${analysisContent.substring(0, 500)}${analysisContent.length > 500 ? "..." : ""}
           timestamp: new Date().toISOString(),
         },
       },
+      flags: {},
     };
 
     console.log("[Analysis:integration] ✓ Integration completed");

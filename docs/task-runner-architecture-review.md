@@ -1,97 +1,152 @@
 # Task Runner Architecture Review
 
-**Source for observations:** [`src/core/task-runner.js:8-261`](src/core/task-runner.js:8) and demo task implementations under [`demo/pipeline-config/content-generation/tasks`](demo/pipeline-config/content-generation/tasks/analysis.js:1)
+**Source for observations:** [`src/core/task-runner.js`](src/core/task-runner.js) and demo task implementations under [`demo/pipeline-config/content-generation/tasks`](demo/pipeline-config/content-generation/tasks/analysis.js:1)
 
 ---
 
-## 1. Evaluation of Proposed Context-Handling Change
+## 1. Modern Pipeline Architecture
 
-### 1.1 Proposal Summary
+### 1.1 Current Implementation
 
-- Clone `context` before calling each stage handler.
-- Force handlers to return data placed under `context.data.<stageName>`.
-- Place seed data under `context.data.seed`.
+The task runner uses a modern, unified pipeline execution model with a single canonical stage order. All stages are optional and skipped if their handlers are not implemented. The pipeline maintains structured context with proper validation and type safety.
 
-### 1.2 Compatibility Risks
+### 1.2 Canonical Stage Order
 
-1. **In-place mutations are relied upon today.**
-   - Stages such as [`validateStructure`](demo/pipeline-config/content-generation/tasks/analysis.js:77) in the analysis task set flags directly on `context` (`context.validationFailed = true`).
-   - Pre-validation hooks in [`runPipeline`](src/core/task-runner.js:114) depend on those mutations (e.g., `context.refined`, `context.validationFailed`).
-   - Cloning the context and discarding in-stage mutations unless they are returned would break these flows.
+The pipeline executes stages in this fixed sequence:
 
-2. **Handlers already assume shared `context.output`.**
-   - Ingestion stages populate `context.output` to feed downstream stages (e.g., [`research.ingestion`](demo/pipeline-config/content-generation/tasks/research.js:3) returns `{ output: { ... } }`).
-   - Later stages read from `context.output` directly (e.g., [`analysis.promptTemplating`](demo/pipeline-config/content-generation/tasks/analysis.js:3)).
-   - Redirecting outputs to `context.data.<stage>` would require a cross-project refactor and enforcing new access patterns.
+1. ingestion
+2. preProcessing
+3. promptTemplating
+4. inference
+5. parsing
+6. validateStructure
+7. validateQuality
+8. critique
+9. refine
+10. finalValidation
+11. integration
 
-3. **Some stages rely on side-effects without returning new objects.**
-   - [`research.inference`](demo/pipeline-config/content-generation/tasks/research.js:55) writes artifacts and does not return a value.
-   - With cloning, any mutation they perform on `context.output` (currently none) or metadata would be lost unless explicitly returned.
+### 1.3 Stage Handler Contract
 
-4. **File I/O reference coupling.**
-   - Context cloning must preserve referential equality for `context.io` and `context.llm` to avoid resource duplication. A shallow clone could suffice, but care is needed to avoid double initialization or stale references.
+All stage handlers must return an object conforming to the `{ output, flags }` contract:
 
-### 1.3 Suggested Mitigations If Pursued
+- `output`: The stage's primary output data
+- `flags`: Control flags that influence pipeline behavior
 
-- Introduce a transitional compatibility layer where returned objects merge under both `context.output` (current behavior) and `context.data.<stage>`.
-- Enforce a standardized shape for handler responses (e.g., `{ data, controlFlags }`) and update the runner to merge known keys instead of the current blanket `Object.assign`.
-- Provide utility helpers for stages (`withStageContext(stageName, handler)`), enabling controlled cloning or snapshotting while keeping backward compatibility.
-
-### 1.4 Potential Benefits
-
-- Clearer provenance of stage outputs (namespaced by stage).
-- Easier to diff context snapshots between refinement cycles.
-- Ability to re-run specific stages with deterministic inputs if clones include deep copies.
-
-### 1.5 Potential Issues
-
-- **Backward compatibility:** all existing task modules would require updates.
-- **Performance:** deep cloning (if required to isolate mutations) could incur overhead with large payloads.
-- **Loss of flexible state sharing:** teams may intentionally set shared flags or intermediate buffers in `context`; strict scoping could inhibit advanced workflows.
+This contract is enforced by `assertStageResult()` and flag types are validated against schemas defined in `FLAG_SCHEMAS`.
 
 ---
 
-## 2. Additional Architectural Observations
+## 2. Context Structure and Flow
 
-1. **Unstructured context merging.**  
-   The unconditional `Object.assign(context, result)` ([`src/core/task-runner.js:178-180`](src/core/task-runner.js:178)) allows any stage to overwrite unrelated fields, creating tight coupling and increasing the chance of accidental corruption.
+### 2.1 Context Organization
 
-2. **Implicit contracts for stage outputs.**  
-   There is no schema verification for what each stage must return. A misbehaving stage can skip required data without immediate detection.
+The modern context structure is organized into logical sections:
 
-3. **Refinement state resets.**  
-   When validation fails, `context.validationFailed` is reset to `false` on retry ([`src/core/task-runner.js:191`](src/core/task-runner.js:191)), but `context.lastValidationError` lingers unless new errors occur. Consumers relying on error diagnostics must inspect logs rather than context.
+- `meta`: Task metadata (taskName, workDir, statusPath, etc.)
+- `data`: Stage outputs, including `data.seed` for initial input
+- `flags`: Control flags for pipeline flow and validation state
+- `logs`: Execution logs and audit trail
+- `io`: File I/O operations singleton
+- `llm`: LLM client instance
 
-4. **Event listener lifecycle.**  
-   LLM event listeners are removed only on successful completion ([`src/core/task-runner.js:253`](src/core/task-runner.js:253)); in failure paths the cleanup relies on the process exit. While acceptable in the current process-oriented usage, long-lived runners would benefit from `finally` cleanup.
+### 2.2 Stage Execution Context
 
-5. **Missing stage metrics for skips.**  
-   Skipped stages during refinement (e.g., ingestion) log the reason but do not expose standardized signals in `context`. Downstream tooling could benefit from a structured `stageStatus` map.
+Each stage receives a cloned context with:
 
-6. **Lack of immutable snapshots for logging.**  
-   Logs capture execution order and durations but not the context state per stage. If reproducibility or auditing is required, snapshots or hash references would help.
+- `output`: Output from the last executed stage (or seed for first stage)
+- `previousStage`: Name of the last executed stage
+- `currentStage`: Current stage being executed
+- Isolated `data` and `flags` to prevent cross-contamination
 
----
+### 2.3 Chaining Behavior
 
-## 3. Recommendations
+Stages are chained via the last successful stage output:
 
-1. **Define a Stage Response Schema.**  
-   Adopt a convention such as `{ data, flags, logs }` per stage. The runner would merge `flags` into `context` (for control flow) and store `data` under a dedicated namespace. This allows gradual migration toward the proposed `context.data.stage` structure.
-
-2. **Provide Utility Helpers.**  
-   Offer wrapper utilities for task authors—e.g., `stageHelpers.createStageContext(stageName, context)`—to hide cloning, enforce read-only access where appropriate, and manage return structures.
-
-3. **Introduce Validation for Returned Structures.**  
-   Validate stage outputs against schema rules to catch unexpected mutations early.
-
-4. **Plan a Migration Path.**  
-   If moving seed data to `context.data.seed`, ensure pipeline loaders populate both the legacy `context.seed` and new path during migration to keep existing tasks functional.
-
-5. **Enhance Error and Cleanup Handling.**  
-   Use `try`/`finally` around the main loop to unregister LLM event listeners even when failures occur, and consider capturing the final `context` snapshot for postmortem analysis.
+- Non-validation stages update `lastStageOutput` and `lastExecutedStageName`
+- Validation stages are excluded from chaining to maintain clean data flow
+- Missing handlers are skipped without breaking the pipeline
 
 ---
 
-## 4. Conclusion
+## 3. Refinement and Validation
 
-The proposed restructuring could improve clarity and stage isolation, but it is incompatible with current task implementations and control-flow flags that rely on shared mutable context. A phased approach that introduces structured return schemas and helper utilities is advisable before enforcing cloning and stage-specific data storage. Additional improvements—including stricter output validation, better cleanup, and richer logging—would strengthen the runner’s robustness without breaking existing pipelines.
+### 3.1 Refinement Cycle Mechanics
+
+- Validation stages (`validateStructure`, `validateQuality`) can trigger refinement
+- During refinement, `ingestion` and `preProcessing` are automatically skipped
+- Pre-refinement logic runs `critique` and `refine` before validation when needed
+- Refinement cycles are bounded by `maxRefinements` configuration
+
+### 3.2 Validation System
+
+- Flag schemas define required and produced flags per stage
+- Type validation ensures flag consistency across stages
+- Validation failures trigger refinement when attempts remain
+- Final validation failure occurs only if validation handlers exist
+
+---
+
+## 4. Error Handling and Observability
+
+### 4.1 Error Management
+
+- Stage failures are normalized and logged with context
+- Validation errors trigger refinement instead of immediate failure
+- Non-validation stage failures abort the pipeline immediately
+- All errors include stage name, timing, and normalized error information
+
+### 4.2 Logging and Metrics
+
+- Comprehensive logging captures stage execution, timing, and reasons for skips
+- LLM metrics are collected with task and stage annotations
+- Status files provide real-time pipeline state updates
+- Console output is captured per stage for debugging
+
+---
+
+## 5. Architectural Strengths
+
+1. **Type Safety**: Structured `{ output, flags }` contracts with validation
+2. **Flexibility**: Optional stages with clean skip behavior
+3. **Observability**: Comprehensive logging and metrics collection
+4. **Robustness**: Proper error handling and refinement cycles
+5. **Isolation**: Cloned contexts prevent unintended mutations
+6. **Extensibility**: Clear flag schema system for new stages
+
+---
+
+## 6. Design Decisions and Rationale
+
+### 6.1 Single Pipeline Loop
+
+The unified pipeline loop eliminates complexity while maintaining:
+
+- Deterministic stage execution order
+- Clean skip behavior for missing handlers
+- Consistent error handling and logging
+- Proper resource management and cleanup
+
+### 6.2 Flag-Based Control Flow
+
+Using structured flags instead of ad-hoc context mutations provides:
+
+- Type safety and validation
+- Clear documentation of stage dependencies
+- Predictable behavior across different task implementations
+- Easier testing and debugging
+
+### 6.3 Optional Stage Design
+
+Making all stages optional supports:
+
+- Gradual adoption of new pipeline features
+- Task-specific pipeline customization
+- Backward compatibility with existing tasks
+- Simplified testing scenarios
+
+---
+
+## 7. Conclusion
+
+The modern task runner architecture provides a robust, type-safe, and flexible foundation for pipeline execution. The unified approach eliminates complexity while maintaining powerful features like refinement cycles, comprehensive validation, and detailed observability. The design supports both simple and complex use cases through its optional stage model and extensible flag system.

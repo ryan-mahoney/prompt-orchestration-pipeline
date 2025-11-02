@@ -12,12 +12,20 @@ export async function ingestion(context) {
         outputFormat: context.seed.data.outputFormat,
         metadata: synthesis?.metadata,
       },
+      flags: {},
     };
 
-    console.log("[Formatting:ingestion] ✓ Successfully ingested data:", {
-      hasContent: !!result.output.content,
-      outputFormat: result.output.outputFormat,
-    });
+    console.log(
+      "[Formatting:ingestion] ✓ Successfully ingested data:",
+      JSON.stringify(
+        {
+          hasContent: !!result.output.content,
+          outputFormat: result.output.outputFormat,
+        },
+        null,
+        2
+      )
+    );
 
     return result;
   } catch (error) {
@@ -55,14 +63,19 @@ export async function preProcessing(context) {
         formatSpec:
           formatSpecs[outputFormat] || formatSpecs["executive-summary"],
       },
+      flags: {},
     };
 
     console.log(
       "[Formatting:preProcessing] ✓ Format specifications determined:",
-      {
-        outputFormat,
-        hasFormatSpec: !!result.output.formatSpec,
-      }
+      JSON.stringify(
+        {
+          outputFormat,
+          hasFormatSpec: !!result.output.formatSpec,
+        },
+        null,
+        2
+      )
     );
 
     return result;
@@ -93,8 +106,9 @@ ${content}
 FORMAT SPECIFICATIONS:
 ${JSON.stringify(formatSpec, null, 2)}
 
-Provide the formatted output with proper structure, headings, and styling.`,
+Provide formatted output with proper structure, headings, and styling.`,
       },
+      flags: {},
     };
 
     console.log("[Formatting:promptTemplating] ✓ Prompt template created");
@@ -111,19 +125,19 @@ Provide the formatted output with proper structure, headings, and styling.`,
 export async function inference(context) {
   console.log("[Formatting:inference] Starting LLM inference");
   try {
-    const { system, prompt } = context.output;
-    const model = context.taskConfig?.model || "gpt-5-nano";
-
-    console.log("[Formatting:inference] Using model:", model);
+    const pt = context.data?.promptTemplating;
+    if (!pt?.system || !pt?.prompt) {
+      throw new Error(
+        "promptTemplating output missing required fields: system/prompt"
+      );
+    }
+    const { system, prompt } = pt;
 
     const response = await context.llm.deepseek.chat({
       messages: [
         { role: "system", content: system },
         { role: "user", content: prompt },
       ],
-      model,
-      temperature: context.taskConfig?.temperature || 0.3,
-      max_tokens: context.taskConfig?.maxTokens || 2000,
     });
 
     const result = {
@@ -135,13 +149,21 @@ export async function inference(context) {
           tokens: response.usage?.total_tokens,
         },
       },
+      flags: {},
     };
 
-    console.log("[Formatting:inference] ✓ Inference completed:", {
-      model: result.output.metadata.model,
-      tokens: result.output.metadata.tokens,
-      contentLength: response.content.length,
-    });
+    console.log(
+      "[Formatting:inference] ✓ Inference completed:",
+      JSON.stringify(
+        {
+          model: result.output.metadata.model,
+          tokens: result.output.metadata.tokens,
+          contentLength: response.content.length,
+        },
+        null,
+        2
+      )
+    );
 
     return result;
   } catch (error) {
@@ -153,36 +175,54 @@ export async function inference(context) {
   }
 }
 
-export async function finalValidation(context) {
-  console.log("[Formatting:finalValidation] Validating formatted content");
+export async function validateStructure(context) {
+  console.log("[Formatting:validateStructure] Validating formatted content");
   try {
     const { formattedContent, formatSpec } = context.output;
+    let validationFailed = false;
+    let lastValidationError = undefined;
+    let missingSections = [];
 
     if (formatSpec.sections) {
-      const missingSections = formatSpec.sections.filter(
+      missingSections = formatSpec.sections.filter(
         (section) => !formattedContent.includes(section)
       );
 
       if (missingSections.length > 0) {
         console.error(
-          "[Formatting:finalValidation] ✗ Validation failed: Missing sections:",
-          missingSections
+          "[Formatting:validateStructure] ✗ Validation failed: Missing sections:",
+          JSON.stringify(missingSections, null, 2)
         );
-        context.validationFailed = true;
-        context.lastValidationError = `Missing sections: ${missingSections.join(", ")}`;
+        validationFailed = true;
+        lastValidationError = `Missing sections: ${missingSections.join(", ")}`;
       } else {
         console.log(
-          "[Formatting:finalValidation] ✓ Validation passed: All required sections present"
+          "[Formatting:validateStructure] ✓ Validation passed: All required sections present"
         );
       }
     } else {
       console.log(
-        "[Formatting:finalValidation] ✓ No section validation required"
+        "[Formatting:validateStructure] ✓ No section validation required"
       );
     }
+
+    return {
+      output: {
+        validationResult: {
+          contentLength: formattedContent?.length || 0,
+          passed: !validationFailed,
+          missingSections,
+          validatedAt: new Date().toISOString(),
+        },
+      },
+      flags: {
+        validationFailed,
+        lastValidationError,
+      },
+    };
   } catch (error) {
     console.error(
-      "[Formatting:finalValidation] ✗ Error during validation:",
+      "[Formatting:validateStructure] ✗ Error during validation:",
       error.message
     );
     throw error;
@@ -207,12 +247,20 @@ export async function integration(context) {
           timestamp: new Date().toISOString(),
         },
       },
+      flags: {},
     };
 
-    console.log("[Formatting:integration] ✓ Integration completed:", {
-      wordCount: result.output.finalOutput.metadata.wordCount,
-      characterCount: result.output.finalOutput.metadata.characterCount,
-    });
+    console.log(
+      "[Formatting:integration] ✓ Integration completed:",
+      JSON.stringify(
+        {
+          wordCount: result.output.finalOutput.metadata.wordCount,
+          characterCount: result.output.finalOutput.metadata.characterCount,
+        },
+        null,
+        2
+      )
+    );
 
     return result;
   } catch (error) {

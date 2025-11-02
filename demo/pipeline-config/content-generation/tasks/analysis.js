@@ -22,6 +22,7 @@ Provide:
 3. Opportunities and challenges
 4. Recommendations`,
       },
+      flags: {},
     };
 
     console.log("[Analysis:promptTemplating] ✓ Prompt template created");
@@ -38,7 +39,13 @@ Provide:
 export async function inference(context) {
   console.log("[Analysis:inference] Starting LLM inference");
   try {
-    const { system, prompt } = context.output;
+    const pt = context.data?.promptTemplating;
+    if (!pt?.system || !pt?.prompt) {
+      throw new Error(
+        "promptTemplating output missing required fields: system/prompt"
+      );
+    }
+    const { system, prompt } = pt;
 
     const response = await context.llm.deepseek.chat({
       messages: [
@@ -56,13 +63,21 @@ export async function inference(context) {
           tokens: response.usage?.total_tokens,
         },
       },
+      flags: {},
     };
 
-    console.log("[Analysis:inference] ✓ Inference completed:", {
-      model: result.output.metadata.model,
-      tokens: result.output.metadata.tokens,
-      contentLength: response.content.length,
-    });
+    console.log(
+      "[Analysis:inference] ✓ Inference completed:",
+      JSON.stringify(
+        {
+          model: result.output.metadata.model,
+          tokens: result.output.metadata.tokens,
+          contentLength: response.content.length,
+        },
+        null,
+        2
+      )
+    );
 
     return result;
   } catch (error) {
@@ -93,7 +108,7 @@ export async function validateStructure(context) {
       );
       console.error(
         "[Analysis:validateStructure] ✗ Validation failed: Missing sections:",
-        missingSections
+        JSON.stringify(missingSections, null, 2)
       );
       validationFailed = true;
       lastValidationError = `Analysis missing required sections: ${missingSections.join(", ")}`;
@@ -162,7 +177,9 @@ Model: ${metadata.model}
 Tokens: ${metadata.tokens}
 
 Content Preview:
-${analysisContent.substring(0, 500)}${analysisContent.length > 500 ? "..." : ""}`
+${analysisContent.substring(0, 500)}${
+          analysisContent.length > 500 ? "..." : ""
+        }`
       );
 
       // Log integration completion
@@ -184,6 +201,7 @@ ${analysisContent.substring(0, 500)}${analysisContent.length > 500 ? "..." : ""}
           timestamp: new Date().toISOString(),
         },
       },
+      flags: {},
     };
 
     console.log("[Analysis:integration] ✓ Integration completed");
