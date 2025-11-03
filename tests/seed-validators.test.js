@@ -147,21 +147,38 @@ describe("Seed Validation Utilities", () => {
       expect(validateNameFormat("test-123_job")).toBe("test-123_job");
     });
 
-    it("should throw error with 'required' for names with spaces", () => {
-      expect(() => validateNameFormat("test job")).toThrow(
-        "name must contain only alphanumeric characters, hyphens, and underscores"
+    it("should accept names with spaces", () => {
+      expect(validateNameFormat("test job")).toBe("test job");
+    });
+
+    it("should accept names with common punctuation", () => {
+      expect(validateNameFormat("Market Analysis: Renewable Energy")).toBe(
+        "Market Analysis: Renewable Energy"
       );
     });
 
-    it("should throw error with 'required' for names with special characters", () => {
-      expect(() => validateNameFormat("test@job")).toThrow(
-        "name must contain only alphanumeric characters, hyphens, and underscores"
+    it("should trim whitespace", () => {
+      expect(validateNameFormat("  trimmed job  ")).toBe("trimmed job");
+    });
+
+    it("should throw error for empty name", () => {
+      expect(() => validateNameFormat("")).toThrow("name field is required");
+    });
+
+    it("should throw error for whitespace-only name", () => {
+      expect(() => validateNameFormat("   ")).toThrow("name field is required");
+    });
+
+    it("should throw error for name exceeding 120 characters", () => {
+      const longName = "a".repeat(121);
+      expect(() => validateNameFormat(longName)).toThrow(
+        "name must be 120 characters or less"
       );
     });
 
-    it("should throw error with 'required' for names with dots", () => {
-      expect(() => validateNameFormat("test.job")).toThrow(
-        "name must contain only alphanumeric characters, hyphens, and underscores"
+    it("should throw error for control characters", () => {
+      expect(() => validateNameFormat("test\x00job")).toThrow(
+        "name must contain only printable characters"
       );
     });
   });
@@ -261,15 +278,16 @@ describe("Seed Validation Utilities", () => {
       );
     });
 
-    it("should throw 'required' for invalid name format", async () => {
-      const invalidName = JSON.stringify({
-        name: "test job",
+    it("should accept name with spaces in full validation", async () => {
+      const validName = JSON.stringify({
+        name: "Market Analysis about Renewable Energy Storage",
         data: { key: "value" },
         pipeline: "content",
       });
 
-      await expect(validateSeed(invalidName, tempDir)).rejects.toThrow(
-        "name must contain only alphanumeric characters, hyphens, and underscores"
+      const result = await validateSeed(validName, tempDir);
+      expect(result.name).toBe(
+        "Market Analysis about Renewable Energy Storage"
       );
     });
 

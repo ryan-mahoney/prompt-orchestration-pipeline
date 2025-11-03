@@ -4,6 +4,9 @@
   "description": "A Prompt-orchestration pipeline (POP) is a framework for building, running, and experimenting with complex chains of LLM tasks.",
   "type": "module",
   "main": "src/ui/server.js",
+  "bin": {
+    "pipeline-orchestrator": "src/cli/index.js"
+  },
   "files": [
     "src",
     "README.md",
@@ -19,12 +22,10 @@
   "scripts": {
     "test": "vitest run --config ./vite.config.js --root .",
     "lint": "eslint . --ext .js,.jsx",
-    "check:paths": "bash scripts/check-name-based-paths.sh",
     "backend": "NODE_ENV=development nodemon src/ui/server.js",
-    "ui": "nodemon src/ui/server.js",
+    "ui": "NODE_ENV=development nodemon src/ui/server.js",
     "ui:dev": "vite",
     "ui:build": "vite build",
-    "ui:preview": "vite preview",
     "ui:prod": "node src/ui/server.js",
     "demo:ui": "NODE_ENV=production PO_ROOT=demo node src/ui/server.js",
     "demo:orchestrator": "PO_ROOT=demo NODE_ENV=production node -e \"import('./src/core/orchestrator.js').then(m => m.startOrchestrator({ dataDir: process.env.PO_ROOT || 'demo' })).catch(err => { console.error(err); process.exit(1) })\"",
@@ -40,6 +41,7 @@
     "ajv": "^8.17.1",
     "chokidar": "^3.5.3",
     "clsx": "^2.1.1",
+    "commander": "^14.0.2",
     "dotenv": "^17.2.3",
     "lucide-react": "^0.544.0",
     "openai": "^5.23.1",

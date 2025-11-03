@@ -58,13 +58,21 @@ function validateRequiredFields(seedObject) {
  * @throws {Error} With message containing "required" if format is invalid
  */
 function validateNameFormat(name) {
-  const nameRegex = /^[a-zA-Z0-9_-]+$/;
-  if (!nameRegex.test(name)) {
-    throw new Error(
-      "name must contain only alphanumeric characters, hyphens, and underscores"
-    );
+  // Allow display-friendly names: required non-empty string, trim, length cap
+  if (!name || typeof name !== "string" || name.trim() === "") {
+    throw new Error("name field is required");
   }
-  return name;
+  const trimmed = name.trim();
+  if (trimmed.length > 120) {
+    throw new Error("name must be 120 characters or less");
+  }
+  // Allow spaces and common punctuation for better UX
+  // Still disallow control characters and path traversal patterns
+  const dangerousPattern = /[\x00-\x1f\x7f-\x9f]/;
+  if (dangerousPattern.test(trimmed)) {
+    throw new Error("name must contain only printable characters");
+  }
+  return trimmed;
 }
 
 /**
