@@ -27,7 +27,7 @@ describe("CLI", () => {
   });
 
   describe("CLI Command Logic", () => {
-    it("should handle init command file operations", async () => {
+    it("should create exact directory tree and registry.json on init", async () => {
       // Arrange
       const mockFs = {
         mkdir: vi.fn().mockResolvedValue(),
@@ -36,49 +36,170 @@ describe("CLI", () => {
 
       vi.doMock("node:fs/promises", () => mockFs);
 
-      // Act - Test the init command logic directly
-      const initHandler = async () => {
-        const template = {
-          pipeline: {
-            name: "my-pipeline",
-            version: "1.0.0",
-            tasks: ["example-task"],
-          },
-          tasks: {
-            "example-task": {
-              ingestion: `export async function ingestion(context) { return { data: "example" }; }`,
-              inference: `export async function inference(context) { return { output: context.data }; }`,
-            },
-          },
-        };
-        await mockFs.mkdir("pipeline-config/tasks/example-task", {
+      // Act - Test the new init command logic directly
+      const initHandler = async (globalOptions = {}) => {
+        const root =
+          globalOptions.root || path.resolve(process.cwd(), "pipelines");
+
+        // Create directories
+        await mockFs.mkdir(path.join(root, "pipeline-config"), {
           recursive: true,
         });
+        await mockFs.mkdir(path.join(root, "pipeline-data", "pending"), {
+          recursive: true,
+        });
+        await mockFs.mkdir(path.join(root, "pipeline-data", "current"), {
+          recursive: true,
+        });
+        await mockFs.mkdir(path.join(root, "pipeline-data", "complete"), {
+          recursive: true,
+        });
+        await mockFs.mkdir(path.join(root, "pipeline-data", "rejected"), {
+          recursive: true,
+        });
+
+        // Create .gitkeep files
         await mockFs.writeFile(
-          "pipeline-config/pipeline.json",
-          JSON.stringify(template.pipeline, null, 2)
+          path.join(root, "pipeline-data", "pending", ".gitkeep"),
+          ""
         );
         await mockFs.writeFile(
-          "pipeline-config/tasks/index.js",
-          `export default {\n  'example-task': './example-task/index.js'\n};`
+          path.join(root, "pipeline-data", "current", ".gitkeep"),
+          ""
         );
         await mockFs.writeFile(
-          "pipeline-config/tasks/example-task/index.js",
-          `${template.tasks["example-task"].ingestion}\n\n${template.tasks["example-task"].inference}\n`
+          path.join(root, "pipeline-data", "complete", ".gitkeep"),
+          ""
         );
-        console.log("Pipeline configuration initialized");
+        await mockFs.writeFile(
+          path.join(root, "pipeline-data", "rejected", ".gitkeep"),
+          ""
+        );
+
+        // Write registry.json with exact required content
+        const registryContent = { pipelines: {} };
+        await mockFs.writeFile(
+          path.join(root, "pipeline-config", "registry.json"),
+          JSON.stringify(registryContent, null, 2) + "\n"
+        );
+
+        console.log(`Pipeline configuration initialized at ${root}`);
       };
 
       await initHandler();
 
-      // Assert
+      // Assert - Check directory creation
       expect(mockFs.mkdir).toHaveBeenCalledWith(
-        "pipeline-config/tasks/example-task",
+        expect.stringMatching(/pipeline-config$/),
         { recursive: true }
       );
-      expect(mockFs.writeFile).toHaveBeenCalled();
+      expect(mockFs.mkdir).toHaveBeenCalledWith(
+        expect.stringMatching(/pipeline-data\/pending$/),
+        { recursive: true }
+      );
+      expect(mockFs.mkdir).toHaveBeenCalledWith(
+        expect.stringMatching(/pipeline-data\/current$/),
+        { recursive: true }
+      );
+      expect(mockFs.mkdir).toHaveBeenCalledWith(
+        expect.stringMatching(/pipeline-data\/complete$/),
+        { recursive: true }
+      );
+      expect(mockFs.mkdir).toHaveBeenCalledWith(
+        expect.stringMatching(/pipeline-data\/rejected$/),
+        { recursive: true }
+      );
+
+      // Assert - Check .gitkeep files
+      expect(mockFs.writeFile).toHaveBeenCalledWith(
+        expect.stringMatching(/pipeline-data\/pending\/\.gitkeep$/),
+        ""
+      );
+      expect(mockFs.writeFile).toHaveBeenCalledWith(
+        expect.stringMatching(/pipeline-data\/current\/\.gitkeep$/),
+        ""
+      );
+      expect(mockFs.writeFile).toHaveBeenCalledWith(
+        expect.stringMatching(/pipeline-data\/complete\/\.gitkeep$/),
+        ""
+      );
+      expect(mockFs.writeFile).toHaveBeenCalledWith(
+        expect.stringMatching(/pipeline-data\/rejected\/\.gitkeep$/),
+        ""
+      );
+
+      // Assert - Check registry.json content
+      expect(mockFs.writeFile).toHaveBeenCalledWith(
+        expect.stringMatching(/pipeline-config\/registry\.json$/),
+        '{\n  "pipelines": {}\n}\n'
+      );
+
       expect(console.log).toHaveBeenCalledWith(
-        "Pipeline configuration initialized"
+        expect.stringMatching(/Pipeline configuration initialized at/)
+      );
+    });
+
+    it("should use custom root when provided", async () => {
+      // Arrange
+      const mockFs = {
+        mkdir: vi.fn().mockResolvedValue(),
+        writeFile: vi.fn().mockResolvedValue(),
+      };
+
+      vi.doMock("node:fs/promises", () => mockFs);
+
+      // Act
+      const initHandler = async (globalOptions = {}) => {
+        const root =
+          globalOptions.root || path.resolve(process.cwd(), "pipelines");
+        await mockFs.mkdir(path.join(root, "pipeline-config"), {
+          recursive: true,
+        });
+        await mockFs.mkdir(path.join(root, "pipeline-data", "pending"), {
+          recursive: true,
+        });
+        await mockFs.mkdir(path.join(root, "pipeline-data", "current"), {
+          recursive: true,
+        });
+        await mockFs.mkdir(path.join(root, "pipeline-data", "complete"), {
+          recursive: true,
+        });
+        await mockFs.mkdir(path.join(root, "pipeline-data", "rejected"), {
+          recursive: true,
+        });
+        await mockFs.writeFile(
+          path.join(root, "pipeline-data", "pending", ".gitkeep"),
+          ""
+        );
+        await mockFs.writeFile(
+          path.join(root, "pipeline-data", "current", ".gitkeep"),
+          ""
+        );
+        await mockFs.writeFile(
+          path.join(root, "pipeline-data", "complete", ".gitkeep"),
+          ""
+        );
+        await mockFs.writeFile(
+          path.join(root, "pipeline-data", "rejected", ".gitkeep"),
+          ""
+        );
+        const registryContent = { pipelines: {} };
+        await mockFs.writeFile(
+          path.join(root, "pipeline-config", "registry.json"),
+          JSON.stringify(registryContent, null, 2) + "\n"
+        );
+        console.log(`Pipeline configuration initialized at ${root}`);
+      };
+
+      await initHandler({ root: "/custom/path" });
+
+      // Assert
+      expect(mockFs.mkdir).toHaveBeenCalledWith(
+        "/custom/path/pipeline-config",
+        { recursive: true }
+      );
+      expect(console.log).toHaveBeenCalledWith(
+        "Pipeline configuration initialized at /custom/path"
       );
     });
 
@@ -240,7 +361,7 @@ describe("CLI", () => {
   });
 
   describe("Error Handling", () => {
-    it("should handle file system errors in init command", async () => {
+    it("should handle file system errors in new init command", async () => {
       // Arrange
       const mockFs = {
         mkdir: vi.fn().mockRejectedValue(new Error("Permission denied")),
@@ -250,36 +371,46 @@ describe("CLI", () => {
       vi.doMock("node:fs/promises", () => mockFs);
 
       // Act & Assert
-      const initHandler = async () => {
-        const template = {
-          pipeline: {
-            name: "my-pipeline",
-            version: "1.0.0",
-            tasks: ["example-task"],
-          },
-          tasks: {
-            "example-task": {
-              ingestion: `export async function ingestion(context) { return { data: "example" }; }`,
-              inference: `export async function inference(context) { return { output: context.data }; }`,
-            },
-          },
-        };
-        await mockFs.mkdir("pipeline-config/tasks/example-task", {
+      const initHandler = async (globalOptions = {}) => {
+        const root =
+          globalOptions.root || path.resolve(process.cwd(), "pipelines");
+        await mockFs.mkdir(path.join(root, "pipeline-config"), {
+          recursive: true,
+        });
+        await mockFs.mkdir(path.join(root, "pipeline-data", "pending"), {
+          recursive: true,
+        });
+        await mockFs.mkdir(path.join(root, "pipeline-data", "current"), {
+          recursive: true,
+        });
+        await mockFs.mkdir(path.join(root, "pipeline-data", "complete"), {
+          recursive: true,
+        });
+        await mockFs.mkdir(path.join(root, "pipeline-data", "rejected"), {
           recursive: true,
         });
         await mockFs.writeFile(
-          "pipeline-config/pipeline.json",
-          JSON.stringify(template.pipeline, null, 2)
+          path.join(root, "pipeline-data", "pending", ".gitkeep"),
+          ""
         );
         await mockFs.writeFile(
-          "pipeline-config/tasks/index.js",
-          `export default {\n  'example-task': './example-task/index.js'\n};`
+          path.join(root, "pipeline-data", "current", ".gitkeep"),
+          ""
         );
         await mockFs.writeFile(
-          "pipeline-config/tasks/example-task/index.js",
-          `${template.tasks["example-task"].ingestion}\n\n${template.tasks["example-task"].inference}\n`
+          path.join(root, "pipeline-data", "complete", ".gitkeep"),
+          ""
         );
-        console.log("Pipeline configuration initialized");
+        await mockFs.writeFile(
+          path.join(root, "pipeline-data", "rejected", ".gitkeep"),
+          ""
+        );
+        const registryContent = { pipelines: {} };
+        await mockFs.writeFile(
+          path.join(root, "pipeline-config", "registry.json"),
+          JSON.stringify(registryContent, null, 2) + "\n"
+        );
+        console.log(`Pipeline configuration initialized at ${root}`);
       };
 
       await expect(initHandler()).rejects.toThrow("Permission denied");

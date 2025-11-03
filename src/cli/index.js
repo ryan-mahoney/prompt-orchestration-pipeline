@@ -6,6 +6,21 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { spawn } from "node:child_process";
 
+// Canonical stage names that must match src/core/task-runner.js
+const STAGE_NAMES = [
+  "ingestion",
+  "preProcessing",
+  "promptTemplating",
+  "inference",
+  "parsing",
+  "validateStructure",
+  "validateQuality",
+  "critique",
+  "refine",
+  "finalValidation",
+  "integration",
+];
+
 const program = new Command();
 
 program
@@ -19,35 +34,50 @@ program
   .command("init")
   .description("Initialize pipeline configuration")
   .action(async () => {
-    const template = {
-      pipeline: {
-        name: "my-pipeline",
-        version: "1.0.0",
-        tasks: ["example-task"],
-      },
-      tasks: {
-        "example-task": {
-          ingestion:
-            'export async function ingestion(context) { return { data: "example" }; }',
-          inference:
-            "export async function inference(context) { return { output: context.data }; }",
-        },
-      },
-    };
-    await fs.mkdir("pipeline-config/tasks/example-task", { recursive: true });
+    const globalOptions = program.opts();
+    const root = globalOptions.root || path.resolve(process.cwd(), "pipelines");
+
+    // Create directories
+    await fs.mkdir(path.join(root, "pipeline-config"), { recursive: true });
+    await fs.mkdir(path.join(root, "pipeline-data", "pending"), {
+      recursive: true,
+    });
+    await fs.mkdir(path.join(root, "pipeline-data", "current"), {
+      recursive: true,
+    });
+    await fs.mkdir(path.join(root, "pipeline-data", "complete"), {
+      recursive: true,
+    });
+    await fs.mkdir(path.join(root, "pipeline-data", "rejected"), {
+      recursive: true,
+    });
+
+    // Create .gitkeep files
     await fs.writeFile(
-      "pipeline-config/pipeline.json",
-      JSON.stringify(template.pipeline, null, 2)
+      path.join(root, "pipeline-data", "pending", ".gitkeep"),
+      ""
     );
     await fs.writeFile(
-      "pipeline-config/tasks/index.js",
-      `export default {\n  'example-task': './example-task/index.js'\n};`
+      path.join(root, "pipeline-data", "current", ".gitkeep"),
+      ""
     );
     await fs.writeFile(
-      "pipeline-config/tasks/example-task/index.js",
-      `${template.tasks["example-task"].ingestion}\n\n${template.tasks["example-task"].inference}\n`
+      path.join(root, "pipeline-data", "complete", ".gitkeep"),
+      ""
     );
-    console.log("Pipeline configuration initialized");
+    await fs.writeFile(
+      path.join(root, "pipeline-data", "rejected", ".gitkeep"),
+      ""
+    );
+
+    // Write registry.json with exact required content
+    const registryContent = { pipelines: {} };
+    await fs.writeFile(
+      path.join(root, "pipeline-config", "registry.json"),
+      JSON.stringify(registryContent, null, 2) + "\n"
+    );
+
+    console.log(`Pipeline configuration initialized at ${root}`);
   });
 
 program
