@@ -167,6 +167,7 @@ program
           NODE_ENV: "production",
           PO_ROOT: absoluteRoot,
           PORT: port,
+          PO_UI_PORT: undefined, // Ensure PORT takes precedence
         },
       });
 
