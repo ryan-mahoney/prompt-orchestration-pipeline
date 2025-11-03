@@ -1,104 +1,65 @@
 // Formatting Task - Format final output according to specifications
 
-export async function ingestion(context) {
-  console.log("[Formatting:ingestion] Starting data ingestion");
-  try {
-    const { artifacts } = context;
-    const synthesis = artifacts?.synthesis?.synthesis;
+export const ingestion = ({
+  data: {
+    seed: { data: seed },
+  },
+  flags,
+}) => {
+  const content = seed.synthesis?.content;
+  const outputFormat = seed.outputFormat;
+  const metadata = seed.synthesis?.metadata;
 
-    const result = {
-      output: {
-        content: synthesis?.content,
-        outputFormat: context.seed.data.outputFormat,
-        metadata: synthesis?.metadata,
-      },
-      flags: {},
-    };
-
-    console.log(
-      "[Formatting:ingestion] ✓ Successfully ingested data:",
-      JSON.stringify(
-        {
-          hasContent: !!result.output.content,
-          outputFormat: result.output.outputFormat,
-        },
-        null,
-        2
-      )
-    );
-
-    return result;
-  } catch (error) {
-    console.error(
-      "[Formatting:ingestion] ✗ Error during ingestion:",
-      error.message
-    );
-    throw error;
+  if (!content) {
+    throw new Error("Synthesis content not found in seed");
   }
-}
 
-export async function preProcessing(context) {
-  console.log("[Formatting:preProcessing] Determining format specifications");
-  try {
-    const { outputFormat } = context.output;
+  return {
+    output: { content, outputFormat, metadata },
+    flags,
+  };
+};
 
-    const formatSpecs = {
-      "executive-summary": {
-        sections: ["Executive Summary", "Key Findings", "Recommendations"],
-        style: "professional, concise",
-      },
-      "blog-post": {
-        sections: ["Introduction", "Main Content", "Conclusion"],
-        style: "engaging, accessible",
-      },
-      "structured-json": {
-        format: "JSON",
-        style: "machine-readable",
-      },
-    };
+export const preProcessing = ({
+  data: {
+    ingestion: { outputFormat },
+  },
+  flags,
+}) => {
+  const formatSpecs = {
+    "executive-summary": {
+      sections: ["Executive Summary", "Key Findings", "Recommendations"],
+      style: "professional, concise",
+    },
+    "blog-post": {
+      sections: ["Introduction", "Main Content", "Conclusion"],
+      style: "engaging, accessible",
+    },
+    "structured-json": {
+      format: "JSON",
+      style: "machine-readable",
+    },
+  };
 
-    const result = {
-      output: {
-        ...context.output,
-        formatSpec:
-          formatSpecs[outputFormat] || formatSpecs["executive-summary"],
-      },
-      flags: {},
-    };
+  const formatSpec =
+    formatSpecs[outputFormat] || formatSpecs["executive-summary"];
 
-    console.log(
-      "[Formatting:preProcessing] ✓ Format specifications determined:",
-      JSON.stringify(
-        {
-          outputFormat,
-          hasFormatSpec: !!result.output.formatSpec,
-        },
-        null,
-        2
-      )
-    );
+  return {
+    output: { outputFormat, formatSpec },
+    flags,
+  };
+};
 
-    return result;
-  } catch (error) {
-    console.error(
-      "[Formatting:preProcessing] ✗ Error during preprocessing:",
-      error.message
-    );
-    throw error;
-  }
-}
-
-export async function promptTemplating(context) {
-  console.log("[Formatting:promptTemplating] Building prompt template");
-  try {
-    const { content, formatSpec } = context.output;
-
-    const result = {
-      output: {
-        ...context.output,
-        system:
-          "You are a professional editor skilled at formatting content for different audiences and purposes.",
-        prompt: `Format the following content according to these specifications:
+export const promptTemplating = ({
+  data: {
+    ingestion: { content },
+    preProcessing: { formatSpec },
+  },
+  flags,
+}) => {
+  const system =
+    "You are a professional editor skilled at formatting content for different audiences and purposes.";
+  const prompt = `Format the following content according to these specifications:
 
 CONTENT:
 ${content}
@@ -106,81 +67,60 @@ ${content}
 FORMAT SPECIFICATIONS:
 ${JSON.stringify(formatSpec, null, 2)}
 
-Provide formatted output with proper structure, headings, and styling.`,
+Provide formatted output with proper structure, headings, and styling.`;
+
+  return {
+    output: { system, prompt },
+    flags,
+  };
+};
+
+export const inference = async ({
+  io,
+  llm: { deepseek },
+  data: {
+    promptTemplating: { system, prompt },
+  },
+  flags,
+}) => {
+  const response = await deepseek.chat({
+    messages: [
+      { role: "system", content: system },
+      { role: "user", content: prompt },
+    ],
+  });
+
+  const content =
+    typeof response.content === "string"
+      ? response.content
+      : JSON.stringify(response.content);
+
+  await io.writeArtifact("formatted-output.json", content);
+
+  return {
+    output: {
+      metadata: {
+        model: response.model,
+        tokens: response.usage?.total_tokens,
       },
-      flags: {},
-    };
+    },
+    flags,
+  };
+};
 
-    console.log("[Formatting:promptTemplating] ✓ Prompt template created");
-    return result;
-  } catch (error) {
-    console.error(
-      "[Formatting:promptTemplating] ✗ Error creating prompt:",
-      error.message
-    );
-    throw error;
-  }
-}
+export const finalValidation = async ({
+  io,
+  data: {
+    preProcessing: { formatSpec },
+  },
+  flags,
+}) => {
+  const raw = await io.readArtifact("formatted-output.json");
+  let validationFailed = false;
+  let validationResult = {};
 
-export async function inference(context) {
-  console.log("[Formatting:inference] Starting LLM inference");
   try {
-    const pt = context.data?.promptTemplating;
-    if (!pt?.system || !pt?.prompt) {
-      throw new Error(
-        "promptTemplating output missing required fields: system/prompt"
-      );
-    }
-    const { system, prompt } = pt;
-
-    const response = await context.llm.deepseek.chat({
-      messages: [
-        { role: "system", content: system },
-        { role: "user", content: prompt },
-      ],
-    });
-
-    const result = {
-      output: {
-        ...context.output,
-        formattedContent: response.content,
-        metadata: {
-          model: response.model,
-          tokens: response.usage?.total_tokens,
-        },
-      },
-      flags: {},
-    };
-
-    console.log(
-      "[Formatting:inference] ✓ Inference completed:",
-      JSON.stringify(
-        {
-          model: result.output.metadata.model,
-          tokens: result.output.metadata.tokens,
-          contentLength: response.content.length,
-        },
-        null,
-        2
-      )
-    );
-
-    return result;
-  } catch (error) {
-    console.error(
-      "[Formatting:inference] ✗ Error during inference:",
-      error.message
-    );
-    throw error;
-  }
-}
-
-export async function finalValidation(context) {
-  console.log("[Formatting:finalValidation] Validating formatted content");
-  try {
-    const { formattedContent, formatSpec } = context.output;
-    let validationFailed = false;
-    let lastValidationError = undefined;
+    const formattedContent = raw;
     let missingSections = [];
 
     if (formatSpec.sections) {
@@ -189,85 +129,80 @@ export async function finalValidation(context) {
       );
 
       if (missingSections.length > 0) {
-        console.error(
-          "[Formatting:finalValidation] ✗ Validation failed: Missing sections:",
-          JSON.stringify(missingSections, null, 2)
+        console.warn(
+          "[finalValidation] ⚠ Missing sections:",
+          missingSections.join(", ")
         );
         validationFailed = true;
-        lastValidationError = `Missing sections: ${missingSections.join(", ")}`;
+        validationResult = {
+          contentLength: formattedContent?.length || 0,
+          passed: false,
+          missingSections,
+          error: `Missing sections: ${missingSections.join(", ")}`,
+        };
       } else {
-        console.log(
-          "[Formatting:finalValidation] ✓ Validation passed: All required sections present"
-        );
+        validationResult = {
+          contentLength: formattedContent.length,
+          passed: true,
+          missingSections: [],
+        };
       }
     } else {
-      console.log(
-        "[Formatting:finalValidation] ✓ No section validation required"
-      );
+      validationResult = {
+        contentLength: formattedContent.length,
+        passed: true,
+        missingSections: [],
+      };
     }
-
-    return {
-      output: {
-        validationResult: {
-          contentLength: formattedContent?.length || 0,
-          passed: !validationFailed,
-          missingSections,
-          validatedAt: new Date().toISOString(),
-        },
-      },
-      flags: {
-        validationFailed,
-        lastValidationError,
-      },
+  } catch (err) {
+    console.warn("[finalValidation] ⚠ Validation failed:", err.message);
+    validationFailed = true;
+    validationResult = {
+      contentLength: 0,
+      passed: false,
+      missingSections: [],
+      error: err.message,
     };
-  } catch (error) {
-    console.error(
-      "[Formatting:finalValidation] ✗ Error during validation:",
-      error.message
-    );
-    throw error;
   }
-}
 
-export async function integration(context) {
-  console.log("[Formatting:integration] Integrating final output");
-  try {
-    const { formattedContent, metadata, formatSpec } = context.output;
-
-    const result = {
-      output: {
-        finalOutput: {
-          content: formattedContent,
-          format: formatSpec,
-          metadata: {
-            ...metadata,
-            wordCount: formattedContent.split(/\s+/).length,
-            characterCount: formattedContent.length,
-          },
-          timestamp: new Date().toISOString(),
-        },
+  return {
+    output: {
+      validationResult: {
+        ...validationResult,
+        validatedAt: new Date().toISOString(),
       },
-      flags: {},
-    };
+    },
+    flags: { ...flags, validationFailed },
+  };
+};
 
-    console.log(
-      "[Formatting:integration] ✓ Integration completed:",
-      JSON.stringify(
-        {
-          wordCount: result.output.finalOutput.metadata.wordCount,
-          characterCount: result.output.finalOutput.metadata.characterCount,
+export const integration = async ({
+  io,
+  data: {
+    ingestion: { metadata },
+    preProcessing: { formatSpec },
+    finalValidation: { validationResult },
+    inference: { metadata: inferenceMetadata },
+  },
+  flags,
+}) => {
+  const formattedContent = await io.readArtifact("formatted-output.json");
+
+  return {
+    output: {
+      finalOutput: {
+        content: formattedContent,
+        format: formatSpec,
+        metadata: {
+          ...metadata,
+          ...inferenceMetadata,
+          wordCount: formattedContent.split(/\s+/).length,
+          characterCount: formattedContent.length,
         },
-        null,
-        2
-      )
-    );
-
-    return result;
-  } catch (error) {
-    console.error(
-      "[Formatting:integration] ✗ Error during integration:",
-      error.message
-    );
-    throw error;
-  }
-}
+        validationResult,
+        timestamp: new Date().toISOString(),
+      },
+    },
+    flags,
+  };
+};
