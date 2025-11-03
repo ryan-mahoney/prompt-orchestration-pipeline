@@ -176,16 +176,16 @@ describe("Status Transformer", () => {
       expect(result.progress).toBe(33); // 1/3 done
     });
 
-    it("should prioritize error status", () => {
+    it("should prioritize failed status", () => {
       const tasks = {
         "task-1": { state: "done" },
-        "task-2": { state: "error" },
+        "task-2": { state: "failed" },
         "task-3": { state: "running" },
       };
 
       const result = computeJobStatus(tasks);
 
-      expect(result.status).toBe("error");
+      expect(result.status).toBe("failed");
       expect(result.progress).toBe(33);
     });
 

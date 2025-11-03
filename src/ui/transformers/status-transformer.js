@@ -1,13 +1,7 @@
 import { normalizeTaskFiles } from "../../utils/task-files.js";
 import { derivePipelineMetadata } from "../../utils/pipelines.js";
 
-const VALID_TASK_STATES = new Set([
-  "pending",
-  "running",
-  "done",
-  "failed",
-  "error",
-]);
+const VALID_TASK_STATES = new Set(["pending", "running", "done", "failed"]);
 
 /**
  * Calculate progress percentage from task states.
@@ -35,7 +29,6 @@ export function determineJobStatus(tasks = {}) {
   const states = names.map((n) => tasks[n]?.state);
 
   if (states.includes("failed")) return "failed";
-  if (states.includes("error")) return "error";
   if (states.includes("running")) return "running";
   if (states.every((s) => s === "done")) return "complete";
   return "pending";
