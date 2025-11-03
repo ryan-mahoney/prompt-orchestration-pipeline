@@ -23,7 +23,10 @@ async function checkFileExistence(filePath) {
 
 function resolveRepoRoot(config) {
   const configuredRoot = config?.paths?.root;
-  return configuredRoot ? path.resolve(configuredRoot) : process.cwd();
+  if (!configuredRoot) {
+    throw new Error("PO_ROOT is required");
+  }
+  return path.resolve(configuredRoot);
 }
 
 function resolveWithBase(rootDir, maybePath) {
@@ -222,18 +225,13 @@ export const defaultConfig = {
     maxRecentChanges: 10,
   },
   paths: {
-    root: process.env.PO_ROOT || process.cwd(),
+    root: undefined,
     dataDir: "pipeline-data",
     pendingDir: "pending",
     currentDir: "current",
     completeDir: "complete",
   },
-  pipelines: {
-    content: {
-      configDir: "pipeline-config/content",
-      tasksDir: "pipeline-config/content/tasks",
-    },
-  },
+  pipelines: {},
   validation: {
     seedNameMinLength: 1,
     seedNameMaxLength: 100,
@@ -470,33 +468,43 @@ export async function loadConfig(options = {}) {
   // Override with environment variables
   config = loadFromEnvironment(config);
 
+  // Validate that PO_ROOT is set
+  if (!config.paths.root) {
+    throw new Error("PO_ROOT is required");
+  }
+
   // Hydrate pipeline registry if present
   await hydratePipelinesFromRegistry(config);
 
+  // Validate pipelines presence after hydration
+  if (!config.pipelines || Object.keys(config.pipelines).length === 0) {
+    const repoRoot = resolveRepoRoot(config);
+    throw new Error(
+      `No pipelines are registered. Create pipeline-config/registry.json in ${repoRoot} to register pipelines.`
+    );
+  }
+
   // Normalize pipeline paths and validate existence
-  if (config.pipelines) {
-    const repoRoot = process.cwd(); // Use current working directory as repo root
+  const repoRoot = resolveRepoRoot(config);
+  for (const slug in config.pipelines) {
+    const pipeline = config.pipelines[slug];
 
-    for (const slug in config.pipelines) {
-      const pipeline = config.pipelines[slug];
+    // Resolve to absolute paths
+    pipeline.configDir = path.resolve(repoRoot, pipeline.configDir);
+    pipeline.tasksDir = path.resolve(repoRoot, pipeline.tasksDir);
 
-      // Resolve to absolute paths
-      pipeline.configDir = path.resolve(repoRoot, pipeline.configDir);
-      pipeline.tasksDir = path.resolve(repoRoot, pipeline.tasksDir);
+    // Validate directory existence
+    if (!(await checkFileExistence(pipeline.configDir))) {
+      throw new Error(pipeline.configDir + " does not exist");
+    }
+    if (!(await checkFileExistence(pipeline.tasksDir))) {
+      throw new Error(pipeline.tasksDir + " does not exist");
+    }
 
-      // Validate directory existence
-      if (!(await checkFileExistence(pipeline.configDir))) {
-        throw new Error(pipeline.configDir + " does not exist");
-      }
-      if (!(await checkFileExistence(pipeline.tasksDir))) {
-        throw new Error(pipeline.tasksDir + " does not exist");
-      }
-
-      // Validate pipeline.json exists
-      const pipelineJsonPath = path.join(pipeline.configDir, "pipeline.json");
-      if (!(await checkFileExistence(pipelineJsonPath))) {
-        throw new Error(pipelineJsonPath + " does not exist");
-      }
+    // Validate pipeline.json exists
+    const pipelineJsonPath = path.join(pipeline.configDir, "pipeline.json");
+    if (!(await checkFileExistence(pipelineJsonPath))) {
+      throw new Error(pipelineJsonPath + " does not exist");
     }
   }
 
@@ -523,7 +531,24 @@ export function getConfig() {
     currentConfig = loadFromEnvironment(
       JSON.parse(JSON.stringify(defaultConfig))
     );
+
+    // Validate that PO_ROOT is set
+    if (!currentConfig.paths.root) {
+      throw new Error("PO_ROOT is required");
+    }
+
     hydratePipelinesFromRegistrySync(currentConfig);
+
+    // Validate pipelines presence after hydration
+    if (
+      !currentConfig.pipelines ||
+      Object.keys(currentConfig.pipelines).length === 0
+    ) {
+      const repoRoot = resolveRepoRoot(currentConfig);
+      throw new Error(
+        `No pipelines are registered. Create pipeline-config/registry.json in ${repoRoot} to register pipelines.`
+      );
+    }
   }
   return currentConfig;
 }
