@@ -4,8 +4,13 @@ import { submitJobWithValidation } from "../api/index.js";
 import { PipelineOrchestrator } from "../api/index.js";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
 import { updatePipelineJson } from "./update-pipeline-json.js";
+
+// Derive package root for resolving internal paths regardless of host CWD
+const currentFile = fileURLToPath(import.meta.url);
+const PKG_ROOT = path.dirname(path.dirname(path.dirname(currentFile)));
 
 // Canonical stage names that must match src/core/task-runner.js
 const STAGE_NAMES = [
@@ -140,46 +145,28 @@ program
     });
 
     try {
-      // Step d: Build UI once if dist/ doesn't exist
-      const distPath = path.join(process.cwd(), "dist");
+      // Step d: Check for prebuilt UI assets
+      const distPath = path.join(PKG_ROOT, "src/ui/dist");
       try {
         await fs.access(distPath);
         console.log("UI build found, skipping build step");
       } catch {
-        console.log("Building UI...");
-        await new Promise((resolve, reject) => {
-          const vitePath = path.resolve(
-            process.cwd(),
-            "node_modules/vite/bin/vite.js"
-          );
-          const buildChild = spawn("node", [vitePath, "build"], {
-            stdio: "inherit",
-            env: { ...process.env, NODE_ENV: "development" },
-          });
-
-          buildChild.on("exit", (code) => {
-            if (code === 0) {
-              console.log("UI build completed");
-              resolve();
-            } else {
-              reject(new Error(`UI build failed with code ${code}`));
-            }
-          });
-
-          buildChild.on("error", reject);
-        });
+        console.error(
+          "UI assets missing. This indicates a source checkout. Run 'npm run ui:build' locally or install dev deps."
+        );
+        process.exit(1);
       }
 
       // Step e: Spawn UI server
       console.log("Starting UI server...");
-      const uiServerPath = path.resolve(process.cwd(), "src/ui/server.js");
+      const uiServerPath = path.join(PKG_ROOT, "src/ui/server.js");
       uiChild = spawn("node", [uiServerPath], {
         stdio: "pipe",
         env: {
           ...process.env,
           NODE_ENV: "production",
           PO_ROOT: absoluteRoot,
-          PO_UI_PORT: port,
+          PORT: port,
         },
       });
 
@@ -194,8 +181,8 @@ program
 
       // Step f: Spawn orchestrator
       console.log("Starting orchestrator...");
-      const orchestratorPath = path.resolve(
-        process.cwd(),
+      const orchestratorPath = path.join(
+        PKG_ROOT,
         "src/cli/run-orchestrator.js"
       );
       orchestratorChild = spawn("node", [orchestratorPath], {
