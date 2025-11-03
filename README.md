@@ -581,6 +581,78 @@ grep -i error pipeline-data/current/{jobId}/files/logs/stage-*.log
 
 ---
 
+## Scaffolding
+
+Use the CLI commands to quickly scaffold a new pipeline structure. These examples show the minimal commands and resulting directory trees.
+
+### Initialize pipeline structure
+
+```bash
+pipeline-orchestrator init --root ./pipelines
+```
+
+**Resulting directory tree:**
+
+```
+pipelines/
+├── pipeline-config/
+│   └── registry.json
+└── pipeline-data/
+    ├── pending/.gitkeep
+    ├── current/.gitkeep
+    ├── complete/.gitkeep
+    └── rejected/.gitkeep
+```
+
+### Add a pipeline
+
+```bash
+pipeline-orchestrator add-pipeline content-generation --root ./pipelines
+```
+
+**Resulting directory tree:**
+
+```
+pipelines/
+├── pipeline-config/
+│   ├── registry.json
+│   └── content-generation/
+│       ├── pipeline.json
+│       └── tasks/
+│           └── index.js
+└── pipeline-data/
+    ├── pending/.gitkeep
+    ├── current/.gitkeep
+    ├── complete/.gitkeep
+    └── rejected/.gitkeep
+```
+
+### Add a pipeline task
+
+```bash
+pipeline-orchestrator add-pipeline-task content-generation research --root ./pipelines
+```
+
+**Resulting directory tree:**
+
+```
+pipelines/
+├── pipeline-config/
+│   ├── registry.json
+│   └── content-generation/
+│       ├── pipeline.json
+│       └── tasks/
+│           ├── index.js
+│           └── research.js
+└── pipeline-data/
+    ├── pending/.gitkeep
+    ├── current/.gitkeep
+    ├── complete/.gitkeep
+    └── rejected/.gitkeep
+```
+
+---
+
 ## Getting started (TL;DR)
 
 ```bash

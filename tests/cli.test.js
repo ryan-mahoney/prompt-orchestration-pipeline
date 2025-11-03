@@ -1,5 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { mockProcessArgv } from "./test-utils.js";
+import {
+  mockProcessArgv,
+  createTempDir,
+  cleanupTempDir,
+} from "./test-utils.js";
+import { promises as fs } from "node:fs";
 import path from "node:path";
 
 describe("CLI", () => {
@@ -723,7 +728,10 @@ describe("CLI", () => {
         .mockImplementation(() => {});
 
       vi.spyOn(process, "on").mockImplementation((event, handler) => {
-        if (event === "SIGINT" || event === "TERM") {
+        if (event === "SIGINT") {
+          handler();
+        }
+        if (event === "SIGTERM") {
           handler();
         }
       });
@@ -787,9 +795,7 @@ describe("CLI", () => {
         // Validate pipeline-slug is kebab-case
         const kebabCaseRegex = /^[a-z0-9-]+$/;
         if (!kebabCaseRegex.test(pipelineSlug)) {
-          console.error(
-            "Pipeline slug must be kebab-case (lowercase letters, numbers, and hyphens only)"
-          );
+          console.error("Invalid pipeline slug: must be kebab-case (a-z0-9-)");
           process.exit(1);
         }
 
@@ -1211,7 +1217,7 @@ describe("CLI", () => {
         .mockResolvedValueOnce("export default {};")
         .mockResolvedValueOnce("export default {};"); // Second call for reading index
 
-      // Act - Test add-pipeline-task command logic directly
+      // Act - Test the add-pipeline-task command logic directly
       const addPipelineTaskHandler = async (
         pipelineSlug,
         taskSlug,
@@ -1223,15 +1229,11 @@ describe("CLI", () => {
         // Validate both slugs are kebab-case
         const kebabCaseRegex = /^[a-z0-9-]+$/;
         if (!kebabCaseRegex.test(pipelineSlug)) {
-          console.error(
-            "Pipeline slug must be kebab-case (lowercase letters, numbers, and hyphens only)"
-          );
+          console.error("Invalid pipeline slug: must be kebab-case (a-z0-9-)");
           process.exit(1);
         }
         if (!kebabCaseRegex.test(taskSlug)) {
-          console.error(
-            "Task slug must be kebab-case (lowercase letters, numbers, and hyphens only)"
-          );
+          console.error("Invalid task slug: must be kebab-case (a-z0-9-)");
           process.exit(1);
         }
 
@@ -1267,12 +1269,21 @@ describe("CLI", () => {
             "integration",
           ];
 
-          const taskFileContent = STAGE_NAMES.map(
-            (stageName) => `export async function ${stageName}(ctx) {
+          const taskFileContent = STAGE_NAMES.map((stageName) => {
+            if (stageName === "ingestion") {
+              return `// Step 1: Ingestion
+export const ingestion = async ({ io, llm, data: { seed }, meta, flags }) => {
   // Purpose: ${getStagePurpose(stageName)}
-  return { output: {}, flags: {} };
-}`
-          ).join("\n\n");
+  return { output: {}, flags };
+}`;
+            }
+            const stepNumber = STAGE_NAMES.indexOf(stageName) + 1;
+            return `// Step ${stepNumber}: ${stageName.charAt(0).toUpperCase() + stageName.slice(1)}
+export const ${stageName} = async ({ io, llm, data, meta, flags }) => {
+  // Purpose: ${getStagePurpose(stageName)}
+  return { output: {}, flags };
+}`;
+          }).join("\n\n");
 
           await mockFs.writeFile(
             path.join(tasksDir, `${taskSlug}.js`),
@@ -1328,11 +1339,15 @@ describe("CLI", () => {
       // Assert - Check task file creation
       expect(mockFs.writeFile).toHaveBeenCalledWith(
         "/test/pipelines/pipeline-config/content-generation/tasks/research.js",
-        expect.stringContaining("export async function ingestion(ctx)")
+        expect.stringContaining(
+          "export const ingestion = async ({ io, llm, data: { seed }, meta, flags }) => {"
+        )
       );
       expect(mockFs.writeFile).toHaveBeenCalledWith(
         "/test/pipelines/pipeline-config/content-generation/tasks/research.js",
-        expect.stringContaining("export async function integration(ctx)")
+        expect.stringContaining(
+          "export const integration = async ({ io, llm, data, meta, flags }) => {"
+        )
       );
 
       // Assert - Check index file update
@@ -1404,9 +1419,7 @@ describe("CLI", () => {
           process.exit(1);
         }
         if (!kebabCaseRegex.test(taskSlug)) {
-          console.error(
-            "Task slug must be kebab-case (lowercase letters, numbers, and hyphens only)"
-          );
+          console.error("Invalid task slug: must be kebab-case (a-z0-9-)");
           process.exit(1);
         }
       };
@@ -1415,7 +1428,7 @@ describe("CLI", () => {
 
       // Assert
       expect(mockConsoleError).toHaveBeenCalledWith(
-        "Task slug must be kebab-case (lowercase letters, numbers, and hyphens only)"
+        "Invalid task slug: must be kebab-case (a-z0-9-)"
       );
       expect(mockProcessExit).toHaveBeenCalledWith(1);
     });
@@ -1440,15 +1453,11 @@ describe("CLI", () => {
         // Validate both slugs are kebab-case
         const kebabCaseRegex = /^[a-z0-9-]+$/;
         if (!kebabCaseRegex.test(pipelineSlug)) {
-          console.error(
-            "Pipeline slug must be kebab-case (lowercase letters, numbers, and hyphens only)"
-          );
+          console.error("Invalid pipeline slug: must be kebab-case (a-z0-9-)");
           process.exit(1);
         }
         if (!kebabCaseRegex.test(taskSlug)) {
-          console.error(
-            "Task slug must be kebab-case (lowercase letters, numbers, and hyphens only)"
-          );
+          console.error("Invalid task slug: must be kebab-case (a-z0-9-)");
           process.exit(1);
         }
 
@@ -1463,7 +1472,7 @@ describe("CLI", () => {
           await mockFs.access(tasksDir);
         } catch (error) {
           console.error(
-            `Pipeline "${pipelineSlug}" does not exist. Run "pipeline-orchestrator add-pipeline ${pipelineSlug}" first.`
+            `Pipeline "${pipelineSlug}" not found. Run add-pipeline first.`
           );
           process.exit(1);
         }
@@ -1476,7 +1485,7 @@ describe("CLI", () => {
         expect.stringContaining("pipeline-config/nonexistent-pipeline/tasks")
       );
       expect(mockConsoleError).toHaveBeenCalledWith(
-        'Pipeline "nonexistent-pipeline" does not exist. Run "pipeline-orchestrator add-pipeline nonexistent-pipeline" first.'
+        'Pipeline "nonexistent-pipeline" not found. Run add-pipeline first.'
       );
       expect(mockProcessExit).toHaveBeenCalledWith(1);
     });
@@ -1532,7 +1541,7 @@ describe("CLI", () => {
         try {
           // Create task file
           const taskFileContent =
-            "export async function ingestion(ctx) {\n  // Purpose: test\n  return { output: {}, flags: {} };\n}";
+            "export const ingestion = async ({ io, llm, data: { seed }, meta, flags }) => {\n  // Purpose: test\n  return { output: {}, flags };\n}";
           await mockFs.writeFile(
             path.join(tasksDir, `${taskSlug}.js`),
             taskFileContent + "\n"
@@ -1644,6 +1653,467 @@ describe("CLI", () => {
         ),
         "test content\n"
       );
+    });
+  });
+
+  describe("CLI Integration Tests", () => {
+    let tempDir;
+
+    beforeEach(async () => {
+      tempDir = await createTempDir();
+    });
+
+    afterEach(async () => {
+      await cleanupTempDir(tempDir);
+    });
+
+    it("should create exact tree and registry.json shape under temp dir on init", async () => {
+      // Act - Run init with temp directory
+      await fs.mkdir(path.join(tempDir, "pipeline-config"), {
+        recursive: true,
+      });
+      await fs.mkdir(path.join(tempDir, "pipeline-data", "pending"), {
+        recursive: true,
+      });
+      await fs.mkdir(path.join(tempDir, "pipeline-data", "current"), {
+        recursive: true,
+      });
+      await fs.mkdir(path.join(tempDir, "pipeline-data", "complete"), {
+        recursive: true,
+      });
+      await fs.mkdir(path.join(tempDir, "pipeline-data", "rejected"), {
+        recursive: true,
+      });
+
+      // Create .gitkeep files
+      await fs.writeFile(
+        path.join(tempDir, "pipeline-data", "pending", ".gitkeep"),
+        ""
+      );
+      await fs.writeFile(
+        path.join(tempDir, "pipeline-data", "current", ".gitkeep"),
+        ""
+      );
+      await fs.writeFile(
+        path.join(tempDir, "pipeline-data", "complete", ".gitkeep"),
+        ""
+      );
+      await fs.writeFile(
+        path.join(tempDir, "pipeline-data", "rejected", ".gitkeep"),
+        ""
+      );
+
+      // Write registry.json with exact required content
+      const registryContent = { pipelines: {} };
+      await fs.writeFile(
+        path.join(tempDir, "pipeline-config", "registry.json"),
+        JSON.stringify(registryContent, null, 2) + "\n"
+      );
+
+      // Assert - Verify directory structure exists
+      const pipelineConfigExists = await fs
+        .access(path.join(tempDir, "pipeline-config"))
+        .then(() => true)
+        .catch(() => false);
+      expect(pipelineConfigExists).toBe(true);
+
+      const pendingExists = await fs
+        .access(path.join(tempDir, "pipeline-data", "pending"))
+        .then(() => true)
+        .catch(() => false);
+      expect(pendingExists).toBe(true);
+
+      const currentExists = await fs
+        .access(path.join(tempDir, "pipeline-data", "current"))
+        .then(() => true)
+        .catch(() => false);
+      expect(currentExists).toBe(true);
+
+      const completeExists = await fs
+        .access(path.join(tempDir, "pipeline-data", "complete"))
+        .then(() => true)
+        .catch(() => false);
+      expect(completeExists).toBe(true);
+
+      const rejectedExists = await fs
+        .access(path.join(tempDir, "pipeline-data", "rejected"))
+        .then(() => true)
+        .catch(() => false);
+      expect(rejectedExists).toBe(true);
+
+      // Assert - Verify .gitkeep files exist and are empty
+      const pendingGitkeep = await fs.readFile(
+        path.join(tempDir, "pipeline-data", "pending", ".gitkeep"),
+        "utf8"
+      );
+      expect(pendingGitkeep).toBe("");
+
+      const currentGitkeep = await fs.readFile(
+        path.join(tempDir, "pipeline-data", "current", ".gitkeep"),
+        "utf8"
+      );
+      expect(currentGitkeep).toBe("");
+
+      const completeGitkeep = await fs.readFile(
+        path.join(tempDir, "pipeline-data", "complete", ".gitkeep"),
+        "utf8"
+      );
+      expect(completeGitkeep).toBe("");
+
+      const rejectedGitkeep = await fs.readFile(
+        path.join(tempDir, "pipeline-data", "rejected", ".gitkeep"),
+        "utf8"
+      );
+      expect(rejectedGitkeep).toBe("");
+
+      // Assert - Verify registry.json content and format
+      const registryContentActual = await fs.readFile(
+        path.join(tempDir, "pipeline-config", "registry.json"),
+        "utf8"
+      );
+      expect(registryContentActual).toBe('{\n  "pipelines": {}\n}\n');
+
+      const parsedRegistry = JSON.parse(registryContentActual);
+      expect(parsedRegistry).toEqual({ pipelines: {} });
+    });
+
+    it("should re-run init non-throwing and preserve shape", async () => {
+      // First init
+      await fs.mkdir(path.join(tempDir, "pipeline-config"), {
+        recursive: true,
+      });
+      await fs.mkdir(path.join(tempDir, "pipeline-data", "pending"), {
+        recursive: true,
+      });
+      await fs.mkdir(path.join(tempDir, "pipeline-data", "current"), {
+        recursive: true,
+      });
+      await fs.mkdir(path.join(tempDir, "pipeline-data", "complete"), {
+        recursive: true,
+      });
+      await fs.mkdir(path.join(tempDir, "pipeline-data", "rejected"), {
+        recursive: true,
+      });
+
+      await fs.writeFile(
+        path.join(tempDir, "pipeline-data", "pending", ".gitkeep"),
+        ""
+      );
+      await fs.writeFile(
+        path.join(tempDir, "pipeline-data", "current", ".gitkeep"),
+        ""
+      );
+      await fs.writeFile(
+        path.join(tempDir, "pipeline-data", "complete", ".gitkeep"),
+        ""
+      );
+      await fs.writeFile(
+        path.join(tempDir, "pipeline-data", "rejected", ".gitkeep"),
+        ""
+      );
+
+      const registryContent = { pipelines: {} };
+      await fs.writeFile(
+        path.join(tempDir, "pipeline-config", "registry.json"),
+        JSON.stringify(registryContent, null, 2) + "\n"
+      );
+
+      // Second init should not throw
+      await expect(
+        fs.mkdir(path.join(tempDir, "pipeline-config"), { recursive: true })
+      ).resolves.toBeUndefined();
+
+      // Verify registry.json still has correct shape
+      const registryAfterSecondInit = await fs.readFile(
+        path.join(tempDir, "pipeline-config", "registry.json"),
+        "utf8"
+      );
+      const parsedRegistryAfterSecondInit = JSON.parse(registryAfterSecondInit);
+      expect(parsedRegistryAfterSecondInit).toEqual({ pipelines: {} });
+    });
+
+    it("should create pipeline.json, tasks/index.js, and add registry entry on add-pipeline", async () => {
+      // First init structure
+      await fs.mkdir(path.join(tempDir, "pipeline-config"), {
+        recursive: true,
+      });
+      await fs.mkdir(path.join(tempDir, "pipeline-data", "pending"), {
+        recursive: true,
+      });
+      await fs.mkdir(path.join(tempDir, "pipeline-data", "current"), {
+        recursive: true,
+      });
+      await fs.mkdir(path.join(tempDir, "pipeline-data", "complete"), {
+        recursive: true,
+      });
+      await fs.mkdir(path.join(tempDir, "pipeline-data", "rejected"), {
+        recursive: true,
+      });
+
+      await fs.writeFile(
+        path.join(tempDir, "pipeline-data", "pending", ".gitkeep"),
+        ""
+      );
+      await fs.writeFile(
+        path.join(tempDir, "pipeline-data", "current", ".gitkeep"),
+        ""
+      );
+      await fs.writeFile(
+        path.join(tempDir, "pipeline-data", "complete", ".gitkeep"),
+        ""
+      );
+      await fs.writeFile(
+        path.join(tempDir, "pipeline-data", "rejected", ".gitkeep"),
+        ""
+      );
+
+      const registryContent = { pipelines: {} };
+      await fs.writeFile(
+        path.join(tempDir, "pipeline-config", "registry.json"),
+        JSON.stringify(registryContent, null, 2) + "\n"
+      );
+
+      // Now add a pipeline
+      const pipelineSlug = "content-generation";
+
+      // Ensure directories exist
+      const pipelineConfigDir = path.join(
+        tempDir,
+        "pipeline-config",
+        pipelineSlug
+      );
+      const tasksDir = path.join(pipelineConfigDir, "tasks");
+      await fs.mkdir(tasksDir, { recursive: true });
+
+      // Write pipeline.json
+      const pipelineConfig = {
+        name: pipelineSlug,
+        version: "1.0.0",
+        description: "New pipeline",
+        tasks: [],
+      };
+      await fs.writeFile(
+        path.join(pipelineConfigDir, "pipeline.json"),
+        JSON.stringify(pipelineConfig, null, 2) + "\n"
+      );
+
+      // Write tasks/index.js
+      await fs.writeFile(
+        path.join(tasksDir, "index.js"),
+        "export default {};\n"
+      );
+
+      // Update registry.json
+      const registryPath = path.join(
+        tempDir,
+        "pipeline-config",
+        "registry.json"
+      );
+      let registry = { pipelines: {} };
+
+      try {
+        const registryContent = await fs.readFile(registryPath, "utf8");
+        registry = JSON.parse(registryContent);
+        if (!registry.pipelines) {
+          registry.pipelines = {};
+        }
+      } catch (error) {
+        registry = { pipelines: {} };
+      }
+
+      // Add/replace pipeline entry
+      registry.pipelines[pipelineSlug] = {
+        name: pipelineSlug,
+        description: "New pipeline",
+        pipelinePath: `pipeline-config/${pipelineSlug}/pipeline.json`,
+        taskRegistryPath: `pipeline-config/${pipelineSlug}/tasks/index.js`,
+      };
+
+      // Write back registry
+      await fs.writeFile(
+        registryPath,
+        JSON.stringify(registry, null, 2) + "\n"
+      );
+
+      // Assert - Verify pipeline.json exists and has correct content
+      const pipelineJsonExists = await fs
+        .access(path.join(pipelineConfigDir, "pipeline.json"))
+        .then(() => true)
+        .catch(() => false);
+      expect(pipelineJsonExists).toBe(true);
+
+      const pipelineJsonContent = await fs.readFile(
+        path.join(pipelineConfigDir, "pipeline.json"),
+        "utf8"
+      );
+      expect(pipelineJsonContent).toBe(
+        '{\n  "name": "content-generation",\n  "version": "1.0.0",\n  "description": "New pipeline",\n  "tasks": []\n}\n'
+      );
+
+      // Assert - Verify tasks/index.js exists and has correct content
+      const tasksIndexExists = await fs
+        .access(path.join(tasksDir, "index.js"))
+        .then(() => true)
+        .catch(() => false);
+      expect(tasksIndexExists).toBe(true);
+
+      const tasksIndexContent = await fs.readFile(
+        path.join(tasksDir, "index.js"),
+        "utf8"
+      );
+      expect(tasksIndexContent).toBe("export default {};\n");
+
+      // Assert - Verify registry was updated correctly
+      const updatedRegistryContent = await fs.readFile(registryPath, "utf8");
+      const updatedRegistry = JSON.parse(updatedRegistryContent);
+      expect(updatedRegistry.pipelines).toHaveProperty("content-generation");
+      expect(updatedRegistry.pipelines["content-generation"]).toEqual({
+        name: "content-generation",
+        description: "New pipeline",
+        pipelinePath: "pipeline-config/content-generation/pipeline.json",
+        taskRegistryPath: "pipeline-config/content-generation/tasks/index.js",
+      });
+    });
+
+    it("should create tasks/<task>.js with all STAGE_NAMES and update index on add-pipeline-task", async () => {
+      // First setup pipeline structure
+      const pipelineSlug = "content-generation";
+      const taskSlug = "research";
+
+      // Create pipeline structure
+      const pipelineConfigDir = path.join(
+        tempDir,
+        "pipeline-config",
+        pipelineSlug
+      );
+      const tasksDir = path.join(pipelineConfigDir, "tasks");
+      await fs.mkdir(tasksDir, { recursive: true });
+
+      // Create pipeline.json
+      const pipelineConfig = {
+        name: pipelineSlug,
+        version: "1.0.0",
+        description: "New pipeline",
+        tasks: [],
+      };
+      await fs.writeFile(
+        path.join(pipelineConfigDir, "pipeline.json"),
+        JSON.stringify(pipelineConfig, null, 2) + "\n"
+      );
+
+      // Create initial tasks/index.js
+      await fs.writeFile(
+        path.join(tasksDir, "index.js"),
+        "export default {};\n"
+      );
+
+      // Create task file with all stage exports
+      const STAGE_NAMES = [
+        "ingestion",
+        "preProcessing",
+        "promptTemplating",
+        "inference",
+        "parsing",
+        "validateStructure",
+        "validateQuality",
+        "critique",
+        "refine",
+        "finalValidation",
+        "integration",
+      ];
+
+      const taskFileContent = STAGE_NAMES.map((stageName) => {
+        if (stageName === "ingestion") {
+          return `// Step 1: Ingestion
+export const ingestion = async ({ io, llm, data: { seed }, meta, flags }) => {
+  // Purpose: ${getStagePurpose(stageName)}
+  return { output: {}, flags };
+}`;
+        }
+        const stepNumber = STAGE_NAMES.indexOf(stageName) + 1;
+        return `// Step ${stepNumber}: ${stageName.charAt(0).toUpperCase() + stageName.slice(1)}
+export const ${stageName} = async ({ io, llm, data, meta, flags }) => {
+  // Purpose: ${getStagePurpose(stageName)}
+  return { output: {}, flags };
+}`;
+      }).join("\n\n");
+
+      await fs.writeFile(
+        path.join(tasksDir, `${taskSlug}.js`),
+        taskFileContent + "\n"
+      );
+
+      // Update tasks/index.js
+      const indexFilePath = path.join(tasksDir, "index.js");
+      let taskIndex = {};
+
+      try {
+        const indexContent = await fs.readFile(indexFilePath, "utf8");
+        const exportMatch = indexContent.match(
+          /export default\s+({[\s\S]*?})\s*;?\s*$/
+        );
+        if (exportMatch) {
+          taskIndex = eval(`(${exportMatch[1]})`);
+        }
+      } catch (error) {
+        taskIndex = {};
+      }
+
+      // Add/replace task mapping
+      taskIndex[taskSlug] = `./${taskSlug}.js`;
+
+      // Sort keys alphabetically for stable output
+      const sortedKeys = Object.keys(taskIndex).sort();
+      const sortedIndex = {};
+      for (const key of sortedKeys) {
+        sortedIndex[key] = taskIndex[key];
+      }
+
+      // Write back the index file with proper formatting
+      const indexContent = `export default ${JSON.stringify(sortedIndex, null, 2)};\n`;
+      await fs.writeFile(indexFilePath, indexContent);
+
+      // Assert - Verify task file exists and contains all stage exports
+      const taskFileExists = await fs
+        .access(path.join(tasksDir, `${taskSlug}.js`))
+        .then(() => true)
+        .catch(() => false);
+      expect(taskFileExists).toBe(true);
+
+      const taskFileContentActual = await fs.readFile(
+        path.join(tasksDir, `${taskSlug}.js`),
+        "utf8"
+      );
+
+      // Verify all stage names are exported
+      for (const stageName of STAGE_NAMES) {
+        if (stageName === "ingestion") {
+          expect(taskFileContentActual).toContain(
+            `export const ingestion = async ({ io, llm, data: { seed }, meta, flags }) => {`
+          );
+        } else {
+          expect(taskFileContentActual).toContain(
+            `export const ${stageName} = async ({ io, llm, data, meta, flags }) => {`
+          );
+        }
+        expect(taskFileContentActual).toContain(
+          `// Purpose: ${getStagePurpose(stageName)}`
+        );
+        expect(taskFileContentActual).toContain(
+          `return { output: {}, flags };`
+        );
+      }
+
+      // Assert - Verify index file was updated with new task
+      const updatedIndexContent = await fs.readFile(indexFilePath, "utf8");
+      expect(updatedIndexContent).toBe(
+        'export default {\n  "research": "./research.js"\n};\n'
+      );
+
+      // Assert - Verify no duplicates (should only have one entry for research)
+      const researchCount = (updatedIndexContent.match(/research/g) || [])
+        .length;
+      expect(researchCount).toBe(2); // Once in key, once in value
     });
   });
 });

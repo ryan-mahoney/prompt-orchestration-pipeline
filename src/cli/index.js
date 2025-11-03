@@ -5,6 +5,7 @@ import { PipelineOrchestrator } from "../api/index.js";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { spawn } from "node:child_process";
+import { updatePipelineJson } from "./update-pipeline-json.js";
 
 // Canonical stage names that must match src/core/task-runner.js
 const STAGE_NAMES = [
@@ -311,9 +312,7 @@ program
     // Validate pipeline-slug is kebab-case
     const kebabCaseRegex = /^[a-z0-9-]+$/;
     if (!kebabCaseRegex.test(pipelineSlug)) {
-      console.error(
-        "Pipeline slug must be kebab-case (lowercase letters, numbers, and hyphens only)"
-      );
+      console.error("Invalid pipeline slug: must be kebab-case (a-z0-9-)");
       process.exit(1);
     }
 
@@ -391,15 +390,11 @@ program
     // Validate both slugs are kebab-case
     const kebabCaseRegex = /^[a-z0-9-]+$/;
     if (!kebabCaseRegex.test(pipelineSlug)) {
-      console.error(
-        "Pipeline slug must be kebab-case (lowercase letters, numbers, and hyphens only)"
-      );
+      console.error("Invalid pipeline slug: must be kebab-case (a-z0-9-)");
       process.exit(1);
     }
     if (!kebabCaseRegex.test(taskSlug)) {
-      console.error(
-        "Task slug must be kebab-case (lowercase letters, numbers, and hyphens only)"
-      );
+      console.error("Invalid task slug: must be kebab-case (a-z0-9-)");
       process.exit(1);
     }
 
@@ -409,19 +404,28 @@ program
       await fs.access(tasksDir);
     } catch (error) {
       console.error(
-        `Pipeline "${pipelineSlug}" does not exist. Run "pipeline-orchestrator add-pipeline ${pipelineSlug}" first.`
+        `Pipeline "${pipelineSlug}" not found. Run add-pipeline first.`
       );
       process.exit(1);
     }
 
     try {
       // Create task file with all stage exports
-      const taskFileContent = STAGE_NAMES.map(
-        (stageName) => `export async function ${stageName}(ctx) {
-  // Purpose: ${getStagePurpose(stageName)}
-  return { output: {}, flags: {} };
-}`
-      ).join("\n\n");
+      const taskFileContent = STAGE_NAMES.map((stageName) => {
+        if (stageName === "ingestion") {
+          return `// Step 1: Ingestion, ${getStagePurpose(stageName)}
+export const ingestion = async ({ io, llm, data: { seed }, meta, flags }) => {
+
+  return { output: {}, flags };
+}`;
+        }
+        const stepNumber = STAGE_NAMES.indexOf(stageName) + 1;
+        return `// Step ${stepNumber}: ${stageName.charAt(0).toUpperCase() + stageName.slice(1)}, ${getStagePurpose(stageName)}
+export const ${stageName} = async ({ io, llm, data, meta, flags }) => {
+
+  return { output: {}, flags };
+}`;
+      }).join("\n\n");
 
       await fs.writeFile(
         path.join(tasksDir, `${taskSlug}.js`),
@@ -460,6 +464,9 @@ program
       // Write back the index file with proper formatting
       const indexContent = `export default ${JSON.stringify(sortedIndex, null, 2)};\n`;
       await fs.writeFile(indexFilePath, indexContent);
+
+      // Update pipeline.json to include the new task
+      await updatePipelineJson(root, pipelineSlug, taskSlug);
 
       console.log(`Task "${taskSlug}" added to pipeline "${pipelineSlug}"`);
     } catch (error) {
