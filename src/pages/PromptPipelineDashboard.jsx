@@ -47,7 +47,7 @@ export default function PromptPipelineDashboard({ isConnected }) {
     const src = Array.isArray(apiJobs) ? apiJobs : [];
 
     // Do not fall back to in-memory demo data. On error, return an empty list so
-    // the UI shows a neutral empty/error state rather than demo jobs.
+    // UI shows a neutral empty/error state rather than demo jobs.
     if (error) {
       return [];
     }
@@ -59,10 +59,10 @@ export default function PromptPipelineDashboard({ isConnected }) {
   const [seedUploadTimer, setSeedUploadTimer] = useState(null);
 
   // Shared ticker for live duration updates
-  const now = useTicker(1000);
+  const now = useTicker(10000);
 
   const errorCount = useMemo(
-    () => jobs.filter((j) => j.status === "error").length,
+    () => jobs.filter((j) => j.status === "failed").length,
     [jobs]
   );
   const currentCount = useMemo(
@@ -79,27 +79,13 @@ export default function PromptPipelineDashboard({ isConnected }) {
       case "current":
         return jobs.filter((j) => j.status === "running");
       case "errors":
-        return jobs.filter((j) => j.status === "error");
+        return jobs.filter((j) => j.status === "failed");
       case "complete":
         return jobs.filter((j) => j.status === "complete");
       default:
         return [];
     }
   }, [jobs, activeTab]);
-
-  const totalProgressPct = (job) => {
-    const total = Array.isArray(job.tasks)
-      ? job.tasks.length
-      : Object.keys(job.tasks || {}).length;
-    if (!total) return 0;
-    const taskList = Array.isArray(job.tasks)
-      ? job.tasks
-      : Object.values(job.tasks || {});
-    const done = taskList.filter(
-      (t) => t.state === "done" || t.state === "completed"
-    ).length;
-    return Math.round((done / total) * 100);
-  };
 
   const overallElapsed = (job) => jobCumulativeDurationMs(job, now);
 
@@ -110,7 +96,7 @@ export default function PromptPipelineDashboard({ isConnected }) {
   );
   const aggregateProgress = useMemo(() => {
     if (runningJobs.length === 0) return 0;
-    const sum = runningJobs.reduce((acc, j) => acc + totalProgressPct(j), 0);
+    const sum = runningJobs.reduce((acc, j) => acc + (j.progress || 0), 0);
     return Math.round(sum / runningJobs.length);
   }, [runningJobs]);
 
@@ -153,7 +139,7 @@ export default function PromptPipelineDashboard({ isConnected }) {
     };
   }, [seedUploadTimer]);
 
-  // Header actions for the Layout
+  // Header actions for Layout
   const headerActions = runningJobs.length > 0 && (
     <Flex align="center" gap="2" className="text-gray-11">
       <Text size="1" weight="medium">
@@ -209,7 +195,6 @@ export default function PromptPipelineDashboard({ isConnected }) {
             jobs={filteredJobs}
             pipeline={null}
             onOpenJob={openJob}
-            totalProgressPct={totalProgressPct}
             overallElapsed={overallElapsed}
             now={now}
           />
@@ -219,7 +204,6 @@ export default function PromptPipelineDashboard({ isConnected }) {
             jobs={filteredJobs}
             pipeline={null}
             onOpenJob={openJob}
-            totalProgressPct={totalProgressPct}
             overallElapsed={overallElapsed}
             now={now}
           />
@@ -229,7 +213,6 @@ export default function PromptPipelineDashboard({ isConnected }) {
             jobs={filteredJobs}
             pipeline={null}
             onOpenJob={openJob}
-            totalProgressPct={totalProgressPct}
             overallElapsed={overallElapsed}
             now={now}
           />

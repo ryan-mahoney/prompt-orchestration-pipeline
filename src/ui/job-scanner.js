@@ -9,7 +9,7 @@
 
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import * as configBridge from "./config-bridge.js";
+import * as configBridge from "./config-bridge.node.js";
 
 /**
  * List job directory names for a given location.
@@ -25,18 +25,15 @@ export async function listJobs(location) {
     return [];
   }
 
-  // Primary: use mocked PATHS (tests spy on this getter). Fallbacks:
-  //  - configBridge.getPATHS() if available
-  //  - environment PO_<LOCATION>_DIR (used by orchestrator/tests)
-  //  - default pipeline-data/<location> under cwd
-  const dirPath =
-    configBridge.PATHS?.[location] ??
-    (typeof configBridge.getPATHS === "function" &&
-      configBridge.getPATHS()[location]) ??
-    process.env[`PO_${location.toUpperCase()}_DIR`] ??
-    path.join(process.cwd(), "pipeline-data", location);
+  // Use dynamic path resolution to avoid caching issues
+  const paths = configBridge.getPATHS();
+  const dirPath = paths[location];
+
+  console.log(`[JobScanner] Resolved paths for ${location}:`, paths);
+  console.log(`[JobScanner] Directory path for ${location}:`, dirPath);
 
   if (!dirPath) {
+    console.log(`[JobScanner] No directory path found for ${location}`);
     return [];
   }
 
@@ -45,6 +42,10 @@ export async function listJobs(location) {
     await fs.access(dirPath);
   } catch (err) {
     // Directory doesn't exist or access denied -> return empty
+    console.log(
+      `[JobScanner] Directory access failed for ${dirPath}:`,
+      err?.message
+    );
     return [];
   }
 
@@ -73,6 +74,7 @@ export async function listJobs(location) {
       jobs.push(name);
     }
 
+    console.log(`[JobScanner] Found ${jobs.length} jobs in ${location}:`, jobs);
     return jobs;
   } catch (err) {
     // Permission errors or other fs errors: log and return empty
@@ -118,12 +120,9 @@ export async function getJobDirectoryStats(location) {
     };
   }
 
-  const dirPath =
-    configBridge.PATHS?.[location] ??
-    (typeof configBridge.getPATHS === "function" &&
-      configBridge.getPATHS()[location]) ??
-    process.env[`PO_${location.toUpperCase()}_DIR`] ??
-    path.join(process.cwd(), "pipeline-data", location);
+  // Use dynamic path resolution to avoid caching issues
+  const paths = configBridge.getPATHS();
+  const dirPath = paths[location];
 
   if (!dirPath) {
     return {

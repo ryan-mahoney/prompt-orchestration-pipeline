@@ -16,6 +16,39 @@ function upperFirst(s) {
     : s;
 }
 
+// Format stage token into human-readable label
+function formatStageLabel(s) {
+  if (typeof s !== "string" || s.length === 0) return s;
+
+  // Replace underscores and hyphens with spaces first
+  let processed = s.replace(/[_-]/g, " ");
+
+  // Add space before capital letters that follow lowercase letters
+  processed = processed.replace(/([a-z])([A-Z])/g, "$1 $2");
+
+  // Split into words and clean up
+  const words = processed.trim().split(/\s+/).filter(Boolean);
+
+  if (words.length === 0) return s;
+
+  // Handle consecutive capitals by treating them as a single word
+  const normalizedWords = words.map((word) => {
+    // If word is all caps or mostly caps, treat it as an acronym
+    if (word.length > 1 && word === word.toUpperCase()) {
+      return word;
+    }
+    return word;
+  });
+
+  // Lower-case all words except first (which gets upperFirst)
+  const [first, ...rest] = normalizedWords;
+  return (
+    upperFirst(first.toLowerCase()) +
+    " " +
+    rest.map((w) => w.toLowerCase()).join(" ")
+  );
+}
+
 function formatStepName(item, idx) {
   const raw = item.title ?? item.id ?? `Step ${idx + 1}`;
   // If item has a title, assume it’s curated and leave unchanged; otherwise capitalize fallback
@@ -32,6 +65,28 @@ function formatStepName(item, idx) {
  * @param {string} props.jobId - Job ID for file operations
  * @param {Function} props.filesByTypeForItem - Selector returning { artifacts, logs, tmp }
  */
+// Instrumentation helper for DAGGrid
+const createDAGGridLogger = (jobId) => {
+  const prefix = `[DAGGrid:${jobId || "unknown"}]`;
+  return {
+    log: (message, data = null) => {
+      console.log(`${prefix} ${message}`, data ? data : "");
+    },
+    warn: (message, data = null) => {
+      console.warn(`${prefix} ${message}`, data ? data : "");
+    },
+    error: (message, data = null) => {
+      console.error(`${prefix} ${message}`, data ? data : "");
+    },
+    group: (label) => console.group(`${prefix} ${label}`),
+    groupEnd: () => console.groupEnd(),
+    table: (data, title) => {
+      console.log(`${prefix} ${title}:`);
+      console.table(data);
+    },
+  };
+};
+
 function DAGGrid({
   items,
   cols = 3,
@@ -40,6 +95,8 @@ function DAGGrid({
   jobId,
   filesByTypeForItem = () => createEmptyTaskFiles(),
 }) {
+  const logger = React.useMemo(() => createDAGGridLogger(jobId), [jobId]);
+
   const overlayRef = useRef(null);
   const gridRef = useRef(null);
   const nodeRefs = useRef([]);
@@ -50,6 +107,19 @@ function DAGGrid({
   const [filePaneOpen, setFilePaneOpen] = useState(false);
   const [filePaneType, setFilePaneType] = useState("artifacts");
   const [filePaneFilename, setFilePaneFilename] = useState(null);
+
+  // Log component props and state changes
+  React.useEffect(() => {
+    logger.group("Component Render");
+    logger.log("Props received:", {
+      itemCount: items?.length,
+      cols,
+      activeIndex,
+      jobId,
+    });
+    logger.log("Items data:", items);
+    logger.groupEnd();
+  }, [items, cols, activeIndex, jobId, logger]);
 
   // Create refs for each node
   nodeRefs.current = useMemo(
@@ -234,12 +304,12 @@ function DAGGrid({
   const getStatus = (index) => {
     const item = items[index];
     const s = item?.status;
-    if (s === "error") return "error";
-    if (s === "succeeded") return "succeeded";
-    if (s === "active") return "active";
+    if (s === "failed") return "failed";
+    if (s === "done") return "done";
+    if (s === "running") return "running";
     if (typeof activeIndex === "number") {
-      if (index < activeIndex) return "succeeded";
-      if (index === activeIndex) return "active";
+      if (index < activeIndex) return "done";
+      if (index === activeIndex) return "running";
       return "pending";
     }
     return "pending";
@@ -248,11 +318,11 @@ function DAGGrid({
   // Get CSS classes for card header based on status
   const getHeaderClasses = (status) => {
     switch (status) {
-      case "succeeded":
+      case "done":
         return "bg-green-50 border-green-200 text-green-700";
-      case "active":
+      case "running":
         return "bg-amber-50 border-amber-200 text-amber-700";
-      case "error":
+      case "failed":
         return "bg-pink-50 border-pink-200 text-pink-700";
       default:
         return "bg-gray-100 border-gray-200 text-gray-700";
@@ -384,15 +454,33 @@ function DAGGrid({
                   {formatStepName(item, idx)}
                 </div>
                 <div className="flex items-center gap-2">
-                  {status === "active" ? (
-                    <div className="relative h-4 w-4" aria-label="Active">
-                      <span className="sr-only">Active</span>
-                      <span className="absolute inset-0 rounded-full border-2 border-amber-200" />
-                      <span className="absolute inset-0 rounded-full border-2 border-transparent border-t-amber-600 animate-spin" />
-                    </div>
+                  {status === "running" ? (
+                    <>
+                      <div className="relative h-4 w-4" aria-label="Running">
+                        <span className="sr-only">Running</span>
+                        <span className="absolute inset-0 rounded-full border-2 border-amber-200" />
+                        <span className="absolute inset-0 rounded-full border-2 border-transparent border-t-amber-600 animate-spin" />
+                      </div>
+                      {item.stage && (
+                        <span
+                          className="text-[11px] font-medium opacity-80 truncate"
+                          title={item.stage}
+                        >
+                          {formatStageLabel(item.stage)}
+                        </span>
+                      )}
+                    </>
                   ) : (
                     <span className="text-[11px] uppercase tracking-wide opacity-80">
                       {status}
+                      {status === "failed" && item.stage && (
+                        <span
+                          className="text-[11px] font-medium opacity-80 truncate ml-2"
+                          title={item.stage}
+                        >
+                          ({formatStageLabel(item.stage)})
+                        </span>
+                      )}
                     </span>
                   )}
                 </div>
@@ -444,7 +532,7 @@ function DAGGrid({
             </div>
             <div className="p-6 space-y-8 overflow-y-auto h-full">
               {/* Error Callout - shown when task has error status and body */}
-              {items[openIdx]?.status === "error" && items[openIdx]?.body && (
+              {items[openIdx]?.status === "failed" && items[openIdx]?.body && (
                 <section aria-label="Error">
                   <Callout.Root role="alert" aria-live="assertive">
                     <Callout.Text className="whitespace-pre-wrap break-words">
@@ -516,20 +604,24 @@ function DAGGrid({
                       );
                     }
 
-                    return filesForTab.map((name) => (
-                      <div
-                        key={`${filePaneType}-${name}`}
-                        className="flex items-center justify-between p-2 rounded border border-gray-200 hover:border-gray-300 hover:bg-gray-50 cursor-pointer transition-colors"
-                        onClick={() => {
-                          setFilePaneFilename(name);
-                          setFilePaneOpen(true);
-                        }}
-                      >
-                        <div className="flex items-center space-x-2">
-                          <span className="text-sm text-gray-700">{name}</span>
+                    return filesForTab.map((name) => {
+                      return (
+                        <div
+                          key={`${filePaneType}-${name}`}
+                          className="flex items-center justify-between p-2 rounded border border-gray-200 hover:border-gray-300 hover:bg-gray-50 cursor-pointer transition-colors"
+                          onClick={() => {
+                            setFilePaneFilename(name);
+                            setFilePaneOpen(true);
+                          }}
+                        >
+                          <div className="flex items-center space-x-2">
+                            <span className="text-sm text-gray-700">
+                              {name}
+                            </span>
+                          </div>
                         </div>
-                      </div>
-                    ));
+                      );
+                    });
                   })()}
                 </div>
               </div>

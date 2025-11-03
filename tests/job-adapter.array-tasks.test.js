@@ -6,7 +6,7 @@ describe("adaptJobDetail - Object Tasks Validation", () => {
     const apiDetail = {
       id: "test-job",
       name: "Test Job",
-      tasks: {
+      tasksStatus: {
         research: { state: "done", startedAt: "2025-10-06T00:00:00Z" },
         analysis: {
           state: "running",
@@ -83,7 +83,7 @@ describe("adaptJobDetail - Object Tasks Validation", () => {
     const apiDetail = {
       id: "test-job",
       name: "Test Job",
-      tasks: {
+      tasksStatus: {
         task1: { state: "invalid_state" },
         task2: { state: "" },
         task3: { state: null },
@@ -110,7 +110,7 @@ describe("adaptJobDetail - Object Tasks Validation", () => {
     const apiDetail = {
       id: "test-job",
       name: "Test Job",
-      tasks: {
+      tasksStatus: {
         "complex-task": {
           state: "done",
           startedAt: "2025-10-06T00:00:00Z",
@@ -142,7 +142,7 @@ describe("adaptJobDetail - Object Tasks Validation", () => {
     const apiDetail = {
       id: "test-job",
       name: "Test Job",
-      tasks: {},
+      tasksStatus: {},
     };
 
     const result = adaptJobDetail(apiDetail);
@@ -172,7 +172,7 @@ describe("adaptJobDetail - Object Tasks Validation", () => {
     const apiDetail = {
       id: "test-job",
       name: "Test Job",
-      tasks: null,
+      tasksStatus: null,
     };
 
     const result = adaptJobDetail(apiDetail);
@@ -187,7 +187,7 @@ describe("adaptJobDetail - Object Tasks Validation", () => {
     const apiDetail = {
       id: "test-job",
       name: "Test Job",
-      tasks: {
+      tasksStatus: {
         task1: { state: "done" },
         task2: { state: "running" },
         task3: { state: "pending" },
@@ -211,7 +211,7 @@ describe("adaptJobDetail - Object Tasks Validation", () => {
     const apiDetail = {
       id: "test-job",
       name: "Test Job",
-      tasks: {
+      tasksStatus: {
         task1: { state: "done" },
         task2: { state: "pending" },
       },

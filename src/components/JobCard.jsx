@@ -14,13 +14,14 @@ export default function JobCard({
   progressPct,
   overallElapsedMs,
 }) {
-  const now = useTicker(1000);
+  const now = useTicker(60000);
   const currentTask = job.current ? job.tasks[job.current] : undefined;
   const currentElapsedMs = currentTask
     ? taskDisplayDurationMs(currentTask, now)
     : 0;
   const totalCompleted = countCompleted(job);
   const hasValidId = Boolean(job.id);
+  const jobTitle = job.title || job.name; // Fallback for backward compatibility
 
   return (
     <Card
@@ -28,8 +29,8 @@ export default function JobCard({
       tabIndex={hasValidId ? 0 : -1}
       aria-label={
         hasValidId
-          ? `Open ${job.name}`
-          : `${job.name} - No valid job ID, cannot open details`
+          ? `Open ${jobTitle}`
+          : `${jobTitle} - No valid job ID, cannot open details`
       }
       onClick={() => hasValidId && onClick()}
       onKeyDown={(e) =>
@@ -49,8 +50,8 @@ export default function JobCard({
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between gap-2">
           <div>
-            <div className="text-xs text-slate-500">{job.id}</div>
-            <CardTitle className="text-lg font-semibold">{job.name}</CardTitle>
+            <div className="text-xs text-slate-500">{job.jobId}</div>
+            <CardTitle className="text-lg font-semibold">{jobTitle}</CardTitle>
           </div>
           <div className="flex items-center gap-2">
             {statusBadge(job.status)}

@@ -65,12 +65,14 @@ export function start(paths, onChange, options = {}) {
     // Always use relative path for consistency with tests
     const normalizedPath = rel;
 
+    console.debug("[Watcher] File added:", normalizedPath);
     pendingChanges.push({ path: normalizedPath, type: "created" });
     scheduleFlush();
 
     // Check for job-specific changes with normalized path
     const jobChange = detectJobChange(normalizedPath);
     if (jobChange) {
+      console.debug("[Watcher] Job change detected:", jobChange);
       sseEnhancer.handleJobChange(jobChange);
     }
   });
@@ -81,12 +83,14 @@ export function start(paths, onChange, options = {}) {
     // Always use relative path for consistency with tests
     const normalizedPath = rel;
 
+    console.debug("[Watcher] File changed:", normalizedPath);
     pendingChanges.push({ path: normalizedPath, type: "modified" });
     scheduleFlush();
 
     // Check for job-specific changes with normalized path
     const jobChange = detectJobChange(normalizedPath);
     if (jobChange) {
+      console.debug("[Watcher] Job change detected:", jobChange);
       sseEnhancer.handleJobChange(jobChange);
     }
   });

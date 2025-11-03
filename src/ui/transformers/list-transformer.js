@@ -32,12 +32,16 @@ export function getStatusPriority(status) {
   }
 }
 
+function getJobId(job) {
+  return job && typeof job === "object" ? job.jobId || job.id || null : null;
+}
+
 /**
- * Validate a job object minimally: must have id, status, and createdAt
+ * Validate a job object minimally: must have jobId (or id), status, and createdAt
  */
 function isValidJob(job) {
   if (!job || typeof job !== "object") return false;
-  if (!job.id) return false;
+  if (!getJobId(job)) return false;
   if (!job.status) return false;
   if (!job.createdAt) return false;
   return true;
@@ -56,17 +60,20 @@ export function sortJobs(jobs) {
     const pa = getStatusPriority(a.status);
     const pb = getStatusPriority(b.status);
 
-    if (pa !== pb) return pb - pa; // higher priority first
+    if (pa !== pb) return pb - pa;
 
-    // parse createdAt; if invalid, treat as 0
     const ta = Date.parse(a.createdAt) || 0;
     const tb = Date.parse(b.createdAt) || 0;
 
-    if (ta !== tb) return ta - tb; // older first
+    if (ta !== tb) return ta - tb;
 
-    // stable tie-breaker by id
-    if (a.id < b.id) return -1;
-    if (a.id > b.id) return 1;
+    const idA = getJobId(a);
+    const idB = getJobId(b);
+    if (idA == null && idB == null) return 0;
+    if (idA == null) return 1;
+    if (idB == null) return -1;
+    if (idA < idB) return -1;
+    if (idA > idB) return 1;
     return 0;
   });
 
@@ -84,16 +91,16 @@ export function aggregateAndSortJobs(currentJobs, completeJobs) {
 
     const map = new Map();
 
-    // Add complete jobs first
     for (const j of comp) {
-      if (!j || !j.id) continue;
-      map.set(j.id, j);
+      const jobId = getJobId(j);
+      if (!jobId) continue;
+      map.set(jobId, j);
     }
 
-    // Override with current jobs (precedence)
     for (const j of cur) {
-      if (!j || !j.id) continue;
-      map.set(j.id, j);
+      const jobId = getJobId(j);
+      if (!jobId) continue;
+      map.set(jobId, j);
     }
 
     const aggregated = Array.from(map.values());
@@ -199,7 +206,7 @@ export function filterJobs(jobs, searchTerm = "", options = {}) {
 
     if (!term) return true;
 
-    const hay = `${job.name || ""} ${job.id || ""}`.toLowerCase();
+    const hay = `${job.title || ""} ${getJobId(job) || ""}`.toLowerCase();
     return hay.includes(term);
   });
 }
@@ -209,46 +216,49 @@ export function filterJobs(jobs, searchTerm = "", options = {}) {
  */
 export function transformJobListForAPI(jobs = [], options = {}) {
   if (!Array.isArray(jobs) || jobs.length === 0) return [];
-  const allowed = [
-    "id",
-    "name",
-    "status",
-    "progress",
-    "createdAt",
-    "updatedAt",
-    "location",
-  ];
 
   const { includePipelineMetadata = true } = options;
 
   const out = [];
   for (const job of jobs) {
     if (!job || typeof job !== "object") continue;
-    const obj = {};
-    for (const k of allowed) {
-      if (k in job) obj[k] = job[k];
+
+    const base = {
+      jobId: job.jobId,
+      title: job.title,
+      status: job.status,
+      progress:
+        typeof job.progress === "number" && Number.isFinite(job.progress)
+          ? job.progress
+          : 0,
+      createdAt: job.createdAt,
+      updatedAt: job.updatedAt,
+      location: job.location,
+    };
+
+    // Only include files if present
+    if (job.files) {
+      base.files = job.files;
     }
 
+    // Only include pipeline metadata if option is enabled
     if (includePipelineMetadata) {
       const { pipeline, pipelineLabel, pipelineSlug } =
         derivePipelineMetadata(job);
 
       if (pipelineSlug != null) {
-        obj.pipelineSlug = pipelineSlug;
+        base.pipelineSlug = pipelineSlug;
+        base.pipeline = pipelineSlug;
+      } else if (typeof pipeline === "string") {
+        base.pipeline = pipeline;
       }
 
       if (pipelineLabel != null) {
-        obj.pipelineLabel = pipelineLabel;
-      }
-
-      if (pipelineSlug != null) {
-        obj.pipeline = pipelineSlug;
-      } else if (typeof pipeline === "string") {
-        obj.pipeline = pipeline;
+        base.pipelineLabel = pipelineLabel;
       }
     }
 
-    out.push(obj);
+    out.push(base);
   }
 
   return out;
@@ -269,8 +279,8 @@ export function getAggregationStats(
   const totalInput = current.length + complete.length;
 
   // duplicates: ids present in both
-  const compIds = new Set(complete.map((j) => j && j.id).filter(Boolean));
-  const curIds = new Set(current.map((j) => j && j.id).filter(Boolean));
+  const compIds = new Set(complete.map((j) => getJobId(j)).filter(Boolean));
+  const curIds = new Set(current.map((j) => getJobId(j)).filter(Boolean));
 
   let duplicates = 0;
   for (const id of curIds) {

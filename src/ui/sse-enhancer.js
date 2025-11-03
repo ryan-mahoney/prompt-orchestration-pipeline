@@ -15,6 +15,7 @@
  */
 
 import { detectJobChange } from "./job-change-detector.js";
+import { transformJobStatus } from "./transformers/status-transformer.js";
 
 export function createSSEEnhancer({
   readJobFn,
@@ -40,8 +41,19 @@ export function createSSEEnhancer({
         return;
       }
 
-      // Build payload: reuse returned data as detail (readJob returns data/raw)
-      const detail = res.data || {};
+      // Transform to canonical schema before broadcasting
+      const canonicalJob = transformJobStatus(
+        res.data || {},
+        jobId,
+        res.location
+      );
+
+      if (!canonicalJob) {
+        console.warn(
+          `[SSEEnhancer] Failed to transform job ${jobId} for broadcast`
+        );
+        return;
+      }
 
       // If this is the first successful read for this jobId, emit a
       // "job:created" event so clients can observe new jobs immediately.
@@ -49,7 +61,7 @@ export function createSSEEnhancer({
       try {
         const alreadySeen = seen.has(jobId);
         const type = alreadySeen ? "job:updated" : "job:created";
-        sseRegistry.broadcast({ type, data: detail });
+        sseRegistry.broadcast({ type, data: canonicalJob });
         if (!alreadySeen) {
           seen.add(jobId);
         }

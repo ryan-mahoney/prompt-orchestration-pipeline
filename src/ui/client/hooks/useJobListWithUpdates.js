@@ -21,8 +21,8 @@ function applyJobEvent(prev = [], event) {
   const p = event.payload || {};
   switch (event.type) {
     case "job:created": {
-      if (!p.id) return list;
-      const idx = list.findIndex((j) => j.id === p.id);
+      if (!p.jobId) return list;
+      const idx = list.findIndex((j) => j.jobId === p.jobId);
       if (idx === -1) {
         // New job: add and sort
         list.push(p);
@@ -41,8 +41,8 @@ function applyJobEvent(prev = [], event) {
     }
 
     case "job:updated": {
-      if (!p.id) return list;
-      const idx = list.findIndex((j) => j.id === p.id);
+      if (!p.jobId) return list;
+      const idx = list.findIndex((j) => j.jobId === p.jobId);
       if (idx === -1) {
         // If we don't have it yet, add it
         list.push(p);
@@ -60,8 +60,8 @@ function applyJobEvent(prev = [], event) {
     }
 
     case "job:removed": {
-      if (!p.id) return list;
-      const filtered = list.filter((j) => j.id !== p.id);
+      if (!p.jobId) return list;
+      const filtered = list.filter((j) => j.jobId !== p.jobId);
       // If nothing removed, return prev
       try {
         if (JSON.stringify(filtered) === JSON.stringify(prev)) return prev;
@@ -70,9 +70,9 @@ function applyJobEvent(prev = [], event) {
     }
 
     case "status:changed": {
-      if (!p.id) return list;
+      if (!p.jobId) return list;
       const mapped = list.map((j) =>
-        j.id === p.id ? { ...j, status: p.status } : j
+        j.jobId === p.jobId ? { ...j, status: p.status } : j
       );
       try {
         if (JSON.stringify(mapped) === JSON.stringify(prev)) return prev;

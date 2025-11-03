@@ -254,18 +254,48 @@ function extractJsonFromMultipart(raw, contentType) {
  * recent change when available (type: "state:change") and fall back to a
  * lightweight summary event if no recent change is present.
  */
+function decorateChangeWithJobId(change) {
+  if (!change || typeof change !== "object") return change;
+  const normalizedPath = String(change.path || "").replace(/\\/g, "/");
+  const match = normalizedPath.match(
+    /pipeline-data\/(current|complete|pending|rejected)\/([^/]+)/
+  );
+  if (!match) {
+    return change;
+  }
+  return {
+    ...change,
+    lifecycle: match[1],
+    jobId: match[2],
+  };
+}
+
+function prioritizeJobStatusChange(changes = []) {
+  const normalized = changes.map((change) => decorateChangeWithJobId(change));
+  const statusChange = normalized.find(
+    (change) =>
+      typeof change?.path === "string" &&
+      /tasks-status\.json$/.test(change.path)
+  );
+  return statusChange || normalized[0] || null;
+}
+
 function broadcastStateUpdate(currentState) {
   try {
-    const latest =
-      currentState &&
-      currentState.recentChanges &&
-      currentState.recentChanges[0];
+    const recentChanges = (currentState && currentState.recentChanges) || [];
+    const latest = prioritizeJobStatusChange(recentChanges);
+    console.debug("[Server] Broadcasting state update:", {
+      latest,
+      currentState,
+    });
     if (latest) {
       // Emit only the most recent change as a compact, typed event
-      sseRegistry.broadcast({ type: "state:change", data: latest });
+      const eventData = { type: "state:change", data: latest };
+      console.debug("[Server] Broadcasting event:", eventData);
+      sseRegistry.broadcast(eventData);
     } else {
       // Fallback: emit a minimal summary so clients can observe a state "tick"
-      sseRegistry.broadcast({
+      const eventData = {
         type: "state:summary",
         data: {
           changeCount:
@@ -273,11 +303,14 @@ function broadcastStateUpdate(currentState) {
               ? currentState.changeCount
               : 0,
         },
-      });
+      };
+      console.debug("[Server] Broadcasting summary event:", eventData);
+      sseRegistry.broadcast(eventData);
     }
   } catch (err) {
     // Defensive: if something unexpected happens, fall back to a lightweight notification
     try {
+      console.error("[Server] Error in broadcastStateUpdate:", err);
       sseRegistry.broadcast({
         type: "state:summary",
         data: {
@@ -754,7 +787,7 @@ async function handleTaskFileListRequest(req, res, { jobId, taskId, type }) {
 
   // Use single lifecycle directory
   const jobDir = getJobDirectoryPath(dataDir, jobId, lifecycle);
-  const taskDir = path.join(jobDir, "tasks", taskId, type);
+  const taskDir = path.join(jobDir, "files", type);
 
   // Use path.relative for stricter jail enforcement
   const resolvedPath = path.resolve(taskDir);
@@ -1585,6 +1618,11 @@ async function startServer({ dataDir, port: customPort }) {
       "customPort:",
       customPort
     );
+
+    // Initialize config-bridge paths early to ensure consistent path resolution
+    // This prevents path caching issues when dataDir changes between tests
+    const { initPATHS } = await import("./config-bridge.node.js");
+    initPATHS(dataDir);
 
     // Set the data directory environment variable
     if (dataDir) {

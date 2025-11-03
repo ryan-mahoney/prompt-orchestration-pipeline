@@ -1,22 +1,66 @@
 /**
- * Browser-safe configuration bridge.
- * Exports only lightweight, pure values usable in the client bundle.
- *
- * This file intentionally avoids Node APIs (fs/path/url) so it can be bundled by Vite.
- * Server-side code should import src/ui/config-bridge.node.js instead.
+ * Browser-specific configuration bridge for UI helpers.
+ * Contains only browser-safe utilities (no Node APIs).
  */
 
+/**
+ * Global constants and contracts for project data display system
+ * @namespace Constants
+ */
 export const Constants = {
+  /**
+   * Job ID validation regex
+   * @type {RegExp}
+   */
   JOB_ID_REGEX: /^[A-Za-z0-9-_]+$/,
-  TASK_STATES: ["pending", "running", "done", "error"],
+
+  /**
+   * Valid task states
+   * @type {string[]}
+   */
+  TASK_STATES: ["pending", "running", "done", "failed"],
+
+  /**
+   * Valid job locations
+   * @type {string[]}
+   */
   JOB_LOCATIONS: ["current", "complete"],
-  STATUS_ORDER: ["running", "error", "pending", "complete"],
+
+  /**
+   * Status sort order (descending priority)
+   * @type {string[]}
+   */
+  STATUS_ORDER: ["running", "failed", "pending", "complete"],
+
+  /**
+   * File size limits for reading
+   * @type {Object}
+   */
   FILE_LIMITS: {
-    MAX_FILE_SIZE: 5 * 1024 * 1024,
+    MAX_FILE_SIZE: 5 * 1024 * 1024, // 5MB
   },
+
+  /**
+   * Retry configuration for atomic reads
+   * @type {Object}
+   */
+  RETRY_CONFIG: {
+    MAX_ATTEMPTS: 3,
+    DELAY_MS: 1000,
+  },
+
+  /**
+   * SSE debounce configuration
+   * @type {Object}
+   */
   SSE_CONFIG: {
     DEBOUNCE_MS: 200,
   },
+
+  /**
+   * Error codes for structured error responses
+   * @type {Object}
+   */
   ERROR_CODES: {
     NOT_FOUND: "not_found",
     INVALID_JSON: "invalid_json",
@@ -26,44 +70,80 @@ export const Constants = {
   },
 };
 
-// Lightweight client-side config. Use Vite env override where available.
-export const CONFIG = {
-  // NOTE: `useRealData` in the browser build is a lightweight configuration
-  // flag exposed via Vite env variables (VITE_UI_REAL_DATA). This flag is
-  // intended to document/configure whether the server should be pointed at
-  // real filesystem-backed data (for example by setting PO_ROOT=demo) and to
-  // surface small feature/logging toggles. It MUST NOT be used by client code
-  // to substitute in-memory demo arrays at runtime. The UI should always rely
-  // on API/SSE responses (or show neutral empty/error states) rather than
-  // falling back to demo data. Demo content belongs on-disk under `demo/`
-  // and is read by server-side readers when configured via PO_ROOT.
-  useRealData: Boolean(
-    // Vite exposes env under import.meta.env
-    typeof import.meta !== "undefined" &&
-      import.meta.env &&
-      import.meta.env.VITE_UI_REAL_DATA === "1"
-  ),
-  logging: {
-    level:
-      (typeof import.meta !== "undefined" &&
-        import.meta.env &&
-        import.meta.env.VITE_UI_LOG_LEVEL) ||
-      "warn",
-  },
-};
+/**
+ * Validates a job ID against the global contract
+ * @param {string} jobId - Job ID to validate
+ * @returns {boolean} True if valid
+ */
+export function validateJobId(jobId) {
+  return Constants.JOB_ID_REGEX.test(jobId);
+}
 
-// Provide a no-op PATHS placeholder for client code that may import it.
-// Real filesystem paths are meaningless in the browser; consumers should not rely on them.
-export const PATHS = {
-  current: null,
-  complete: null,
-  pending: null,
-  rejected: null,
-};
+/**
+ * Validates a task state against the global contract
+ * @param {string} state - Task state to validate
+ * @returns {boolean} True if valid
+ */
+export function validateTaskState(state) {
+  return Constants.TASK_STATES.includes(state);
+}
 
-// Minimal helper to create an error response shape (pure, browser-safe)
+/**
+ * Gets the status sort priority for a job status
+ * @param {string} status - Job status
+ * @returns {number} Sort priority (lower number = higher priority)
+ */
+export function getStatusPriority(status) {
+  const index = Constants.STATUS_ORDER.indexOf(status);
+  return index === -1 ? Constants.STATUS_ORDER.length : index;
+}
+
+/**
+ * Determines job status based on task states
+ * @param {Object} tasks - Tasks object from tasks-status.json
+ * @returns {string} Job status
+ */
+export function determineJobStatus(tasks = {}) {
+  const taskEntries = Object.entries(tasks);
+
+  if (taskEntries.length === 0) {
+    return "pending";
+  }
+
+  const taskStates = taskEntries.map(([_, task]) => task.state);
+
+  if (taskStates.includes("failed")) {
+    return "failed";
+  }
+
+  if (taskStates.includes("running")) {
+    return "running";
+  }
+
+  if (taskStates.every((state) => state === "done")) {
+    return "complete";
+  }
+
+  return "pending";
+}
+
+/**
+ * Creates a structured error response
+ * @param {string} code - Error code
+ * @param {string} message - Error message
+ * @param {string} [path] - Optional file path
+ * @returns {Object} Structured error object
+ */
 export function createErrorResponse(code, message, path = null) {
-  const error = { ok: false, code, message };
-  if (path) error.path = path;
+  const error = {
+    ok: false,
+    code,
+    message,
+  };
+
+  if (path) {
+    error.path = path;
+  }
+
   return error;
 }

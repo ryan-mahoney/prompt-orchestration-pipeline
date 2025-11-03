@@ -29,64 +29,114 @@ export default function JobDetail({ job, pipeline, onClose, onResume }) {
   // job.tasks is expected to be an object keyed by task name; normalize from array if needed
   const taskById = React.useMemo(() => {
     const tasks = job?.tasks;
-    if (!tasks) return {};
-    if (Array.isArray(tasks)) {
+
+    let result;
+    if (!tasks) {
+      result = {};
+    } else if (Array.isArray(tasks)) {
       const map = {};
       for (const t of tasks) {
         const key = t?.name;
-        if (key) map[key] = t;
+        if (key) {
+          map[key] = t;
+        }
       }
-      return map;
+      result = map;
+    } else {
+      result = tasks;
     }
-    return tasks; // already keyed object
+
+    return result;
   }, [job?.tasks]);
 
   // Compute pipeline tasks from pipeline or derive from job tasks
   const computedPipeline = React.useMemo(() => {
+    let result;
     if (pipeline?.tasks) {
-      return pipeline;
+      result = pipeline;
+    } else {
+      // Derive pipeline tasks from job tasks object keys
+      const jobTasks = job?.tasks;
+
+      if (!jobTasks) {
+        result = { tasks: [] };
+      } else {
+        const taskKeys = Array.isArray(jobTasks)
+          ? jobTasks.map((t) => t?.name).filter(Boolean)
+          : Object.keys(jobTasks);
+
+        result = { tasks: taskKeys };
+      }
     }
 
-    // Derive pipeline tasks from job tasks object keys
-    const jobTasks = job?.tasks;
-    if (!jobTasks) return { tasks: [] };
-
-    return { tasks: Object.keys(jobTasks) };
+    return result;
   }, [pipeline, job?.tasks]);
 
   // Compute DAG items and active index for visualization
-  const dagItems = computeDagItems(job, computedPipeline).map((item) => {
-    const task = taskById[item.id];
-    const taskConfig = task?.config || {};
+  const dagItems = React.useMemo(() => {
+    const rawDagItems = computeDagItems(job, computedPipeline);
 
-    // Build subtitle with useful metadata when available (Tufte-inspired inline tokens)
-    const subtitleParts = [];
-    if (taskConfig?.model) subtitleParts.push(taskConfig.model);
-    if (taskConfig?.temperature != null)
-      subtitleParts.push(`temp ${taskConfig.temperature}`);
-    if (task?.attempts != null) subtitleParts.push(`${task.attempts} attempts`);
-    if (task?.refinementAttempts != null)
-      subtitleParts.push(`${task.refinementAttempts} refinements`);
-    if (task?.startedAt) {
-      const durationMs = taskDisplayDurationMs(task, now);
-      if (durationMs > 0) subtitleParts.push(fmtDuration(durationMs));
-    }
+    const processedItems = rawDagItems.map((item, index) => {
+      if (process.env.NODE_ENV !== "test") {
+        console.debug("[JobDetail] computed DAG item", {
+          id: item.id,
+          status: item.status,
+          stage: item.stage,
+          jobHasTasks: !!job?.tasks,
+          taskKeys: job?.tasks ? Object.keys(job.tasks) : null,
+        });
+      }
 
-    // Include error message in body when task status is error
-    const errorMsg = task?.error?.message;
-    const body = item.status === "error" && errorMsg ? errorMsg : null;
+      const task = taskById[item.id];
 
-    return {
-      ...item,
-      title:
-        typeof item.id === "string"
-          ? item.id
-          : item.id?.name || item.id?.id || `Task ${item.id}`,
-      subtitle: subtitleParts.length > 0 ? subtitleParts.join(" · ") : null,
-      body,
-    };
-  });
-  const activeIndex = computeActiveIndex(dagItems);
+      const taskConfig = task?.config || {};
+
+      // Build subtitle with useful metadata when available (Tufte-inspired inline tokens)
+      const subtitleParts = [];
+      if (taskConfig?.model) {
+        subtitleParts.push(taskConfig.model);
+      }
+      if (taskConfig?.temperature != null) {
+        subtitleParts.push(`temp ${taskConfig.temperature}`);
+      }
+      if (task?.attempts != null) {
+        subtitleParts.push(`${task.attempts} attempts`);
+      }
+      if (task?.refinementAttempts != null) {
+        subtitleParts.push(`${task.refinementAttempts} refinements`);
+      }
+      if (task?.startedAt) {
+        const durationMs = taskDisplayDurationMs(task, now);
+        if (durationMs > 0) {
+          subtitleParts.push(fmtDuration(durationMs));
+        }
+      }
+
+      // Include error message in body when task status is error
+      const errorMsg = task?.error?.message;
+      const body = item.status === "failed" && errorMsg ? errorMsg : null;
+
+      const resultItem = {
+        ...item,
+        title:
+          typeof item.id === "string"
+            ? item.id
+            : item.id?.name || item.id?.id || `Task ${item.id}`,
+        subtitle: subtitleParts.length > 0 ? subtitleParts.join(" · ") : null,
+        body,
+      };
+
+      return resultItem;
+    });
+
+    return processedItems;
+  }, [job, computedPipeline, taskById, now]);
+
+  const activeIndex = React.useMemo(() => {
+    const index = computeActiveIndex(dagItems);
+
+    return index;
+  }, [dagItems]);
 
   const filesByTypeForItem = React.useCallback(
     (item) => {

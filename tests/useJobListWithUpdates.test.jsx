@@ -86,7 +86,7 @@ function TestComp() {
       <div data-testid="count">{String(count)}</div>
       <ul data-testid="list">
         {Array.isArray(data)
-          ? data.map((j) => <li key={j.id}>{j.id}</li>)
+          ? data.map((j) => <li key={j.jobId}>{j.jobId}</li>)
           : null}
       </ul>
     </div>
@@ -109,7 +109,7 @@ describe("useJobListWithUpdates (SSE behavior)", () => {
     act(() => {
       es.dispatchEvent("job:created", {
         data: JSON.stringify({
-          id: "j-1",
+          jobId: "j-1",
           title: "One",
           status: "pending",
           createdAt: "2020-01-01T00:00:00.000Z",
@@ -163,7 +163,7 @@ describe("useJobListWithUpdates (SSE behavior)", () => {
     act(() => {
       es.dispatchEvent("job:created", {
         data: JSON.stringify({
-          id: "queued-1",
+          jobId: "queued-1",
           title: "Queued",
           status: "pending",
           createdAt: "2020-01-01T00:00:00.000Z",

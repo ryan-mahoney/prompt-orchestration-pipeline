@@ -28,16 +28,16 @@ describe("List Transformer", () => {
     it("should merge jobs with current taking precedence", () => {
       const currentJobs = [
         {
-          id: "job-1",
-          name: "Job 1 Current",
+          jobId: "job-1",
+          title: "Job 1 Current",
           status: "running",
           progress: 50,
           createdAt: "2023-01-01T00:00:00Z",
           location: "current",
         },
         {
-          id: "job-3",
-          name: "Job 3",
+          jobId: "job-3",
+          title: "Job 3",
           status: "pending",
           progress: 0,
           createdAt: "2023-01-01T02:00:00Z",
@@ -47,16 +47,16 @@ describe("List Transformer", () => {
 
       const completeJobs = [
         {
-          id: "job-1",
-          name: "Job 1 Complete",
+          jobId: "job-1",
+          title: "Job 1 Complete",
           status: "complete",
           progress: 100,
           createdAt: "2023-01-01T00:00:00Z",
           location: "complete",
         },
         {
-          id: "job-2",
-          name: "Job 2",
+          jobId: "job-2",
+          title: "Job 2",
           status: "complete",
           progress: 100,
           createdAt: "2023-01-01T01:00:00Z",
@@ -69,35 +69,35 @@ describe("List Transformer", () => {
       expect(result).toHaveLength(3);
 
       // Job-1 should come from current (precedence)
-      const job1 = result.find((job) => job.id === "job-1");
-      expect(job1.name).toBe("Job 1 Current");
+      const job1 = result.find((job) => job.jobId === "job-1");
+      expect(job1.title).toBe("Job 1 Current");
       expect(job1.status).toBe("running");
       expect(job1.location).toBe("current");
 
       // Job-2 should come from complete
-      const job2 = result.find((job) => job.id === "job-2");
-      expect(job2.name).toBe("Job 2");
+      const job2 = result.find((job) => job.jobId === "job-2");
+      expect(job2.title).toBe("Job 2");
       expect(job2.location).toBe("complete");
 
       // Job-3 should come from current
-      const job3 = result.find((job) => job.id === "job-3");
-      expect(job3.name).toBe("Job 3");
+      const job3 = result.find((job) => job.jobId === "job-3");
+      expect(job3.title).toBe("Job 3");
       expect(job3.location).toBe("current");
     });
 
     it("should sort jobs by status priority and creation time", () => {
       const currentJobs = [
         {
-          id: "job-running",
-          name: "Running Job",
+          jobId: "job-running",
+          title: "Running Job",
           status: "running",
           progress: 50,
           createdAt: "2023-01-01T02:00:00Z",
           location: "current",
         },
         {
-          id: "job-error",
-          name: "Error Job",
+          jobId: "job-error",
+          title: "Error Job",
           status: "error",
           progress: 0,
           createdAt: "2023-01-01T01:00:00Z",
@@ -107,16 +107,16 @@ describe("List Transformer", () => {
 
       const completeJobs = [
         {
-          id: "job-complete",
-          name: "Complete Job",
+          jobId: "job-complete",
+          title: "Complete Job",
           status: "complete",
           progress: 100,
           createdAt: "2023-01-01T00:00:00Z",
           location: "complete",
         },
         {
-          id: "job-pending",
-          name: "Pending Job",
+          jobId: "job-pending",
+          title: "Pending Job",
           status: "pending",
           progress: 0,
           createdAt: "2023-01-01T03:00:00Z",
@@ -127,10 +127,10 @@ describe("List Transformer", () => {
       const result = aggregateAndSortJobs(currentJobs, completeJobs);
 
       // Should be sorted by status priority: running > error > pending > complete
-      expect(result[0].id).toBe("job-running"); // Highest priority
-      expect(result[1].id).toBe("job-error"); // Second highest
-      expect(result[2].id).toBe("job-pending"); // Third
-      expect(result[3].id).toBe("job-complete"); // Lowest
+      expect(result[0].jobId).toBe("job-running"); // Highest priority
+      expect(result[1].jobId).toBe("job-error"); // Second highest
+      expect(result[2].jobId).toBe("job-pending"); // Third
+      expect(result[3].jobId).toBe("job-complete"); // Lowest
     });
 
     it("should handle empty inputs", () => {
@@ -142,8 +142,8 @@ describe("List Transformer", () => {
     it("should handle invalid jobs gracefully", () => {
       const currentJobs = [
         {
-          id: "valid-job",
-          name: "Valid",
+          jobId: "valid-job",
+          title: "Valid",
           status: "running",
           createdAt: "2023-01-01T00:00:00Z",
           location: "current",
@@ -155,7 +155,7 @@ describe("List Transformer", () => {
       const result = aggregateAndSortJobs(currentJobs, []);
 
       expect(result).toHaveLength(1);
-      expect(result[0].id).toBe("valid-job");
+      expect(result[0].jobId).toBe("valid-job");
     });
 
     it("should handle aggregation errors gracefully", () => {
@@ -165,7 +165,7 @@ describe("List Transformer", () => {
         throw new Error("Test error");
       });
 
-      const result = aggregateAndSortJobs([{ id: "job-1" }], []);
+      const result = aggregateAndSortJobs([{ jobId: "job-1" }], []);
 
       expect(result).toEqual([]);
       expect(console.error).toHaveBeenCalled();
@@ -178,10 +178,22 @@ describe("List Transformer", () => {
   describe("sortJobs", () => {
     it("should sort by status priority", () => {
       const jobs = [
-        { id: "job-1", status: "complete", createdAt: "2023-01-01T00:00:00Z" },
-        { id: "job-2", status: "running", createdAt: "2023-01-01T01:00:00Z" },
-        { id: "job-3", status: "pending", createdAt: "2023-01-01T02:00:00Z" },
-        { id: "job-4", status: "error", createdAt: "2023-01-01T03:00:00Z" },
+        {
+          jobId: "job-1",
+          status: "complete",
+          createdAt: "2023-01-01T00:00:00Z",
+        },
+        {
+          jobId: "job-2",
+          status: "running",
+          createdAt: "2023-01-01T01:00:00Z",
+        },
+        {
+          jobId: "job-3",
+          status: "pending",
+          createdAt: "2023-01-01T02:00:00Z",
+        },
+        { jobId: "job-4", status: "error", createdAt: "2023-01-01T03:00:00Z" },
       ];
 
       const result = sortJobs(jobs);
@@ -194,48 +206,80 @@ describe("List Transformer", () => {
 
     it("should sort by creation time within same status", () => {
       const jobs = [
-        { id: "job-1", status: "running", createdAt: "2023-01-01T02:00:00Z" },
-        { id: "job-2", status: "running", createdAt: "2023-01-01T01:00:00Z" },
-        { id: "job-3", status: "running", createdAt: "2023-01-01T00:00:00Z" },
+        {
+          jobId: "job-1",
+          status: "running",
+          createdAt: "2023-01-01T02:00:00Z",
+        },
+        {
+          jobId: "job-2",
+          status: "running",
+          createdAt: "2023-01-01T01:00:00Z",
+        },
+        {
+          jobId: "job-3",
+          status: "running",
+          createdAt: "2023-01-01T00:00:00Z",
+        },
       ];
 
       const result = sortJobs(jobs);
 
       // Should be sorted by creation time ascending (oldest first)
-      expect(result[0].id).toBe("job-3"); // Oldest
-      expect(result[1].id).toBe("job-2"); // Middle
-      expect(result[2].id).toBe("job-1"); // Newest
+      expect(result[0].jobId).toBe("job-3"); // Oldest
+      expect(result[1].jobId).toBe("job-2"); // Middle
+      expect(result[2].jobId).toBe("job-1"); // Newest
     });
 
     it("should sort by ID for stability when creation times are equal", () => {
       const jobs = [
-        { id: "job-b", status: "running", createdAt: "2023-01-01T00:00:00Z" },
-        { id: "job-a", status: "running", createdAt: "2023-01-01T00:00:00Z" },
-        { id: "job-c", status: "running", createdAt: "2023-01-01T00:00:00Z" },
+        {
+          jobId: "job-b",
+          status: "running",
+          createdAt: "2023-01-01T00:00:00Z",
+        },
+        {
+          jobId: "job-a",
+          status: "running",
+          createdAt: "2023-01-01T00:00:00Z",
+        },
+        {
+          jobId: "job-c",
+          status: "running",
+          createdAt: "2023-01-01T00:00:00Z",
+        },
       ];
 
       const result = sortJobs(jobs);
 
-      expect(result[0].id).toBe("job-a");
-      expect(result[1].id).toBe("job-b");
-      expect(result[2].id).toBe("job-c");
+      expect(result[0].jobId).toBe("job-a");
+      expect(result[1].jobId).toBe("job-b");
+      expect(result[2].jobId).toBe("job-c");
     });
 
     it("should filter out invalid jobs", () => {
       const jobs = [
-        { id: "valid-1", status: "running", createdAt: "2023-01-01T00:00:00Z" },
+        {
+          jobId: "valid-1",
+          status: "running",
+          createdAt: "2023-01-01T00:00:00Z",
+        },
         null,
-        { id: "valid-2", status: "pending", createdAt: "2023-01-01T01:00:00Z" },
+        {
+          jobId: "valid-2",
+          status: "pending",
+          createdAt: "2023-01-01T01:00:00Z",
+        },
         { invalid: "job" }, // Missing required fields
-        { id: "valid-3", status: "error" }, // Missing createdAt
-        { id: "valid-4", createdAt: "2023-01-01T02:00:00Z" }, // Missing status
+        { jobId: "valid-3", status: "error" }, // Missing createdAt
+        { jobId: "valid-4", createdAt: "2023-01-01T02:00:00Z" }, // Missing status
       ];
 
       const result = sortJobs(jobs);
 
       expect(result).toHaveLength(2);
-      expect(result[0].id).toBe("valid-1");
-      expect(result[1].id).toBe("valid-2");
+      expect(result[0].jobId).toBe("valid-1");
+      expect(result[1].jobId).toBe("valid-2");
     });
 
     it("should handle empty input", () => {
@@ -263,12 +307,12 @@ describe("List Transformer", () => {
   describe("groupJobsByStatus", () => {
     it("should group jobs by status", () => {
       const jobs = [
-        { id: "job-1", status: "running" },
-        { id: "job-2", status: "running" },
-        { id: "job-3", status: "error" },
-        { id: "job-4", status: "pending" },
-        { id: "job-5", status: "complete" },
-        { id: "job-6", status: "complete" },
+        { jobId: "job-1", status: "running" },
+        { jobId: "job-2", status: "running" },
+        { jobId: "job-3", status: "error" },
+        { jobId: "job-4", status: "pending" },
+        { jobId: "job-5", status: "complete" },
+        { jobId: "job-6", status: "complete" },
       ];
 
       const result = groupJobsByStatus(jobs);
@@ -281,8 +325,8 @@ describe("List Transformer", () => {
 
     it("should handle unknown statuses", () => {
       const jobs = [
-        { id: "job-1", status: "running" },
-        { id: "job-2", status: "unknown" }, // Should be ignored
+        { jobId: "job-1", status: "running" },
+        { jobId: "job-2", status: "unknown" }, // Should be ignored
       ];
 
       const result = groupJobsByStatus(jobs);
@@ -308,16 +352,21 @@ describe("List Transformer", () => {
   describe("getJobListStats", () => {
     it("should compute job list statistics", () => {
       const jobs = [
-        { id: "job-1", status: "running", progress: 50, location: "current" },
-        { id: "job-2", status: "error", progress: 0, location: "current" },
         {
-          id: "job-3",
+          jobId: "job-1",
+          status: "running",
+          progress: 50,
+          location: "current",
+        },
+        { jobId: "job-2", status: "error", progress: 0, location: "current" },
+        {
+          jobId: "job-3",
           status: "complete",
           progress: 100,
           location: "complete",
         },
         {
-          id: "job-4",
+          jobId: "job-4",
           status: "complete",
           progress: 100,
           location: "complete",
@@ -343,8 +392,8 @@ describe("List Transformer", () => {
 
     it("should handle jobs without progress", () => {
       const jobs = [
-        { id: "job-1", status: "running", location: "current" }, // No progress
-        { id: "job-2", status: "error", progress: 0, location: "current" },
+        { jobId: "job-1", status: "running", location: "current" }, // No progress
+        { jobId: "job-2", status: "error", progress: 0, location: "current" },
       ];
 
       const result = getJobListStats(jobs);
@@ -367,20 +416,20 @@ describe("List Transformer", () => {
   describe("filterJobs", () => {
     const jobs = [
       {
-        id: "job-1",
-        name: "Research Project",
+        jobId: "job-1",
+        title: "Research Project",
         status: "running",
         location: "current",
       },
       {
-        id: "job-2",
-        name: "Data Analysis",
+        jobId: "job-2",
+        title: "Data Analysis",
         status: "complete",
         location: "complete",
       },
       {
-        id: "job-3",
-        name: "Market Research",
+        jobId: "job-3",
+        title: "Market Research",
         status: "pending",
         location: "current",
       },
@@ -390,29 +439,29 @@ describe("List Transformer", () => {
       const result = filterJobs(jobs, "research");
 
       expect(result).toHaveLength(2);
-      expect(result[0].id).toBe("job-1");
-      expect(result[1].id).toBe("job-3");
+      expect(result[0].jobId).toBe("job-1");
+      expect(result[1].jobId).toBe("job-3");
     });
 
     it("should filter by status", () => {
       const result = filterJobs(jobs, "", { status: "running" });
 
       expect(result).toHaveLength(1);
-      expect(result[0].id).toBe("job-1");
+      expect(result[0].jobId).toBe("job-1");
     });
 
     it("should filter by location", () => {
       const result = filterJobs(jobs, "", { location: "complete" });
 
       expect(result).toHaveLength(1);
-      expect(result[0].id).toBe("job-2");
+      expect(result[0].jobId).toBe("job-2");
     });
 
     it("should combine multiple filters", () => {
       const result = filterJobs(jobs, "research", { status: "running" });
 
       expect(result).toHaveLength(1);
-      expect(result[0].id).toBe("job-1");
+      expect(result[0].jobId).toBe("job-1");
     });
 
     it("should handle empty search term", () => {
@@ -431,14 +480,14 @@ describe("List Transformer", () => {
     it("should transform job list to API format", () => {
       const jobs = [
         {
-          id: "job-1",
-          name: "Job 1",
+          jobId: "job-1",
+          title: "Job 1",
           status: "running",
           progress: 50,
           createdAt: "2023-01-01T00:00:00Z",
           updatedAt: "2023-01-01T01:00:00Z",
           location: "current",
-          tasks: [{ name: "task-1", state: "running" }], // Should be excluded
+          tasksStatus: [{ name: "task-1", state: "running" }], // Should be excluded
           warnings: ["Some warning"], // Should be excluded
           pipeline: "content-generation",
           pipelineLabel: "Content Generation",
@@ -450,8 +499,8 @@ describe("List Transformer", () => {
 
       expect(result).toEqual([
         {
-          id: "job-1",
-          name: "Job 1",
+          jobId: "job-1",
+          title: "Job 1",
           status: "running",
           progress: 50,
           createdAt: "2023-01-01T00:00:00Z",
@@ -467,8 +516,8 @@ describe("List Transformer", () => {
     it("should include pipeline metadata when option enabled", () => {
       const jobs = [
         {
-          id: "job-1",
-          name: "Job 1",
+          jobId: "job-1",
+          title: "Job 1",
           status: "running",
           progress: 50,
           createdAt: "2023-01-01T00:00:00Z",
@@ -482,8 +531,8 @@ describe("List Transformer", () => {
           pipelineSlug: "content-generation",
         },
         {
-          id: "job-2",
-          name: "Job 2",
+          jobId: "job-2",
+          title: "Job 2",
           status: "pending",
           progress: 0,
           createdAt: "2023-01-02T00:00:00Z",
@@ -498,8 +547,8 @@ describe("List Transformer", () => {
 
       expect(result).toEqual([
         {
-          id: "job-1",
-          name: "Job 1",
+          jobId: "job-1",
+          title: "Job 1",
           status: "running",
           progress: 50,
           createdAt: "2023-01-01T00:00:00Z",
@@ -510,8 +559,8 @@ describe("List Transformer", () => {
           pipelineSlug: "content-generation",
         },
         {
-          id: "job-2",
-          name: "Job 2",
+          jobId: "job-2",
+          title: "Job 2",
           status: "pending",
           progress: 0,
           createdAt: "2023-01-02T00:00:00Z",
@@ -526,8 +575,8 @@ describe("List Transformer", () => {
     it("should exclude pipeline metadata when option disabled", () => {
       const jobs = [
         {
-          id: "job-1",
-          name: "Job 1",
+          jobId: "job-1",
+          title: "Job 1",
           status: "running",
           progress: 50,
           createdAt: "2023-01-01T00:00:00Z",
@@ -541,8 +590,8 @@ describe("List Transformer", () => {
           pipelineSlug: "content-generation",
         },
         {
-          id: "job-2",
-          name: "Job 2",
+          jobId: "job-2",
+          title: "Job 2",
           status: "pending",
           progress: 0,
           createdAt: "2023-01-02T00:00:00Z",
@@ -557,8 +606,8 @@ describe("List Transformer", () => {
 
       expect(result).toEqual([
         {
-          id: "job-1",
-          name: "Job 1",
+          jobId: "job-1",
+          title: "Job 1",
           status: "running",
           progress: 50,
           createdAt: "2023-01-01T00:00:00Z",
@@ -566,8 +615,8 @@ describe("List Transformer", () => {
           location: "current",
         },
         {
-          id: "job-2",
-          name: "Job 2",
+          jobId: "job-2",
+          title: "Job 2",
           status: "pending",
           progress: 0,
           createdAt: "2023-01-02T00:00:00Z",
@@ -579,8 +628,8 @@ describe("List Transformer", () => {
     it("should include pipeline metadata by default", () => {
       const jobs = [
         {
-          id: "job-1",
-          name: "Job 1",
+          jobId: "job-1",
+          title: "Job 1",
           status: "running",
           progress: 50,
           createdAt: "2023-01-01T00:00:00Z",
@@ -599,8 +648,8 @@ describe("List Transformer", () => {
 
       expect(result).toEqual([
         {
-          id: "job-1",
-          name: "Job 1",
+          jobId: "job-1",
+          title: "Job 1",
           status: "running",
           progress: 50,
           createdAt: "2023-01-01T00:00:00Z",
@@ -616,16 +665,16 @@ describe("List Transformer", () => {
     it("should filter out null jobs", () => {
       const jobs = [
         {
-          id: "job-1",
-          name: "Job 1",
+          jobId: "job-1",
+          title: "Job 1",
           status: "running",
           createdAt: "2023-01-01T00:00:00Z",
           location: "current",
         },
         null,
         {
-          id: "job-2",
-          name: "Job 2",
+          jobId: "job-2",
+          title: "Job 2",
           status: "complete",
           createdAt: "2023-01-01T01:00:00Z",
           location: "complete",
@@ -635,8 +684,8 @@ describe("List Transformer", () => {
       const result = transformJobListForAPI(jobs);
 
       expect(result).toHaveLength(2);
-      expect(result[0].id).toBe("job-1");
-      expect(result[1].id).toBe("job-2");
+      expect(result[0].jobId).toBe("job-1");
+      expect(result[1].jobId).toBe("job-2");
     });
 
     it("should handle empty input", () => {
@@ -647,19 +696,19 @@ describe("List Transformer", () => {
   describe("getAggregationStats", () => {
     it("should compute aggregation statistics", () => {
       const currentJobs = [
-        { id: "job-1", status: "running", location: "current" },
-        { id: "job-2", status: "error", location: "current" },
+        { jobId: "job-1", status: "running", location: "current" },
+        { jobId: "job-2", status: "error", location: "current" },
       ];
 
       const completeJobs = [
-        { id: "job-1", status: "complete", location: "complete" }, // Duplicate
-        { id: "job-3", status: "complete", location: "complete" },
+        { jobId: "job-1", status: "complete", location: "complete" }, // Duplicate
+        { jobId: "job-3", status: "complete", location: "complete" },
       ];
 
       const aggregatedJobs = [
-        { id: "job-1", status: "running", location: "current" }, // From current (precedence)
-        { id: "job-2", status: "error", location: "current" },
-        { id: "job-3", status: "complete", location: "complete" },
+        { jobId: "job-1", status: "running", location: "current" }, // From current (precedence)
+        { jobId: "job-2", status: "error", location: "current" },
+        { jobId: "job-3", status: "complete", location: "complete" },
       ];
 
       const result = getAggregationStats(
