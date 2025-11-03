@@ -1,59 +1,22 @@
 // Formatting Task - Format final output according to specifications
 
-export const ingestion = ({
-  data: {
-    seed: { data: seed },
-  },
-  flags,
-}) => {
-  const content = seed.synthesis?.content;
-  const outputFormat = seed.outputFormat;
-  const metadata = seed.synthesis?.metadata;
-
-  if (!content) {
-    throw new Error("Synthesis content not found in seed");
-  }
+export const preProcessing = async ({ flags, io }) => {
+  const raw = await io.readArtifact("synthesis-output.json");
+  const { title, paragraphs, conclusion } = JSON.parse(raw);
 
   return {
-    output: { content, outputFormat, metadata },
-    flags,
-  };
-};
-
-export const preProcessing = ({
-  data: {
-    ingestion: { outputFormat },
-  },
-  flags,
-}) => {
-  const formatSpecs = {
-    "executive-summary": {
-      sections: ["Executive Summary", "Key Findings", "Recommendations"],
-      style: "professional, concise",
+    output: {
+      title,
+      paragraphs,
+      conclusion,
     },
-    "blog-post": {
-      sections: ["Introduction", "Main Content", "Conclusion"],
-      style: "engaging, accessible",
-    },
-    "structured-json": {
-      format: "JSON",
-      style: "machine-readable",
-    },
-  };
-
-  const formatSpec =
-    formatSpecs[outputFormat] || formatSpecs["executive-summary"];
-
-  return {
-    output: { outputFormat, formatSpec },
     flags,
   };
 };
 
 export const promptTemplating = ({
   data: {
-    ingestion: { content },
-    preProcessing: { formatSpec },
+    preProcessing: { title, paragraphs, conclusion },
   },
   flags,
 }) => {
@@ -61,13 +24,20 @@ export const promptTemplating = ({
     "You are a professional editor skilled at formatting content for different audiences and purposes.";
   const prompt = `Format the following content according to these specifications:
 
-CONTENT:
-${content}
+FORMAT: Markdown with appropriate headings, subheadings, bullet points, and emphasis.
 
-FORMAT SPECIFICATIONS:
-${JSON.stringify(formatSpec, null, 2)}
+CONTENT TO FORMAT:
+- Title: ${title}
+- Paragraphs: ${paragraphs.map((p) => `\n  - ${p}`).join("")}
+- Conclusion: ${conclusion}
 
-Provide formatted output with proper structure, headings, and styling.`;
+JSON OUTPUT SPECIFICATION:
+{
+  "formattedContent": "<formatted markdown content here>"
+}
+
+Now produce ONLY the JSON object in the specified structure.
+`;
 
   return {
     output: { system, prompt },
@@ -90,119 +60,28 @@ export const inference = async ({
     ],
   });
 
-  const content =
-    typeof response.content === "string"
-      ? response.content
-      : JSON.stringify(response.content);
-
-  await io.writeArtifact("formatted-output.json", content);
-
-  return {
-    output: {
-      metadata: {
-        model: response.model,
-        tokens: response.usage?.total_tokens,
-      },
-    },
-    flags,
-  };
-};
-
-export const finalValidation = async ({
-  io,
-  data: {
-    preProcessing: { formatSpec },
-  },
-  flags,
-}) => {
-  const raw = await io.readArtifact("formatted-output.json");
-  let validationFailed = false;
-  let validationResult = {};
-
+  let content;
   try {
-    const formattedContent = raw;
-    let missingSections = [];
+    // Parse the JSON response to get the formattedContent
+    const parsedResponse =
+      typeof response.content === "string"
+        ? JSON.parse(response.content)
+        : response.content;
 
-    if (formatSpec.sections) {
-      missingSections = formatSpec.sections.filter(
-        (section) => !formattedContent.includes(section)
-      );
-
-      if (missingSections.length > 0) {
-        console.warn(
-          "[finalValidation] ⚠ Missing sections:",
-          missingSections.join(", ")
-        );
-        validationFailed = true;
-        validationResult = {
-          contentLength: formattedContent?.length || 0,
-          passed: false,
-          missingSections,
-          error: `Missing sections: ${missingSections.join(", ")}`,
-        };
-      } else {
-        validationResult = {
-          contentLength: formattedContent.length,
-          passed: true,
-          missingSections: [],
-        };
-      }
-    } else {
-      validationResult = {
-        contentLength: formattedContent.length,
-        passed: true,
-        missingSections: [],
-      };
-    }
-  } catch (err) {
-    console.warn("[finalValidation] ⚠ Validation failed:", err.message);
-    validationFailed = true;
-    validationResult = {
-      contentLength: 0,
-      passed: false,
-      missingSections: [],
-      error: err.message,
-    };
+    content = parsedResponse.formattedContent;
+  } catch (error) {
+    console.warn("Failed to parse LLM response as JSON:", error.message);
+    // Fallback to the raw content if JSON parsing fails
+    content =
+      typeof response.content === "string"
+        ? response.content
+        : JSON.stringify(response.content);
   }
 
-  return {
-    output: {
-      validationResult: {
-        ...validationResult,
-        validatedAt: new Date().toISOString(),
-      },
-    },
-    flags: { ...flags, validationFailed },
-  };
-};
-
-export const integration = async ({
-  io,
-  data: {
-    ingestion: { metadata },
-    preProcessing: { formatSpec },
-    finalValidation: { validationResult },
-    inference: { metadata: inferenceMetadata },
-  },
-  flags,
-}) => {
-  const formattedContent = await io.readArtifact("formatted-output.json");
+  await io.writeArtifact("formatted-output.md", content || "");
 
   return {
-    output: {
-      finalOutput: {
-        content: formattedContent,
-        format: formatSpec,
-        metadata: {
-          ...metadata,
-          ...inferenceMetadata,
-          wordCount: formattedContent.split(/\s+/).length,
-          characterCount: formattedContent.length,
-        },
-        validationResult,
-        timestamp: new Date().toISOString(),
-      },
-    },
+    output: {},
     flags,
   };
 };
