@@ -26,6 +26,7 @@
     "ui": "NODE_ENV=development nodemon src/ui/server.js",
     "ui:dev": "vite",
     "ui:build": "vite build",
+    "prepack": "npm run ui:build",
     "ui:prod": "node src/ui/server.js",
     "demo:ui": "NODE_ENV=production PO_ROOT=demo node src/ui/server.js",
     "demo:orchestrator": "PO_ROOT=demo NODE_ENV=production node -e \"import('./src/core/orchestrator.js').then(m => m.startOrchestrator({ dataDir: process.env.PO_ROOT || 'demo' })).catch(err => { console.error(err); process.exit(1) })\"",
