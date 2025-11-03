@@ -487,7 +487,7 @@ describe("CLI", () => {
       );
     });
 
-    it("should spawn processes with correct environment variables", () => {
+    it("should spawn processes with correct environment variables and absolute paths", () => {
       // Arrange
       const mockChildProcess = {
         stdout: { on: vi.fn() },
@@ -501,9 +501,14 @@ describe("CLI", () => {
 
       const absoluteRoot = "/absolute/path/to/demo";
       const port = "3000";
+      const expectedUiPath = path.resolve(process.cwd(), "src/ui/server.js");
+      const expectedOrchestratorPath = path.resolve(
+        process.cwd(),
+        "src/cli/run-orchestrator.js"
+      );
 
       // Act
-      const uiChild = mockSpawn("node", ["src/ui/server.js"], {
+      const uiChild = mockSpawn("node", [expectedUiPath], {
         stdio: "pipe",
         env: {
           ...process.env,
@@ -513,39 +518,30 @@ describe("CLI", () => {
         },
       });
 
-      const orchestratorChild = mockSpawn(
-        "node",
-        ["src/cli/run-orchestrator.js"],
-        {
-          stdio: "pipe",
-          env: {
-            ...process.env,
-            NODE_ENV: "production",
-            PO_ROOT: absoluteRoot,
-          },
-        }
-      );
+      const orchestratorChild = mockSpawn("node", [expectedOrchestratorPath], {
+        stdio: "pipe",
+        env: {
+          ...process.env,
+          NODE_ENV: "production",
+          PO_ROOT: absoluteRoot,
+        },
+      });
 
       // Assert
       expect(mockSpawn).toHaveBeenCalledTimes(2);
-      expect(mockSpawn).toHaveBeenNthCalledWith(
-        1,
-        "node",
-        ["src/ui/server.js"],
-        {
-          stdio: "pipe",
-          env: {
-            ...process.env,
-            NODE_ENV: "production",
-            PO_ROOT: absoluteRoot,
-            PO_UI_PORT: port,
-          },
-        }
-      );
+      expect(mockSpawn).toHaveBeenNthCalledWith(1, "node", [expectedUiPath], {
+        stdio: "pipe",
+        env: {
+          ...process.env,
+          NODE_ENV: "production",
+          PO_ROOT: absoluteRoot,
+          PO_UI_PORT: port,
+        },
+      });
       expect(mockSpawn).toHaveBeenNthCalledWith(
         2,
         "node",
-        ["src/cli/run-orchestrator.js"],
+        [expectedOrchestratorPath],
         {
           stdio: "pipe",
           env: {

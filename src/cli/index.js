@@ -117,14 +117,14 @@ program
       } catch {
         console.log("Building UI...");
         await new Promise((resolve, reject) => {
-          const buildChild = spawn(
-            "node",
-            ["./node_modules/vite/bin/vite.js", "build"],
-            {
-              stdio: "inherit",
-              env: { ...process.env, NODE_ENV: "development" },
-            }
+          const vitePath = path.resolve(
+            process.cwd(),
+            "node_modules/vite/bin/vite.js"
           );
+          const buildChild = spawn("node", [vitePath, "build"], {
+            stdio: "inherit",
+            env: { ...process.env, NODE_ENV: "development" },
+          });
 
           buildChild.on("exit", (code) => {
             if (code === 0) {
@@ -141,7 +141,8 @@ program
 
       // Step e: Spawn UI server
       console.log("Starting UI server...");
-      uiChild = spawn("node", ["src/ui/server.js"], {
+      const uiServerPath = path.resolve(process.cwd(), "src/ui/server.js");
+      uiChild = spawn("node", [uiServerPath], {
         stdio: "pipe",
         env: {
           ...process.env,
@@ -162,7 +163,11 @@ program
 
       // Step f: Spawn orchestrator
       console.log("Starting orchestrator...");
-      orchestratorChild = spawn("node", ["src/cli/run-orchestrator.js"], {
+      const orchestratorPath = path.resolve(
+        process.cwd(),
+        "src/cli/run-orchestrator.js"
+      );
+      orchestratorChild = spawn("node", [orchestratorPath], {
         stdio: "pipe",
         env: {
           ...process.env,
