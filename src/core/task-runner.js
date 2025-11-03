@@ -7,6 +7,7 @@ import { loadEnvironment } from "./environment.js";
 import { getConfig } from "./config.js";
 import { createTaskFileIO } from "./file-io.js";
 import { writeJobStatus } from "./status-writer.js";
+import { computeDeterministicProgress } from "./progress.js";
 
 /**
  * Validates that a value is a plain object (not array, null, or class instance).
@@ -425,6 +426,10 @@ export async function runPipeline(modulePath, initialContext = {}) {
       jobId: initialContext.jobId,
       envLoaded: initialContext.envLoaded,
       modelConfig: initialContext.modelConfig,
+      pipelineTasks:
+        initialContext.meta?.pipelineTasks ||
+        initialContext.pipelineTasks ||
+        [],
     },
     data: {
       seed: seed,
@@ -705,6 +710,21 @@ export async function runPipeline(modulePath, initialContext = {}) {
               snapshot.currentStage = stageName;
               snapshot.lastUpdated = new Date().toISOString();
 
+              // Compute deterministic progress after stage completion
+              const pct = computeDeterministicProgress(
+                context.meta.pipelineTasks || [],
+                context.meta.taskName,
+                stageName
+              );
+              snapshot.progress = pct;
+
+              // Debug log for progress computation
+              console.debug("[task-runner] stage completion progress", {
+                task: context.meta.taskName,
+                stage: stageName,
+                progress: pct,
+              });
+
               // Ensure task exists and update task-specific fields
               if (!snapshot.tasks[context.meta.taskName]) {
                 snapshot.tasks[context.meta.taskName] = {};
@@ -858,6 +878,7 @@ export async function runPipeline(modulePath, initialContext = {}) {
         snapshot.current = null;
         snapshot.currentStage = null;
         snapshot.state = "done";
+        snapshot.progress = 100;
         snapshot.lastUpdated = new Date().toISOString();
 
         // Update task state to done
