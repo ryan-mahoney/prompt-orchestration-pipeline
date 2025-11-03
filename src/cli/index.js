@@ -301,4 +301,190 @@ program
     }
   });
 
+program
+  .command("add-pipeline <pipeline-slug>")
+  .description("Add a new pipeline configuration")
+  .action(async (pipelineSlug) => {
+    const globalOptions = program.opts();
+    const root = globalOptions.root || path.resolve(process.cwd(), "pipelines");
+
+    // Validate pipeline-slug is kebab-case
+    const kebabCaseRegex = /^[a-z0-9-]+$/;
+    if (!kebabCaseRegex.test(pipelineSlug)) {
+      console.error(
+        "Pipeline slug must be kebab-case (lowercase letters, numbers, and hyphens only)"
+      );
+      process.exit(1);
+    }
+
+    try {
+      // Ensure directories exist
+      const pipelineConfigDir = path.join(
+        root,
+        "pipeline-config",
+        pipelineSlug
+      );
+      const tasksDir = path.join(pipelineConfigDir, "tasks");
+      await fs.mkdir(tasksDir, { recursive: true });
+
+      // Write pipeline.json
+      const pipelineConfig = {
+        name: pipelineSlug,
+        version: "1.0.0",
+        description: "New pipeline",
+        tasks: [],
+      };
+      await fs.writeFile(
+        path.join(pipelineConfigDir, "pipeline.json"),
+        JSON.stringify(pipelineConfig, null, 2) + "\n"
+      );
+
+      // Write tasks/index.js
+      await fs.writeFile(
+        path.join(tasksDir, "index.js"),
+        "export default {};\n"
+      );
+
+      // Update registry.json
+      const registryPath = path.join(root, "pipeline-config", "registry.json");
+      let registry = { pipelines: {} };
+
+      try {
+        const registryContent = await fs.readFile(registryPath, "utf8");
+        registry = JSON.parse(registryContent);
+        if (!registry.pipelines) {
+          registry.pipelines = {};
+        }
+      } catch (error) {
+        // If registry doesn't exist or is invalid, use empty registry
+        registry = { pipelines: {} };
+      }
+
+      // Add/replace pipeline entry
+      registry.pipelines[pipelineSlug] = {
+        name: pipelineSlug,
+        description: "New pipeline",
+        pipelinePath: `pipeline-config/${pipelineSlug}/pipeline.json`,
+        taskRegistryPath: `pipeline-config/${pipelineSlug}/tasks/index.js`,
+      };
+
+      // Write back registry
+      await fs.writeFile(
+        registryPath,
+        JSON.stringify(registry, null, 2) + "\n"
+      );
+
+      console.log(`Pipeline "${pipelineSlug}" added successfully`);
+    } catch (error) {
+      console.error(`Error adding pipeline: ${error.message}`);
+      process.exit(1);
+    }
+  });
+
+program
+  .command("add-pipeline-task <pipeline-slug> <task-slug>")
+  .description("Add a new task to a pipeline")
+  .action(async (pipelineSlug, taskSlug) => {
+    const globalOptions = program.opts();
+    const root = globalOptions.root || path.resolve(process.cwd(), "pipelines");
+
+    // Validate both slugs are kebab-case
+    const kebabCaseRegex = /^[a-z0-9-]+$/;
+    if (!kebabCaseRegex.test(pipelineSlug)) {
+      console.error(
+        "Pipeline slug must be kebab-case (lowercase letters, numbers, and hyphens only)"
+      );
+      process.exit(1);
+    }
+    if (!kebabCaseRegex.test(taskSlug)) {
+      console.error(
+        "Task slug must be kebab-case (lowercase letters, numbers, and hyphens only)"
+      );
+      process.exit(1);
+    }
+
+    // Check if pipeline tasks directory exists
+    const tasksDir = path.join(root, "pipeline-config", pipelineSlug, "tasks");
+    try {
+      await fs.access(tasksDir);
+    } catch (error) {
+      console.error(
+        `Pipeline "${pipelineSlug}" does not exist. Run "pipeline-orchestrator add-pipeline ${pipelineSlug}" first.`
+      );
+      process.exit(1);
+    }
+
+    try {
+      // Create task file with all stage exports
+      const taskFileContent = STAGE_NAMES.map(
+        (stageName) => `export async function ${stageName}(ctx) {
+  // Purpose: ${getStagePurpose(stageName)}
+  return { output: {}, flags: {} };
+}`
+      ).join("\n\n");
+
+      await fs.writeFile(
+        path.join(tasksDir, `${taskSlug}.js`),
+        taskFileContent + "\n"
+      );
+
+      // Update tasks/index.js
+      const indexFilePath = path.join(tasksDir, "index.js");
+      let taskIndex = {};
+
+      try {
+        const indexContent = await fs.readFile(indexFilePath, "utf8");
+        // Parse the default export from the file
+        const exportMatch = indexContent.match(
+          /export default\s+({[\s\S]*?})\s*;?\s*$/
+        );
+        if (exportMatch) {
+          // Use eval to parse the object (safe in this controlled context)
+          taskIndex = eval(`(${exportMatch[1]})`);
+        }
+      } catch (error) {
+        // If file is missing or invalid, start with empty object
+        taskIndex = {};
+      }
+
+      // Add/replace task mapping
+      taskIndex[taskSlug] = `./${taskSlug}.js`;
+
+      // Sort keys alphabetically for stable output
+      const sortedKeys = Object.keys(taskIndex).sort();
+      const sortedIndex = {};
+      for (const key of sortedKeys) {
+        sortedIndex[key] = taskIndex[key];
+      }
+
+      // Write back the index file with proper formatting
+      const indexContent = `export default ${JSON.stringify(sortedIndex, null, 2)};\n`;
+      await fs.writeFile(indexFilePath, indexContent);
+
+      console.log(`Task "${taskSlug}" added to pipeline "${pipelineSlug}"`);
+    } catch (error) {
+      console.error(`Error adding task: ${error.message}`);
+      process.exit(1);
+    }
+  });
+
+// Helper function to get stage purpose descriptions
+function getStagePurpose(stageName) {
+  const purposes = {
+    ingestion:
+      "load/shape input for downstream stages (no external side-effects required)",
+    preProcessing: "prepare and clean data for main processing",
+    promptTemplating: "generate or format prompts for LLM interaction",
+    inference: "execute LLM calls or other model inference",
+    parsing: "extract and structure results from model outputs",
+    validateStructure: "ensure output meets expected format and schema",
+    validateQuality: "check content quality and completeness",
+    critique: "analyze and evaluate results against criteria",
+    refine: "improve and optimize outputs based on feedback",
+    finalValidation: "perform final checks before completion",
+    integration: "integrate results into downstream systems or workflows",
+  };
+  return purposes[stageName] || "handle stage-specific processing";
+}
+
 program.parse();

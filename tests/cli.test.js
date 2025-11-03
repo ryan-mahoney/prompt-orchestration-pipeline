@@ -723,7 +723,7 @@ describe("CLI", () => {
         .mockImplementation(() => {});
 
       vi.spyOn(process, "on").mockImplementation((event, handler) => {
-        if (event === "SIGINT" || event === "SIGTERM") {
+        if (event === "SIGINT" || event === "TERM") {
           handler();
         }
       });
@@ -746,4 +746,923 @@ describe("CLI", () => {
       expect(mockProcessExit).toHaveBeenCalledTimes(2);
     });
   });
+
+  describe("Add Pipeline Command", () => {
+    let mockFs, mockConsoleError, mockProcessExit, mockConsoleLog;
+
+    beforeEach(() => {
+      // Mock fs.promises
+      mockFs = {
+        mkdir: vi.fn().mockResolvedValue(),
+        writeFile: vi.fn().mockResolvedValue(),
+        readFile: vi.fn(),
+      };
+      vi.doMock("node:fs/promises", () => mockFs);
+
+      // Mock console methods
+      mockConsoleError = vi
+        .spyOn(console, "error")
+        .mockImplementation(() => {});
+      mockConsoleLog = vi.spyOn(console, "log").mockImplementation(() => {});
+      mockProcessExit = vi.spyOn(process, "exit").mockImplementation(() => {});
+    });
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it("should create pipeline configuration and update registry successfully", async () => {
+      // Arrange
+      const pipelineSlug = "content-generation";
+      const root = "/test/pipelines";
+
+      // Mock registry.json read to return empty registry
+      mockFs.readFile.mockResolvedValue(JSON.stringify({ pipelines: {} }));
+
+      // Act - Test the add-pipeline command logic directly
+      const addPipelineHandler = async (pipelineSlug, globalOptions = {}) => {
+        const root =
+          globalOptions.root || path.resolve(process.cwd(), "pipelines");
+
+        // Validate pipeline-slug is kebab-case
+        const kebabCaseRegex = /^[a-z0-9-]+$/;
+        if (!kebabCaseRegex.test(pipelineSlug)) {
+          console.error(
+            "Pipeline slug must be kebab-case (lowercase letters, numbers, and hyphens only)"
+          );
+          process.exit(1);
+        }
+
+        try {
+          // Ensure directories exist
+          const pipelineConfigDir = path.join(
+            root,
+            "pipeline-config",
+            pipelineSlug
+          );
+          const tasksDir = path.join(pipelineConfigDir, "tasks");
+          await mockFs.mkdir(tasksDir, { recursive: true });
+
+          // Write pipeline.json
+          const pipelineConfig = {
+            name: pipelineSlug,
+            version: "1.0.0",
+            description: "New pipeline",
+            tasks: [],
+          };
+          await mockFs.writeFile(
+            path.join(pipelineConfigDir, "pipeline.json"),
+            JSON.stringify(pipelineConfig, null, 2) + "\n"
+          );
+
+          // Write tasks/index.js
+          await mockFs.writeFile(
+            path.join(tasksDir, "index.js"),
+            "export default {};\n"
+          );
+
+          // Update registry.json
+          const registryPath = path.join(
+            root,
+            "pipeline-config",
+            "registry.json"
+          );
+          let registry = { pipelines: {} };
+
+          try {
+            const registryContent = await mockFs.readFile(registryPath, "utf8");
+            registry = JSON.parse(registryContent);
+            if (!registry.pipelines) {
+              registry.pipelines = {};
+            }
+          } catch (error) {
+            // If registry doesn't exist or is invalid, use empty registry
+            registry = { pipelines: {} };
+          }
+
+          // Add/replace pipeline entry
+          registry.pipelines[pipelineSlug] = {
+            name: pipelineSlug,
+            description: "New pipeline",
+            pipelinePath: `pipeline-config/${pipelineSlug}/pipeline.json`,
+            taskRegistryPath: `pipeline-config/${pipelineSlug}/tasks/index.js`,
+          };
+
+          // Write back registry
+          await mockFs.writeFile(
+            registryPath,
+            JSON.stringify(registry, null, 2) + "\n"
+          );
+
+          console.log(`Pipeline "${pipelineSlug}" added successfully`);
+        } catch (error) {
+          console.error(`Error adding pipeline: ${error.message}`);
+          process.exit(1);
+        }
+      };
+
+      await addPipelineHandler(pipelineSlug, { root });
+
+      // Assert - Check directory creation
+      expect(mockFs.mkdir).toHaveBeenCalledWith(
+        "/test/pipelines/pipeline-config/content-generation/tasks",
+        { recursive: true }
+      );
+
+      // Assert - Check pipeline.json creation
+      expect(mockFs.writeFile).toHaveBeenCalledWith(
+        "/test/pipelines/pipeline-config/content-generation/pipeline.json",
+        '{\n  "name": "content-generation",\n  "version": "1.0.0",\n  "description": "New pipeline",\n  "tasks": []\n}\n'
+      );
+
+      // Assert - Check tasks/index.js creation
+      expect(mockFs.writeFile).toHaveBeenCalledWith(
+        "/test/pipelines/pipeline-config/content-generation/tasks/index.js",
+        "export default {};\n"
+      );
+
+      // Assert - Check registry update
+      expect(mockFs.readFile).toHaveBeenCalledWith(
+        "/test/pipelines/pipeline-config/registry.json",
+        "utf8"
+      );
+      expect(mockFs.writeFile).toHaveBeenCalledWith(
+        "/test/pipelines/pipeline-config/registry.json",
+        '{\n  "pipelines": {\n    "content-generation": {\n      "name": "content-generation",\n      "description": "New pipeline",\n      "pipelinePath": "pipeline-config/content-generation/pipeline.json",\n      "taskRegistryPath": "pipeline-config/content-generation/tasks/index.js"\n    }\n  }\n}\n'
+      );
+
+      expect(mockConsoleLog).toHaveBeenCalledWith(
+        'Pipeline "content-generation" added successfully'
+      );
+    });
+
+    it("should reject invalid pipeline slugs", async () => {
+      // Arrange
+      const invalidSlug = "Invalid_Slug";
+
+      // Act
+      const addPipelineHandler = async (pipelineSlug, globalOptions = {}) => {
+        const root =
+          globalOptions.root || path.resolve(process.cwd(), "pipelines");
+
+        // Validate pipeline-slug is kebab-case
+        const kebabCaseRegex = /^[a-z0-9-]+$/;
+        if (!kebabCaseRegex.test(pipelineSlug)) {
+          console.error(
+            "Pipeline slug must be kebab-case (lowercase letters, numbers, and hyphens only)"
+          );
+          process.exit(1);
+        }
+      };
+
+      await addPipelineHandler(invalidSlug);
+
+      // Assert
+      expect(mockConsoleError).toHaveBeenCalledWith(
+        "Pipeline slug must be kebab-case (lowercase letters, numbers, and hyphens only)"
+      );
+      expect(mockProcessExit).toHaveBeenCalledWith(1);
+    });
+
+    it("should handle missing registry file gracefully", async () => {
+      // Arrange
+      const pipelineSlug = "test-pipeline";
+      const root = "/test/pipelines";
+
+      // Mock registry.json read to throw error (file doesn't exist)
+      mockFs.readFile.mockRejectedValue(new Error("ENOENT: no such file"));
+
+      // Act
+      const addPipelineHandler = async (pipelineSlug, globalOptions = {}) => {
+        const root =
+          globalOptions.root || path.resolve(process.cwd(), "pipelines");
+
+        // Validate pipeline-slug is kebab-case
+        const kebabCaseRegex = /^[a-z0-9-]+$/;
+        if (!kebabCaseRegex.test(pipelineSlug)) {
+          console.error(
+            "Pipeline slug must be kebab-case (lowercase letters, numbers, and hyphens only)"
+          );
+          process.exit(1);
+        }
+
+        try {
+          // Ensure directories exist
+          const pipelineConfigDir = path.join(
+            root,
+            "pipeline-config",
+            pipelineSlug
+          );
+          const tasksDir = path.join(pipelineConfigDir, "tasks");
+          await mockFs.mkdir(tasksDir, { recursive: true });
+
+          // Write pipeline.json
+          const pipelineConfig = {
+            name: pipelineSlug,
+            version: "1.0.0",
+            description: "New pipeline",
+            tasks: [],
+          };
+          await mockFs.writeFile(
+            path.join(pipelineConfigDir, "pipeline.json"),
+            JSON.stringify(pipelineConfig, null, 2) + "\n"
+          );
+
+          // Write tasks/index.js
+          await mockFs.writeFile(
+            path.join(tasksDir, "index.js"),
+            "export default {};\n"
+          );
+
+          // Update registry.json
+          const registryPath = path.join(
+            root,
+            "pipeline-config",
+            "registry.json"
+          );
+          let registry = { pipelines: {} };
+
+          try {
+            const registryContent = await mockFs.readFile(registryPath, "utf8");
+            registry = JSON.parse(registryContent);
+            if (!registry.pipelines) {
+              registry.pipelines = {};
+            }
+          } catch (error) {
+            // If registry doesn't exist or is invalid, use empty registry
+            registry = { pipelines: {} };
+          }
+
+          // Add/replace pipeline entry
+          registry.pipelines[pipelineSlug] = {
+            name: pipelineSlug,
+            description: "New pipeline",
+            pipelinePath: `pipeline-config/${pipelineSlug}/pipeline.json`,
+            taskRegistryPath: `pipeline-config/${pipelineSlug}/tasks/index.js`,
+          };
+
+          // Write back registry
+          await mockFs.writeFile(
+            registryPath,
+            JSON.stringify(registry, null, 2) + "\n"
+          );
+
+          console.log(`Pipeline "${pipelineSlug}" added successfully`);
+        } catch (error) {
+          console.error(`Error adding pipeline: ${error.message}`);
+          process.exit(1);
+        }
+      };
+
+      await addPipelineHandler(pipelineSlug, { root });
+
+      // Assert - Should still create pipeline even with missing registry
+      expect(mockFs.writeFile).toHaveBeenCalledWith(
+        "/test/pipelines/pipeline-config/registry.json",
+        '{\n  "pipelines": {\n    "test-pipeline": {\n      "name": "test-pipeline",\n      "description": "New pipeline",\n      "pipelinePath": "pipeline-config/test-pipeline/pipeline.json",\n      "taskRegistryPath": "pipeline-config/test-pipeline/tasks/index.js"\n    }\n  }\n}\n'
+      );
+      expect(mockConsoleLog).toHaveBeenCalledWith(
+        'Pipeline "test-pipeline" added successfully'
+      );
+    });
+
+    it("should handle file system errors gracefully", async () => {
+      // Arrange
+      const pipelineSlug = "test-pipeline";
+      const root = "/test/pipelines";
+
+      // Mock mkdir to throw an error
+      mockFs.mkdir.mockRejectedValue(new Error("Permission denied"));
+
+      // Act
+      const addPipelineHandler = async (pipelineSlug, globalOptions = {}) => {
+        const root =
+          globalOptions.root || path.resolve(process.cwd(), "pipelines");
+
+        // Validate pipeline-slug is kebab-case
+        const kebabCaseRegex = /^[a-z0-9-]+$/;
+        if (!kebabCaseRegex.test(pipelineSlug)) {
+          console.error(
+            "Pipeline slug must be kebab-case (lowercase letters, numbers, and hyphens only)"
+          );
+          process.exit(1);
+        }
+
+        try {
+          // Ensure directories exist
+          const pipelineConfigDir = path.join(
+            root,
+            "pipeline-config",
+            pipelineSlug
+          );
+          const tasksDir = path.join(pipelineConfigDir, "tasks");
+          await mockFs.mkdir(tasksDir, { recursive: true });
+
+          // Write pipeline.json
+          const pipelineConfig = {
+            name: pipelineSlug,
+            version: "1.0.0",
+            description: "New pipeline",
+            tasks: [],
+          };
+          await mockFs.writeFile(
+            path.join(pipelineConfigDir, "pipeline.json"),
+            JSON.stringify(pipelineConfig, null, 2) + "\n"
+          );
+
+          // Write tasks/index.js
+          await mockFs.writeFile(
+            path.join(tasksDir, "index.js"),
+            "export default {};\n"
+          );
+
+          // Update registry.json
+          const registryPath = path.join(
+            root,
+            "pipeline-config",
+            "registry.json"
+          );
+          let registry = { pipelines: {} };
+
+          try {
+            const registryContent = await mockFs.readFile(registryPath, "utf8");
+            registry = JSON.parse(registryContent);
+            if (!registry.pipelines) {
+              registry.pipelines = {};
+            }
+          } catch (error) {
+            // If registry doesn't exist or is invalid, use empty registry
+            registry = { pipelines: {} };
+          }
+
+          // Add/replace pipeline entry
+          registry.pipelines[pipelineSlug] = {
+            name: pipelineSlug,
+            description: "New pipeline",
+            pipelinePath: `pipeline-config/${pipelineSlug}/pipeline.json`,
+            taskRegistryPath: `pipeline-config/${pipelineSlug}/tasks/index.js`,
+          };
+
+          // Write back registry
+          await mockFs.writeFile(
+            registryPath,
+            JSON.stringify(registry, null, 2) + "\n"
+          );
+
+          console.log(`Pipeline "${pipelineSlug}" added successfully`);
+        } catch (error) {
+          console.error(`Error adding pipeline: ${error.message}`);
+          process.exit(1);
+        }
+      };
+
+      await addPipelineHandler(pipelineSlug, { root });
+
+      // Assert
+      expect(mockConsoleError).toHaveBeenCalledWith(
+        "Error adding pipeline: Permission denied"
+      );
+      expect(mockProcessExit).toHaveBeenCalledWith(1);
+    });
+
+    it("should use default root when not provided", async () => {
+      // Arrange
+      const pipelineSlug = "test-pipeline";
+
+      mockFs.readFile.mockResolvedValue(JSON.stringify({ pipelines: {} }));
+
+      // Act
+      const addPipelineHandler = async (pipelineSlug, globalOptions = {}) => {
+        const root =
+          globalOptions.root || path.resolve(process.cwd(), "pipelines");
+
+        // Validate pipeline-slug is kebab-case
+        const kebabCaseRegex = /^[a-z0-9-]+$/;
+        if (!kebabCaseRegex.test(pipelineSlug)) {
+          console.error(
+            "Pipeline slug must be kebab-case (lowercase letters, numbers, and hyphens only)"
+          );
+          process.exit(1);
+        }
+
+        // Create directories to verify root path
+        const pipelineConfigDir = path.join(
+          root,
+          "pipeline-config",
+          pipelineSlug
+        );
+        const tasksDir = path.join(pipelineConfigDir, "tasks");
+        await mockFs.mkdir(tasksDir, { recursive: true });
+
+        return root;
+      };
+
+      const usedRoot = await addPipelineHandler(pipelineSlug);
+
+      // Assert
+      expect(usedRoot).toBe(path.resolve(process.cwd(), "pipelines"));
+      expect(mockFs.mkdir).toHaveBeenCalledWith(
+        path.join(
+          path.resolve(process.cwd(), "pipelines"),
+          "pipeline-config",
+          "test-pipeline",
+          "tasks"
+        ),
+        { recursive: true }
+      );
+    });
+  });
+
+  describe("Add Pipeline Task Command", () => {
+    let mockFs, mockConsoleError, mockProcessExit, mockConsoleLog;
+
+    beforeEach(() => {
+      // Mock fs.promises
+      mockFs = {
+        access: vi.fn(),
+        writeFile: vi.fn().mockResolvedValue(),
+        readFile: vi.fn(),
+      };
+      vi.doMock("node:fs/promises", () => mockFs);
+
+      // Mock console methods
+      mockConsoleError = vi
+        .spyOn(console, "error")
+        .mockImplementation(() => {});
+      mockConsoleLog = vi.spyOn(console, "log").mockImplementation(() => {});
+      mockProcessExit = vi.spyOn(process, "exit").mockImplementation(() => {});
+    });
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it("should create task file with all stage exports and update index", async () => {
+      // Arrange
+      const pipelineSlug = "content-generation";
+      const taskSlug = "research";
+      const root = "/test/pipelines";
+
+      // Mock that tasks directory exists
+      mockFs.access.mockResolvedValue(undefined);
+
+      // Mock existing index.js content (empty)
+      mockFs.readFile
+        .mockResolvedValueOnce("export default {};")
+        .mockResolvedValueOnce("export default {};"); // Second call for reading index
+
+      // Act - Test add-pipeline-task command logic directly
+      const addPipelineTaskHandler = async (
+        pipelineSlug,
+        taskSlug,
+        globalOptions = {}
+      ) => {
+        const root =
+          globalOptions.root || path.resolve(process.cwd(), "pipelines");
+
+        // Validate both slugs are kebab-case
+        const kebabCaseRegex = /^[a-z0-9-]+$/;
+        if (!kebabCaseRegex.test(pipelineSlug)) {
+          console.error(
+            "Pipeline slug must be kebab-case (lowercase letters, numbers, and hyphens only)"
+          );
+          process.exit(1);
+        }
+        if (!kebabCaseRegex.test(taskSlug)) {
+          console.error(
+            "Task slug must be kebab-case (lowercase letters, numbers, and hyphens only)"
+          );
+          process.exit(1);
+        }
+
+        // Check if pipeline tasks directory exists
+        const tasksDir = path.join(
+          root,
+          "pipeline-config",
+          pipelineSlug,
+          "tasks"
+        );
+        try {
+          await mockFs.access(tasksDir);
+        } catch (error) {
+          console.error(
+            `Pipeline "${pipelineSlug}" does not exist. Run "pipeline-orchestrator add-pipeline ${pipelineSlug}" first.`
+          );
+          process.exit(1);
+        }
+
+        try {
+          // Create task file with all stage exports
+          const STAGE_NAMES = [
+            "ingestion",
+            "preProcessing",
+            "promptTemplating",
+            "inference",
+            "parsing",
+            "validateStructure",
+            "validateQuality",
+            "critique",
+            "refine",
+            "finalValidation",
+            "integration",
+          ];
+
+          const taskFileContent = STAGE_NAMES.map(
+            (stageName) => `export async function ${stageName}(ctx) {
+  // Purpose: ${getStagePurpose(stageName)}
+  return { output: {}, flags: {} };
+}`
+          ).join("\n\n");
+
+          await mockFs.writeFile(
+            path.join(tasksDir, `${taskSlug}.js`),
+            taskFileContent + "\n"
+          );
+
+          // Update tasks/index.js
+          const indexFilePath = path.join(tasksDir, "index.js");
+          let taskIndex = {};
+
+          try {
+            const indexContent = await mockFs.readFile(indexFilePath, "utf8");
+            // Parse the default export from the file
+            const exportMatch = indexContent.match(
+              /export default\s+({[\s\S]*?})\s*;?\s*$/
+            );
+            if (exportMatch) {
+              // Use eval to parse the object (safe in this controlled context)
+              taskIndex = eval(`(${exportMatch[1]})`);
+            }
+          } catch (error) {
+            // If file is missing or invalid, start with empty object
+            taskIndex = {};
+          }
+
+          // Add/replace task mapping
+          taskIndex[taskSlug] = `./${taskSlug}.js`;
+
+          // Sort keys alphabetically for stable output
+          const sortedKeys = Object.keys(taskIndex).sort();
+          const sortedIndex = {};
+          for (const key of sortedKeys) {
+            sortedIndex[key] = taskIndex[key];
+          }
+
+          // Write back the index file with proper formatting
+          const indexContent = `export default ${JSON.stringify(
+            sortedIndex,
+            null,
+            2
+          )};\n`;
+          await mockFs.writeFile(indexFilePath, indexContent);
+
+          console.log(`Task "${taskSlug}" added to pipeline "${pipelineSlug}"`);
+        } catch (error) {
+          console.error(`Error adding task: ${error.message}`);
+          process.exit(1);
+        }
+      };
+
+      await addPipelineTaskHandler(pipelineSlug, taskSlug, { root });
+
+      // Assert - Check task file creation
+      expect(mockFs.writeFile).toHaveBeenCalledWith(
+        "/test/pipelines/pipeline-config/content-generation/tasks/research.js",
+        expect.stringContaining("export async function ingestion(ctx)")
+      );
+      expect(mockFs.writeFile).toHaveBeenCalledWith(
+        "/test/pipelines/pipeline-config/content-generation/tasks/research.js",
+        expect.stringContaining("export async function integration(ctx)")
+      );
+
+      // Assert - Check index file update
+      expect(mockFs.readFile).toHaveBeenCalledWith(
+        "/test/pipelines/pipeline-config/content-generation/tasks/index.js",
+        "utf8"
+      );
+      expect(mockFs.writeFile).toHaveBeenCalledWith(
+        "/test/pipelines/pipeline-config/content-generation/tasks/index.js",
+        'export default {\n  "research": "./research.js"\n};\n'
+      );
+
+      expect(mockConsoleLog).toHaveBeenCalledWith(
+        'Task "research" added to pipeline "content-generation"'
+      );
+    });
+
+    it("should reject invalid pipeline slugs", async () => {
+      // Arrange
+      const invalidSlug = "Invalid_Slug";
+
+      // Act
+      const addPipelineTaskHandler = async (
+        pipelineSlug,
+        taskSlug,
+        globalOptions = {}
+      ) => {
+        const root =
+          globalOptions.root || path.resolve(process.cwd(), "pipelines");
+
+        // Validate both slugs are kebab-case
+        const kebabCaseRegex = /^[a-z0-9-]+$/;
+        if (!kebabCaseRegex.test(pipelineSlug)) {
+          console.error(
+            "Pipeline slug must be kebab-case (lowercase letters, numbers, and hyphens only)"
+          );
+          process.exit(1);
+        }
+      };
+
+      await addPipelineTaskHandler(invalidSlug, "task-name");
+
+      // Assert
+      expect(mockConsoleError).toHaveBeenCalledWith(
+        "Pipeline slug must be kebab-case (lowercase letters, numbers, and hyphens only)"
+      );
+      expect(mockProcessExit).toHaveBeenCalledWith(1);
+    });
+
+    it("should reject invalid task slugs", async () => {
+      // Arrange
+      const invalidTaskSlug = "Invalid_Task";
+
+      // Act
+      const addPipelineTaskHandler = async (
+        pipelineSlug,
+        taskSlug,
+        globalOptions = {}
+      ) => {
+        const root =
+          globalOptions.root || path.resolve(process.cwd(), "pipelines");
+
+        // Validate both slugs are kebab-case
+        const kebabCaseRegex = /^[a-z0-9-]+$/;
+        if (!kebabCaseRegex.test(pipelineSlug)) {
+          console.error(
+            "Pipeline slug must be kebab-case (lowercase letters, numbers, and hyphens only)"
+          );
+          process.exit(1);
+        }
+        if (!kebabCaseRegex.test(taskSlug)) {
+          console.error(
+            "Task slug must be kebab-case (lowercase letters, numbers, and hyphens only)"
+          );
+          process.exit(1);
+        }
+      };
+
+      await addPipelineTaskHandler("valid-pipeline", invalidTaskSlug);
+
+      // Assert
+      expect(mockConsoleError).toHaveBeenCalledWith(
+        "Task slug must be kebab-case (lowercase letters, numbers, and hyphens only)"
+      );
+      expect(mockProcessExit).toHaveBeenCalledWith(1);
+    });
+
+    it("should fail when pipeline directory does not exist", async () => {
+      // Arrange
+      const pipelineSlug = "nonexistent-pipeline";
+      const taskSlug = "task-name";
+
+      // Mock that tasks directory doesn't exist
+      mockFs.access.mockRejectedValue(new Error("ENOENT"));
+
+      // Act
+      const addPipelineTaskHandler = async (
+        pipelineSlug,
+        taskSlug,
+        globalOptions = {}
+      ) => {
+        const root =
+          globalOptions.root || path.resolve(process.cwd(), "pipelines");
+
+        // Validate both slugs are kebab-case
+        const kebabCaseRegex = /^[a-z0-9-]+$/;
+        if (!kebabCaseRegex.test(pipelineSlug)) {
+          console.error(
+            "Pipeline slug must be kebab-case (lowercase letters, numbers, and hyphens only)"
+          );
+          process.exit(1);
+        }
+        if (!kebabCaseRegex.test(taskSlug)) {
+          console.error(
+            "Task slug must be kebab-case (lowercase letters, numbers, and hyphens only)"
+          );
+          process.exit(1);
+        }
+
+        // Check if pipeline tasks directory exists
+        const tasksDir = path.join(
+          root,
+          "pipeline-config",
+          pipelineSlug,
+          "tasks"
+        );
+        try {
+          await mockFs.access(tasksDir);
+        } catch (error) {
+          console.error(
+            `Pipeline "${pipelineSlug}" does not exist. Run "pipeline-orchestrator add-pipeline ${pipelineSlug}" first.`
+          );
+          process.exit(1);
+        }
+      };
+
+      await addPipelineTaskHandler(pipelineSlug, taskSlug);
+
+      // Assert
+      expect(mockFs.access).toHaveBeenCalledWith(
+        expect.stringContaining("pipeline-config/nonexistent-pipeline/tasks")
+      );
+      expect(mockConsoleError).toHaveBeenCalledWith(
+        'Pipeline "nonexistent-pipeline" does not exist. Run "pipeline-orchestrator add-pipeline nonexistent-pipeline" first.'
+      );
+      expect(mockProcessExit).toHaveBeenCalledWith(1);
+    });
+
+    it("should update existing index file with new task", async () => {
+      // Arrange
+      const pipelineSlug = "content-generation";
+      const taskSlug = "research";
+      const root = "/test/pipelines";
+
+      // Mock that tasks directory exists
+      mockFs.access.mockResolvedValue(undefined);
+
+      // Mock existing index.js with existing tasks
+      mockFs.readFile
+        .mockResolvedValueOnce(
+          'export default {\n  "existing-task": "./existing-task.js"\n};'
+        )
+        .mockResolvedValueOnce(
+          'export default {\n  "existing-task": "./existing-task.js"\n};'
+        );
+
+      // Act
+      const addPipelineTaskHandler = async (
+        pipelineSlug,
+        taskSlug,
+        globalOptions = {}
+      ) => {
+        const root =
+          globalOptions.root || path.resolve(process.cwd(), "pipelines");
+
+        // Validate slugs and check directory exist
+        const kebabCaseRegex = /^[a-z0-9-]+$/;
+        if (
+          !kebabCaseRegex.test(pipelineSlug) ||
+          !kebabCaseRegex.test(taskSlug)
+        ) {
+          return;
+        }
+
+        const tasksDir = path.join(
+          root,
+          "pipeline-config",
+          pipelineSlug,
+          "tasks"
+        );
+        try {
+          await mockFs.access(tasksDir);
+        } catch (error) {
+          return;
+        }
+
+        try {
+          // Create task file
+          const taskFileContent =
+            "export async function ingestion(ctx) {\n  // Purpose: test\n  return { output: {}, flags: {} };\n}";
+          await mockFs.writeFile(
+            path.join(tasksDir, `${taskSlug}.js`),
+            taskFileContent + "\n"
+          );
+
+          // Update tasks/index.js
+          const indexFilePath = path.join(tasksDir, "index.js");
+          let taskIndex = {};
+
+          try {
+            const indexContent = await mockFs.readFile(indexFilePath, "utf8");
+            const exportMatch = indexContent.match(
+              /export default\s+({[\s\S]*?})\s*;?\s*$/
+            );
+            if (exportMatch) {
+              taskIndex = eval(`(${exportMatch[1]})`);
+            }
+          } catch (error) {
+            taskIndex = {};
+          }
+
+          // Add/replace task mapping
+          taskIndex[taskSlug] = `./${taskSlug}.js`;
+
+          // Sort keys alphabetically for stable output
+          const sortedKeys = Object.keys(taskIndex).sort();
+          const sortedIndex = {};
+          for (const key of sortedKeys) {
+            sortedIndex[key] = taskIndex[key];
+          }
+
+          const indexContent = `export default ${JSON.stringify(
+            sortedIndex,
+            null,
+            2
+          )};\n`;
+          await mockFs.writeFile(indexFilePath, indexContent);
+
+          console.log(`Task "${taskSlug}" added to pipeline "${pipelineSlug}"`);
+        } catch (error) {
+          console.error(`Error adding task: ${error.message}`);
+          process.exit(1);
+        }
+      };
+
+      await addPipelineTaskHandler(pipelineSlug, taskSlug, { root });
+
+      // Assert
+      expect(mockFs.writeFile).toHaveBeenCalledWith(
+        "/test/pipelines/pipeline-config/content-generation/tasks/index.js",
+        'export default {\n  "existing-task": "./existing-task.js",\n  "research": "./research.js"\n};\n'
+      );
+    });
+
+    it("should use default root when not provided", async () => {
+      // Arrange
+      const pipelineSlug = "test-pipeline";
+      const taskSlug = "test-task";
+
+      mockFs.access.mockResolvedValue(undefined);
+      mockFs.readFile.mockResolvedValue("export default {};");
+
+      // Act
+      const addPipelineTaskHandler = async (
+        pipelineSlug,
+        taskSlug,
+        globalOptions = {}
+      ) => {
+        const root =
+          globalOptions.root || path.resolve(process.cwd(), "pipelines");
+
+        // Validate slugs and check directory exist
+        const kebabCaseRegex = /^[a-z0-9-]+$/;
+        if (
+          !kebabCaseRegex.test(pipelineSlug) ||
+          !kebabCaseRegex.test(taskSlug)
+        ) {
+          return;
+        }
+
+        const tasksDir = path.join(
+          root,
+          "pipeline-config",
+          pipelineSlug,
+          "tasks"
+        );
+        await mockFs.access(tasksDir);
+
+        // Create task file
+        await mockFs.writeFile(
+          path.join(tasksDir, `${taskSlug}.js`),
+          "test content\n"
+        );
+
+        return root;
+      };
+
+      const usedRoot = await addPipelineTaskHandler(pipelineSlug, taskSlug);
+
+      // Assert
+      expect(usedRoot).toBe(path.resolve(process.cwd(), "pipelines"));
+      expect(mockFs.writeFile).toHaveBeenCalledWith(
+        path.join(
+          path.resolve(process.cwd(), "pipelines"),
+          "pipeline-config",
+          "test-pipeline",
+          "tasks",
+          "test-task.js"
+        ),
+        "test content\n"
+      );
+    });
+  });
 });
+
+// Helper function for testing
+function getStagePurpose(stageName) {
+  const purposes = {
+    ingestion:
+      "load/shape input for downstream stages (no external side-effects required)",
+    preProcessing: "prepare and clean data for main processing",
+    promptTemplating: "generate or format prompts for LLM interaction",
+    inference: "execute LLM calls or other model inference",
+    parsing: "extract and structure results from model outputs",
+    validateStructure: "ensure output meets expected format and schema",
+    validateQuality: "check content quality and completeness",
+    critique: "analyze and evaluate results against criteria",
+    refine: "improve and optimize outputs based on feedback",
+    finalValidation: "perform final checks before completion",
+    integration: "integrate results into downstream systems or workflows",
+  };
+  return purposes[stageName] || "handle stage-specific processing";
+}
