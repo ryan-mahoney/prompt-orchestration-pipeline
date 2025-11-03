@@ -1,6 +1,6 @@
 {
   "name": "@ryanfw/prompt-orchestration-pipeline",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "A Prompt-orchestration pipeline (POP) is a framework for building, running, and experimenting with complex chains of LLM tasks.",
   "type": "module",
   "main": "src/ui/server.js",
