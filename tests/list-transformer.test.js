@@ -477,7 +477,7 @@ describe("List Transformer", () => {
   });
 
   describe("transformJobListForAPI", () => {
-    it("should transform job list to API format", () => {
+    it("should transform job list to API format with dashboard fields", () => {
       const jobs = [
         {
           jobId: "job-1",
@@ -487,7 +487,16 @@ describe("List Transformer", () => {
           createdAt: "2023-01-01T00:00:00Z",
           updatedAt: "2023-01-01T01:00:00Z",
           location: "current",
-          tasksStatus: [{ name: "task-1", state: "running" }], // Should be excluded
+          tasksStatus: {
+            "task-1": {
+              state: "running",
+              startedAt: "2023-01-01T00:30:00Z",
+              executionTimeMs: 1500,
+              currentStage: "processing",
+            },
+          },
+          current: "task-1",
+          currentStage: "processing",
           warnings: ["Some warning"], // Should be excluded
           pipeline: "content-generation",
           pipelineLabel: "Content Generation",
@@ -506,6 +515,16 @@ describe("List Transformer", () => {
           createdAt: "2023-01-01T00:00:00Z",
           updatedAt: "2023-01-01T01:00:00Z",
           location: "current",
+          current: "task-1",
+          currentStage: "processing",
+          tasksStatus: {
+            "task-1": {
+              state: "running",
+              startedAt: "2023-01-01T00:30:00Z",
+              executionTimeMs: 1500,
+              currentStage: "processing",
+            },
+          },
           pipeline: "content-generation",
           pipelineLabel: "Content Generation",
           pipelineSlug: "content-generation",
@@ -691,6 +710,79 @@ describe("List Transformer", () => {
     it("should handle empty input", () => {
       expect(transformJobListForAPI([])).toEqual([]);
     });
+
+    it("should include dashboard completeness fields when present", () => {
+      const jobs = [
+        {
+          jobId: "job-dashboard",
+          title: "Dashboard Test Job",
+          status: "running",
+          progress: 75,
+          createdAt: "2023-01-01T00:00:00Z",
+          updatedAt: "2023-01-01T01:00:00Z",
+          location: "current",
+          current: "ingestion-task",
+          currentStage: "processing",
+          tasksStatus: {
+            "ingestion-task": {
+              state: "done",
+              startedAt: "2023-01-01T00:05:00Z",
+              endedAt: "2023-01-01T00:15:00Z",
+              executionTimeMs: 600000,
+              currentStage: "completed",
+            },
+            "processing-task": {
+              state: "running",
+              startedAt: "2023-01-01T00:20:00Z",
+              currentStage: "validating",
+            },
+            "output-task": {
+              state: "pending",
+            },
+          },
+          pipeline: "test-pipeline",
+          pipelineLabel: "Test Pipeline",
+        },
+      ];
+
+      const result = transformJobListForAPI(jobs);
+
+      expect(result).toHaveLength(1);
+      const job = result[0];
+
+      // Should include basic fields
+      expect(job.jobId).toBe("job-dashboard");
+      expect(job.title).toBe("Dashboard Test Job");
+      expect(job.status).toBe("running");
+      expect(job.progress).toBe(75);
+      expect(job.location).toBe("current");
+
+      // Should include dashboard completeness fields
+      expect(job.current).toBe("ingestion-task");
+      expect(job.currentStage).toBe("processing");
+
+      // Should include complete tasksStatus with all required fields
+      expect(job.tasksStatus).toBeDefined();
+      expect(job.tasksStatus["ingestion-task"]).toEqual({
+        state: "done",
+        startedAt: "2023-01-01T00:05:00Z",
+        endedAt: "2023-01-01T00:15:00Z",
+        executionTimeMs: 600000,
+        currentStage: "completed",
+      });
+      expect(job.tasksStatus["processing-task"]).toEqual({
+        state: "running",
+        startedAt: "2023-01-01T00:20:00Z",
+        currentStage: "validating",
+      });
+      expect(job.tasksStatus["output-task"]).toEqual({
+        state: "pending",
+      });
+
+      // Should include pipeline metadata
+      expect(job.pipeline).toBe("test-pipeline");
+      expect(job.pipelineLabel).toBe("Test Pipeline");
+    });
   });
 
   describe("getAggregationStats", () => {
@@ -745,6 +837,206 @@ describe("List Transformer", () => {
         statusDistribution: {},
         locationDistribution: {},
       });
+    });
+  });
+
+  describe("dashboard completeness fields", () => {
+    it("should include all required dashboard fields in API response", () => {
+      const jobs = [
+        {
+          jobId: "job-complete",
+          title: "Complete Job",
+          status: "complete",
+          progress: 100,
+          createdAt: "2023-01-01T00:00:00Z",
+          updatedAt: "2023-01-01T02:00:00Z",
+          location: "complete",
+          current: null,
+          currentStage: null,
+          tasksStatus: {
+            "task-1": {
+              state: "done",
+              startedAt: "2023-01-01T00:00:00Z",
+              endedAt: "2023-01-01T00:30:00Z",
+              executionTimeMs: 1800000,
+              currentStage: "completed",
+            },
+            "task-2": {
+              state: "done",
+              startedAt: "2023-01-01T00:30:00Z",
+              endedAt: "2023-01-01T01:00:00Z",
+              executionTimeMs: 1800000,
+              currentStage: "completed",
+            },
+          },
+          pipeline: "content-generation",
+          pipelineLabel: "Content Generation",
+        },
+        {
+          jobId: "job-running",
+          title: "Running Job",
+          status: "running",
+          progress: 50,
+          createdAt: "2023-01-01T01:00:00Z",
+          updatedAt: "2023-01-01T01:30:00Z",
+          location: "current",
+          current: "task-2",
+          currentStage: "processing",
+          tasksStatus: {
+            "task-1": {
+              state: "done",
+              startedAt: "2023-01-01T01:00:00Z",
+              endedAt: "2023-01-01T01:15:00Z",
+              executionTimeMs: 900000,
+              currentStage: "completed",
+            },
+            "task-2": {
+              state: "running",
+              startedAt: "2023-01-01T01:15:00Z",
+              executionTimeMs: null, // Still running
+              currentStage: "processing",
+            },
+            "task-3": {
+              state: "pending",
+              // No optional fields for pending tasks
+            },
+          },
+          pipeline: "data-processing",
+          pipelineLabel: "Data Processing",
+        },
+      ];
+
+      const result = transformJobListForAPI(jobs);
+
+      expect(result).toHaveLength(2);
+
+      // Verify complete job
+      const completeJob = result[0];
+      expect(completeJob.jobId).toBe("job-complete");
+      expect(completeJob.current).toBeUndefined();
+      expect(completeJob.currentStage).toBeUndefined();
+      expect(completeJob.tasksStatus).toBeDefined();
+      expect(Object.keys(completeJob.tasksStatus)).toHaveLength(2);
+
+      // Verify tasksStatus structure for complete job
+      const completeTask1 = completeJob.tasksStatus["task-1"];
+      expect(completeTask1.state).toBe("done");
+      expect(completeTask1.executionTimeMs).toBe(1800000);
+      expect(completeTask1.currentStage).toBe("completed");
+
+      // Verify running job
+      const runningJob = result[1];
+      expect(runningJob.jobId).toBe("job-running");
+      expect(runningJob.current).toBe("task-2");
+      expect(runningJob.currentStage).toBe("processing");
+      expect(runningJob.tasksStatus).toBeDefined();
+      expect(Object.keys(runningJob.tasksStatus)).toHaveLength(3);
+
+      // Verify tasksStatus structure for running job
+      const runningTask1 = runningJob.tasksStatus["task-1"];
+      expect(runningTask1.state).toBe("done");
+      expect(runningTask1.executionTimeMs).toBe(900000);
+
+      const runningTask2 = runningJob.tasksStatus["task-2"];
+      expect(runningTask2.state).toBe("running");
+      expect(runningTask2.currentStage).toBe("processing");
+      expect(runningTask2.executionTimeMs).toBeUndefined(); // Still running
+
+      const runningTask3 = runningJob.tasksStatus["task-3"];
+      expect(runningTask3.state).toBe("pending");
+      expect(runningTask3.startedAt).toBeUndefined();
+      expect(runningTask3.endedAt).toBeUndefined();
+      expect(runningTask3.executionTimeMs).toBeUndefined();
+      expect(runningTask3.currentStage).toBeUndefined();
+      expect(runningTask3.failedStage).toBeUndefined();
+
+      // Verify pipeline metadata is included
+      expect(completeJob.pipeline).toBe("content-generation");
+      expect(completeJob.pipelineLabel).toBe("Content Generation");
+      expect(runningJob.pipeline).toBe("data-processing");
+      expect(runningJob.pipelineLabel).toBe("Data Processing");
+    });
+
+    it("should handle failed tasks with proper error fields", () => {
+      const jobs = [
+        {
+          jobId: "job-failed",
+          title: "Failed Job",
+          status: "failed",
+          progress: 25,
+          createdAt: "2023-01-01T00:00:00Z",
+          updatedAt: "2023-01-01T01:00:00Z",
+          location: "complete",
+          current: "task-2",
+          currentStage: null, // Failed tasks don't have currentStage
+          tasksStatus: {
+            "task-1": {
+              state: "done",
+              startedAt: "2023-01-01T00:00:00Z",
+              endedAt: "2023-01-01T00:30:00Z",
+              executionTimeMs: 1800000,
+              currentStage: "completed",
+            },
+            "task-2": {
+              state: "failed",
+              startedAt: "2023-01-01T00:30:00Z",
+              endedAt: "2023-01-01T01:00:00Z",
+              failedStage: "error-processing",
+              executionTimeMs: 1800000,
+            },
+          },
+          pipeline: "test-pipeline",
+          pipelineLabel: "Test Pipeline",
+        },
+      ];
+
+      const result = transformJobListForAPI(jobs);
+
+      expect(result).toHaveLength(1);
+      const job = result[0];
+
+      expect(job.current).toBe("task-2");
+      expect(job.currentStage).toBeUndefined();
+
+      // Verify failed task structure
+      const failedTask = job.tasksStatus["task-2"];
+      expect(failedTask.state).toBe("failed");
+      expect(failedTask.failedStage).toBe("error-processing");
+      expect(failedTask.executionTimeMs).toBe(1800000);
+      expect(failedTask.currentStage).toBeUndefined(); // Failed tasks don't have currentStage
+    });
+
+    it("should handle jobs without optional dashboard fields", () => {
+      const jobs = [
+        {
+          jobId: "job-minimal",
+          title: "Minimal Job",
+          status: "pending",
+          progress: 0,
+          createdAt: "2023-01-01T00:00:00Z",
+          location: "current",
+          // Missing current, currentStage, tasksStatus, pipeline fields
+        },
+      ];
+
+      const result = transformJobListForAPI(jobs);
+
+      expect(result).toHaveLength(1);
+      const job = result[0];
+
+      // Should include basic fields
+      expect(job.jobId).toBe("job-minimal");
+      expect(job.title).toBe("Minimal Job");
+      expect(job.status).toBe("pending");
+      expect(job.progress).toBe(0);
+      expect(job.location).toBe("current");
+
+      // Should not include missing optional fields
+      expect(job.current).toBeUndefined();
+      expect(job.currentStage).toBeUndefined();
+      expect(job.tasksStatus).toBeUndefined();
+      expect(job.pipeline).toBeUndefined();
+      expect(job.pipelineLabel).toBeUndefined();
     });
   });
 });

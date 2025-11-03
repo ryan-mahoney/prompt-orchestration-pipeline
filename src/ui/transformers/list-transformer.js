@@ -241,6 +241,39 @@ export function transformJobListForAPI(jobs = [], options = {}) {
       base.files = job.files;
     }
 
+    // Add required fields for dashboard completeness
+    if (job.current != null) {
+      base.current = job.current;
+    }
+
+    if (job.currentStage != null) {
+      base.currentStage = job.currentStage;
+    }
+
+    if (job.tasksStatus && typeof job.tasksStatus === "object") {
+      // Include tasksStatus with all required fields for UI computation
+      const tasksStatus = {};
+      for (const [taskId, task] of Object.entries(job.tasksStatus)) {
+        if (task && typeof task === "object") {
+          tasksStatus[taskId] = {
+            state: task.state || "pending",
+          };
+
+          // Include optional fields if present
+          if (task.startedAt != null)
+            tasksStatus[taskId].startedAt = task.startedAt;
+          if (task.endedAt != null) tasksStatus[taskId].endedAt = task.endedAt;
+          if (task.executionTimeMs != null)
+            tasksStatus[taskId].executionTimeMs = task.executionTimeMs;
+          if (task.currentStage != null)
+            tasksStatus[taskId].currentStage = task.currentStage;
+          if (task.failedStage != null)
+            tasksStatus[taskId].failedStage = task.failedStage;
+        }
+      }
+      base.tasksStatus = tasksStatus;
+    }
+
     // Only include pipeline metadata if option is enabled
     if (includePipelineMetadata) {
       const { pipeline, pipelineLabel, pipelineSlug } =
