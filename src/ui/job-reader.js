@@ -11,7 +11,7 @@
  */
 
 import { readFileWithRetry } from "./file-reader.js";
-import * as configBridge from "./config-bridge.js";
+import * as configBridge from "./config-bridge.node.js";
 import path from "node:path";
 
 /**
@@ -34,22 +34,10 @@ export async function readJob(jobId) {
 
   for (const location of locations) {
     console.log(`readJob: checking location ${location} for ${jobId}`);
-    // Prefer using resolvePipelinePaths (tests spy on this) to derive paths.
-    // Fall back to getJobPath/getTasksStatusPath if resolvePipelinePaths is not available.
-    let jobDir;
-    let tasksPath;
-    if (typeof configBridge.resolvePipelinePaths === "function") {
-      const paths = configBridge.resolvePipelinePaths();
-      jobDir = path.join(paths[location], jobId);
-      tasksPath = path.join(paths[location], jobId, "tasks-status.json");
-    } else if (typeof configBridge.getJobPath === "function") {
-      jobDir = configBridge.getJobPath(jobId, location);
-      tasksPath = configBridge.getTasksStatusPath(jobId, location);
-    } else {
-      // As a last resort, build paths relative to cwd
-      jobDir = path.join(process.cwd(), "pipeline-data", location, jobId);
-      tasksPath = path.join(jobDir, "tasks-status.json");
-    }
+    // Prefer using getPATHS() to get paths with PO_ROOT support
+    const paths = configBridge.getPATHS();
+    const jobDir = path.join(paths[location], jobId);
+    const tasksPath = path.join(paths[location], jobId, "tasks-status.json");
 
     // Debug: trace lock checks and reading steps
     console.log(
@@ -87,11 +75,11 @@ export async function readJob(jobId) {
       // Note: we intentionally do not wait or re-check here to avoid flaky timing.
     }
 
-    // Try reading the tasks-status.json with retry for parse-race conditions
+    // Try reading tasks-status.json with retry for parse-race conditions
     const result = await readFileWithRetry(tasksPath);
 
     if (!result.ok) {
-      // Log a warning for failed reads of the tasks-status.json in this location
+      // Log a warning for failed reads of tasks-status.json in this location
       console.warn(
         `Failed to read tasks-status.json for job ${jobId} in ${location}`,
         result
@@ -112,7 +100,7 @@ export async function readJob(jobId) {
     }
 
     // Validate job shape minimally (validation function exists separately)
-    // Return the successful read
+    // Return successful read
     return {
       ok: true,
       data: result.data,
@@ -188,6 +176,7 @@ export function getJobReadingStats(jobIds = [], results = []) {
 
 /**
  * Validate job data conforms to minimal schema and expected job id.
+ * Supports both legacy (id, name, tasks) and canonical (jobId, title, tasksStatus) fields.
  * Returns { valid: boolean, warnings: string[], error?: string }
  */
 export function validateJobData(jobData, expectedJobId) {
@@ -201,35 +190,49 @@ export function validateJobData(jobData, expectedJobId) {
     return { valid: false, error: "Job data must be an object" };
   }
 
-  // Required fields: id, name, createdAt, tasks
-  if (!("id" in jobData)) {
-    return { valid: false, error: "Missing required field: id" };
+  // Support both legacy and canonical field names
+  const hasLegacyId = "id" in jobData;
+  const hasCanonicalId = "jobId" in jobData;
+  const hasLegacyName = "name" in jobData;
+  const hasCanonicalName = "title" in jobData;
+  const hasLegacyTasks = "tasks" in jobData;
+  const hasCanonicalTasks = "tasksStatus" in jobData;
+
+  // Required: at least one ID field
+  if (!hasLegacyId && !hasCanonicalId) {
+    return { valid: false, error: "Missing required field: id or jobId" };
   }
 
-  if (!("name" in jobData)) {
-    return { valid: false, error: "Missing required field: name" };
+  // Required: at least one name field
+  if (!hasLegacyName && !hasCanonicalName) {
+    return { valid: false, error: "Missing required field: name or title" };
   }
 
+  // Required: createdAt
   if (!("createdAt" in jobData)) {
     return { valid: false, error: "Missing required field: createdAt" };
   }
 
-  if (!("tasks" in jobData)) {
-    return { valid: false, error: "Missing required field: tasks" };
+  // Required: at least one tasks field
+  if (!hasLegacyTasks && !hasCanonicalTasks) {
+    return {
+      valid: false,
+      error: "Missing required field: tasks or tasksStatus",
+    };
   }
 
-  if (jobData.id !== expectedJobId) {
+  // Get actual ID for validation
+  const actualId = jobData.jobId ?? jobData.id;
+  if (actualId !== expectedJobId) {
     warnings.push("Job ID mismatch");
     console.warn(
-      `Job ID mismatch: expected ${expectedJobId}, found ${jobData.id}`
+      `Job ID mismatch: expected ${expectedJobId}, found ${actualId}`
     );
   }
 
-  if (
-    typeof jobData.tasks !== "object" ||
-    jobData.tasks === null ||
-    Array.isArray(jobData.tasks)
-  ) {
+  // Validate tasks (prefer canonical, fallback to legacy)
+  const tasks = jobData.tasksStatus ?? jobData.tasks;
+  if (typeof tasks !== "object" || tasks === null || Array.isArray(tasks)) {
     return { valid: false, error: "Tasks must be an object" };
   }
 
@@ -240,7 +243,7 @@ export function validateJobData(jobData, expectedJobId) {
     "error",
   ];
 
-  for (const [taskName, task] of Object.entries(jobData.tasks)) {
+  for (const [taskName, task] of Object.entries(tasks)) {
     if (!task || typeof task !== "object") {
       return { valid: false, error: `Task ${taskName} missing state field` };
     }
@@ -254,6 +257,17 @@ export function validateJobData(jobData, expectedJobId) {
       warnings.push(`Unknown state: ${state}`);
       console.warn(`Unknown task state for ${taskName}: ${state}`);
     }
+  }
+
+  // Add warnings for legacy field usage
+  if (hasLegacyId && hasCanonicalId) {
+    warnings.push("Both id and jobId present, using jobId");
+  }
+  if (hasLegacyName && hasCanonicalName) {
+    warnings.push("Both name and title present, using title");
+  }
+  if (hasLegacyTasks && hasCanonicalTasks) {
+    warnings.push("Both tasks and tasksStatus present, using tasksStatus");
   }
 
   return { valid: true, warnings };

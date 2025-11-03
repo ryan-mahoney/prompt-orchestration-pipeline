@@ -88,7 +88,13 @@ describe("Job Navigation", () => {
 
     it("should call onOpenJob with job when row is clicked", () => {
       const jobs = [
-        { id: "job-1", name: "Test Job", status: "running", tasks: {} },
+        {
+          id: "job-1",
+          name: "Test Job",
+          status: "running",
+          progress: 50,
+          tasks: {},
+        },
       ];
 
       render(
@@ -96,7 +102,6 @@ describe("Job Navigation", () => {
           jobs={jobs}
           pipeline={mockPipeline}
           onOpenJob={mockOnOpenJob}
-          totalProgressPct={() => 50}
           overallElapsed={() => 1000}
         />
       );
@@ -113,6 +118,7 @@ describe("Job Navigation", () => {
           id: "job-1",
           name: "Keyboard Test Job",
           status: "running",
+          progress: 50,
           tasks: {},
         },
       ];
@@ -122,7 +128,6 @@ describe("Job Navigation", () => {
           jobs={jobs}
           pipeline={mockPipeline}
           onOpenJob={mockOnOpenJob}
-          totalProgressPct={() => 50}
           overallElapsed={() => 1000}
         />
       );
@@ -138,6 +143,7 @@ describe("Job Navigation", () => {
         {
           name: "Legacy Job",
           status: "running",
+          progress: 0,
           tasks: {},
         },
       ];
@@ -147,7 +153,6 @@ describe("Job Navigation", () => {
           jobs={jobs}
           pipeline={mockPipeline}
           onOpenJob={mockOnOpenJob}
-          totalProgressPct={() => 50}
           overallElapsed={() => 1000}
         />
       );
@@ -164,6 +169,7 @@ describe("Job Navigation", () => {
         {
           name: "Legacy Job",
           status: "running",
+          progress: 0,
           tasks: {},
         },
       ];
@@ -173,7 +179,6 @@ describe("Job Navigation", () => {
           jobs={jobs}
           pipeline={mockPipeline}
           onOpenJob={mockOnOpenJob}
-          totalProgressPct={() => 50}
           overallElapsed={() => 1000}
         />
       );

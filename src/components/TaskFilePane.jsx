@@ -181,10 +181,15 @@ export function TaskFilePane({
 
     const doFetch = async () => {
       try {
-        const response = await fetch(
-          `/api/jobs/${encodeURIComponent(jobId)}/tasks/${encodeURIComponent(taskId)}/file?type=${encodeURIComponent(type)}&filename=${encodeURIComponent(filename)}`,
-          { signal }
-        );
+        const url = `/api/jobs/${encodeURIComponent(jobId)}/tasks/${encodeURIComponent(taskId)}/file?type=${encodeURIComponent(type)}&filename=${encodeURIComponent(filename)}`;
+        console.debug("[TaskFilePane] Fetching file:", {
+          url,
+          jobId,
+          taskId,
+          type,
+          filename,
+        });
+        const response = await fetch(url, { signal });
 
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({}));

@@ -258,9 +258,11 @@ export default {
 
 ### 4. Task Status Files (`tasks-status.json`)
 
-**Purpose**: Track execution state of all tasks in a pipeline.
+**Purpose**: Track execution state of all tasks in a pipeline with real-time stage progress tracking.
 
 **Location**: `{job-directory}/tasks-status.json`
+
+**⚠️ Important**: This schema is **non-backward-compatible**. The status document is the single source of truth for current stage information and does not support legacy formats.
 
 **Schema**:
 
@@ -268,8 +270,11 @@ export default {
 {
   "id": "unique-pipeline-id",
   "name": "job-name",
-  "current": "current-task-name",
+  "current": "current-task-name-or-null",
+  "currentStage": "current-stage-id-or-null",
+  "state": "pending|running|done|failed",
   "createdAt": "ISO-timestamp",
+  "lastUpdated": "ISO-timestamp",
   "files": {
     "artifacts": ["file1.json", "file2.json"],
     "logs": ["process.log", "debug.log"],
@@ -277,7 +282,9 @@ export default {
   },
   "tasks": {
     "task-name": {
-      "state": "pending|running|done|error",
+      "state": "pending|running|done|failed",
+      "currentStage": "current-stage-id-or-null",
+      "failedStage": "stage-id-if-failed-or-null",
       "startedAt": "ISO-timestamp",
       "attempts": 1,
       "endedAt": "ISO-timestamp",
@@ -293,6 +300,47 @@ export default {
   }
 }
 ```
+
+**Real-Time Stage Tracking**:
+
+The status file provides atomic, synchronous updates at stage boundaries:
+
+- **While task is running**:
+  - `current` points to the active `taskId`
+  - `currentStage` points to the active `stageId`
+  - `tasks[taskId].currentStage` matches `currentStage`
+  - `tasks[taskId].state` is `"running"`
+
+- **On successful stage completion**:
+  - Both root `currentStage` and per-task `currentStage` update synchronously
+  - `lastUpdated` timestamp is set
+  - SSE `state:change` event is emitted
+
+- **On task success**:
+  - `tasks[taskId].state` becomes `"done"`
+  - Root `current`/`currentStage` advance to next task or clear if pipeline finished
+  - Root `state` remains `"pending"` (or `"done"` when all tasks complete)
+
+- **On task failure**:
+  - `tasks[taskId].state` becomes `"failed"`
+  - `tasks[taskId].failedStage` is set to the failing `stageId`
+  - Root `state` becomes `"failed"`
+  - Root `current`/`currentStage` retain the failing task/stage until recovery
+
+**Atomic Updates and SSE**:
+
+- All writes to `tasks-status.json` are performed atomically using temp-file + rename
+- Every write is immediately followed by an SSE `state:change` event with `payload.path` ending in `/tasks-status.json`
+- UI components rely exclusively on this file for stage information (no execution-log dependency)
+
+**Field Descriptions**:
+
+- `current`: Currently executing task ID, or `null` when no task is active
+- `currentStage`: Currently executing stage ID within the current task, or `null`
+- `state`: Overall pipeline state - **reflects failures immediately** (`"failed"` when any task fails)
+- `tasks[taskId].currentStage`: Stage ID currently executing for this task, or `null`
+- `tasks[taskId].failedStage`: Stage ID where this task failed, or `null`
+- `lastUpdated`: ISO timestamp of the most recent status update
 
 **Example**:
 
@@ -537,6 +585,109 @@ The storage system integrates with the pipeline architecture as follows:
 - **UI Server**: Reads from storage to display job status and results
 - **API Layer**: Provides programmatic access to storage operations
 
+## Real-Time Updates via Server-Sent Events (SSE)
+
+### SSE Filtering for Stage Updates
+
+The UI automatically updates when `tasks-status.json` changes for the currently viewed job. This is achieved through Server-Sent Events (SSE) with intelligent filtering that ensures reliable real-time updates.
+
+#### SSE Event Types
+
+The system emits SSE events for file system changes, with `state:change` events being the primary mechanism for task status updates.
+
+#### Path-Based Filtering
+
+**Rule**: Any `state:change` event with `payload.path` pointing to the job's `tasks-status.json` triggers a debounced refetch, regardless of whether an `id` is present in the payload.
+
+**Matching Pattern**: `^/?pipeline-data/(current|complete|pending|rejected)/{jobId}/tasks-status\.json$`
+
+**Path Normalization**:
+
+- Leading slashes are ignored (`/pipeline-data/...` == `pipeline-data/...`)
+- Windows backslashes are converted to forward slashes (`pipeline-data\\...` → `pipeline-data/...`)
+- Whitespace is trimmed from paths
+
+**Lifecycle Support**: The pattern matches all pipeline lifecycle directories:
+
+- `current/` - Active pipeline executions
+- `complete/` - Completed pipelines
+- `pending/` - Jobs awaiting processing
+- `rejected/` - Rejected pipelines
+
+#### Debouncing
+
+Rapid file changes are debounced to prevent excessive API calls:
+
+- Multiple `state:change` events within the debounce window result in a single refetch
+- Default debounce delay: 200ms (configurable via `REFRESH_DEBOUNCE_MS`)
+- Ensures UI updates efficiently without overwhelming the server
+
+#### Event Handling Logic
+
+1. **Path Matching**: Event path is normalized and matched against the job's `tasks-status.json`
+2. **Debounced Refetch**: Matching events schedule a debounced refetch of job data
+3. **State Update**: Refetched data updates the UI with current task and stage information
+4. **Error Handling**: Malformed events are logged but don't crash the SSE connection
+
+#### Example SSE Events
+
+**Matching Event** (triggers refetch):
+
+```json
+{
+  "type": "state:change",
+  "payload": {
+    "path": "pipeline-data/current/job123/tasks-status.json",
+    "type": "modified"
+  }
+}
+```
+
+**Non-Matching Event** (ignored):
+
+```json
+{
+  "type": "state:change",
+  "payload": {
+    "path": "pipeline-data/current/different-job/tasks-status.json",
+    "type": "modified"
+  }
+}
+```
+
+**Path Variations** (all match after normalization):
+
+- `pipeline-data/current/job123/tasks-status.json`
+- `/pipeline-data/current/job123/tasks-status.json`
+- `pipeline-data\\current\\job123\\tasks-status.json` (Windows)
+- `  pipeline-data/current/job123/tasks-status.json  ` (with whitespace)
+
+#### Implementation Notes
+
+- The filtering logic is implemented in `src/ui/client/hooks/useJobDetailWithUpdates.js`
+- Legacy behavior requiring `!id` for refetch has been removed
+- Future-proof design allows for data-rich events while maintaining path-based refetching
+- All path matching is case-sensitive and follows the exact pattern shown above
+
+This SSE filtering approach ensures that:
+
+1. **Immediate Updates**: UI reflects stage changes within debounce + network latency
+2. **Reliable Filtering**: Only relevant job status changes trigger updates
+3. **Cross-Platform**: Works consistently across different operating systems
+4. **Efficient**: Debouncing prevents unnecessary API calls during burst activity
+5. **Robust**: Graceful handling of malformed events and edge cases
+
+## Integration with Architecture
+
+The storage system integrates with pipeline architecture as follows:
+
+- **Orchestrator**: Monitors `pending/` directory and manages job lifecycle
+- **Pipeline Runner**: Reads from `current/{job}/` and writes task results
+- **Task Runner**: Executes individual tasks and saves outputs
+- **UI Server**: Reads from storage to display job status and results
+- **API Layer**: Provides programmatic access to storage operations
+- **SSE System**: Emits real-time events for file changes with intelligent filtering
+
 This file-based storage approach provides:
 
 - **Transparency**: All data is human-readable JSON
@@ -544,3 +695,4 @@ This file-based storage approach provides:
 - **Auditability**: Complete execution history is preserved
 - **Flexibility**: Easy to inspect, debug, and modify
 - **Portability**: No database dependencies
+- **Real-Time Updates**: SSE filtering ensures UI stays synchronized with execution state

@@ -24,11 +24,11 @@ describe("Status Transformer", () => {
   describe("transformJobStatus", () => {
     it("should transform valid job data correctly", () => {
       const rawJobData = {
-        id: "job-123",
-        name: "Test Job",
+        jobId: "job-123",
+        title: "Test Job",
         createdAt: "2023-01-01T00:00:00Z",
         updatedAt: "2023-01-01T01:00:00Z",
-        tasks: {
+        tasksStatus: {
           "task-1": {
             state: "done",
             startedAt: "2023-01-01T00:00:00Z",
@@ -47,8 +47,8 @@ describe("Status Transformer", () => {
       const result = transformJobStatus(rawJobData, "job-123", "current");
 
       expect(result).toEqual({
-        id: "job-123",
-        name: "Test Job",
+        jobId: "job-123",
+        title: "Test Job",
         status: "running",
         progress: 50,
         createdAt: "2023-01-01T00:00:00Z",
@@ -59,8 +59,8 @@ describe("Status Transformer", () => {
           logs: [],
           tmp: [],
         },
-        tasks: [
-          {
+        tasksStatus: {
+          "task-1": {
             name: "task-1",
             state: "done",
             startedAt: "2023-01-01T00:00:00Z",
@@ -74,7 +74,7 @@ describe("Status Transformer", () => {
               tmp: [],
             },
           },
-          {
+          "task-2": {
             name: "task-2",
             state: "running",
             startedAt: "2023-01-01T00:30:00Z",
@@ -84,48 +84,48 @@ describe("Status Transformer", () => {
               tmp: [],
             },
           },
-        ],
+        },
       });
     });
 
     it("should handle job ID mismatch with warning", () => {
       const rawJobData = {
-        id: "different-id",
-        name: "Test Job",
+        jobId: "different-id",
+        title: "Test Job",
         createdAt: "2023-01-01T00:00:00Z",
-        tasks: {
+        tasksStatus: {
           "task-1": { state: "pending" },
         },
       };
 
       const result = transformJobStatus(rawJobData, "job-123", "current");
 
-      expect(result.id).toBe("job-123"); // Prefer directory name
+      expect(result.jobId).toBe("job-123"); // Prefer directory name
       expect(result.warnings).toContain(
         'Job ID mismatch: JSON has "different-id", using directory name "job-123"'
       );
     });
 
-    it("should handle missing job name", () => {
+    it("should handle missing job title", () => {
       const rawJobData = {
-        id: "job-123",
+        jobId: "job-123",
         createdAt: "2023-01-01T00:00:00Z",
-        tasks: {
+        tasksStatus: {
           "task-1": { state: "pending" },
         },
       };
 
       const result = transformJobStatus(rawJobData, "job-123", "current");
 
-      expect(result.name).toBe("Unnamed Job");
+      expect(result.title).toBe("Unnamed Job");
     });
 
     it("should handle missing updatedAt", () => {
       const rawJobData = {
-        id: "job-123",
-        name: "Test Job",
+        jobId: "job-123",
+        title: "Test Job",
         createdAt: "2023-01-01T00:00:00Z",
-        tasks: {
+        tasksStatus: {
           "task-1": { state: "pending" },
         },
       };
@@ -143,18 +143,18 @@ describe("Status Transformer", () => {
 
     it("should handle invalid tasks gracefully", () => {
       const rawJobData = {
-        id: "job-123",
-        name: "Test Job",
+        jobId: "job-123",
+        title: "Test Job",
         createdAt: "2023-01-01T00:00:00Z",
-        tasks: "invalid-tasks", // This will be handled gracefully
+        tasksStatus: "invalid-tasks", // This will be handled gracefully
       };
 
       const result = transformJobStatus(rawJobData, "job-123", "current");
 
-      // Should handle invalid tasks by treating as empty tasks array
+      // Should handle invalid tasks by treating as empty tasks object
       expect(result).toEqual({
-        id: "job-123",
-        name: "Test Job",
+        jobId: "job-123",
+        title: "Test Job",
         status: "pending",
         progress: 0,
         createdAt: "2023-01-01T00:00:00Z",
@@ -165,7 +165,7 @@ describe("Status Transformer", () => {
           logs: [],
           tmp: [],
         },
-        tasks: [],
+        tasksStatus: {},
       });
     });
   });
@@ -266,8 +266,8 @@ describe("Status Transformer", () => {
 
       const result = transformTasks(rawTasks);
 
-      expect(result).toEqual([
-        {
+      expect(result).toEqual({
+        "task-1": {
           name: "task-1",
           state: "done",
           startedAt: "2023-01-01T00:00:00Z",
@@ -281,7 +281,7 @@ describe("Status Transformer", () => {
             tmp: [],
           },
         },
-        {
+        "task-2": {
           name: "task-2",
           state: "running",
           startedAt: "2023-01-01T00:30:00Z",
@@ -291,7 +291,7 @@ describe("Status Transformer", () => {
             tmp: [],
           },
         },
-      ]);
+      });
     });
 
     it("should handle missing task state", () => {
@@ -304,7 +304,7 @@ describe("Status Transformer", () => {
 
       const result = transformTasks(rawTasks);
 
-      expect(result[0].state).toBe("pending");
+      expect(result["task-1"].state).toBe("pending");
     });
 
     it("should handle invalid task state with warning", () => {
@@ -316,7 +316,7 @@ describe("Status Transformer", () => {
 
       const result = transformTasks(rawTasks);
 
-      expect(result[0].state).toBe("pending");
+      expect(result["task-1"].state).toBe("pending");
       expect(console.warn).toHaveBeenCalledWith(
         expect.stringContaining('Invalid task state "invalid-state"')
       );
@@ -325,13 +325,13 @@ describe("Status Transformer", () => {
     it("should handle empty tasks object", () => {
       const result = transformTasks({});
 
-      expect(result).toEqual([]);
+      expect(result).toEqual({});
     });
 
     it("should handle invalid tasks input", () => {
-      expect(transformTasks(null)).toEqual([]);
-      expect(transformTasks(undefined)).toEqual([]);
-      expect(transformTasks("invalid")).toEqual([]);
+      expect(transformTasks(null)).toEqual({});
+      expect(transformTasks(undefined)).toEqual({});
+      expect(transformTasks("invalid")).toEqual({});
     });
   });
 
@@ -341,10 +341,10 @@ describe("Status Transformer", () => {
         {
           ok: true,
           data: {
-            id: "job-1",
-            name: "Job 1",
+            jobId: "job-1",
+            title: "Job 1",
             createdAt: "2023-01-01T00:00:00Z",
-            tasks: { "task-1": { state: "done" } },
+            tasksStatus: { "task-1": { state: "done" } },
           },
           jobId: "job-1",
           location: "current",
@@ -352,10 +352,10 @@ describe("Status Transformer", () => {
         {
           ok: true,
           data: {
-            id: "job-2",
-            name: "Job 2",
+            jobId: "job-2",
+            title: "Job 2",
             createdAt: "2023-01-01T01:00:00Z",
-            tasks: { "task-1": { state: "running" } },
+            tasksStatus: { "task-1": { state: "running" } },
           },
           jobId: "job-2",
           location: "complete",
@@ -369,8 +369,8 @@ describe("Status Transformer", () => {
       const result = transformMultipleJobs(jobReadResults);
 
       expect(result).toHaveLength(2);
-      expect(result[0].id).toBe("job-1");
-      expect(result[1].id).toBe("job-2");
+      expect(result[0].jobId).toBe("job-1");
+      expect(result[1].jobId).toBe("job-2");
       expect(console.log).toHaveBeenCalledWith(
         expect.stringContaining("Transforming 3 jobs")
       );
@@ -404,8 +404,8 @@ describe("Status Transformer", () => {
       ];
 
       const transformedJobs = [
-        { id: "job-1", status: "running" },
-        { id: "job-2", status: "complete" },
+        { jobId: "job-1", status: "running" },
+        { jobId: "job-2", status: "complete" },
       ];
 
       const stats = getTransformationStats(jobReadResults, transformedJobs);

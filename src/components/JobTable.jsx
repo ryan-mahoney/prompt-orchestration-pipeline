@@ -11,14 +11,13 @@ export default function JobTable({
   jobs,
   pipeline,
   onOpenJob,
-  totalProgressPct,
   overallElapsed,
   now,
 }) {
   if (jobs.length === 0) {
     return (
-      <Box className="border border-dashed border-slate-200 rounded-xl p-6 text-center">
-        <Text size="2" className="text-slate-500">
+      <Box className="p-6">
+        <Text size="2" className="text-slate-600">
           No jobs to show here yet.
         </Text>
       </Box>
@@ -26,8 +25,8 @@ export default function JobTable({
   }
 
   return (
-    <Box className="border border-slate-200 rounded-xl overflow-hidden mt-6">
-      <Table.Root variant="surface">
+    <Box>
+      <Table.Root radius="none">
         <Table.Header>
           <Table.Row>
             <Table.ColumnHeaderCell>Job Name</Table.ColumnHeaderCell>
@@ -43,6 +42,7 @@ export default function JobTable({
 
         <Table.Body>
           {jobs.map((job) => {
+            const jobTitle = job.title || job.name; // Fallback for backward compatibility
             const taskById = Array.isArray(job.tasks)
               ? Object.fromEntries(
                   (job.tasks || []).map((t) => {
@@ -61,7 +61,9 @@ export default function JobTable({
               (Array.isArray(job.tasks)
                 ? job.tasks.length
                 : Object.keys(job.tasks || {}).length);
-            const progress = totalProgressPct(job);
+            const progress = Number.isFinite(job.progress)
+              ? Math.round(job.progress)
+              : 0;
             const duration = overallElapsed(job);
             const currentTaskName = currentTask
               ? (currentTask.name ?? currentTask.id ?? job.current)
@@ -89,8 +91,8 @@ export default function JobTable({
                 tabIndex={hasValidId ? 0 : -1}
                 aria-label={
                   hasValidId
-                    ? `Open ${job.name}`
-                    : `${job.name} - No valid job ID, cannot open details`
+                    ? `Open ${jobTitle}`
+                    : `${jobTitle} - No valid job ID, cannot open details`
                 }
                 title={
                   hasValidId
@@ -101,7 +103,7 @@ export default function JobTable({
                 <Table.Cell>
                   <Flex direction="column" gap="1">
                     <Text size="2" weight="medium" className="text-slate-900">
-                      {job.name}
+                      {jobTitle}
                     </Text>
                     <Text size="1" className="text-slate-500">
                       {job.id}
@@ -185,7 +187,7 @@ export default function JobTable({
                     variant="ghost"
                     size="1"
                     className="opacity-0 group-hover:opacity-100 transition-opacity text-slate-500 hover:text-slate-700"
-                    aria-label={`View details for ${job.name}`}
+                    aria-label={`View details for ${jobTitle}`}
                   >
                     <ChevronRight className="h-4 w-4" />
                   </Button>

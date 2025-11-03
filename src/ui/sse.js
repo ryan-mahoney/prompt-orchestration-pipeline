@@ -145,9 +145,9 @@ export function createSSERegistry({
     for (const client of clients) {
       const res = client.res || client;
 
-      // Apply jobId filtering: if data has an id and client has a jobId, only send if they match
-      if (data && data.id && client.jobId) {
-        if (data.id !== client.jobId) {
+      // Apply jobId filtering: if data has a jobId and client has a jobId, only send if they match
+      if (data && data.jobId && client.jobId) {
+        if (data.jobId !== client.jobId) {
           continue; // Skip this client - event is for a different job
         }
       }

@@ -1,40 +1,10 @@
-/**
- * Job Adapter
- *
- * Purpose:
- * - Normalize API payloads (/api/jobs and /api/jobs/:id) into a stable UI-facing shape.
- * - Provide sensible defaults for missing optional fields.
- * - Be backward compatible with legacy/demo payload shapes.
- *
- * Defaults:
- * - progress: 0
- * - name: ''
- * - createdAt: null
- * - updatedAt: null
- * - tasks: []
- *
- * Normalization rules:
- * - Task state mapping: only 'pending'|'running'|'done'|'error' are allowed; unknown -> 'pending'
- * - If apiJob.progress is a valid number, use it; otherwise compute:
- *     progress = round(100 * done_count / max(1, total_tasks))
- * - If tasks is an object keyed by task name, convert to array with `name` field.
- * - Timestamps remain ISO strings (no UI formatting).
- *
- * Exports:
- * - adaptJobSummary(apiJob) -> summary props for lists
- * - adaptJobDetail(apiDetail) -> full job detail props for details view
- *
- * Implementation notes:
- * - Pure functions, no IO.
- * - Returns a normalized object; includes optional `__warnings` array for non-fatal issues.
- */
+import { derivePipelineMetadata } from "../../../utils/pipelines.js";
 
-const ID_REGEX = /^[A-Za-z0-9-_]+$/;
-const ALLOWED_STATES = new Set(["pending", "running", "done", "error"]);
+const ALLOWED_STATES = new Set(["pending", "running", "done", "failed"]);
 
 /**
  * Normalize a raw task state into canonical enum.
- * Returns { state, warning? } where warning is a string if normalization occured.
+ * Returns { state, warning? } where warning is a string if normalization occurred.
  */
 function normalizeTaskState(raw) {
   if (!raw || typeof raw !== "string")
@@ -60,7 +30,7 @@ function normalizeTasks(rawTasks) {
     Object.entries(rawTasks).forEach(([name, t]) => {
       const ns = normalizeTaskState(t && t.state);
       if (ns.warning) warnings.push(`${name}:${ns.warning}`);
-      tasks[name] = {
+      const taskObj = {
         name,
         state: ns.state,
         startedAt: t && t.startedAt ? String(t.startedAt) : null,
@@ -71,6 +41,13 @@ function normalizeTasks(rawTasks) {
           typeof (t && t.executionTimeMs) === "number"
             ? t.executionTimeMs
             : undefined,
+        // Preserve stage metadata for DAG visualization
+        ...(typeof t?.currentStage === "string" && t.currentStage.length > 0
+          ? { currentStage: t.currentStage }
+          : {}),
+        ...(typeof t?.failedStage === "string" && t.failedStage.length > 0
+          ? { failedStage: t.failedStage }
+          : {}),
         // Prefer new files.* schema, fallback to legacy artifacts
         files:
           t && t.files
@@ -90,6 +67,7 @@ function normalizeTasks(rawTasks) {
           ? t.artifacts.slice()
           : undefined,
       };
+      tasks[name] = taskObj;
     });
     return { tasks, warnings };
   }
@@ -112,6 +90,13 @@ function normalizeTasks(rawTasks) {
           typeof (t && t.executionTimeMs) === "number"
             ? t.executionTimeMs
             : undefined,
+        // Preserve stage metadata for DAG visualization
+        ...(typeof t?.currentStage === "string" && t.currentStage.length > 0
+          ? { currentStage: t.currentStage }
+          : {}),
+        ...(typeof t?.failedStage === "string" && t.failedStage.length > 0
+          ? { failedStage: t.failedStage }
+          : {}),
         artifacts: Array.isArray(t && t.artifacts)
           ? t.artifacts.slice()
           : undefined,
@@ -124,31 +109,17 @@ function normalizeTasks(rawTasks) {
 }
 
 /**
- * Compute progress from tasks if progress not present.
- * Uses formula: round(100 * done_count / max(1, total_tasks))
- */
-function computeProgressFromTasks(tasks) {
-  const taskList = Object.values(tasks);
-  const total = Math.max(1, taskList.length);
-  const done = taskList.reduce(
-    (acc, t) => acc + (t.state === "done" ? 1 : 0),
-    0
-  );
-  return Math.round((100 * done) / total);
-}
-
-/**
  * Derive status from tasks when status is missing/invalid.
  * Rules:
- * - error if any task state === 'error'
- * - running if >=1 running and none error
+ * - failed if any task state === 'failed'
+ * - running if >=1 running and none failed
  * - complete if all done
  * - pending otherwise
  */
 function deriveStatusFromTasks(tasks) {
   const taskList = Object.values(tasks);
   if (!Array.isArray(taskList) || taskList.length === 0) return "pending";
-  if (taskList.some((t) => t.state === "error")) return "error";
+  if (taskList.some((t) => t.state === "failed")) return "failed";
   if (taskList.some((t) => t.state === "running")) return "running";
   if (taskList.every((t) => t.state === "done")) return "complete";
   return "pending";
@@ -163,93 +134,67 @@ function clampProgress(n) {
 }
 
 /**
- * adaptJobSummary(apiJob)
- * - apiJob: object roughly matching docs 0.5 /api/jobs entry.
- * Returns normalized summary object for UI consumption.
+ * Compute summary stats from normalized tasks.
  */
-import { derivePipelineMetadata } from "../../../utils/pipelines.js";
-
-export function adaptJobSummary(apiJob = {}) {
-  const warnings = [];
-
-  // Basic extraction with defaults
-  const rawId = apiJob.id || apiJob.jobId || apiJob.name || null;
-  if (!rawId || typeof rawId !== "string") warnings.push("missing_id");
-  const id = rawId && typeof rawId === "string" ? rawId : null;
-
-  if (id && !ID_REGEX.test(id)) warnings.push("id_mismatch");
-
-  const name =
-    typeof apiJob.name === "string"
-      ? apiJob.name
-      : typeof apiJob.title === "string"
-        ? apiJob.title
-        : "";
-
-  // Normalize tasks
-  const { tasks, warnings: taskWarnings } = normalizeTasks(
-    apiJob.tasks || apiJob.tasksStatus || apiJob.taskList
-  );
-  warnings.push(...taskWarnings);
-
-  // Progress
-  let progress = 0;
-  if (typeof apiJob.progress === "number" && !Number.isNaN(apiJob.progress)) {
-    progress = clampProgress(apiJob.progress);
-  } else {
-    progress = computeProgressFromTasks(tasks);
-  }
-
-  // Status
-  let status =
-    typeof apiJob.status === "string" &&
-    ["running", "error", "pending", "complete"].includes(apiJob.status)
-      ? apiJob.status
-      : null;
-  if (!status) {
-    status = deriveStatusFromTasks(tasks);
-  }
-
-  const createdAt = apiJob.createdAt ? String(apiJob.createdAt) : null;
-  const updatedAt = apiJob.updatedAt ? String(apiJob.updatedAt) : null;
-  const location = apiJob.location === "complete" ? "complete" : "current";
-
-  // Derived counts
+function computeJobSummaryStats(tasks) {
   const taskList = Object.values(tasks);
   const taskCount = taskList.length;
   const doneCount = taskList.reduce(
     (acc, t) => acc + (t.state === "done" ? 1 : 0),
     0
   );
+  const status = deriveStatusFromTasks(tasks);
+  const progress = 0; // Will be overridden by API progress if available
+  return { status, progress, doneCount, taskCount };
+}
 
-  const out = {
+/**
+ * adaptJobSummary(apiJob)
+ * - apiJob: object roughly matching docs 0.5 /api/jobs entry.
+ * Returns normalized summary object for UI consumption.
+ */
+export function adaptJobSummary(apiJob) {
+  // Demo-only: read canonical fields strictly
+  const id = apiJob.jobId;
+  const name = apiJob.title || "";
+  const rawTasks = apiJob.tasksStatus;
+  const location = apiJob.location;
+
+  // Job-level stage metadata
+  const current = apiJob.current;
+  const currentStage = apiJob.currentStage;
+
+  const { tasks, warnings } = normalizeTasks(rawTasks);
+
+  // Use API status and progress as source of truth, fall back to task-based computation only when missing
+  const apiStatus = apiJob.status;
+  const apiProgress = apiJob.progress;
+  const derivedStats = computeJobSummaryStats(tasks);
+
+  const job = {
     id,
+    jobId: id,
     name,
-    status,
-    progress,
-    createdAt,
-    updatedAt,
+    status: apiStatus || derivedStats.status,
+    progress: apiProgress ?? derivedStats.progress,
+    taskCount: derivedStats.taskCount,
+    doneCount: derivedStats.doneCount,
     location,
-    taskCount,
-    doneCount,
     tasks,
   };
 
-  const { pipeline, pipelineLabel, pipelineSlug } =
-    derivePipelineMetadata(apiJob);
+  // Preserve job-level stage metadata
+  if (current != null) job.current = current;
+  if (currentStage != null) job.currentStage = currentStage;
 
-  if (pipeline != null) {
-    out.pipeline = pipeline;
-  }
-  if (pipelineLabel != null) {
-    out.pipelineLabel = pipelineLabel;
-  }
-  if (pipelineSlug != null) {
-    out.pipelineSlug = pipelineSlug;
-  }
+  // Optional/metadata fields (preserve if present)
+  if ("createdAt" in apiJob) job.createdAt = apiJob.createdAt;
+  if ("updatedAt" in apiJob) job.updatedAt = apiJob.updatedAt;
 
-  if (warnings.length > 0) out.__warnings = warnings;
-  return out;
+  // Include warnings for debugging
+  if (warnings.length > 0) job.__warnings = warnings;
+
+  return job;
 }
 
 /**
@@ -257,68 +202,51 @@ export function adaptJobSummary(apiJob = {}) {
  * - apiDetail: object roughly matching docs 0.5 /api/jobs/:jobId detail schema.
  * Returns a normalized detailed job object for UI consumption.
  */
-export function adaptJobDetail(apiDetail = {}) {
-  const warnings = [];
+export function adaptJobDetail(apiDetail) {
+  // Demo-only: read canonical fields strictly
+  const id = apiDetail.jobId;
+  const name = apiDetail.title || "";
+  const rawTasks = apiDetail.tasksStatus;
+  const location = apiDetail.location;
 
-  const id = apiDetail.id || null;
-  if (!id) warnings.push("missing_id");
+  // Job-level stage metadata
+  const current = apiDetail.current;
+  const currentStage = apiDetail.currentStage;
 
-  // Tasks can be array (detail) or object (legacy)
-  const { tasks, warnings: taskWarnings } = normalizeTasks(
-    apiDetail.tasks ||
-      apiDetail.tasksObj ||
-      apiDetail.tasksStatus ||
-      apiDetail.tasks
-  );
-  warnings.push(...taskWarnings);
+  const { tasks, warnings } = normalizeTasks(rawTasks);
 
-  // Keep top-level name/status/progress fields, fallback to summary adapter behavior
-  const summaryLike = adaptJobSummary({
+  // Use API status and progress as source of truth, fall back to task-based computation only when missing
+  const apiStatus = apiDetail.status;
+  const apiProgress = apiDetail.progress;
+  const derivedStats = computeJobSummaryStats(tasks);
+
+  const detail = {
     id,
-    name: apiDetail.name,
-    status: apiDetail.status,
-    progress: apiDetail.progress,
-    createdAt: apiDetail.createdAt,
-    updatedAt: apiDetail.updatedAt,
-    location: apiDetail.location,
-    tasks, // pass normalized tasks so progress/status derive consistently
-  });
-
-  const { pipeline, pipelineSlug, pipelineLabel } = derivePipelineMetadata({
-    ...apiDetail,
-    pipeline: apiDetail.pipeline ?? summaryLike.pipeline,
-    pipelineLabel: apiDetail.pipelineLabel ?? summaryLike.pipelineLabel,
-  });
-
-  const detailOut = {
-    ...summaryLike,
-    // Ensure tasks exist as object of normalized task entries
+    jobId: id,
+    name,
+    status: apiStatus || derivedStats.status,
+    progress: apiProgress ?? derivedStats.progress,
+    taskCount: derivedStats.taskCount,
+    doneCount: derivedStats.doneCount,
+    location,
     tasks,
-    // Include any metadata or original fields the UI may use (do not include raw artifacts content)
-    raw: undefined, // intentional placeholder to indicate raw content is not included
   };
 
-  const pipelineFromApi = apiDetail?.pipeline;
+  // Preserve job-level stage metadata
+  if (current != null) detail.current = current;
+  if (currentStage != null) detail.currentStage = currentStage;
 
-  if (
-    pipelineFromApi &&
-    typeof pipelineFromApi === "object" &&
-    !Array.isArray(pipelineFromApi)
-  ) {
-    detailOut.pipeline = pipelineFromApi;
-  } else if (pipeline != null) {
-    detailOut.pipeline = pipeline;
-  }
+  // Optional/metadata fields (preserve if present)
+  if ("createdAt" in apiDetail) detail.createdAt = apiDetail.createdAt;
+  if ("updatedAt" in apiDetail) detail.updatedAt = apiDetail.updatedAt;
 
-  if (pipelineSlug && detailOut.pipelineSlug == null) {
-    detailOut.pipelineSlug = pipelineSlug;
-  }
+  // Pipeline metadata
+  const { pipeline, pipelineLabel } = derivePipelineMetadata(apiDetail);
+  if (pipeline != null) detail.pipeline = pipeline;
+  if (pipelineLabel != null) detail.pipelineLabel = pipelineLabel;
 
-  if (pipelineLabel && detailOut.pipelineLabel == null) {
-    detailOut.pipelineLabel = pipelineLabel;
-  }
+  // Include warnings for debugging
+  if (warnings.length > 0) detail.__warnings = warnings;
 
-  if (warnings.length > 0)
-    detailOut.__warnings = (detailOut.__warnings || []).concat(warnings);
-  return detailOut;
+  return detail;
 }

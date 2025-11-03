@@ -1,7 +1,7 @@
 /**
  * Task files selector utilities.
  *
- * Single source of truth for normalizing the `task.files` structure that flows
+ * Single source of truth for normalizing `task.files` structure that flows
  * from tasks_status.json into the UI. The enforced contract is:
  *
  *   {
@@ -73,7 +73,7 @@ function reportUnsupportedKeys(keys) {
 }
 
 /**
- * Normalize an arbitrary input into the strict TaskFiles structure.
+ * Normalize an arbitrary input into a strict TaskFiles structure.
  * @param {unknown} candidate
  * @returns {TaskFiles}
  */
@@ -96,7 +96,7 @@ export function normalizeTaskFiles(candidate) {
 }
 
 /**
- * Ensure the provided task object has a normalized `files` property that matches
+ * Ensure provided task object has a normalized `files` property that matches
  * the enforced contract. Returns the normalized structure for convenience.
  * @param {Record<string, unknown> | null | undefined} task
  * @returns {TaskFiles}
@@ -110,7 +110,7 @@ export function ensureTaskFiles(task) {
 }
 
 /**
- * Determine whether a task matches the provided identifier.
+ * Determine whether a task matches a provided identifier.
  * @param {Record<string, unknown>} task
  * @param {string | number} taskId
  * @returns {boolean}
@@ -124,7 +124,7 @@ function matchesTaskIdentifier(task, taskId) {
 }
 
 /**
- * Locate a task within the provided tasks collection.
+ * Locate a task within a provided tasks collection.
  * @param {unknown} tasks
  * @param {string | number} taskId
  * @returns {Record<string, unknown> | null}
@@ -160,20 +160,112 @@ function findTaskCandidate(tasks, taskId) {
 }
 
 /**
- * Public selector that retrieves the strict TaskFiles structure for a specific task.
+ * Public selector that retrieves a strict TaskFiles structure for a specific task.
  * @param {Object} job
  * @param {string | number} taskId
  * @returns {TaskFiles}
  */
 export function getTaskFilesForTask(job, taskId) {
+  console.debug("[getTaskFilesForTask] Called with:", { job, taskId });
+
   if (!job || typeof job !== "object") {
+    console.debug("[getTaskFilesForTask] No job or invalid job object");
     return createEmptyTaskFiles();
   }
 
   const taskCandidate = findTaskCandidate(job.tasks, taskId);
   if (!taskCandidate) {
+    console.debug(
+      "[getTaskFilesForTask] No task candidate found for taskId:",
+      taskId
+    );
     return createEmptyTaskFiles();
   }
 
-  return ensureTaskFiles(taskCandidate);
+  const result = ensureTaskFiles(taskCandidate);
+  console.debug("[getTaskFilesForTask] Task files result:", { taskId, result });
+  return result;
+}
+
+/**
+ * List task files by type with fallback to empty task files
+ * @param {string} jobId - Job ID
+ * @param {string} taskId - Task ID
+ * @param {string} type - File type (artifacts/logs/tmp)
+ * @returns {Promise<string[]>} Array of file names
+ */
+export async function listTaskFiles(jobId, taskId, type) {
+  try {
+    console.debug("[listTaskFiles] Called with:", { jobId, taskId, type });
+
+    // Use fetch API directly for consistency with UI
+    const apiUrl = new URL(
+      `/api/jobs/${jobId}/tasks/${taskId}/files?type=${type}`,
+      window.location.origin
+    );
+
+    console.debug("[listTaskFiles] Fetching from:", apiUrl.toString());
+
+    const response = await fetch(apiUrl.toString());
+    const data = await response.json();
+
+    console.debug("[listTaskFiles] Response:", data);
+
+    if (data.ok && data.data && data.data.files) {
+      const fileNames = data.data.files.map((f) => f.name);
+      console.debug("[listTaskFiles] Found files:", fileNames);
+      return fileNames;
+    }
+
+    console.debug("[listTaskFiles] No valid files found in response");
+    return [];
+  } catch (error) {
+    console.error("[listTaskFiles] Error:", error);
+    return [];
+  }
+}
+
+/**
+ * Read task file content with proper error handling
+ * @param {string} jobId - Job ID
+ * @param {string} taskId - Task ID
+ * @param {string} type - File type (artifacts/logs/tmp)
+ * @param {string} filename - File name
+ * @returns {Promise<Object|null>} File object or null if error
+ */
+export async function readTaskFile(jobId, taskId, type, filename) {
+  try {
+    console.debug("[readTaskFile] Called with:", {
+      jobId,
+      taskId,
+      type,
+      filename,
+    });
+
+    // Use fetch API directly for consistency with UI
+    const apiUrl = new URL(
+      `/api/jobs/${jobId}/tasks/${taskId}/file?type=${type}&filename=${encodeURIComponent(
+        filename
+      )}`,
+      window.location.origin
+    );
+
+    console.debug("[readTaskFile] Fetching from:", apiUrl.toString());
+
+    const response = await fetch(apiUrl.toString());
+    const data = await response.json();
+
+    console.debug("[readTaskFile] Response:", data);
+
+    if (data.ok) {
+      console.debug("[readTaskFile] File read successfully");
+      return data;
+    }
+
+    console.error("[readTaskFile] File read failed:", data);
+    return null;
+  } catch (error) {
+    console.error("[readTaskFile] Error:", error);
+    return null;
+  }
 }

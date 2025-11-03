@@ -5,7 +5,7 @@ import path from "node:path";
 import os from "node:os";
 import { fileURLToPath } from "node:url";
 
-// Get absolute path to the dummy tasks module
+// Get absolute path to dummy tasks module
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const dummyTasksPath = path.resolve(__dirname, "./fixtures/dummy-tasks.js");
@@ -1260,5 +1260,321 @@ describe("Status Persistence Tests", () => {
     expect(result.ok).toBe(true);
     expect(result.context.data.validateStructure).toBeDefined();
     expect(result.context.flags.validationFailed).toBe(false);
+  });
+});
+
+describe("Progress Computation Idempotency", () => {
+  let tempDir;
+  let mockTasksModule;
+  let mockWriteJobStatus;
+
+  beforeEach(async () => {
+    // Create a temporary directory for test files
+    tempDir = await fs.mkdtemp(
+      path.join(os.tmpdir(), "task-runner-progress-idempotency-")
+    );
+
+    // Mock writeJobStatus to track calls
+    mockWriteJobStatus = vi
+      .fn()
+      .mockImplementation(async (workDir, updateFn) => {
+        // Simulate actual writeJobStatus behavior for progress tracking
+        const mockSnapshot = {
+          current: "test-task",
+          currentStage: "ingestion",
+          lastUpdated: new Date().toISOString(),
+          tasks: {},
+          progress: 0,
+        };
+
+        const result = updateFn(mockSnapshot);
+        return result || mockSnapshot;
+      });
+
+    // Mock status-writer module
+    vi.doMock("../src/core/status-writer.js", () => ({
+      writeJobStatus: mockWriteJobStatus,
+      readJobStatus: vi.fn(),
+      updateTaskStatus: vi.fn(),
+    }));
+
+    // Create a mock tasks module
+    mockTasksModule = {
+      ingestion: vi.fn().mockImplementation(async (context) => ({
+        output: { ingested: true, data: context.output },
+        flags: { ingestionComplete: true },
+      })),
+      preProcessing: vi.fn().mockImplementation(async (context) => ({
+        output: { preProcessed: true, data: context.output },
+        flags: { preProcessingComplete: true },
+      })),
+      promptTemplating: vi.fn().mockImplementation(async (context) => ({
+        output: { template: "test-template", data: context.output },
+        flags: { templateReady: true },
+      })),
+      inference: vi.fn().mockImplementation(async (context) => ({
+        output: { result: "test-inference", data: context.output },
+        flags: { inferenceComplete: true },
+      })),
+      parsing: vi.fn().mockImplementation(async (context) => ({
+        output: { parsed: true, data: context.output },
+        flags: { parsingComplete: true },
+      })),
+      validateStructure: vi.fn().mockImplementation(async (context) => ({
+        output: { validationPassed: true },
+        flags: { validationFailed: false },
+      })),
+      validateQuality: vi.fn().mockImplementation(async (context) => ({
+        output: { qualityValid: true, data: context.output },
+        flags: { qualityValidationPassed: true },
+      })),
+      critique: vi.fn().mockImplementation(async (context) => ({
+        output: { critique: "good" },
+        flags: { critiqueComplete: true },
+      })),
+      refine: vi.fn().mockImplementation(async (context) => ({
+        output: { refined: true },
+        flags: { refined: true },
+      })),
+      finalValidation: vi.fn().mockImplementation(async (context) => ({
+        output: { finalResult: true, data: context.output },
+        flags: { finalValidationPassed: true },
+      })),
+      integration: vi.fn().mockImplementation(async (context) => ({
+        output: { integrated: true, data: context.output },
+        flags: { integrationComplete: true },
+      })),
+    };
+
+    // Mock performance.now()
+    vi.spyOn(performance, "now").mockReturnValue(1000);
+  });
+
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    vi.clearAllMocks();
+    vi.unmock("../src/core/status-writer.js");
+    if (tempDir) {
+      await fs.rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("should write same progress value for repeated stage completions", async () => {
+    const jobId = "test-job-progress";
+    const statusPath = path.join(tempDir, "tasks-status.json");
+    const initialContext = {
+      taskName: "test-task",
+      workDir: tempDir,
+      jobId,
+      statusPath,
+      seed: { testData: "progress test" },
+      meta: {
+        pipelineTasks: ["test-task", "second-task"],
+      },
+    };
+
+    await fs.mkdir(path.join(tempDir, jobId, "files", "logs"), {
+      recursive: true,
+    });
+
+    // Mock console.debug to capture debug logs
+    const consoleDebugSpy = vi
+      .spyOn(console, "debug")
+      .mockImplementation(() => {});
+
+    // Run pipeline
+    const result = await taskRunner.runPipeline(dummyTasksPath, {
+      ...initialContext,
+      tasksOverride: mockTasksModule,
+    });
+
+    // Verify pipeline completed successfully
+    expect(result.ok).toBe(true);
+
+    // Verify that writeJobStatus was called for each stage completion
+    expect(mockWriteJobStatus).toHaveBeenCalled();
+
+    // Get all of progress values that were written
+    const progressWrites = [];
+    mockWriteJobStatus.mock.calls.forEach(([workDir, updateFn]) => {
+      const mockSnapshot = {
+        progress: 0,
+        current: "test-task",
+        currentStage: "",
+      };
+      updateFn(mockSnapshot);
+      if (
+        mockSnapshot.progress !== undefined &&
+        mockSnapshot.progress !== 100
+      ) {
+        progressWrites.push({
+          stage: mockSnapshot.currentStage,
+          progress: mockSnapshot.progress,
+        });
+      }
+    });
+
+    // Verify that progress values are deterministic and consistent for same stage
+    const stageProgressMap = new Map();
+    progressWrites.forEach(({ stage, progress }) => {
+      if (stage) {
+        if (stageProgressMap.has(stage)) {
+          // If stage was seen before, progress should be same
+          expect(stageProgressMap.get(stage)).toBe(progress);
+        } else {
+          // First time seeing this stage, record progress
+          stageProgressMap.set(stage, progress);
+        }
+      }
+    });
+
+    // Verify debug logging was called with progress information
+    const progressDebugLogs = consoleDebugSpy.mock.calls.filter(([message]) =>
+      message.includes("stage completion progress")
+    );
+    expect(progressDebugLogs.length).toBeGreaterThan(0);
+
+    // Verify debug log format
+    progressDebugLogs.forEach(([message, data]) => {
+      expect(message).toBe("[task-runner] stage completion progress");
+      expect(data).toHaveProperty("task");
+      expect(data).toHaveProperty("stage");
+      expect(data).toHaveProperty("progress");
+      expect(typeof data.progress).toBe("number");
+      expect(data.progress).toBeGreaterThanOrEqual(0);
+      expect(data.progress).toBeLessThanOrEqual(100);
+    });
+
+    consoleDebugSpy.mockRestore();
+  });
+
+  it("should not throw errors when progress is written multiple times for same stage", async () => {
+    const jobId = "test-job-errorless";
+    const statusPath = path.join(tempDir, "tasks-status-errorless.json");
+    const initialContext = {
+      taskName: "test-task",
+      workDir: tempDir,
+      jobId,
+      statusPath,
+      seed: { testData: "errorless test" },
+      meta: {
+        pipelineTasks: ["test-task"],
+      },
+    };
+
+    await fs.mkdir(path.join(tempDir, jobId, "files", "logs"), {
+      recursive: true,
+    });
+
+    // Mock writeJobStatus to simulate multiple writes for same stage
+    let callCount = 0;
+    mockWriteJobStatus.mockImplementation(async (workDir, updateFn) => {
+      callCount++;
+      const mockSnapshot = {
+        current: "test-task",
+        currentStage: "ingestion",
+        lastUpdated: new Date().toISOString(),
+        tasks: {},
+        progress: 0,
+      };
+
+      // Simulate multiple writes for same stage by calling updateFn multiple times
+      const result1 = updateFn(mockSnapshot);
+      const result2 = updateFn(mockSnapshot); // Second call for same stage
+
+      return result1 || result2 || mockSnapshot;
+    });
+
+    // This should not throw any errors
+    await expect(
+      taskRunner.runPipeline(dummyTasksPath, {
+        ...initialContext,
+        tasksOverride: mockTasksModule,
+      })
+    ).resolves.toMatchObject({ ok: true });
+
+    // Verify that writeJobStatus was called and didn't throw
+    expect(mockWriteJobStatus).toHaveBeenCalled();
+    expect(callCount).toBeGreaterThan(0);
+  });
+
+  it("should ensure progress computation is deterministic", async () => {
+    const jobId = "test-job-deterministic";
+    const statusPath = path.join(tempDir, "tasks-status-deterministic.json");
+    const initialContext = {
+      taskName: "test-task",
+      workDir: tempDir,
+      jobId,
+      statusPath,
+      seed: { testData: "deterministic test" },
+      meta: {
+        pipelineTasks: ["task-a", "task-b"],
+      },
+    };
+
+    await fs.mkdir(path.join(tempDir, jobId, "files", "logs"), {
+      recursive: true,
+    });
+
+    // Track progress values for each stage
+    const stageProgressTracking = new Map();
+
+    mockWriteJobStatus.mockImplementation(async (workDir, updateFn) => {
+      const mockSnapshot = {
+        current: initialContext.taskName,
+        currentStage: "",
+        lastUpdated: new Date().toISOString(),
+        tasks: {},
+        progress: 0,
+      };
+
+      updateFn(mockSnapshot);
+
+      if (mockSnapshot.currentStage && mockSnapshot.progress !== undefined) {
+        const stage = mockSnapshot.currentStage;
+        const progress = mockSnapshot.progress;
+
+        if (stageProgressTracking.has(stage)) {
+          // If we've seen this stage before, progress should be identical
+          expect(stageProgressTracking.get(stage)).toBe(progress);
+        } else {
+          // First time seeing this stage
+          stageProgressTracking.set(stage, progress);
+
+          // Progress should be within expected bounds
+          expect(progress).toBeGreaterThanOrEqual(0);
+          expect(progress).toBeLessThanOrEqual(100);
+          expect(Number.isInteger(progress)).toBe(true);
+        }
+      }
+
+      return mockSnapshot;
+    });
+
+    // Run pipeline multiple times to verify determinism
+    const results = await Promise.all([
+      taskRunner.runPipeline(dummyTasksPath, {
+        ...initialContext,
+        tasksOverride: mockTasksModule,
+      }),
+      taskRunner.runPipeline(dummyTasksPath, {
+        ...initialContext,
+        tasksOverride: mockTasksModule,
+      }),
+    ]);
+
+    // Both runs should succeed
+    results.forEach((result) => {
+      expect(result.ok).toBe(true);
+    });
+
+    // Verify that same stages always get same progress values
+    expect(stageProgressTracking.size).toBeGreaterThan(0);
+
+    // Check monotonic progression
+    const progressValues = Array.from(stageProgressTracking.values());
+    for (let i = 1; i < progressValues.length; i++) {
+      expect(progressValues[i]).toBeGreaterThanOrEqual(progressValues[i - 1]);
+    }
   });
 });

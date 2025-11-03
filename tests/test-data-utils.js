@@ -66,8 +66,8 @@ export async function createJobTree(options = {}) {
 
   // Generate default tasks-status.json if not provided
   const defaultTasksStatus = {
-    id: jobId,
-    name: `Test Job ${jobId}`,
+    jobId: jobId,
+    title: `Test Job ${jobId}`,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     tasks: {},
@@ -75,12 +75,12 @@ export async function createJobTree(options = {}) {
 
   const finalTasksStatus = tasksStatus || defaultTasksStatus;
 
-  // Ensure ID matches jobId (prefer jobId per global contracts)
-  if (finalTasksStatus.id !== jobId) {
+  // Ensure jobId matches (prefer jobId per global contracts)
+  if (finalTasksStatus.jobId !== jobId) {
     console.warn(
-      `Warning: tasks-status.json id (${finalTasksStatus.id}) does not match jobId (${jobId}). Preferring jobId.`
+      `Warning: tasks-status.json jobId (${finalTasksStatus.jobId}) does not match jobId (${jobId}). Preferring jobId.`
     );
-    finalTasksStatus.id = jobId;
+    finalTasksStatus.jobId = jobId;
   }
 
   // Write tasks-status.json
@@ -152,7 +152,7 @@ export async function createJobTree(options = {}) {
 export function createTasksStatus(options) {
   const {
     jobId,
-    name = `Job ${jobId}`,
+    title = `Job ${jobId}`,
     tasks = {},
     createdAt = new Date().toISOString(),
     updatedAt = new Date().toISOString(),
@@ -173,25 +173,14 @@ export function createTasksStatus(options) {
   }
 
   return {
-    id: jobId,
-    name,
+    jobId,
+    title,
     createdAt,
     updatedAt,
     tasks,
   };
 }
 
-/**
- * Creates a task definition with optional fields
- * @param {Object} options - Task options
- * @param {string} options.state - Task state
- * @param {string} [options.startedAt] - Start timestamp
- * @param {string} [options.endedAt] - End timestamp
- * @param {number} [options.attempts] - Number of attempts
- * @param {number} [options.executionTimeMs] - Execution time in ms
- * @param {string[]} [options.artifacts] - Artifact paths
- * @returns {Object} Task definition
- */
 export function createTask(options) {
   const {
     state,
@@ -200,6 +189,9 @@ export function createTask(options) {
     attempts,
     executionTimeMs,
     artifacts = [],
+    currentStage,
+    failedStage,
+    files,
   } = options;
 
   const validStates = ["pending", "running", "done", "error"];
@@ -216,6 +208,9 @@ export function createTask(options) {
   if (attempts !== undefined) task.attempts = attempts;
   if (executionTimeMs !== undefined) task.executionTimeMs = executionTimeMs;
   if (artifacts.length > 0) task.artifacts = artifacts;
+  if (currentStage) task.currentStage = currentStage;
+  if (failedStage) task.failedStage = failedStage;
+  if (files) task.files = files;
 
   return task;
 }

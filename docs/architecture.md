@@ -1034,6 +1034,59 @@ Testing guidance
 
 The demo content under `demo/` is intended as an on-disk seed only — not a UI fallback.
 
+## Canonical Data Schema (v0.5+)
+
+### Job Schema
+
+```javascript
+{
+  jobId: string,           // Job identifier
+  title: string,           // Human-readable job name
+  tasksStatus: object,      // Task data keyed by task name
+  location: string,         // Storage location (current, complete, etc.)
+  current?: string,         // Currently executing task name
+  currentStage?: string,    // Current task's stage for DAG visualization
+  createdAt?: string,       // ISO timestamp
+  updatedAt?: string,       // ISO timestamp
+}
+```
+
+### Task Schema
+
+```javascript
+{
+  state: "pending"|"running"|"done"|"error",  // Task state
+  currentStage?: string,    // Current stage for DAG visualization
+  failedStage?: string,     // Failed stage for DAG visualization
+  startedAt?: string,      // ISO timestamp
+  endedAt?: string,        // ISO timestamp
+  attempts?: number,        // Number of execution attempts
+  executionTimeMs?: number,  // Execution time in milliseconds
+  files: {                // File artifacts structure
+    artifacts: string[],    // Generated artifacts
+    logs: string[],         // Execution logs
+    tmp: string[]           // Temporary files
+  },
+  artifacts?: string[],      // Legacy artifacts (fallback)
+  error?: {               // Error metadata
+    message: string,
+    debug?: {
+      stage: string       // Failed stage from debug info
+    }
+  }
+}
+```
+
+### Stage Metadata Flow
+
+Stage metadata (`currentStage`, `failedStage`) flows through the entire pipeline:
+
+1. **Task Runner** - Sets stage during execution
+2. **Status Transformer** - Preserves stage in `transformTasks()`
+3. **Job Adapter** - Preserves stage in `normalizeTasks()`
+4. **DAG Utility** - Computes stage in `computeTaskStage()`
+5. **UI Components** - Displays stage in DAG visualization
+
 ## Pipeline Configuration
 
 ### Pipeline Definition (`pipeline-config/pipeline.json`)
@@ -1087,59 +1140,6 @@ export async function refine(context) {
   // Apply refinements
   return { refined: true };
 }
-```
-
-## Critical Issues Identified
-
-### 1. Code Duplication
-
-- ✅ **RESOLVED**: Removed duplicate `src/providers/index.js` file
-- All LLM abstraction now consolidated in `src/llm/index.js`
-- See `docs/providers-fix.md` for resolution details
-
-### 2. Error Handling
-
-- Insufficient error recovery in orchestrator
-- No retry mechanism for failed process spawns
-- Pipeline runner exits immediately on task failure
-- **Recommendation**: Implement comprehensive error recovery strategy
-
-### 3. State Management
-
-- Mutable state passed around in API layer
-- No transaction safety for file operations
-- No mechanism to resume interrupted pipelines
-- **Recommendation**: Implement immutable state patterns and transaction logs
-
-### 4. Process Isolation
-
-- Environment variables could conflict in multi-instance scenarios
-- Lock file mechanism fragile
-- **Recommendation**: Use proper IPC or message queues
-
-### 5. Security
-
-- No authentication on UI server
-- No input validation on seed files
-- No rate limiting
-- **Recommendation**: Add authentication, validation, and rate limiting
-
-### 6. Scalability
-
-- Single orchestrator instance
-- No distributed execution support
-- In-memory state only
-- **Recommendation**: Design for horizontal scaling
-
-### 7. Observability
-
-- Limited logging
-- No distributed tracing
-- Metrics collection incomplete
-- **Recommendation**: Implement structured logging and tracing
-
-### 8. Configuration
-
 - Hard-coded values throughout (timeouts, limits, paths)
 - No schema validation for pipeline definitions
 - **Recommendation**: Centralize configuration with validation
@@ -1181,3 +1181,4 @@ export async function refine(context) {
 ## Conclusion
 
 The Prompt Orchestration Pipeline is a well-architected system with strong foundations in functional programming and process isolation. The 11-stage pipeline with automatic refinement is particularly innovative. However, there are critical issues around code duplication, error handling, and scalability that should be addressed. The system would benefit from more robust error recovery, better observability, and preparation for distributed execution.
+```

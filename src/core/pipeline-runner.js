@@ -91,6 +91,9 @@ for (const taskName of pipeline.tasks) {
       taskConfig: pipeline.taskConfig?.[taskName] || {},
       statusPath: tasksStatusPath,
       jobId,
+      meta: {
+        pipelineTasks: [...pipeline.tasks],
+      },
     };
     const modulePath = tasks[taskName];
     if (!modulePath) throw new Error(`Task not registered: ${taskName}`);

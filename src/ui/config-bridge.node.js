@@ -9,7 +9,7 @@ import { promises as fs } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 /**
- * Global constants and contracts for the project data display system
+ * Global constants and contracts for project data display system
  * @namespace Constants
  */
 export const Constants = {
@@ -23,7 +23,7 @@ export const Constants = {
    * Valid task states
    * @type {string[]}
    */
-  TASK_STATES: ["pending", "running", "done", "error"],
+  TASK_STATES: ["pending", "running", "done", "failed"],
 
   /**
    * Valid job locations
@@ -35,7 +35,7 @@ export const Constants = {
    * Status sort order (descending priority)
    * @type {string[]}
    */
-  STATUS_ORDER: ["running", "error", "pending", "complete"],
+  STATUS_ORDER: ["running", "failed", "pending", "complete"],
 
   /**
    * File size limits for reading
@@ -80,7 +80,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 /**
- * Resolves pipeline data directory roots relative to the project root
+ * Resolves pipeline data directory roots relative to project root
  * @returns {Object} Object containing resolved directory paths (current/complete/pending/rejected)
  */
 export function resolvePipelinePaths(root = path.resolve(__dirname, "../..")) {
@@ -95,7 +95,7 @@ export function resolvePipelinePaths(root = path.resolve(__dirname, "../..")) {
 }
 
 /**
- * Gets the absolute path to a job directory
+ * Gets absolute path to a job directory
  * @param {string} jobId - Job ID
  * @param {string} [location='current'] - Job location ('current' or 'complete')
  * @returns {string} Absolute path to job directory
@@ -118,7 +118,7 @@ export function getJobPath(jobId, location = "current") {
 }
 
 /**
- * Gets the path to tasks-status.json for a job
+ * Gets path to tasks-status.json for a job
  * @param {string} jobId - Job ID
  * @param {string} [location='current'] - Job location
  * @returns {string} Path to tasks-status.json
@@ -129,7 +129,7 @@ export function getTasksStatusPath(jobId, location = "current") {
 }
 
 /**
- * Gets the path to seed.json for a job
+ * Gets path to seed.json for a job
  * @param {string} jobId - Job ID
  * @param {string} [location='current'] - Job location
  * @returns {string} Path to seed.json
@@ -140,7 +140,7 @@ export function getSeedPath(jobId, location = "current") {
 }
 
 /**
- * Gets the path to a task directory
+ * Gets path to a task directory
  * @param {string} jobId - Job ID
  * @param {string} taskName - Task name
  * @param {string} [location='current'] - Job location
@@ -235,25 +235,6 @@ export function getStatusPriority(status) {
 }
 
 /**
- * Computes job progress percentage
- * @param {Object} tasks - Tasks object from tasks-status.json
- * @returns {number} Progress percentage (0-100)
- */
-export function computeProgress(tasks = {}) {
-  const taskEntries = Object.entries(tasks);
-  if (taskEntries.length === 0) {
-    return 0;
-  }
-
-  const doneCount = taskEntries.filter(
-    ([_, task]) => task.state === "done"
-  ).length;
-  const progressPct = Math.round((100 * doneCount) / taskEntries.length);
-
-  return progressPct;
-}
-
-/**
  * Determines job status based on task states
  * @param {Object} tasks - Tasks object from tasks-status.json
  * @returns {string} Job status
@@ -267,8 +248,8 @@ export function determineJobStatus(tasks = {}) {
 
   const taskStates = taskEntries.map(([_, task]) => task.state);
 
-  if (taskStates.includes("error")) {
-    return "error";
+  if (taskStates.includes("failed")) {
+    return "failed";
   }
 
   if (taskStates.includes("running")) {
@@ -297,7 +278,7 @@ export function initPATHS(root) {
 }
 
 /**
- * Reset the cached PATHS so future calls will re-resolve.
+ * Reset cached PATHS so future calls will re-resolve.
  * Useful in tests or server code that needs to change the project root at runtime.
  */
 export function resetPATHS() {
@@ -308,8 +289,8 @@ export function resetPATHS() {
  * Get the cached PATHS. If a root argument is provided, re-initialize the cache
  * for backward-compatible callers that pass a root to getPATHS(root).
  *
- * If not initialized, initialize with the default project root (two levels up
- * from this file).
+ * If not initialized, initialize with the PO_ROOT environment variable if available,
+ * otherwise use the default project root (two levels up from this file).
  */
 export function getPATHS(root) {
   if (root) {
@@ -317,7 +298,10 @@ export function getPATHS(root) {
     return _PATHS;
   }
   if (!_PATHS) {
-    _PATHS = resolvePipelinePaths(path.resolve(__dirname, "../.."));
+    // Use PO_ROOT environment variable if available, otherwise use default project root
+    const effectiveRoot =
+      process.env.PO_ROOT || path.resolve(__dirname, "../..");
+    _PATHS = resolvePipelinePaths(effectiveRoot);
   }
   return _PATHS;
 }

@@ -79,7 +79,7 @@ function TestComp({ jobId }) {
       <div data-testid="status">{connectionStatus}</div>
       <div data-testid="loading">{String(loading)}</div>
       <div data-testid="error">{error || ""}</div>
-      <div data-testid="job-id">{data?.id || ""}</div>
+      <div data-testid="job-id">{data?.jobId || ""}</div>
       <div data-testid="job-status">{data?.status || ""}</div>
     </div>
   );
@@ -87,12 +87,12 @@ function TestComp({ jobId }) {
 
 describe("useJobDetailWithUpdates", () => {
   const mockJobData = {
-    id: "test-job-1",
-    name: "Test Job",
+    jobId: "test-job-1",
+    title: "Test Job",
     status: "pending",
-    tasks: [
-      { name: "task1", status: "pending" },
-      { name: "task2", status: "pending" },
+    tasksStatus: [
+      { name: "task1", state: "pending" },
+      { name: "task2", state: "pending" },
     ],
     pipeline: { tasks: ["task1", "task2"] },
   };
@@ -147,7 +147,7 @@ describe("useJobDetailWithUpdates", () => {
     act(() => {
       es.dispatchEvent("job:updated", {
         data: JSON.stringify({
-          id: "other-job-2",
+          jobId: "other-job-2",
           status: "running",
         }),
       });
@@ -160,7 +160,7 @@ describe("useJobDetailWithUpdates", () => {
     act(() => {
       es.dispatchEvent("job:updated", {
         data: JSON.stringify({
-          id: "test-job-1",
+          jobId: "test-job-1",
           status: "running",
         }),
       });
@@ -188,7 +188,7 @@ describe("useJobDetailWithUpdates", () => {
     act(() => {
       es.dispatchEvent("job:updated", {
         data: JSON.stringify({
-          id: "test-job-1",
+          jobId: "test-job-1",
           status: "running",
         }),
       });
@@ -284,7 +284,7 @@ describe("useJobDetailWithUpdates", () => {
     act(() => {
       es.dispatchEvent("job:updated", {
         data: JSON.stringify({
-          id: "test-job-1",
+          jobId: "test-job-1",
           status: "running",
           progress: 25,
         }),
@@ -298,7 +298,7 @@ describe("useJobDetailWithUpdates", () => {
     act(() => {
       es.dispatchEvent("job:updated", {
         data: JSON.stringify({
-          id: "test-job-1",
+          jobId: "test-job-1",
           status: "completed",
           progress: 100,
         }),
@@ -658,6 +658,75 @@ describe("useJobDetailWithUpdates", () => {
       // Should not have triggered additional fetch
       expect(mockFetch).toHaveBeenCalledTimes(1);
       expect(screen.getByTestId("job-status").textContent).toBe("pending");
+    });
+
+    it("should refetch and provide updated shape with both root and per-task currentStage", async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          ok: true,
+          data: mockJobData,
+        }),
+      });
+
+      render(<TestComp jobId="test-job-1" />);
+
+      // Wait for hydration
+      await waitFor(() => {
+        expect(screen.getByTestId("loading").textContent).toBe("false");
+      });
+
+      const es =
+        FakeEventSource.instances[FakeEventSource.instances.length - 1];
+
+      // Set up mock for the refetch with updated shape (both root and per-task currentStage)
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          ok: true,
+          data: {
+            ...mockJobData,
+            status: "running",
+            current: "task1",
+            currentStage: "inference",
+            tasks: [
+              {
+                name: "task1",
+                state: "running",
+                currentStage: "inference",
+              },
+              { name: "task2", status: "pending" },
+            ],
+          },
+        }),
+      });
+
+      // Send state:change event for this job
+      act(() => {
+        es.dispatchEvent("state:change", {
+          data: JSON.stringify({
+            path: "pipeline-data/current/test-job-1/tasks-status.json",
+            type: "modified",
+          }),
+        });
+      });
+
+      // Wait for debounced refetch (200ms)
+      await waitFor(
+        () => {
+          expect(mockFetch).toHaveBeenCalledTimes(2);
+        },
+        { timeout: 500 }
+      );
+
+      expect(mockFetch).toHaveBeenLastCalledWith("/api/jobs/test-job-1", {
+        signal: expect.any(AbortSignal),
+      });
+
+      // Status should update after refetch
+      await waitFor(() => {
+        expect(screen.getByTestId("job-status").textContent).toBe("running");
+      });
     });
   });
 });
