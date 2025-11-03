@@ -109,20 +109,6 @@ function normalizeTasks(rawTasks) {
 }
 
 /**
- * Compute progress from tasks if progress not present.
- * Uses formula: round(100 * done_count / max(1, total_tasks))
- */
-function computeProgressFromTasks(tasks) {
-  const taskList = Object.values(tasks);
-  const total = Math.max(1, taskList.length);
-  const done = taskList.reduce(
-    (acc, t) => acc + (t.state === "done" ? 1 : 0),
-    0
-  );
-  return Math.round((100 * done) / total);
-}
-
-/**
  * Derive status from tasks when status is missing/invalid.
  * Rules:
  * - failed if any task state === 'failed'
@@ -158,7 +144,7 @@ function computeJobSummaryStats(tasks) {
     0
   );
   const status = deriveStatusFromTasks(tasks);
-  const progress = computeProgressFromTasks(tasks);
+  const progress = 0; // Will be overridden by API progress if available
   return { status, progress, doneCount, taskCount };
 }
 

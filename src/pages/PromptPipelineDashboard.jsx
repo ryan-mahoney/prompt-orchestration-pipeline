@@ -87,20 +87,6 @@ export default function PromptPipelineDashboard({ isConnected }) {
     }
   }, [jobs, activeTab]);
 
-  const totalProgressPct = (job) => {
-    const total = Array.isArray(job.tasks)
-      ? job.tasks.length
-      : Object.keys(job.tasks || {}).length;
-    if (!total) return 0;
-    const taskList = Array.isArray(job.tasks)
-      ? job.tasks
-      : Object.values(job.tasks || {});
-    const done = taskList.filter(
-      (t) => t.state === "done" || t.state === "completed"
-    ).length;
-    return Math.round((done / total) * 100);
-  };
-
   const overallElapsed = (job) => jobCumulativeDurationMs(job, now);
 
   // Aggregate progress for currently running jobs (for a subtle top progress bar)
@@ -110,7 +96,7 @@ export default function PromptPipelineDashboard({ isConnected }) {
   );
   const aggregateProgress = useMemo(() => {
     if (runningJobs.length === 0) return 0;
-    const sum = runningJobs.reduce((acc, j) => acc + totalProgressPct(j), 0);
+    const sum = runningJobs.reduce((acc, j) => acc + (j.progress || 0), 0);
     return Math.round(sum / runningJobs.length);
   }, [runningJobs]);
 
@@ -209,7 +195,6 @@ export default function PromptPipelineDashboard({ isConnected }) {
             jobs={filteredJobs}
             pipeline={null}
             onOpenJob={openJob}
-            totalProgressPct={totalProgressPct}
             overallElapsed={overallElapsed}
             now={now}
           />
@@ -219,7 +204,6 @@ export default function PromptPipelineDashboard({ isConnected }) {
             jobs={filteredJobs}
             pipeline={null}
             onOpenJob={openJob}
-            totalProgressPct={totalProgressPct}
             overallElapsed={overallElapsed}
             now={now}
           />
@@ -229,7 +213,6 @@ export default function PromptPipelineDashboard({ isConnected }) {
             jobs={filteredJobs}
             pipeline={null}
             onOpenJob={openJob}
-            totalProgressPct={totalProgressPct}
             overallElapsed={overallElapsed}
             now={now}
           />

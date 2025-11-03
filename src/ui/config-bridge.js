@@ -128,25 +128,6 @@ export function determineJobStatus(tasks = {}) {
 }
 
 /**
- * Computes job progress percentage
- * @param {Object} tasks - Tasks object from tasks-status.json
- * @returns {number} Progress percentage (0-100)
- */
-export function computeProgress(tasks = {}) {
-  const taskEntries = Object.entries(tasks);
-  if (taskEntries.length === 0) {
-    return 0;
-  }
-
-  const doneCount = taskEntries.filter(
-    ([_, task]) => task.state === "done"
-  ).length;
-  const progressPct = Math.round((100 * doneCount) / taskEntries.length);
-
-  return progressPct;
-}
-
-/**
  * Creates a structured error response
  * @param {string} code - Error code
  * @param {string} message - Error message

@@ -454,6 +454,140 @@ describe("status-writer", () => {
     });
   });
 
+  describe("progress field preservation", () => {
+    it("preserves snapshot.progress field through read/write round-trip", async () => {
+      const progressValue = 75;
+
+      // Write status with progress field
+      const written = await writeJobStatus(jobDir, (snapshot) => {
+        snapshot.current = "task-1";
+        snapshot.currentStage = "processing";
+        snapshot.state = "running";
+        snapshot.progress = progressValue;
+      });
+
+      expect(written.progress).toBe(progressValue);
+
+      // Read it back
+      const read = await readJobStatus(jobDir);
+
+      expect(read).toBeDefined();
+      expect(read.progress).toBe(progressValue);
+
+      // Verify the complete structure is preserved
+      expect(read).toMatchObject({
+        id: "test-job",
+        current: "task-1",
+        currentStage: "processing",
+        state: "running",
+        progress: progressValue,
+        tasks: {},
+        files: {
+          artifacts: [],
+          logs: [],
+          tmp: [],
+        },
+      });
+    });
+
+    it("preserves progress field when updating other fields", async () => {
+      // Initial write with progress
+      await writeJobStatus(jobDir, (snapshot) => {
+        snapshot.current = "task-1";
+        snapshot.progress = 25;
+      });
+
+      // Update other fields but preserve progress
+      const updated = await writeJobStatus(jobDir, (snapshot) => {
+        snapshot.currentStage = "processing";
+        snapshot.state = "running";
+        // Note: we don't set progress here, it should be preserved
+      });
+
+      expect(updated.progress).toBe(25);
+      expect(updated.currentStage).toBe("processing");
+      expect(updated.state).toBe("running");
+
+      // Verify round-trip preservation
+      const read = await readJobStatus(jobDir);
+      expect(read.progress).toBe(25);
+    });
+
+    it("handles progress field with various numeric values", async () => {
+      const testValues = [0, 1, 50, 99, 100, 42.5, 0.1];
+
+      for (const progressValue of testValues) {
+        const tempJobDir = path.join(tempDir, `test-job-${progressValue}`);
+        await fs.mkdir(tempJobDir, { recursive: true });
+
+        // Write with specific progress value
+        await writeJobStatus(tempJobDir, (snapshot) => {
+          snapshot.progress = progressValue;
+        });
+
+        // Read back and verify
+        const read = await readJobStatus(tempJobDir);
+        expect(read.progress).toBe(progressValue);
+      }
+    });
+
+    it("preserves progress field alongside other unknown fields", async () => {
+      const unknownFields = {
+        customMetric: 123,
+        metadata: { version: "1.0", author: "test" },
+        progress: 67,
+        debugInfo: { lastError: null, retries: 3 },
+      };
+
+      // Write status with multiple unknown fields including progress
+      await writeJobStatus(jobDir, (snapshot) => {
+        Object.assign(snapshot, unknownFields);
+        snapshot.current = "task-1";
+      });
+
+      // Read back and verify all unknown fields are preserved
+      const read = await readJobStatus(jobDir);
+      expect(read.progress).toBe(67);
+      expect(read.customMetric).toBe(123);
+      expect(read.metadata).toEqual({ version: "1.0", author: "test" });
+      expect(read.debugInfo).toEqual({ lastError: null, retries: 3 });
+    });
+
+    it("handles null and undefined progress values", async () => {
+      // Test with null progress
+      await writeJobStatus(jobDir, (snapshot) => {
+        snapshot.progress = null;
+        snapshot.current = "task-1";
+      });
+
+      let read = await readJobStatus(jobDir);
+      expect(read.progress).toBeNull();
+
+      // Test with undefined progress (should not be present in JSON)
+      await writeJobStatus(jobDir, (snapshot) => {
+        snapshot.progress = undefined;
+        snapshot.current = "task-2";
+      });
+
+      read = await readJobStatus(jobDir);
+      expect(read.progress).toBeUndefined();
+    });
+
+    it("validates progress field is optional in default status", async () => {
+      // Create default status without progress field
+      const result = await writeJobStatus(jobDir, (snapshot) => {
+        snapshot.current = "task-1";
+        // Intentionally not setting progress
+      });
+
+      expect(result.progress).toBeUndefined();
+
+      // Should still be able to read it back
+      const read = await readJobStatus(jobDir);
+      expect(read.progress).toBeUndefined();
+    });
+  });
+
   describe("SSE emission", () => {
     it("emits state:change event when writeJobStatus is called", async () => {
       await writeJobStatus(jobDir, (snapshot) => {
@@ -468,6 +602,7 @@ describe("status-writer", () => {
         data: {
           path: path.join(jobDir, "tasks-status.json"),
           id: "test-job",
+          jobId: "test-job",
         },
       });
     });
@@ -491,6 +626,7 @@ describe("status-writer", () => {
         data: {
           path: path.join(jobDir, "tasks-status.json"),
           id: "test-job",
+          jobId: "test-job",
         },
       });
     });
@@ -515,6 +651,7 @@ describe("status-writer", () => {
         data: {
           path: path.join(jobDir, "tasks-status.json"),
           id: "test-job",
+          jobId: "test-job",
         },
       });
     });
@@ -531,6 +668,7 @@ describe("status-writer", () => {
         data: {
           path: path.join(jobDir, "tasks-status.json"),
           id: "test-job",
+          jobId: "test-job",
         },
       });
     });
@@ -591,6 +729,7 @@ describe("status-writer", () => {
         data: {
           path: expectedPath,
           id: "test-job",
+          jobId: "test-job",
         },
       });
 

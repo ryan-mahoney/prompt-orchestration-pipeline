@@ -4,19 +4,6 @@ import { derivePipelineMetadata } from "../../utils/pipelines.js";
 const VALID_TASK_STATES = new Set(["pending", "running", "done", "failed"]);
 
 /**
- * Compute progress percentage from tasks mapping.
- * Accepts tasks object where each value may have a `state` property.
- */
-export function computeProgress(tasks = {}) {
-  if (!tasks || typeof tasks !== "object") return 0;
-  const names = Object.keys(tasks);
-  const total = names.length;
-  if (total === 0) return 0;
-  const doneCount = names.filter((n) => tasks[n]?.state === "done").length;
-  return Math.round((100 * doneCount) / Math.max(1, total));
-}
-
-/**
  * Determine job-level status from tasks mapping.
  */
 export function determineJobStatus(tasks = {}) {
@@ -37,19 +24,20 @@ export function determineJobStatus(tasks = {}) {
  * Tests expect console.warn to be called for unknown states with substring:
  *   Unknown task state "..."
  */
-export function computeJobStatus(tasksInput) {
+export function computeJobStatus(tasksInput, existingProgress = null) {
   // Guard invalid input
   if (
     !tasksInput ||
     typeof tasksInput !== "object" ||
     Array.isArray(tasksInput)
   ) {
-    return { status: "pending", progress: 0 };
+    return { status: "pending", progress: existingProgress ?? 0 };
   }
 
   // Normalize task states, and detect unknown states
   const names = Object.keys(tasksInput);
-  if (names.length === 0) return { status: "pending", progress: 0 };
+  if (names.length === 0)
+    return { status: "pending", progress: existingProgress ?? 0 };
 
   let unknownStatesFound = new Set();
 
@@ -73,8 +61,9 @@ export function computeJobStatus(tasksInput) {
     console.warn(`Unknown task state "${s}"`);
   }
 
-  const progress = computeProgress(normalized);
   const status = determineJobStatus(normalized);
+  // Pass through existing progress if provided, otherwise return undefined
+  const progress = existingProgress;
 
   return { status, progress };
 }
@@ -201,7 +190,7 @@ export function transformJobStatus(raw, jobId, location) {
 
   // Support both canonical (tasksStatus) and legacy (tasks) schema
   const tasksStatus = transformTasks(raw.tasksStatus || raw.tasks);
-  const jobStatusObj = computeJobStatus(tasksStatus);
+  const jobStatusObj = computeJobStatus(tasksStatus, raw.progress);
 
   const jobFiles = normalizeTaskFiles(raw.files);
 

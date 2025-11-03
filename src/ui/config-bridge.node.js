@@ -235,25 +235,6 @@ export function getStatusPriority(status) {
 }
 
 /**
- * Computes job progress percentage
- * @param {Object} tasks - Tasks object from tasks-status.json
- * @returns {number} Progress percentage (0-100)
- */
-export function computeProgress(tasks = {}) {
-  const taskEntries = Object.entries(tasks);
-  if (taskEntries.length === 0) {
-    return 0;
-  }
-
-  const doneCount = taskEntries.filter(
-    ([_, task]) => task.state === "done"
-  ).length;
-  const progressPct = Math.round((100 * doneCount) / taskEntries.length);
-
-  return progressPct;
-}
-
-/**
  * Determines job status based on task states
  * @param {Object} tasks - Tasks object from tasks-status.json
  * @returns {string} Job status

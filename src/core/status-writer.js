@@ -112,7 +112,14 @@ async function atomicWrite(filePath, data) {
 }
 
 /**
- * Validates that the status snapshot has required structure
+ * Validates that the status snapshot has required structure.
+ *
+ * This function preserves all unknown fields, including optional numeric fields
+ * like `snapshot.progress`. Only the required root fields are validated and
+ * fixed if missing or malformed. Extra fields are passed through unchanged.
+ *
+ * @param {Object} snapshot - The status snapshot to validate
+ * @returns {Object} The validated and normalized snapshot
  */
 function validateStatusSnapshot(snapshot) {
   if (!snapshot || typeof snapshot !== "object") {

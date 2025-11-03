@@ -11,14 +11,13 @@ export default function JobTable({
   jobs,
   pipeline,
   onOpenJob,
-  totalProgressPct,
   overallElapsed,
   now,
 }) {
   if (jobs.length === 0) {
     return (
-      <Box className="border border-dashed border-slate-200 rounded-xl p-6 text-center">
-        <Text size="2" className="text-slate-500">
+      <Box className="p-6">
+        <Text size="2" className="text-slate-600">
           No jobs to show here yet.
         </Text>
       </Box>
@@ -26,8 +25,8 @@ export default function JobTable({
   }
 
   return (
-    <Box className="border border-slate-200 rounded-xl overflow-hidden mt-6">
-      <Table.Root variant="surface">
+    <Box>
+      <Table.Root radius="none">
         <Table.Header>
           <Table.Row>
             <Table.ColumnHeaderCell>Job Name</Table.ColumnHeaderCell>
@@ -62,7 +61,9 @@ export default function JobTable({
               (Array.isArray(job.tasks)
                 ? job.tasks.length
                 : Object.keys(job.tasks || {}).length);
-            const progress = totalProgressPct(job);
+            const progress = Number.isFinite(job.progress)
+              ? Math.round(job.progress)
+              : 0;
             const duration = overallElapsed(job);
             const currentTaskName = currentTask
               ? (currentTask.name ?? currentTask.id ?? job.current)

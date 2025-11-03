@@ -31,7 +31,6 @@ vi.mock("../src/components/ui/progress", () => ({
 describe("JobTable - Clickable Rows", () => {
   const mockOnOpenJob = vi.fn();
   const mockPipeline = { tasks: [{ id: "task1" }, { id: "task2" }] };
-  const mockTotalProgressPct = vi.fn(() => 50);
   const mockOverallElapsed = vi.fn(() => 0);
   const mockNow = new Date("2024-01-01T00:00:00Z");
 
@@ -39,6 +38,7 @@ describe("JobTable - Clickable Rows", () => {
     id: "test-job-123",
     title: "Test Job",
     status: "running",
+    progress: 50,
     current: "task1",
     tasks: { task1: { state: "running" }, task2: { state: "pending" } },
   };
@@ -46,6 +46,7 @@ describe("JobTable - Clickable Rows", () => {
   const mockJobWithoutId = {
     title: "Job Without ID",
     status: "pending",
+    progress: 0,
     tasks: { task1: { state: "pending" } },
   };
 
@@ -63,7 +64,6 @@ describe("JobTable - Clickable Rows", () => {
         jobs={[mockJobWithId]}
         pipeline={mockPipeline}
         onOpenJob={mockOnOpenJob}
-        totalProgressPct={mockTotalProgressPct}
         overallElapsed={mockOverallElapsed}
         now={mockNow}
       />
@@ -87,7 +87,6 @@ describe("JobTable - Clickable Rows", () => {
         jobs={[mockJobWithoutId]}
         pipeline={mockPipeline}
         onOpenJob={mockOnOpenJob}
-        totalProgressPct={mockTotalProgressPct}
         overallElapsed={mockOverallElapsed}
         now={mockNow}
       />
@@ -113,7 +112,6 @@ describe("JobTable - Clickable Rows", () => {
         jobs={[mockJobWithId]}
         pipeline={mockPipeline}
         onOpenJob={mockOnOpenJob}
-        totalProgressPct={mockTotalProgressPct}
         overallElapsed={mockOverallElapsed}
         now={mockNow}
       />
@@ -135,7 +133,6 @@ describe("JobTable - Clickable Rows", () => {
         jobs={[mockJobWithoutId]}
         pipeline={mockPipeline}
         onOpenJob={mockOnOpenJob}
-        totalProgressPct={mockTotalProgressPct}
         overallElapsed={mockOverallElapsed}
         now={mockNow}
       />
@@ -158,7 +155,6 @@ describe("JobTable - Clickable Rows", () => {
         jobs={[mockJobWithId]}
         pipeline={mockPipeline}
         onOpenJob={mockOnOpenJob}
-        totalProgressPct={mockTotalProgressPct}
         overallElapsed={mockOverallElapsed}
         now={mockNow}
       />
@@ -188,7 +184,6 @@ describe("JobTable - Clickable Rows", () => {
         jobs={[mockJobWithId]}
         pipeline={mockPipeline}
         onOpenJob={mockOnOpenJob}
-        totalProgressPct={mockTotalProgressPct}
         overallElapsed={mockOverallElapsed}
         now={mockNow}
       />
