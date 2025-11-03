@@ -43,7 +43,7 @@ export default function JobDetail({ job, pipeline, onClose, onResume }) {
     });
     logger.groupEnd();
   }, [job, pipeline, logger]);
-  const now = useTicker(1000);
+  const now = useTicker(60000);
   const [resumeFrom, setResumeFrom] = useState(
     pipeline?.tasks?.[0]
       ? typeof pipeline.tasks[0] === "string"

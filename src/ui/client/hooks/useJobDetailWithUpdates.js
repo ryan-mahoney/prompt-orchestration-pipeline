@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { adaptJobDetail } from "../adapters/job-adapter.js";
 
 // Export debounce constant for tests
@@ -145,16 +145,17 @@ function applyJobEvent(prev = null, event, jobId) {
     }
 
     default:
+      console.log("XXX: Unknown event type:", event.type);
       return prev;
   }
 }
 
 function matchesJobTasksStatusPath(path, jobId) {
   try {
-    // Normalize path: convert backslashes to "/", trim whitespace, allow optional leading "/"
+    // Normalize path: convert backslashes to "/", trim whitespace
     const normalizedPath = path.replace(/\\/g, "/").trim();
     const re = new RegExp(
-      `^/?pipeline-data/(current|complete|pending|rejected)/${jobId}/`
+      `(?:^|/)pipeline-data/(current|complete|pending|rejected)/${jobId}/`
     );
     return re.test(normalizedPath);
   } catch {
@@ -172,7 +173,7 @@ function matchesJobTasksStatusPath(path, jobId) {
  * @returns {Object} { data, loading, error, connectionStatus }
  */
 export function useJobDetailWithUpdates(jobId) {
-  const logger = React.useMemo(() => createHookLogger(jobId), [jobId]);
+  const logger = useMemo(() => createHookLogger(jobId), [jobId]);
 
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -187,60 +188,80 @@ export function useJobDetailWithUpdates(jobId) {
   const refetchTimerRef = useRef(null);
 
   // Log hook initialization and state changes
-  React.useEffect(() => {
+  useEffect(() => {
     logger.group("Hook Initialization");
     logger.log("Job ID:", jobId);
     logger.log("Initial state:", { data, loading, error, connectionStatus });
     logger.groupEnd();
   }, [jobId, logger]);
 
-  React.useEffect(() => {
+  useEffect(() => {
     logger.state("data", data);
   }, [data, logger]);
 
-  React.useEffect(() => {
+  useEffect(() => {
     logger.state("loading", loading);
   }, [loading, logger]);
 
-  React.useEffect(() => {
+  useEffect(() => {
     logger.state("error", error);
   }, [error, logger]);
 
-  React.useEffect(() => {
+  useEffect(() => {
     logger.state("connectionStatus", connectionStatus);
   }, [connectionStatus, logger]);
 
   // Debounced refetch helper (called directly from handlers)
-  const scheduleDebouncedRefetch = useCallback(() => {
-    logger.log("Scheduling debounced refetch");
-    if (refetchTimerRef.current) {
-      logger.log("Clearing existing refetch timer");
-      clearTimeout(refetchTimerRef.current);
-    }
-    refetchTimerRef.current = setTimeout(async () => {
-      if (!mountedRef.current || !hydratedRef.current) {
-        logger.warn("Refetch aborted - component not mounted or not hydrated");
-        return;
+  const scheduleDebouncedRefetch = useCallback(
+    (context = {}) => {
+      logger.group("Debounced Refetch Request");
+      logger.log("Request context:", context);
+      logger.log("Scheduling debounced refetch");
+      if (refetchTimerRef.current) {
+        logger.log("Clearing existing refetch timer");
+        clearTimeout(refetchTimerRef.current);
       }
-      logger.log("Executing debounced refetch");
-      const abortController = new AbortController();
-      try {
-        const jobData = await fetchJobDetail(jobId, {
-          signal: abortController.signal,
-        });
-        if (mountedRef.current) {
-          logger.log("Refetch successful, updating data");
-          setData(jobData);
-          setError(null);
+      refetchTimerRef.current = setTimeout(async () => {
+        if (!mountedRef.current || !hydratedRef.current) {
+          logger.warn(
+            "Refetch aborted - component not mounted or not hydrated",
+            { mounted: mountedRef.current, hydrated: hydratedRef.current }
+          );
+          logger.groupEnd();
+          return;
         }
-      } catch (err) {
-        logger.error("Failed to refetch job detail:", err);
-        if (mountedRef.current) setError(err.message);
-      } finally {
-        refetchTimerRef.current = null;
-      }
-    }, REFRESH_DEBOUNCE_MS);
-  }, [jobId, logger]);
+        logger.log("Executing debounced refetch");
+        logger.log("Refetch jobId:", jobId);
+        const abortController = new AbortController();
+        try {
+          const jobData = await fetchJobDetail(jobId, {
+            signal: abortController.signal,
+          });
+          logger.log("Refetch response received");
+          logger.log("Refetch job data preview:", {
+            status: jobData?.status,
+            hasTasks: !!jobData?.tasks,
+            taskKeys: jobData?.tasks ? Object.keys(jobData.tasks) : [],
+            hasTasksStatus: !!jobData?.tasksStatus,
+          });
+          if (mountedRef.current) {
+            logger.log("Refetch successful, updating data");
+            setData(jobData);
+            setError(null);
+          } else {
+            logger.warn("Refetch completed but component is unmounted");
+          }
+        } catch (err) {
+          logger.error("Failed to refetch job detail:", err);
+          if (mountedRef.current) setError(err.message);
+        } finally {
+          refetchTimerRef.current = null;
+          logger.groupEnd();
+        }
+      }, REFRESH_DEBOUNCE_MS);
+    },
+    [jobId, logger]
+  );
 
   // Reset state when jobId changes
   useEffect(() => {
@@ -328,13 +349,22 @@ export function useJobDetailWithUpdates(jobId) {
 
   // Set up SSE connection
   useEffect(() => {
-    if (!jobId || esRef.current || !mountedRef.current) {
-      logger.log("SSE setup skipped - conditions not met", {
+    if (!jobId) {
+      logger.log("SSE setup skipped - no jobId available", {
         hasJobId: !!jobId,
         hasExistingEs: !!esRef.current,
         isMounted: mountedRef.current,
       });
       return undefined;
+    }
+    if (esRef.current) {
+      logger.log("Closing existing EventSource before reinitializing");
+      try {
+        esRef.current.close();
+      } catch (err) {
+        logger.warn("Error closing existing EventSource during reinit", err);
+      }
+      esRef.current = null;
     }
 
     logger.group("SSE Connection Setup");
@@ -441,7 +471,10 @@ export function useJobDetailWithUpdates(jobId) {
               logger.log(
                 `state:change matches tasks-status path: ${d.path}, scheduling refetch`
               );
-              scheduleDebouncedRefetch();
+              scheduleDebouncedRefetch({
+                reason: "state:change",
+                path: d.path,
+              });
               return; // no direct setData
             } else {
               logger.log(
@@ -452,16 +485,29 @@ export function useJobDetailWithUpdates(jobId) {
 
           // Apply event using pure reducer (includes direct state:change with id)
           setData((prev) => {
+            logger.group("Applying SSE event to state");
+            logger.log("Previous state snapshot:", {
+              hasTasks: !!prev?.tasks,
+              taskKeys: prev?.tasks ? Object.keys(prev.tasks) : [],
+              status: prev?.status,
+            });
+            logger.log("Incoming event payload:", payload);
             const next = applyJobEvent(prev, eventObj, jobId);
             try {
               if (JSON.stringify(prev) === JSON.stringify(next)) {
                 logger.log("Event application resulted in no state change");
+                logger.groupEnd();
                 return prev;
               }
             } catch (e) {
               logger.error("Error comparing states:", e);
             }
-            logger.log("Event applied, state updated");
+            logger.log("Event applied, state updated", {
+              hasTasks: !!next?.tasks,
+              taskKeys: next?.tasks ? Object.keys(next.tasks) : [],
+              status: next?.status,
+            });
+            logger.groupEnd();
             return next;
           });
         } catch (err) {

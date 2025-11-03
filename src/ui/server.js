@@ -254,12 +254,36 @@ function extractJsonFromMultipart(raw, contentType) {
  * recent change when available (type: "state:change") and fall back to a
  * lightweight summary event if no recent change is present.
  */
+function decorateChangeWithJobId(change) {
+  if (!change || typeof change !== "object") return change;
+  const normalizedPath = String(change.path || "").replace(/\\/g, "/");
+  const match = normalizedPath.match(
+    /pipeline-data\/(current|complete|pending|rejected)\/([^/]+)/
+  );
+  if (!match) {
+    return change;
+  }
+  return {
+    ...change,
+    lifecycle: match[1],
+    jobId: match[2],
+  };
+}
+
+function prioritizeJobStatusChange(changes = []) {
+  const normalized = changes.map((change) => decorateChangeWithJobId(change));
+  const statusChange = normalized.find(
+    (change) =>
+      typeof change?.path === "string" &&
+      /tasks-status\.json$/.test(change.path)
+  );
+  return statusChange || normalized[0] || null;
+}
+
 function broadcastStateUpdate(currentState) {
   try {
-    const latest =
-      currentState &&
-      currentState.recentChanges &&
-      currentState.recentChanges[0];
+    const recentChanges = (currentState && currentState.recentChanges) || [];
+    const latest = prioritizeJobStatusChange(recentChanges);
     console.debug("[Server] Broadcasting state update:", {
       latest,
       currentState,

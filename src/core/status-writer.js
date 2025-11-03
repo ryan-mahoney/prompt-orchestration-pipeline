@@ -229,6 +229,7 @@ export async function writeJobStatus(jobDir, updateFn) {
         data: {
           path: path.join(jobDir, "tasks-status.json"),
           id: jobId,
+          jobId,
         },
       };
       registry.broadcast(eventData);

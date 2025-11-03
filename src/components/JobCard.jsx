@@ -14,7 +14,7 @@ export default function JobCard({
   progressPct,
   overallElapsedMs,
 }) {
-  const now = useTicker(1000);
+  const now = useTicker(60000);
   const currentTask = job.current ? job.tasks[job.current] : undefined;
   const currentElapsedMs = currentTask
     ? taskDisplayDurationMs(currentTask, now)

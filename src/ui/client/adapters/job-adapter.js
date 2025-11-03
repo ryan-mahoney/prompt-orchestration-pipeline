@@ -187,6 +187,7 @@ export function adaptJobSummary(apiJob) {
 
   const job = {
     id,
+    jobId: id,
     name,
     status: apiStatus || derivedStats.status,
     progress: apiProgress ?? derivedStats.progress,
@@ -235,6 +236,7 @@ export function adaptJobDetail(apiDetail) {
 
   const detail = {
     id,
+    jobId: id,
     name,
     status: apiStatus || derivedStats.status,
     progress: apiProgress ?? derivedStats.progress,

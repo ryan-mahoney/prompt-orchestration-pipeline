@@ -59,7 +59,7 @@ export default function PromptPipelineDashboard({ isConnected }) {
   const [seedUploadTimer, setSeedUploadTimer] = useState(null);
 
   // Shared ticker for live duration updates
-  const now = useTicker(1000);
+  const now = useTicker(10000);
 
   const errorCount = useMemo(
     () => jobs.filter((j) => j.status === "failed").length,
