@@ -62,8 +62,9 @@ export function computeJobStatus(tasksInput, existingProgress = null) {
   }
 
   const status = determineJobStatus(normalized);
-  // Pass through existing progress if provided, otherwise return undefined
-  const progress = existingProgress;
+  // Use existing progress if provided, otherwise default to 0
+  // Progress is pre-calculated in task-statuses.json, not computed from task states
+  const progress = existingProgress !== null ? existingProgress : 0;
 
   return { status, progress };
 }

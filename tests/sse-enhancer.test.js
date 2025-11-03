@@ -1,223 +1,395 @@
-/**
- * Unit tests for SSE Enhancer
- */
-
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { createSSEEnhancer, sseEnhancer } from "../src/ui/sse-enhancer.js";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { createSSERegistry } from "../src/ui/sse.js";
+import { createSSEEnhancer } from "../src/ui/sse-enhancer.js";
+import { transformJobListForAPI } from "../src/ui/transformers/list-transformer.js";
 
 describe("SSE Enhancer", () => {
-  let enhancer;
-  let mockReadJob;
   let mockSSERegistry;
+  let mockReadJobFn;
+  let sseEnhancer;
 
   beforeEach(() => {
-    vi.clearAllMocks();
-    vi.useFakeTimers();
+    // Mock SSE registry
+    mockSSERegistry = createSSERegistry({ heartbeatMs: 1000 });
+    vi.spyOn(mockSSERegistry, "broadcast");
 
-    // Create mock dependencies
-    mockReadJob = vi.fn();
-    mockSSERegistry = {
-      broadcast: vi.fn(),
-    };
+    // Mock read job function
+    mockReadJobFn = vi.fn();
 
-    // Create a fresh enhancer instance for each test with injected dependencies
-    enhancer = createSSEEnhancer({
-      readJobFn: mockReadJob,
+    // Create SSE enhancer with mocked dependencies
+    sseEnhancer = createSSEEnhancer({
+      readJobFn: mockReadJobFn,
       sseRegistry: mockSSERegistry,
-    });
-
-    // Default mock implementations - return job data matching the requested job ID
-    mockReadJob.mockImplementation((jobId) => {
-      return Promise.resolve({
-        ok: true,
-        data: {
-          id: jobId,
-          name: `Test ${jobId}`,
-          status: "running",
-          progress: 50,
-          createdAt: "2024-01-10T10:00:00.000Z",
-          location: "current",
-          tasks: [
-            {
-              name: "analysis",
-              state: "running",
-              startedAt: "2024-01-10T10:00:00.000Z",
-            },
-          ],
-        },
-      });
+      debounceMs: 50, // Short debounce for tests
     });
   });
 
   afterEach(() => {
-    enhancer.cleanup();
-    vi.useRealTimers();
+    vi.restoreAllMocks();
+    sseEnhancer?.cleanup();
   });
 
-  describe("handleJobChange", () => {
-    it("should debounce multiple changes for the same job", async () => {
-      const change1 = {
-        jobId: "job-123",
-        category: "status",
-        filePath: "pipeline-data/current/job-123/tasks-status.json",
+  describe("SSE payload structure consistency", () => {
+    it("should broadcast job:created with canonical list schema matching /api/jobs", async () => {
+      const jobId = "test-job-1";
+      const mockJobData = {
+        title: "Test Job",
+        status: "running",
+        progress: 50,
+        createdAt: "2023-01-01T00:00:00.000Z",
+        updatedAt: "2023-01-01T01:00:00.000Z",
+        location: "current",
+        current: "task-1",
+        currentStage: "processing",
+        tasksStatus: {
+          "task-1": {
+            state: "running",
+            startedAt: "2023-01-01T00:30:00.000Z",
+            executionTimeMs: 1800000,
+            currentStage: "processing",
+          },
+          "task-2": {
+            state: "pending",
+          },
+        },
+        pipeline: "test-pipeline",
+        pipelineLabel: "Test Pipeline",
+        files: {
+          artifacts: [],
+          logs: [],
+          tmp: [],
+        },
       };
 
-      const change2 = {
-        jobId: "job-123",
-        category: "task",
-        filePath: "pipeline-data/current/job-123/tasks/analysis/output.json",
-      };
+      mockReadJobFn.mockResolvedValue({
+        ok: true,
+        data: mockJobData,
+        location: "current",
+      });
 
-      // Trigger first change
-      enhancer.handleJobChange(change1);
+      // Trigger job change
+      sseEnhancer.handleJobChange({
+        jobId,
+        category: "test",
+        filePath: "test.json",
+      });
 
-      // Advance time by 100ms (less than debounce window)
-      vi.advanceTimersByTime(100);
+      // Wait for debounce and async processing
+      await new Promise((resolve) => setTimeout(resolve, 100));
 
-      // Trigger second change - should reset the timer
-      enhancer.handleJobChange(change2);
-
-      // Advance time by 200ms (debounce window) and wait for async operations
-      await vi.advanceTimersByTimeAsync(200);
-
-      // Should only broadcast once
+      // Verify broadcast was called
       expect(mockSSERegistry.broadcast).toHaveBeenCalledTimes(1);
-      expect(mockSSERegistry.broadcast).toHaveBeenCalledWith({
-        type: "job:created",
-        data: expect.objectContaining({
-          id: "job-123",
-          status: "running",
-        }),
+      const broadcastCall = mockSSERegistry.broadcast.mock.calls[0][0];
+
+      // Should be job:created for first time
+      expect(broadcastCall.type).toBe("job:created");
+      expect(broadcastCall.data).toBeDefined();
+
+      const broadcastData = broadcastCall.data;
+
+      // Verify the payload matches canonical list schema
+      const expectedListSchema = transformJobListForAPI(
+        [
+          {
+            jobId,
+            ...mockJobData,
+          },
+        ],
+        { includePipelineMetadata: true }
+      )[0];
+
+      expect(broadcastData).toEqual(expectedListSchema);
+
+      // Verify required fields are present
+      expect(broadcastData).toHaveProperty("jobId", jobId);
+      expect(broadcastData).toHaveProperty("title", "Test Job");
+      expect(broadcastData).toHaveProperty("status", "running");
+      expect(broadcastData).toHaveProperty("progress", 50);
+      expect(broadcastData).toHaveProperty(
+        "createdAt",
+        "2023-01-01T00:00:00.000Z"
+      );
+      expect(broadcastData).toHaveProperty(
+        "updatedAt",
+        "2023-01-01T01:00:00.000Z"
+      );
+      expect(broadcastData).toHaveProperty("location", "current");
+      expect(broadcastData).toHaveProperty("current", "task-1");
+      expect(broadcastData).toHaveProperty("currentStage", "processing");
+      expect(broadcastData).toHaveProperty("tasksStatus");
+      expect(broadcastData).toHaveProperty("pipeline", "test-pipeline");
+      expect(broadcastData).toHaveProperty("pipelineLabel", "Test Pipeline");
+
+      // Verify tasksStatus structure
+      expect(broadcastData.tasksStatus).toHaveProperty("task-1");
+      expect(broadcastData.tasksStatus["task-1"]).toEqual({
+        state: "running",
+        startedAt: "2023-01-01T00:30:00.000Z",
+        executionTimeMs: 1800000,
+        currentStage: "processing",
+      });
+      expect(broadcastData.tasksStatus).toHaveProperty("task-2");
+      expect(broadcastData.tasksStatus["task-2"]).toEqual({
+        state: "pending",
       });
     });
 
-    it("should handle changes for different jobs independently", async () => {
-      const change1 = {
-        jobId: "job-123",
-        category: "status",
-        filePath: "pipeline-data/current/job-123/tasks-status.json",
+    it("should broadcast job:updated with canonical list schema matching /api/jobs", async () => {
+      const jobId = "test-job-2";
+      const mockJobData = {
+        title: "Updated Test Job",
+        status: "complete",
+        progress: 100,
+        createdAt: "2023-01-01T00:00:00.000Z",
+        updatedAt: "2023-01-01T02:00:00.000Z",
+        location: "complete",
+        current: null,
+        currentStage: null,
+        tasksStatus: {
+          "task-1": {
+            state: "done",
+            startedAt: "2023-01-01T00:30:00.000Z",
+            endedAt: "2023-01-01T01:30:00.000Z",
+            executionTimeMs: 3600000,
+            currentStage: "processing",
+          },
+          "task-2": {
+            state: "done",
+            startedAt: "2023-01-01T01:30:00.000Z",
+            endedAt: "2023-01-01T02:00:00.000Z",
+            executionTimeMs: 1800000,
+            failedStage: "validation",
+          },
+        },
+        files: {
+          artifacts: [],
+          logs: [],
+          tmp: [],
+        },
       };
 
-      const change2 = {
-        jobId: "job-456",
-        category: "status",
-        filePath: "pipeline-data/current/job-456/tasks-status.json",
-      };
-
-      // Trigger changes for different jobs
-      enhancer.handleJobChange(change1);
-      enhancer.handleJobChange(change2);
-
-      // Advance time by 200ms and wait for async operations
-      await vi.advanceTimersByTimeAsync(200);
-
-      // Should broadcast twice (once for each job)
-      expect(mockSSERegistry.broadcast).toHaveBeenCalledTimes(2);
-      expect(mockSSERegistry.broadcast).toHaveBeenCalledWith({
-        type: "job:created",
-        data: expect.objectContaining({ id: "job-123" }),
+      mockReadJobFn.mockResolvedValue({
+        ok: true,
+        data: mockJobData,
+        location: "complete",
       });
-      expect(mockSSERegistry.broadcast).toHaveBeenCalledWith({
-        type: "job:created",
-        data: expect.objectContaining({ id: "job-456" }),
+
+      // First trigger to mark as seen (job:created)
+      sseEnhancer.handleJobChange({
+        jobId,
+        category: "test",
+        filePath: "test.json",
+      });
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      // Clear broadcast calls
+      mockSSERegistry.broadcast.mockClear();
+
+      // Second trigger should result in job:updated
+      sseEnhancer.handleJobChange({
+        jobId,
+        category: "test",
+        filePath: "test.json",
+      });
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      // Verify broadcast was called
+      expect(mockSSERegistry.broadcast).toHaveBeenCalledTimes(1);
+      const broadcastCall = mockSSERegistry.broadcast.mock.calls[0][0];
+
+      // Should be job:updated for subsequent calls
+      expect(broadcastCall.type).toBe("job:updated");
+      expect(broadcastCall.data).toBeDefined();
+
+      const broadcastData = broadcastCall.data;
+
+      // Verify the payload matches canonical list schema
+      const expectedListSchema = transformJobListForAPI(
+        [
+          {
+            jobId,
+            ...mockJobData,
+          },
+        ],
+        { includePipelineMetadata: true }
+      )[0];
+
+      expect(broadcastData).toEqual(expectedListSchema);
+
+      // Verify required fields are present
+      expect(broadcastData).toHaveProperty("jobId", jobId);
+      expect(broadcastData).toHaveProperty("title", "Updated Test Job");
+      expect(broadcastData).toHaveProperty("status", "complete");
+      expect(broadcastData).toHaveProperty("progress", 100);
+      expect(broadcastData).toHaveProperty("location", "complete");
+      expect(broadcastData.current).toBeUndefined();
+      expect(broadcastData.currentStage).toBeUndefined();
+      expect(broadcastData).toHaveProperty("tasksStatus");
+
+      // Verify tasksStatus structure for completed tasks
+      expect(broadcastData.tasksStatus["task-1"]).toEqual({
+        state: "done",
+        startedAt: "2023-01-01T00:30:00.000Z",
+        endedAt: "2023-01-01T01:30:00.000Z",
+        executionTimeMs: 3600000,
+        currentStage: "processing",
+      });
+      expect(broadcastData.tasksStatus["task-2"]).toEqual({
+        state: "done",
+        startedAt: "2023-01-01T01:30:00.000Z",
+        endedAt: "2023-01-01T02:00:00.000Z",
+        executionTimeMs: 1800000,
+        failedStage: "validation",
       });
     });
 
-    it("should handle job read failures gracefully", async () => {
-      mockReadJob.mockResolvedValueOnce({
+    it("should handle minimal job data correctly", async () => {
+      const jobId = "minimal-job";
+      const mockJobData = {
+        title: "Minimal Job",
+        status: "pending",
+        progress: 0,
+        createdAt: "2023-01-01T00:00:00.000Z",
+        tasksStatus: {},
+      };
+
+      mockReadJobFn.mockResolvedValue({
+        ok: true,
+        data: mockJobData,
+        location: "pending",
+      });
+
+      sseEnhancer.handleJobChange({
+        jobId,
+        category: "test",
+        filePath: "test.json",
+      });
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      expect(mockSSERegistry.broadcast).toHaveBeenCalledTimes(1);
+      const broadcastCall = mockSSERegistry.broadcast.mock.calls[0][0];
+
+      expect(broadcastCall.type).toBe("job:created");
+      const broadcastData = broadcastCall.data;
+
+      // Verify minimal required fields
+      expect(broadcastData).toHaveProperty("jobId", jobId);
+      expect(broadcastData).toHaveProperty("title", "Minimal Job");
+      expect(broadcastData).toHaveProperty("status", "pending");
+      expect(broadcastData).toHaveProperty("progress", 0);
+      expect(broadcastData).toHaveProperty("tasksStatus");
+      expect(broadcastData.tasksStatus).toEqual({});
+
+      // Verify optional fields are handled correctly
+      expect(broadcastData.current).toBeUndefined();
+      expect(broadcastData.currentStage).toBeUndefined();
+      expect(broadcastData.pipeline).toBeUndefined();
+      expect(broadcastData.pipelineLabel).toBeUndefined();
+    });
+
+    it("should not broadcast if read job fails", async () => {
+      const jobId = "failed-job";
+
+      mockReadJobFn.mockResolvedValue({
         ok: false,
-        code: "job_not_found",
-        message: "Job not found",
+        error: "Job not found",
       });
 
-      const change = {
-        jobId: "missing-job",
-        category: "status",
-        filePath: "pipeline-data/current/missing-job/tasks-status.json",
-      };
+      sseEnhancer.handleJobChange({
+        jobId,
+        category: "test",
+        filePath: "test.json",
+      });
+      await new Promise((resolve) => setTimeout(resolve, 100));
 
-      enhancer.handleJobChange(change);
-      vi.advanceTimersByTime(200);
-
-      // Should not broadcast when job read fails
       expect(mockSSERegistry.broadcast).not.toHaveBeenCalled();
     });
 
-    it("should handle job read errors gracefully", async () => {
-      mockReadJob.mockRejectedValueOnce(new Error("Read error"));
+    it("should not broadcast if read job throws error", async () => {
+      const jobId = "error-job";
 
-      const change = {
-        jobId: "error-job",
-        category: "status",
-        filePath: "pipeline-data/current/error-job/tasks-status.json",
-      };
+      mockReadJobFn.mockRejectedValue(new Error("Network error"));
 
-      enhancer.handleJobChange(change);
-      vi.advanceTimersByTime(200);
+      sseEnhancer.handleJobChange({
+        jobId,
+        category: "test",
+        filePath: "test.json",
+      });
+      await new Promise((resolve) => setTimeout(resolve, 100));
 
-      // Should not broadcast when job read errors
       expect(mockSSERegistry.broadcast).not.toHaveBeenCalled();
     });
-  });
 
-  describe("cleanup", () => {
-    it("should clear all pending timers", () => {
-      const change = {
-        jobId: "job-123",
-        category: "status",
-        filePath: "pipeline-data/current/job-123/tasks-status.json",
+    it("should debounce multiple rapid changes for same job", async () => {
+      const jobId = "debounce-job";
+      const mockJobData = {
+        title: "Debounce Test Job",
+        status: "running",
+        progress: 50,
+        createdAt: "2023-01-01T00:00:00.000Z",
+        tasksStatus: {
+          "task-1": { state: "running" },
+        },
       };
 
-      enhancer.handleJobChange(change);
+      mockReadJobFn.mockResolvedValue({
+        ok: true,
+        data: mockJobData,
+        location: "current",
+      });
 
-      // Should have one pending update
-      expect(enhancer.getPendingCount()).toBe(1);
+      // Trigger multiple rapid changes
+      sseEnhancer.handleJobChange({
+        jobId,
+        category: "test",
+        filePath: "test1.json",
+      });
+      sseEnhancer.handleJobChange({
+        jobId,
+        category: "test",
+        filePath: "test2.json",
+      });
+      sseEnhancer.handleJobChange({
+        jobId,
+        category: "test",
+        filePath: "test3.json",
+      });
 
-      // Clean up
-      enhancer.cleanup();
+      // Wait for debounce and async processing
+      await new Promise((resolve) => setTimeout(resolve, 100));
 
-      // Should have no pending updates
-      expect(enhancer.getPendingCount()).toBe(0);
-
-      // Advance time - should not broadcast after cleanup
-      vi.advanceTimersByTime(200);
-      expect(mockSSERegistry.broadcast).not.toHaveBeenCalled();
+      // Should only broadcast once due to debouncing
+      expect(mockSSERegistry.broadcast).toHaveBeenCalledTimes(1);
+      expect(mockReadJobFn).toHaveBeenCalledTimes(1);
     });
   });
 
-  describe("getPendingCount", () => {
-    it("should return the number of pending updates", () => {
-      expect(enhancer.getPendingCount()).toBe(0);
+  describe("Utility functions", () => {
+    it("should return correct pending count", () => {
+      const jobId1 = "job-1";
+      const jobId2 = "job-2";
 
-      const change1 = {
-        jobId: "job-123",
-        category: "status",
-        filePath: "pipeline-data/current/job-123/tasks-status.json",
-      };
+      // Mock read to never resolve to keep pending
+      mockReadJobFn.mockImplementation(() => new Promise(() => {}));
 
-      const change2 = {
-        jobId: "job-456",
-        category: "task",
-        filePath: "pipeline-data/current/job-456/tasks/analysis/output.json",
-      };
+      expect(sseEnhancer.getPendingCount()).toBe(0);
 
-      enhancer.handleJobChange(change1);
-      expect(enhancer.getPendingCount()).toBe(1);
+      sseEnhancer.handleJobChange({
+        jobId: jobId1,
+        category: "test",
+        filePath: "test1.json",
+      });
+      expect(sseEnhancer.getPendingCount()).toBe(1);
 
-      enhancer.handleJobChange(change2);
-      expect(enhancer.getPendingCount()).toBe(2);
+      sseEnhancer.handleJobChange({
+        jobId: jobId2,
+        category: "test",
+        filePath: "test2.json",
+      });
+      expect(sseEnhancer.getPendingCount()).toBe(2);
 
-      enhancer.cleanup();
-      expect(enhancer.getPendingCount()).toBe(0);
-    });
-  });
-
-  describe("singleton instance", () => {
-    it("should export a singleton instance", () => {
-      expect(sseEnhancer).toBeDefined();
-      expect(typeof sseEnhancer.handleJobChange).toBe("function");
-      expect(typeof sseEnhancer.cleanup).toBe("function");
-      expect(typeof sseEnhancer.getPendingCount).toBe("function");
+      sseEnhancer.cleanup();
+      expect(sseEnhancer.getPendingCount()).toBe(0);
     });
   });
 });

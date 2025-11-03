@@ -27,20 +27,13 @@ export function normalizeState(state) {
 
 /**
  * Calculates display duration for a task according to policy rules
- * @param {Object} task - Task object with state, startedAt, endedAt, executionTime
+ * @param {Object} task - Task object with state, startedAt, endedAt, executionTime, executionTimeMs
  * @param {number} now - Current timestamp (default: Date.now())
  * @returns {number} Duration in milliseconds
  */
 export function taskDisplayDurationMs(task, now = Date.now()) {
-  const { state, startedAt, endedAt, executionTime } = task;
+  const { state, startedAt, endedAt, executionTime, executionTimeMs } = task;
   const normalizedState = normalizeState(state);
-
-  // If missing startedAt, duration is 0
-  if (!startedAt) {
-    return 0;
-  }
-
-  const startTime = Date.parse(startedAt);
 
   switch (normalizedState) {
     case "pending":
@@ -48,15 +41,27 @@ export function taskDisplayDurationMs(task, now = Date.now()) {
 
     case "running":
     case "current":
+      if (!startedAt) {
+        return 0;
+      }
+      const startTime = Date.parse(startedAt);
       return Math.max(0, now - startTime);
 
     case "completed":
-      // Prefer executionTime if available, otherwise calculate from endedAt or now
-      if (executionTime != null) {
-        return Math.max(0, executionTime);
+      // Prefer executionTimeMs or executionTime if available, even without startedAt
+      const execTime =
+        executionTimeMs != null ? executionTimeMs : executionTime;
+      if (typeof execTime === "number" && execTime >= 0) {
+        return execTime;
       }
+
+      // If no execution time, calculate from timestamps
+      if (!startedAt) {
+        return 0;
+      }
+      const completedStartTime = Date.parse(startedAt);
       const endTime = endedAt ? Date.parse(endedAt) : now;
-      return Math.max(0, endTime - startTime);
+      return Math.max(0, endTime - completedStartTime);
 
     case "rejected":
       return 0;
