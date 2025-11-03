@@ -220,97 +220,111 @@ export async function startOrchestrator(opts) {
  * @param {Object} seed - Seed data containing pipeline information
  */
 function spawnRunner(jobId, dirs, running, spawn, testMode, seed) {
-  const runnerPath = path.join(
-    process.cwd(),
-    "src",
-    "core",
-    "pipeline-runner.js"
-  );
+  // Use path relative to this file to avoid process.cwd() issues
+  const orchestratorDir = path.dirname(new URL(import.meta.url).pathname);
+  const runnerPath = path.join(orchestratorDir, "pipeline-runner.js");
 
-  const configSnapshot = getConfig();
-  const availablePipelines = Object.keys(configSnapshot?.pipelines ?? {});
-  const pipelineSlug = seed?.pipeline;
+  // Set PO_ROOT for the orchestrator process to match what the runner will use
+  const originalPoRoot = process.env.PO_ROOT;
+  const poRoot = path.resolve(dirs.dataDir, "..");
+  process.env.PO_ROOT = poRoot;
 
-  console.log("[Orchestrator] spawnRunner invoked", {
-    jobId,
-    pipelineSlug: pipelineSlug ?? null,
-    availablePipelines,
-    seedKeys: seed ? Object.keys(seed) : null,
-  });
+  try {
+    const configSnapshot = getConfig();
+    const availablePipelines = Object.keys(configSnapshot?.pipelines ?? {});
+    const pipelineSlug = seed?.pipeline;
 
-  if (!availablePipelines.length) {
-    console.warn(
-      "[Orchestrator] No pipelines registered in config() when spawnRunner invoked"
-    );
-  } else if (!availablePipelines.includes(pipelineSlug)) {
-    console.warn(
-      "[Orchestrator] Requested pipeline slug missing from registry snapshot",
-      {
+    console.log("[Orchestrator] spawnRunner invoked", {
+      jobId,
+      pipelineSlug: pipelineSlug ?? null,
+      availablePipelines,
+      seedKeys: seed ? Object.keys(seed) : null,
+    });
+
+    if (!availablePipelines.length) {
+      console.warn(
+        "[Orchestrator] No pipelines registered in config() when spawnRunner invoked"
+      );
+    } else if (!availablePipelines.includes(pipelineSlug)) {
+      console.warn(
+        "[Orchestrator] Requested pipeline slug missing from registry snapshot",
+        {
+          jobId,
+          pipelineSlug,
+          availablePipelines,
+        }
+      );
+    }
+
+    if (!pipelineSlug) {
+      console.error("[Orchestrator] Missing pipeline slug in seed", {
+        jobId,
+        seed,
+        availablePipelines,
+      });
+      throw new Error(
+        "Pipeline slug is required in seed data. Include a 'pipeline' field in your seed."
+      );
+    }
+
+    let pipelineConfig;
+    try {
+      pipelineConfig = getPipelineConfig(pipelineSlug);
+    } catch (error) {
+      console.error("[Orchestrator] Pipeline lookup failed", {
         jobId,
         pipelineSlug,
         availablePipelines,
-      }
-    );
-  }
+      });
+      throw error;
+    }
 
-  if (!pipelineSlug) {
-    console.error("[Orchestrator] Missing pipeline slug in seed", {
-      jobId,
-      seed,
-      availablePipelines,
+    // Use environment variables with explicit slug propagation
+    // PO_ROOT should point to the directory containing pipeline-config
+    // In our case, it's the parent of pipeline-data directory
+    const env = {
+      ...process.env,
+      PO_ROOT: poRoot,
+      PO_DATA_DIR: dirs.dataDir,
+      PO_PENDING_DIR: dirs.pending,
+      PO_CURRENT_DIR: dirs.current,
+      PO_COMPLETE_DIR: dirs.complete,
+      PO_PIPELINE_SLUG: pipelineSlug,
+      // Force mock provider for testing
+      PO_DEFAULT_PROVIDER: "mock",
+    };
+
+    // Always call spawn so tests can capture it
+    const child = spawn(process.execPath, [runnerPath, jobId], {
+      stdio: ["ignore", "inherit", "inherit"],
+      env,
+      cwd: process.cwd(),
     });
-    throw new Error(
-      "Pipeline slug is required in seed data. Include a 'pipeline' field in your seed."
-    );
-  }
 
-  let pipelineConfig;
-  try {
-    pipelineConfig = getPipelineConfig(pipelineSlug);
-  } catch (error) {
-    console.error("[Orchestrator] Pipeline lookup failed", {
-      jobId,
-      pipelineSlug,
-      availablePipelines,
+    running.set(jobId, child);
+
+    child.on("exit", () => {
+      running.delete(jobId);
     });
-    throw error;
-  }
+    child.on("error", () => {
+      running.delete(jobId);
+    });
 
-  // Use environment variables with explicit slug propagation
-  const env = {
-    ...process.env,
-    PO_DATA_DIR: dirs.dataDir,
-    PO_PENDING_DIR: dirs.pending,
-    PO_CURRENT_DIR: dirs.current,
-    PO_COMPLETE_DIR: dirs.complete,
-    PO_PIPELINE_SLUG: pipelineSlug,
-    // Force mock provider for testing
-    PO_DEFAULT_PROVIDER: "mock",
-  };
+    // In test mode: return immediately; in real mode you might await readiness
+    if (testMode) {
+      return child;
+    }
 
-  // Always call spawn so tests can capture it
-  const child = spawn(process.execPath, [runnerPath, jobId], {
-    stdio: ["ignore", "inherit", "inherit"],
-    env,
-    cwd: process.cwd(),
-  });
-
-  running.set(jobId, child);
-
-  child.on("exit", () => {
-    running.delete(jobId);
-  });
-  child.on("error", () => {
-    running.delete(jobId);
-  });
-
-  // In test mode: return immediately; in real mode you might await readiness
-  if (testMode) {
+    // Non-test: we can consider "started" immediately for simplicity
     return child;
+  } finally {
+    // Restore original PO_ROOT
+    if (originalPoRoot) {
+      process.env.PO_ROOT = originalPoRoot;
+    } else {
+      delete process.env.PO_ROOT;
+    }
   }
-
-  // Non-test: we can consider "started" immediately for simplicity
-  return child;
 }
 
 export default { startOrchestrator };
