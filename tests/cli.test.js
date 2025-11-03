@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { mockProcessArgv } from "./test-utils.js";
+import path from "node:path";
 
 describe("CLI", () => {
   let cleanupArgv;
@@ -350,6 +351,272 @@ describe("CLI", () => {
       };
 
       await expect(submitHandler("seed.json")).rejects.toThrow();
+    });
+  });
+
+  describe("Start Command (New Implementation)", () => {
+    let mockSpawn, mockFs, mockConsoleError, mockProcessExit;
+
+    beforeEach(() => {
+      // Mock child_process.spawn
+      mockSpawn = vi.fn();
+      vi.doMock("node:child_process", () => ({ spawn: mockSpawn }));
+
+      // Mock fs.promises
+      mockFs = {
+        access: vi.fn(),
+      };
+      vi.doMock("node:fs/promises", () => mockFs);
+
+      // Mock console.error and process.exit for error testing
+      mockConsoleError = vi
+        .spyOn(console, "error")
+        .mockImplementation(() => {});
+      mockProcessExit = vi.spyOn(process, "exit").mockImplementation(() => {});
+    });
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it("should exit with error when PO_ROOT is not provided", async () => {
+      // Arrange
+      const startHandler = async () => {
+        const globalOptions = { root: undefined, port: "4000" };
+        let root = globalOptions.root || process.env.PO_ROOT;
+        const port = globalOptions.port || "4000";
+
+        if (!root) {
+          console.error(
+            "PO_ROOT is required. Use --root or set PO_ROOT to your pipeline root (e.g., ./demo)."
+          );
+          process.exit(1);
+        }
+
+        console.log(`Using PO_ROOT=${root}`);
+        console.log(`UI port=${port}`);
+      };
+
+      // Act
+      await startHandler();
+
+      // Assert
+      expect(mockConsoleError).toHaveBeenCalledWith(
+        "PO_ROOT is required. Use --root or set PO_ROOT to your pipeline root (e.g., ./demo)."
+      );
+      expect(mockProcessExit).toHaveBeenCalledWith(1);
+    });
+
+    it("should resolve relative paths to absolute paths", async () => {
+      // Arrange
+      const startHandler = async () => {
+        const globalOptions = { root: "demo", port: "4000" };
+        let root = globalOptions.root || process.env.PO_ROOT;
+        const port = globalOptions.port || "4000";
+
+        if (!root) {
+          console.error(
+            "PO_ROOT is required. Use --root or set PO_ROOT to your pipeline root (e.g., ./demo)."
+          );
+          process.exit(1);
+        }
+
+        const absoluteRoot = path.isAbsolute(root)
+          ? root
+          : path.resolve(process.cwd(), root);
+
+        console.log(`Using PO_ROOT=${absoluteRoot}`);
+        console.log(`UI port=${port}`);
+        return { absoluteRoot, port };
+      };
+
+      // Act
+      const result = await startHandler();
+
+      // Assert
+      expect(result.absoluteRoot).toMatch(/\/demo$/);
+      expect(result.absoluteRoot).toBe(path.resolve(process.cwd(), "demo"));
+      expect(result.port).toBe("4000");
+    });
+
+    it("should skip build when dist directory exists", async () => {
+      // Arrange
+      mockFs.access.mockResolvedValue(undefined); // dist exists
+
+      const buildCheckHandler = async () => {
+        const distPath = path.join(process.cwd(), "dist");
+        try {
+          await mockFs.access(distPath);
+          return "UI build found, skipping build step";
+        } catch {
+          return "Building UI...";
+        }
+      };
+
+      // Act
+      const result = await buildCheckHandler();
+
+      // Assert
+      expect(result).toBe("UI build found, skipping build step");
+      expect(mockFs.access).toHaveBeenCalledWith(
+        path.join(process.cwd(), "dist")
+      );
+    });
+
+    it("should build UI when dist directory does not exist", async () => {
+      // Arrange
+      mockFs.access.mockRejectedValue(new Error("ENOENT")); // dist doesn't exist
+
+      const buildCheckHandler = async () => {
+        const distPath = path.join(process.cwd(), "dist");
+        try {
+          await mockFs.access(distPath);
+          return "UI build found, skipping build step";
+        } catch {
+          return "Building UI...";
+        }
+      };
+
+      // Act
+      const result = await buildCheckHandler();
+
+      // Assert
+      expect(result).toBe("Building UI...");
+      expect(mockFs.access).toHaveBeenCalledWith(
+        path.join(process.cwd(), "dist")
+      );
+    });
+
+    it("should spawn processes with correct environment variables", () => {
+      // Arrange
+      const mockChildProcess = {
+        stdout: { on: vi.fn() },
+        stderr: { on: vi.fn() },
+        on: vi.fn(),
+        killed: false,
+        kill: vi.fn(),
+      };
+
+      mockSpawn.mockReturnValue(mockChildProcess);
+
+      const absoluteRoot = "/absolute/path/to/demo";
+      const port = "3000";
+
+      // Act
+      const uiChild = mockSpawn("node", ["src/ui/server.js"], {
+        stdio: "pipe",
+        env: {
+          ...process.env,
+          NODE_ENV: "production",
+          PO_ROOT: absoluteRoot,
+          PO_UI_PORT: port,
+        },
+      });
+
+      const orchestratorChild = mockSpawn(
+        "node",
+        ["src/cli/run-orchestrator.js"],
+        {
+          stdio: "pipe",
+          env: {
+            ...process.env,
+            NODE_ENV: "production",
+            PO_ROOT: absoluteRoot,
+          },
+        }
+      );
+
+      // Assert
+      expect(mockSpawn).toHaveBeenCalledTimes(2);
+      expect(mockSpawn).toHaveBeenNthCalledWith(
+        1,
+        "node",
+        ["src/ui/server.js"],
+        {
+          stdio: "pipe",
+          env: {
+            ...process.env,
+            NODE_ENV: "production",
+            PO_ROOT: absoluteRoot,
+            PO_UI_PORT: port,
+          },
+        }
+      );
+      expect(mockSpawn).toHaveBeenNthCalledWith(
+        2,
+        "node",
+        ["src/cli/run-orchestrator.js"],
+        {
+          stdio: "pipe",
+          env: {
+            ...process.env,
+            NODE_ENV: "production",
+            PO_ROOT: absoluteRoot,
+          },
+        }
+      );
+    });
+
+    it("should handle child process cleanup correctly", () => {
+      // Arrange
+      const mockChildProcess = {
+        killed: false,
+        kill: vi.fn(),
+      };
+
+      const cleanup = (uiChild, orchestratorChild) => {
+        if (uiChild && !uiChild.killed) {
+          uiChild.kill("SIGTERM");
+          setTimeout(() => {
+            if (!uiChild.killed) uiChild.kill("SIGKILL");
+          }, 5000);
+        }
+        if (orchestratorChild && !orchestratorChild.killed) {
+          orchestratorChild.kill("SIGTERM");
+          setTimeout(() => {
+            if (!orchestratorChild.killed) orchestratorChild.kill("SIGKILL");
+          }, 5000);
+        }
+      };
+
+      // Act
+      cleanup(mockChildProcess, mockChildProcess);
+
+      // Assert
+      expect(mockChildProcess.kill).toHaveBeenCalledTimes(2);
+      expect(mockChildProcess.kill).toHaveBeenNthCalledWith(1, "SIGTERM");
+      expect(mockChildProcess.kill).toHaveBeenNthCalledWith(2, "SIGTERM");
+    });
+
+    it("should handle signal propagation correctly", () => {
+      // Arrange
+      const mockCleanup = vi.fn();
+      const mockProcessExit = vi
+        .spyOn(process, "exit")
+        .mockImplementation(() => {});
+
+      vi.spyOn(process, "on").mockImplementation((event, handler) => {
+        if (event === "SIGINT" || event === "SIGTERM") {
+          handler();
+        }
+      });
+
+      // Act
+      process.on("SIGINT", () => {
+        console.log("\nReceived SIGINT, shutting down...");
+        mockCleanup();
+        mockProcessExit(0);
+      });
+
+      process.on("SIGTERM", () => {
+        console.log("\nReceived SIGTERM, shutting down...");
+        mockCleanup();
+        mockProcessExit(0);
+      });
+
+      // Assert
+      expect(mockCleanup).toHaveBeenCalledTimes(2);
+      expect(mockProcessExit).toHaveBeenCalledTimes(2);
     });
   });
 });

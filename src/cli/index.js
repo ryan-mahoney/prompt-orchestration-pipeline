@@ -4,13 +4,16 @@ import { submitJobWithValidation } from "../api/index.js";
 import { PipelineOrchestrator } from "../api/index.js";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { spawn } from "node:child_process";
 
 const program = new Command();
 
 program
   .name("pipeline-orchestrator")
   .description("Pipeline orchestration system")
-  .version("1.0.0");
+  .version("1.0.0")
+  .option("-r, --root <path>", "Pipeline root (PO_ROOT)")
+  .option("-p, --port <port>", "UI server port", "4000");
 
 program
   .command("init")
@@ -49,20 +52,179 @@ program
 
 program
   .command("start")
-  .description("Start the pipeline orchestrator")
-  .option("-u, --ui", "Start with UI server")
-  .option("-p, --port <port>", "UI server port", "3000")
-  .action(async (options) => {
-    const orchestrator = new PipelineOrchestrator({
-      ui: options.ui,
-      uiPort: parseInt(options.port),
+  .description("Start the pipeline orchestrator with UI server")
+  .action(async () => {
+    const globalOptions = program.opts();
+    let root = globalOptions.root || process.env.PO_ROOT;
+    const port = globalOptions.port || "4000";
+
+    // Resolve absolute root path
+    if (!root) {
+      console.error(
+        "PO_ROOT is required. Use --root or set PO_ROOT to your pipeline root (e.g., ./demo)."
+      );
+      process.exit(1);
+    }
+
+    const absoluteRoot = path.isAbsolute(root)
+      ? root
+      : path.resolve(process.cwd(), root);
+    process.env.PO_ROOT = absoluteRoot;
+
+    console.log(`Using PO_ROOT=${absoluteRoot}`);
+    console.log(`UI port=${port}`);
+
+    let uiChild = null;
+    let orchestratorChild = null;
+    let childrenExited = 0;
+    let exitCode = 0;
+
+    // Cleanup function to kill remaining children
+    const cleanup = () => {
+      if (uiChild && !uiChild.killed) {
+        uiChild.kill("SIGTERM");
+        setTimeout(() => {
+          if (!uiChild.killed) uiChild.kill("SIGKILL");
+        }, 5000);
+      }
+      if (orchestratorChild && !orchestratorChild.killed) {
+        orchestratorChild.kill("SIGTERM");
+        setTimeout(() => {
+          if (!orchestratorChild.killed) orchestratorChild.kill("SIGKILL");
+        }, 5000);
+      }
+    };
+
+    // Handle parent process signals
+    process.on("SIGINT", () => {
+      console.log("\nReceived SIGINT, shutting down...");
+      cleanup();
+      process.exit(exitCode);
     });
-    await orchestrator.initialize();
-    console.log("Pipeline orchestrator started");
-    process.on("SIGINT", async () => {
-      await orchestrator.stop();
-      process.exit(0);
+
+    process.on("SIGTERM", () => {
+      console.log("\nReceived SIGTERM, shutting down...");
+      cleanup();
+      process.exit(exitCode);
     });
+
+    try {
+      // Step d: Build UI once if dist/ doesn't exist
+      const distPath = path.join(process.cwd(), "dist");
+      try {
+        await fs.access(distPath);
+        console.log("UI build found, skipping build step");
+      } catch {
+        console.log("Building UI...");
+        await new Promise((resolve, reject) => {
+          const buildChild = spawn(
+            "node",
+            ["./node_modules/vite/bin/vite.js", "build"],
+            {
+              stdio: "inherit",
+              env: { ...process.env, NODE_ENV: "development" },
+            }
+          );
+
+          buildChild.on("exit", (code) => {
+            if (code === 0) {
+              console.log("UI build completed");
+              resolve();
+            } else {
+              reject(new Error(`UI build failed with code ${code}`));
+            }
+          });
+
+          buildChild.on("error", reject);
+        });
+      }
+
+      // Step e: Spawn UI server
+      console.log("Starting UI server...");
+      uiChild = spawn("node", ["src/ui/server.js"], {
+        stdio: "pipe",
+        env: {
+          ...process.env,
+          NODE_ENV: "production",
+          PO_ROOT: absoluteRoot,
+          PO_UI_PORT: port,
+        },
+      });
+
+      // Pipe UI output with prefix
+      uiChild.stdout.on("data", (data) => {
+        console.log(`[ui] ${data.toString().trim()}`);
+      });
+
+      uiChild.stderr.on("data", (data) => {
+        console.error(`[ui] ${data.toString().trim()}`);
+      });
+
+      // Step f: Spawn orchestrator
+      console.log("Starting orchestrator...");
+      orchestratorChild = spawn("node", ["src/cli/run-orchestrator.js"], {
+        stdio: "pipe",
+        env: {
+          ...process.env,
+          NODE_ENV: "production",
+          PO_ROOT: absoluteRoot,
+        },
+      });
+
+      // Pipe orchestrator output with prefix
+      orchestratorChild.stdout.on("data", (data) => {
+        console.log(`[orc] ${data.toString().trim()}`);
+      });
+
+      orchestratorChild.stderr.on("data", (data) => {
+        console.error(`[orc] ${data.toString().trim()}`);
+      });
+
+      // Step h: Kill-others-on-fail behavior
+      const handleChildExit = (child, name) => {
+        return (code, signal) => {
+          console.log(
+            `${name} process exited with code ${code}, signal ${signal}`
+          );
+          childrenExited++;
+
+          if (code !== 0) {
+            exitCode = code;
+            console.log(`${name} failed, terminating other process...`);
+            cleanup();
+          }
+
+          if (childrenExited === 2 || (code !== 0 && childrenExited === 1)) {
+            process.exit(exitCode);
+          }
+        };
+      };
+
+      uiChild.on("exit", handleChildExit(uiChild, "UI"));
+      orchestratorChild.on(
+        "exit",
+        handleChildExit(orchestratorChild, "Orchestrator")
+      );
+
+      // Handle child process errors
+      uiChild.on("error", (error) => {
+        console.error(`UI process error: ${error.message}`);
+        exitCode = 1;
+        cleanup();
+        process.exit(1);
+      });
+
+      orchestratorChild.on("error", (error) => {
+        console.error(`Orchestrator process error: ${error.message}`);
+        exitCode = 1;
+        cleanup();
+        process.exit(1);
+      });
+    } catch (error) {
+      console.error(`Failed to start pipeline: ${error.message}`);
+      cleanup();
+      process.exit(1);
+    }
   });
 
 program
