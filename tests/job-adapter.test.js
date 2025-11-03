@@ -200,4 +200,70 @@ describe("job-adapter", () => {
     expect(out.tasks["task-1"].failedStage).toBe("validate");
     expect(out.tasks["task-2"]).not.toHaveProperty("currentStage");
   });
+
+  it("adaptJobSummary - includes pipeline metadata when available", () => {
+    const apiJob = {
+      jobId: "job1",
+      title: "Job with Pipeline",
+      pipelineSlug: "content-generation",
+      pipelineLabel: "Content Generation",
+      tasksStatus: {
+        "task-1": { state: "done" },
+      },
+    };
+
+    const out = adaptJobSummary(apiJob);
+    expect(out.pipeline).toBe("content-generation");
+    expect(out.pipelineLabel).toBe("Content Generation");
+  });
+
+  it("adaptJobSummary - derives pipeline label from slug when label not provided", () => {
+    const apiJob = {
+      jobId: "job1",
+      title: "Job with Slug Only",
+      pipelineSlug: "market-analysis",
+      tasksStatus: {
+        "task-1": { state: "done" },
+      },
+    };
+
+    const out = adaptJobSummary(apiJob);
+    expect(out.pipeline).toBe("market-analysis");
+    expect(out.pipelineLabel).toBe("Market Analysis");
+  });
+
+  it("adaptJobSummary - handles pipeline as object", () => {
+    const apiJob = {
+      jobId: "job1",
+      title: "Job with Pipeline Object",
+      pipeline: {
+        name: "custom-pipeline",
+        version: "1.0",
+      },
+      tasksStatus: {
+        "task-1": { state: "done" },
+      },
+    };
+
+    const out = adaptJobSummary(apiJob);
+    expect(out.pipeline).toEqual({
+      name: "custom-pipeline",
+      version: "1.0",
+    });
+    expect(out.pipelineLabel).toBeUndefined();
+  });
+
+  it("adaptJobSummary - handles missing pipeline metadata gracefully", () => {
+    const apiJob = {
+      jobId: "job1",
+      title: "Job without Pipeline",
+      tasksStatus: {
+        "task-1": { state: "done" },
+      },
+    };
+
+    const out = adaptJobSummary(apiJob);
+    expect(out.pipeline).toBeUndefined();
+    expect(out.pipelineLabel).toBeUndefined();
+  });
 });
