@@ -144,7 +144,8 @@ function computeJobSummaryStats(tasks) {
     0
   );
   const status = deriveStatusFromTasks(tasks);
-  const progress = 0; // Will be overridden by API progress if available
+  const progress =
+    taskCount > 0 ? Math.round((doneCount / taskCount) * 100) : 0;
   return { status, progress, doneCount, taskCount };
 }
 
@@ -190,6 +191,11 @@ export function adaptJobSummary(apiJob) {
   // Optional/metadata fields (preserve if present)
   if ("createdAt" in apiJob) job.createdAt = apiJob.createdAt;
   if ("updatedAt" in apiJob) job.updatedAt = apiJob.updatedAt;
+
+  // Pipeline metadata
+  const { pipeline, pipelineLabel } = derivePipelineMetadata(apiJob);
+  if (pipeline != null) job.pipeline = pipeline;
+  if (pipelineLabel != null) job.pipelineLabel = pipelineLabel;
 
   // Include warnings for debugging
   if (warnings.length > 0) job.__warnings = warnings;

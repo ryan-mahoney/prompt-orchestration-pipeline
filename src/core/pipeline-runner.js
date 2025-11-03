@@ -164,7 +164,7 @@ for (const taskName of pipeline.tasks) {
     await updateStatus(taskName, {
       state: "done",
       endedAt: now(),
-      executionTime:
+      executionTimeMs:
         result.logs?.reduce((total, log) => total + (log.ms || 0), 0) || 0,
       refinementAttempts: result.refinementAttempts || 0,
     });
@@ -189,7 +189,7 @@ await appendLine(
     finishedAt: now(),
     tasks: Object.keys(status.tasks),
     totalExecutionTime: Object.values(status.tasks).reduce(
-      (total, t) => total + (t.executionTime || 0),
+      (total, t) => total + (t.executionTimeMs || 0),
       0
     ),
     totalRefinementAttempts: Object.values(status.tasks).reduce(

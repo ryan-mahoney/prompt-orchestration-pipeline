@@ -140,6 +140,58 @@ describe("taskDisplayDurationMs", () => {
     const customNow = new Date("2023-01-01T00:02:00.000Z").getTime();
     expect(taskDisplayDurationMs(task, customNow)).toBe(120000);
   });
+
+  it("returns executionTimeMs for completed tasks without startedAt", () => {
+    const task = {
+      state: "completed",
+      executionTimeMs: 75000,
+    };
+    expect(taskDisplayDurationMs(task)).toBe(75000);
+  });
+
+  it("prefers executionTimeMs over executionTime for completed tasks", () => {
+    const task = {
+      state: "completed",
+      executionTimeMs: 75000,
+      executionTime: 50000,
+    };
+    expect(taskDisplayDurationMs(task)).toBe(75000);
+  });
+
+  it("returns executionTime for completed tasks without startedAt", () => {
+    const task = {
+      state: "completed",
+      executionTime: 60000,
+    };
+    expect(taskDisplayDurationMs(task)).toBe(60000);
+  });
+
+  it("returns 0 for completed tasks without execution time and startedAt", () => {
+    const task = {
+      state: "completed",
+    };
+    expect(taskDisplayDurationMs(task)).toBe(0);
+  });
+
+  it("ignores invalid executionTimeMs values", () => {
+    const task = {
+      state: "completed",
+      executionTimeMs: "invalid",
+      startedAt: "2023-01-01T00:00:00.000Z",
+      endedAt: "2023-01-01T00:01:00.000Z",
+    };
+    expect(taskDisplayDurationMs(task)).toBe(60000); // Falls back to timestamp calculation
+  });
+
+  it("handles negative executionTimeMs values", () => {
+    const task = {
+      state: "completed",
+      executionTimeMs: -1000,
+      startedAt: "2023-01-01T00:00:00.000Z",
+      endedAt: "2023-01-01T00:01:00.000Z",
+    };
+    expect(taskDisplayDurationMs(task)).toBe(60000); // Falls back to timestamp calculation
+  });
 });
 
 describe("jobCumulativeDurationMs", () => {
