@@ -254,8 +254,9 @@ program
   .command("status [job-name]")
   .description("Get job status")
   .action(async (jobName) => {
-    const orchestrator = new PipelineOrchestrator({ autoStart: false });
-    await orchestrator.initialize();
+    const orchestrator = await PipelineOrchestrator.create({
+      autoStart: false,
+    });
     if (jobName) {
       const status = await orchestrator.getStatus(jobName);
       console.log(JSON.stringify(status, null, 2));
