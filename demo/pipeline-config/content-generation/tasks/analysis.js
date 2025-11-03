@@ -1,222 +1,144 @@
 // Analysis Task - Analyze research findings and extract insights
 
-export async function promptTemplating(context) {
-  console.log("[Analysis:promptTemplating] Building prompt template");
-  try {
-    const { researchContent, analysisType } = context.output;
+// Step 1: Load and prepare input data
+export const ingestion = async ({
+  io,
+  llm,
+  data: {
+    seed: {
+      data: { type: analysisType },
+    },
+  },
+  meta,
+  flags,
+}) => {
+  const researchContent = await io.readArtifact("research-output.json");
+  const { researchSummary, keyFindings, additionalInsights } =
+    JSON.parse(researchContent);
 
-    const result = {
-      output: {
-        ...context.output,
-        system:
-          "You are an expert analyst skilled at extracting insights from research data.",
-        prompt: `Analyze the following research and provide key insights:
+  return {
+    output: {
+      analysisType,
+      researchSummary,
+      keyFindings,
+      additionalInsights,
+    },
+    flags,
+  };
+};
 
-${researchContent}
+// Step 2: Build LLM prompts
+export const promptTemplating = ({
+  io,
+  llm,
+  data: {
+    ingestion: {
+      researchSummary,
+      keyFindings,
+      additionalInsights,
+      analysisType,
+    },
+  },
+  meta,
+  flags,
+}) => {
+  return {
+    output: {
+      system:
+        "You are an expert analyst skilled at extracting insights from research data. Always respond with valid JSON only.",
+      prompt: `As Nassim Nicholas Taleb, analyze the following research and provide a contrarian perspective in a validation-friendly structure.
 
-Analysis type: ${analysisType}
+RESEARCH INPUT:
+${researchSummary}
 
-Provide:
-1. Key findings
-2. Trends and patterns
-3. Opportunities and challenges
-4. Recommendations`,
-      },
-      flags: {},
-    };
+ANALYSIS TYPE: ${analysisType}
 
-    console.log("[Analysis:promptTemplating] ✓ Prompt template created");
-    return result;
-  } catch (error) {
-    console.error(
-      "[Analysis:promptTemplating] ✗ Error creating prompt:",
-      error.message
-    );
-    throw error;
-  }
+KEY FINDINGS:
+${keyFindings
+  .map(
+    (kf, index) =>
+      `Finding ${index + 1}:\nArea: ${kf.area}\nFindings: ${kf.findings}\nSources: ${
+        Array.isArray(kf.sources) ? kf.sources.join(", ") : "N/A"
+      }`
+  )
+  .join("\n\n")}
+
+IMPORTANT: You must respond with a valid JSON object only. Do not include any text before or after the JSON. Your response MUST follow this exact structure:
+
+{
+  "reaction": "Brief impression of the research findings from a contrarian viewpoint",
+  "insightByArea": [
+    {
+      "area": "MUST match one of research.keyFindings[].area exactly",
+      "alternatePerspective": "<contrarian perspective> for this area",
+      "implications": "What this means and why it matters",
+    }
+  ]
 }
 
-export async function inference(context) {
-  console.log("[Analysis:inference] Starting LLM inference");
+STRICT REQUIREMENTS:
+- Provide ALL top-level fields exactly as named above.
+- "insightByArea" MUST contain one entry per area in research.keyFindings[].area (if appropriate), with "area" strings exactly matching the research JSON.
+- Be specific and actionable. Avoid vague advice.
+
+Now produce ONLY the JSON object in the specified structure.`,
+    },
+    flags,
+  };
+};
+
+// Step 3: Call LLM with prompt
+export const inference = async ({
+  io,
+  llm: { deepseek },
+  data: {
+    promptTemplating: { system, prompt },
+  },
+  meta,
+  flags,
+}) => {
+  const response = await deepseek.chat({
+    messages: [
+      { role: "system", content: system },
+      { role: "user", content: prompt },
+    ],
+  });
+
+  const content =
+    typeof response.content === "string"
+      ? response.content
+      : JSON.stringify(response.content);
+
+  await io.writeArtifact("analysis-output.json", content);
+
+  return {
+    output: {},
+    flags,
+  };
+};
+
+// Step 4: Validate prompt response structure and completeness
+export const validateStructure = async ({ io, llm, data, meta, flags }) => {
+  const analysisContent = await io.readArtifact("analysis-output.json");
+  let jsonValid = false;
+  let structureValid = false;
+
   try {
-    const pt = context.data?.promptTemplating;
-    if (!pt?.system || !pt?.prompt) {
-      throw new Error(
-        "promptTemplating output missing required fields: system/prompt"
-      );
-    }
-    const { system, prompt } = pt;
+    const parsed = JSON.parse(analysisContent);
+    jsonValid = true;
 
-    const response = await context.llm.deepseek.chat({
-      messages: [
-        { role: "system", content: system },
-        { role: "user", content: prompt },
-      ],
-    });
-
-    const result = {
-      output: {
-        ...context.output,
-        analysisContent: response.content,
-        metadata: {
-          model: response.model,
-          tokens: response.usage?.total_tokens,
-        },
-      },
-      flags: {},
-    };
-
-    console.log(
-      "[Analysis:inference] ✓ Inference completed:",
-      JSON.stringify(
-        {
-          model: result.output.metadata.model,
-          tokens: result.output.metadata.tokens,
-          contentLength: response.content.length,
-        },
-        null,
-        2
-      )
+    // 1) Validate required top-level fields and basic types
+    const requiredFields = ["reaction", "insightByArea"];
+    const missing = requiredFields.filter((f) => !parsed.hasOwnProperty(f));
+    if (missing.length === 0) structureValid = true;
+  } catch (parseError) {
+    console.warn(
+      `[Analysis:validateStructure] ⚠ JSON parsing failed: ${parseError.message}`
     );
-
-    return result;
-  } catch (error) {
-    console.error(
-      "[Analysis:inference] ✗ Error during inference:",
-      error.message
-    );
-    throw error;
   }
-}
 
-export async function validateStructure(context) {
-  console.log("[Analysis:validateStructure] Validating analysis content");
-  try {
-    const { analysisContent } = context.output;
-
-    const requiredSections = ["findings", "trends", "recommendations"];
-    const hasAllSections = requiredSections.every((section) =>
-      analysisContent.toLowerCase().includes(section)
-    );
-
-    let validationFailed = false;
-    let lastValidationError = undefined;
-
-    if (!hasAllSections) {
-      const missingSections = requiredSections.filter(
-        (section) => !analysisContent.toLowerCase().includes(section)
-      );
-      console.error(
-        "[Analysis:validateStructure] ✗ Validation failed: Missing sections:",
-        JSON.stringify(missingSections, null, 2)
-      );
-      validationFailed = true;
-      lastValidationError = `Analysis missing required sections: ${missingSections.join(", ")}`;
-    } else {
-      console.log(
-        "[Analysis:validateStructure] ✓ Validation passed: All required sections present"
-      );
-    }
-
-    return {
-      output: {
-        validationResult: {
-          contentLength: analysisContent?.length || 0,
-          passed: !validationFailed,
-          missingSections: validationFailed
-            ? requiredSections.filter(
-                (section) => !analysisContent.toLowerCase().includes(section)
-              )
-            : [],
-          validatedAt: new Date().toISOString(),
-        },
-      },
-      flags: {
-        validationFailed,
-        lastValidationError,
-      },
-    };
-  } catch (error) {
-    console.error(
-      "[Analysis:validateStructure] ✗ Error during validation:",
-      error.message
-    );
-    throw error;
-  }
-}
-
-export async function integration(context) {
-  console.log("[Analysis:integration] Integrating analysis output");
-  try {
-    const { analysisContent, metadata } = context.output;
-
-    // Write final analysis as artifact using new file I/O API
-    if (context.files) {
-      await context.files.writeArtifact(
-        "analysis-output.json",
-        JSON.stringify(
-          {
-            content: analysisContent,
-            metadata,
-            timestamp: new Date().toISOString(),
-            taskName: context.taskName,
-            analysisType: context.output.analysisType,
-          },
-          null,
-          2
-        )
-      );
-
-      // Write a summary file for quick reference
-      await context.files.writeArtifact(
-        "analysis-summary.txt",
-        `Analysis Summary
-Type: ${context.output.analysisType}
-Generated: ${new Date().toISOString()}
-Model: ${metadata.model}
-Tokens: ${metadata.tokens}
-
-Content Preview:
-${analysisContent.substring(0, 500)}${
-          analysisContent.length > 500 ? "..." : ""
-        }`
-      );
-
-      // Log integration completion
-      await context.files.writeLog(
-        "integration.log",
-        `[${new Date().toISOString()}] ✓ Analysis integration completed\n`
-      );
-      await context.files.writeLog(
-        "integration.log",
-        `Output files: analysis-output.json, analysis-summary.txt\n`
-      );
-    }
-
-    const result = {
-      output: {
-        analysis: {
-          content: analysisContent,
-          metadata,
-          timestamp: new Date().toISOString(),
-        },
-      },
-      flags: {},
-    };
-
-    console.log("[Analysis:integration] ✓ Integration completed");
-    return result;
-  } catch (error) {
-    if (context.files) {
-      await context.files.writeLog(
-        "integration.log",
-        `[${new Date().toISOString()}] ✗ Error during integration: ${error.message}\n`
-      );
-    }
-    console.error(
-      "[Analysis:integration] ✗ Error during integration:",
-      error.message
-    );
-    throw error;
-  }
-}
+  return {
+    output: {},
+    flags: { ...flags, validationFailed: !(jsonValid && structureValid) },
+  };
+};

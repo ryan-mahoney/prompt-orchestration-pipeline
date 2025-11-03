@@ -339,20 +339,6 @@ pipeline-data/
 - **Valid**: `/pipeline/abc123def456` - Loads job with ID `abc123def456`
 - **Invalid**: `/pipeline/content-generation` - Shows "Invalid job ID" error
 
-#### Migration from Legacy Data
-
-If you have existing demo data with process-named folders (e.g., `content-generation`), run the migration script:
-
-```bash
-node scripts/migrate-demo-fs.js
-```
-
-This will:
-
-- Convert process-named folders to ID-based directories
-- Preserve all existing job data
-- Create manifests for traceability
-
 #### Error Handling
 
 - **Invalid job ID**: Shows "Invalid job ID" for malformed IDs
