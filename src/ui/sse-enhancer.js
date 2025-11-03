@@ -16,6 +16,7 @@
 
 import { detectJobChange } from "./job-change-detector.js";
 import { transformJobStatus } from "./transformers/status-transformer.js";
+import { transformJobListForAPI } from "./transformers/list-transformer.js";
 
 export function createSSEEnhancer({
   readJobFn,
@@ -41,16 +42,29 @@ export function createSSEEnhancer({
         return;
       }
 
-      // Transform to canonical schema before broadcasting
-      const canonicalJob = transformJobStatus(
+      // First transform to detailed job schema, then to list schema for SSE
+      const detailedJob = transformJobStatus(
         res.data || {},
         jobId,
         res.location
       );
 
-      if (!canonicalJob) {
+      if (!detailedJob) {
         console.warn(
           `[SSEEnhancer] Failed to transform job ${jobId} for broadcast`
+        );
+        return;
+      }
+
+      // Transform to canonical list schema to match /api/jobs item shape
+      const listJob = transformJobListForAPI([detailedJob], {
+        includePipelineMetadata: true,
+      });
+      const canonicalJob = listJob.length > 0 ? listJob[0] : null;
+
+      if (!canonicalJob) {
+        console.warn(
+          `[SSEEnhancer] Failed to transform job ${jobId} to list schema for broadcast`
         );
         return;
       }

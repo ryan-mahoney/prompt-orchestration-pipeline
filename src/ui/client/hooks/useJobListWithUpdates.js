@@ -10,6 +10,9 @@ import { sortJobs } from "../../transformers/list-transformer.js";
  * - Applies SSE events idempotently via pure reducer functions
  * - Maintains connectionStatus derived from EventSource.readyState
  * - Queues events received before hydration completes and applies them after hydrate
+ *
+ * Note: SSE payloads (job:created, job:updated) match the canonical list item shape
+ * from /api/jobs to ensure consistent updates without page refresh.
  */
 function applyJobEvent(prev = [], event) {
   // prev: Array of jobs (treated immutably)

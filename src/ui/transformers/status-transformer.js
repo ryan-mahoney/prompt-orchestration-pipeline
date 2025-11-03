@@ -4,21 +4,6 @@ import { derivePipelineMetadata } from "../../utils/pipelines.js";
 const VALID_TASK_STATES = new Set(["pending", "running", "done", "failed"]);
 
 /**
- * Calculate progress percentage from task states.
- * Done tasks count as 100%, others as 0%.
- */
-export function calculateProgress(tasks = {}) {
-  if (!tasks || typeof tasks !== "object") return 0;
-  const names = Object.keys(tasks);
-  if (names.length === 0) return 0;
-
-  const doneCount = names.filter(
-    (name) => tasks[name]?.state === "done"
-  ).length;
-  return Math.round((doneCount / names.length) * 100);
-}
-
-/**
  * Determine job-level status from tasks mapping.
  */
 export function determineJobStatus(tasks = {}) {
@@ -77,11 +62,9 @@ export function computeJobStatus(tasksInput, existingProgress = null) {
   }
 
   const status = determineJobStatus(normalized);
-  // Calculate progress from tasks if no existing progress provided
-  const progress =
-    existingProgress !== null
-      ? existingProgress
-      : calculateProgress(normalized);
+  // Use existing progress if provided, otherwise default to 0
+  // Progress is pre-calculated in task-statuses.json, not computed from task states
+  const progress = existingProgress !== null ? existingProgress : 0;
 
   return { status, progress };
 }
