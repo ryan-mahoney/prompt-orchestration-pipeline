@@ -231,15 +231,25 @@ export async function chat(options) {
         content: result.content,
       };
 
-      const promptTokens = estimateTokens(systemMsg + userMsg);
-      const completionTokens = estimateTokens(
-        typeof result === "string" ? result : JSON.stringify(result)
-      );
-      usage = {
-        promptTokens,
-        completionTokens,
-        totalTokens: promptTokens + completionTokens,
-      };
+      // Use actual usage from deepseek API if available; otherwise estimate
+      if (result?.usage) {
+        const { prompt_tokens, completion_tokens, total_tokens } = result.usage;
+        usage = {
+          promptTokens: prompt_tokens,
+          completionTokens: completion_tokens,
+          totalTokens: total_tokens,
+        };
+      } else {
+        const promptTokens = estimateTokens(systemMsg + userMsg);
+        const completionTokens = estimateTokens(
+          typeof result === "string" ? result : JSON.stringify(result)
+        );
+        usage = {
+          promptTokens,
+          completionTokens,
+          totalTokens: promptTokens + completionTokens,
+        };
+      }
     } else {
       throw new Error(`Provider ${provider} not yet implemented`);
     }
