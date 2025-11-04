@@ -8,7 +8,6 @@ import {
   readJob,
   readMultipleJobs,
   getJobReadingStats,
-  validateJobData,
 } from "../src/ui/job-reader.js";
 import { createJobTree, createMultipleJobTrees } from "./test-data-utils.js";
 import * as configBridge from "../src/ui/config-bridge.js";
@@ -26,7 +25,7 @@ describe("job-reader", () => {
         {
           jobId: "job-current",
           location: "current",
-          tasksStatus: {
+          tasks: {
             id: "job-current",
             name: "Current Job",
             createdAt: "2024-01-01T00:00:00Z",
@@ -39,7 +38,7 @@ describe("job-reader", () => {
         {
           jobId: "job-complete",
           location: "complete",
-          tasksStatus: {
+          tasks: {
             id: "job-complete",
             name: "Complete Job",
             createdAt: "2024-01-01T00:00:00Z",
@@ -109,7 +108,7 @@ describe("job-reader", () => {
         {
           jobId: "duplicate-job",
           location: "current",
-          tasksStatus: {
+          tasks: {
             id: "duplicate-job",
             name: "Current Version",
             createdAt: "2024-01-01T00:00:00Z",
@@ -119,7 +118,7 @@ describe("job-reader", () => {
         {
           jobId: "duplicate-job",
           location: "complete",
-          tasksStatus: {
+          tasks: {
             id: "duplicate-job",
             name: "Complete Version",
             createdAt: "2024-01-01T00:00:00Z",
@@ -456,132 +455,4 @@ describe("job-reader", () => {
       expect(stats.locations).toEqual({ current: 2 });
     });
   });
-
-  describe("validateJobData", () => {
-    it("should validate correct job data", () => {
-      const jobData = {
-        id: "test-job",
-        name: "Test Job",
-        createdAt: "2024-01-01T00:00:00Z",
-        tasks: {
-          analysis: { state: "pending" },
-          processing: { state: "running" },
-        },
-      };
-
-      const result = validateJobData(jobData, "test-job");
-
-      expect(result.valid).toBe(true);
-      expect(result.warnings).toEqual([]);
-    });
-
-    it("should handle job ID mismatch with warning", () => {
-      const jobData = {
-        id: "different-id",
-        name: "Test Job",
-        createdAt: "2024-01-01T00:00:00Z",
-        tasks: {
-          analysis: { state: "pending" },
-        },
-      };
-
-      const consoleWarnSpy = vi
-        .spyOn(console, "warn")
-        .mockImplementation(() => {});
-
-      const result = validateJobData(jobData, "test-job");
-
-      expect(result.valid).toBe(true);
-      expect(result.warnings).toEqual(["Job ID mismatch"]);
-
-      expect(consoleWarnSpy).toHaveBeenCalledWith(
-        expect.stringContaining(
-          "Job ID mismatch: expected test-job, found different-id"
-        )
-      );
-
-      consoleWarnSpy.mockRestore();
-    });
-
-    it("should reject non-object job data", () => {
-      const result = validateJobData(null, "test-job");
-
-      expect(result.valid).toBe(false);
-      expect(result.error).toBe("Job data must be an object");
-    });
-
-    it("should reject job data missing required fields", () => {
-      const jobData = {
-        id: "test-job",
-        // Missing name
-        createdAt: "2024-01-01T00:00:00Z",
-        tasks: {},
-      };
-
-      const result = validateJobData(jobData, "test-job");
-
-      expect(result.valid).toBe(false);
-      expect(result.error).toBe("Missing required field: name");
-    });
-
-    it("should reject invalid tasks structure", () => {
-      const jobData = {
-        id: "test-job",
-        name: "Test Job",
-        createdAt: "2024-01-01T00:00:00Z",
-        tasks: "not-an-object",
-      };
-
-      const result = validateJobData(jobData, "test-job");
-
-      expect(result.valid).toBe(false);
-      expect(result.error).toBe("Tasks must be an object");
-    });
-
-    it("should reject task without state", () => {
-      const jobData = {
-        id: "test-job",
-        name: "Test Job",
-        createdAt: "2024-01-01T00:00:00Z",
-        tasks: {
-          analysis: { noState: true }, // Missing state
-        },
-      };
-
-      const result = validateJobData(jobData, "test-job");
-
-      expect(result.valid).toBe(false);
-      expect(result.error).toBe("Task analysis missing state field");
-    });
-
-    it("should warn about unknown task states", () => {
-      const jobData = {
-        id: "test-job",
-        name: "Test Job",
-        createdAt: "2024-01-01T00:00:00Z",
-        tasks: {
-          analysis: { state: "unknown-state" },
-        },
-      };
-
-      const consoleWarnSpy = vi
-        .spyOn(console, "warn")
-        .mockImplementation(() => {});
-
-      const result = validateJobData(jobData, "test-job");
-
-      expect(result.valid).toBe(true);
-      expect(consoleWarnSpy).toHaveBeenCalledWith(
-        expect.stringContaining(
-          "Unknown task state for analysis: unknown-state"
-        )
-      );
-
-      consoleWarnSpy.mockRestore();
-    });
-  });
-
-  // Note: Instrumentation tests for lock retry logging have been removed
-  // as they were causing test timeouts and complex mocking issues.
-  // The core functionality is tested in the "should handle locked job with retry" test.
 });

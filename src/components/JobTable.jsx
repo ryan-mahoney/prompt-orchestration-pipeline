@@ -7,6 +7,25 @@ import { taskDisplayDurationMs } from "../utils/duration.js";
 import { countCompleted } from "../utils/jobs";
 import { progressClasses, statusBadge } from "../utils/ui";
 
+// Local helpers for formatting costs and tokens
+function formatCurrency4(x) {
+  if (typeof x !== "number" || x === 0) return "$0.0000";
+  const formatted = x.toFixed(4);
+  // Trim trailing zeros and unnecessary decimal point
+  return `$${formatted.replace(/\.?0+$/, "")}`;
+}
+
+function formatTokensCompact(n) {
+  if (typeof n !== "number" || n === 0) return "0 tok";
+
+  if (n >= 1000000) {
+    return `${(n / 1000000).toFixed(1).replace(/\.0$/, "")}M tok`;
+  } else if (n >= 1000) {
+    return `${(n / 1000).toFixed(1).replace(/\.0$/, "")}k tok`;
+  }
+  return `${n} tok`;
+}
+
 export default function JobTable({
   jobs,
   pipeline,
@@ -35,6 +54,7 @@ export default function JobTable({
             <Table.ColumnHeaderCell>Current Task</Table.ColumnHeaderCell>
             <Table.ColumnHeaderCell>Progress</Table.ColumnHeaderCell>
             <Table.ColumnHeaderCell>Tasks</Table.ColumnHeaderCell>
+            <Table.ColumnHeaderCell>Cost</Table.ColumnHeaderCell>
             <Table.ColumnHeaderCell>Duration</Table.ColumnHeaderCell>
             <Table.ColumnHeaderCell className="w-12"></Table.ColumnHeaderCell>
           </Table.Row>
@@ -42,7 +62,7 @@ export default function JobTable({
 
         <Table.Body>
           {jobs.map((job) => {
-            const jobTitle = job.title || job.name; // Fallback for backward compatibility
+            const jobTitle = job.name;
             const taskById = Array.isArray(job.tasks)
               ? Object.fromEntries(
                   (job.tasks || []).map((t) => {
@@ -72,6 +92,12 @@ export default function JobTable({
               (job.current &&
                 (currentTask?.config || pipeline?.taskConfig?.[job.current])) ||
               {};
+
+            // Cost and token data
+            const costsSummary = job.costsSummary || {};
+            const totalCost = job.totalCost || costsSummary.totalCost || 0;
+            const totalTokens =
+              job.totalTokens || costsSummary.totalTokens || 0;
 
             const hasValidId = Boolean(job.id);
             return (
@@ -171,6 +197,19 @@ export default function JobTable({
                   <Text size="2" className="text-slate-700">
                     {totalCompleted} of {totalTasks}
                   </Text>
+                </Table.Cell>
+
+                <Table.Cell>
+                  <Flex direction="column" gap="1">
+                    <Text size="2" className="text-slate-700">
+                      {totalCost > 0 ? formatCurrency4(totalCost) : "—"}
+                    </Text>
+                    {totalTokens > 0 && (
+                      <Text size="1" className="text-slate-500">
+                        {formatTokensCompact(totalTokens)}
+                      </Text>
+                    )}
+                  </Flex>
                 </Table.Cell>
 
                 <Table.Cell>

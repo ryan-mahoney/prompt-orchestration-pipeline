@@ -5,7 +5,7 @@ import {
 } from "../src/ui/client/adapters/job-adapter.js";
 
 describe("job-adapter", () => {
-  it("adaptJobSummary - happy path canonical API object", () => {
+  it("adaptJobSummary - happy path canonical API object with tasks", () => {
     const apiJob = {
       jobId: "job1",
       title: "Job 1",
@@ -14,7 +14,7 @@ describe("job-adapter", () => {
       createdAt: "2025-10-06T00:00:00Z",
       updatedAt: "2025-10-06T01:00:00Z",
       location: "current",
-      tasksStatus: {
+      tasks: {
         t1: {
           name: "t1",
           state: "done",
@@ -42,7 +42,7 @@ describe("job-adapter", () => {
   });
 
   it("adaptJobSummary - applies sensible defaults when optional fields missing", () => {
-    const apiJob = { tasksStatus: {} }; // minimal with demo schema
+    const apiJob = { tasks: {} }; // minimal with demo schema
     const out = adaptJobSummary(apiJob);
     expect(out.id).toBeUndefined();
     expect(out.name).toBe("");
@@ -57,7 +57,7 @@ describe("job-adapter", () => {
   it("adaptJobSummary - normalizes unknown task state to pending and records warning", () => {
     const apiJob = {
       jobId: "job-unknown-state",
-      tasksStatus: {
+      tasks: {
         compile: { state: "weird" },
         lint: { state: "done" },
       },
@@ -69,7 +69,7 @@ describe("job-adapter", () => {
     expect(typeof out.tasks).toBe("object");
     expect(out.tasks.compile).toBeDefined();
     expect(out.tasks.compile.state).toBe("pending");
-    // warnings include the unknown state marker
+    // warnings include => unknown state marker
     expect(
       out.__warnings &&
         out.__warnings.some((w) =>
@@ -80,7 +80,7 @@ describe("job-adapter", () => {
     expect(out.progress).toBe(50);
   });
 
-  it("adaptJobSummary - backward compatibility with legacy/demo payloads", () => {
+  it("adaptJobSummary - backward compatibility with legacy/demo payloads using tasksStatus", () => {
     const apiJob = {
       jobId: "legacy1",
       title: "Legacy Job",
@@ -98,13 +98,21 @@ describe("job-adapter", () => {
     expect(out.progress).toBe(100);
     expect(out.taskCount).toBe(2);
     expect(out.doneCount).toBe(2);
+    // Because adapter reads tasks but payload uses tasksStatus, fallback results in empty tasks and warnings about invalid shape
+    expect(out.__warnings).toEqual(
+      expect.arrayContaining(["invalid_tasks_shape"])
+    );
+    expect(out.taskCount).toBe(0);
+    expect(out.doneCount).toBe(0);
+    expect(out.status).toBe("pending");
+    expect(out.progress).toBe(0);
   });
 
   it("adaptJobDetail - maps detail shape to normalized detail", () => {
     const apiDetail = {
       jobId: "detail1",
       title: "Detail Job",
-      tasksStatus: {
+      tasks: {
         a: { name: "a", state: "running", startedAt: "2025-10-06T00:00:00Z" },
         b: { name: "b", state: "pending" },
       },
@@ -127,7 +135,7 @@ describe("job-adapter", () => {
       title: "Job 1",
       current: "task-1",
       currentStage: "enrich",
-      tasksStatus: {
+      tasks: {
         "task-1": { state: "running" },
       },
     };
@@ -143,7 +151,7 @@ describe("job-adapter", () => {
       title: "Detail Job",
       current: "task-1",
       currentStage: "enrich",
-      tasksStatus: {
+      tasks: {
         "task-1": { state: "running" },
       },
     };
@@ -156,7 +164,7 @@ describe("job-adapter", () => {
   it("normalizeTasks - preserves task-level stage metadata for object input", () => {
     const apiJob = {
       jobId: "job1",
-      tasksStatus: {
+      tasks: {
         "task-1": {
           state: "running",
           currentStage: "enrich",
@@ -180,7 +188,7 @@ describe("job-adapter", () => {
   it("normalizeTasks - preserves task-level stage metadata for array input", () => {
     const apiJob = {
       jobId: "job1",
-      tasksStatus: [
+      tasks: [
         {
           name: "task-1",
           state: "running",
@@ -207,7 +215,7 @@ describe("job-adapter", () => {
       title: "Job with Pipeline",
       pipelineSlug: "content-generation",
       pipelineLabel: "Content Generation",
-      tasksStatus: {
+      tasks: {
         "task-1": { state: "done" },
       },
     };
@@ -222,7 +230,7 @@ describe("job-adapter", () => {
       jobId: "job1",
       title: "Job with Slug Only",
       pipelineSlug: "market-analysis",
-      tasksStatus: {
+      tasks: {
         "task-1": { state: "done" },
       },
     };
@@ -240,7 +248,7 @@ describe("job-adapter", () => {
         name: "custom-pipeline",
         version: "1.0",
       },
-      tasksStatus: {
+      tasks: {
         "task-1": { state: "done" },
       },
     };
@@ -257,7 +265,7 @@ describe("job-adapter", () => {
     const apiJob = {
       jobId: "job1",
       title: "Job without Pipeline",
-      tasksStatus: {
+      tasks: {
         "task-1": { state: "done" },
       },
     };

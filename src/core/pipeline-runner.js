@@ -4,6 +4,7 @@ import { runPipeline } from "./task-runner.js";
 import { loadFreshModule } from "./module-loader.js";
 import { validatePipelineOrThrow } from "./validation.js";
 import { getPipelineConfig } from "./config.js";
+import { writeJobStatus } from "./status-writer.js";
 
 const ROOT = process.env.PO_ROOT || process.cwd();
 const DATA_DIR = path.join(ROOT, process.env.PO_DATA_DIR || "pipeline-data");
@@ -205,12 +206,18 @@ function now() {
 }
 
 async function updateStatus(taskName, patch) {
-  const current = JSON.parse(await fs.readFile(tasksStatusPath, "utf8"));
-  current.current = taskName;
-  current.tasks = current.tasks || {};
-  current.tasks[taskName] = { ...(current.tasks[taskName] || {}), ...patch };
-  await atomicWrite(tasksStatusPath, JSON.stringify(current, null, 2));
-  Object.assign(status, current);
+  return await writeJobStatus(workDir, (snapshot) => {
+    snapshot.current = taskName;
+    snapshot.tasks = snapshot.tasks || {};
+    snapshot.tasks[taskName] = {
+      ...(snapshot.tasks[taskName] || {}),
+      ...patch,
+    };
+    return snapshot;
+  }).then((snap) => {
+    Object.assign(status, snap);
+    return snap;
+  });
 }
 
 async function appendLine(file, line) {

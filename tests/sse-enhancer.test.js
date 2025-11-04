@@ -41,7 +41,7 @@ describe("SSE Enhancer", () => {
         location: "current",
         current: "task-1",
         currentStage: "processing",
-        tasksStatus: {
+        tasks: {
           "task-1": {
             state: "running",
             startedAt: "2023-01-01T00:30:00.000Z",

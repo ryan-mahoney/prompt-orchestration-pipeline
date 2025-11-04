@@ -242,7 +242,6 @@ export function useJobDetailWithUpdates(jobId) {
             status: jobData?.status,
             hasTasks: !!jobData?.tasks,
             taskKeys: jobData?.tasks ? Object.keys(jobData.tasks) : [],
-            hasTasksStatus: !!jobData?.tasksStatus,
           });
           if (mountedRef.current) {
             logger.log("Refetch successful, updating data");

@@ -6,26 +6,26 @@ export const statusBadge = (status) => {
   switch (status) {
     case "running":
       return (
-        <Badge variant="info" aria-label="Running">
+        <Badge intent="blue" aria-label="Running">
           Running
         </Badge>
       );
     case "failed":
       return (
-        <Badge variant="error" aria-label="Failed">
+        <Badge intent="red" aria-label="Failed">
           Failed
         </Badge>
       );
     case "completed":
     case "complete":
       return (
-        <Badge variant="success" aria-label="Completed">
+        <Badge intent="green" aria-label="Completed">
           Completed
         </Badge>
       );
     case "pending":
       return (
-        <Badge variant="default" aria-label="Pending">
+        <Badge intent="gray" aria-label="Pending">
           Pending
         </Badge>
       );

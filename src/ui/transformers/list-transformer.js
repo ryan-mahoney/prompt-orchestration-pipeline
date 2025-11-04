@@ -250,28 +250,48 @@ export function transformJobListForAPI(jobs = [], options = {}) {
       base.currentStage = job.currentStage;
     }
 
-    if (job.tasksStatus && typeof job.tasksStatus === "object") {
-      // Include tasksStatus with all required fields for UI computation
-      const tasksStatus = {};
-      for (const [taskId, task] of Object.entries(job.tasksStatus)) {
+    if (job.tasks && typeof job.tasks === "object") {
+      // Include tasks with all required fields for UI computation
+      const tasks = {};
+      for (const [taskId, task] of Object.entries(job.tasks)) {
         if (task && typeof task === "object") {
-          tasksStatus[taskId] = {
+          tasks[taskId] = {
             state: task.state || "pending",
           };
 
           // Include optional fields if present
-          if (task.startedAt != null)
-            tasksStatus[taskId].startedAt = task.startedAt;
-          if (task.endedAt != null) tasksStatus[taskId].endedAt = task.endedAt;
+          if (task.startedAt != null) tasks[taskId].startedAt = task.startedAt;
+          if (task.endedAt != null) tasks[taskId].endedAt = task.endedAt;
           if (task.executionTimeMs != null)
-            tasksStatus[taskId].executionTimeMs = task.executionTimeMs;
+            tasks[taskId].executionTimeMs = task.executionTimeMs;
           if (task.currentStage != null)
-            tasksStatus[taskId].currentStage = task.currentStage;
+            tasks[taskId].currentStage = task.currentStage;
           if (task.failedStage != null)
-            tasksStatus[taskId].failedStage = task.failedStage;
+            tasks[taskId].failedStage = task.failedStage;
         }
       }
-      base.tasksStatus = tasksStatus;
+      base.tasks = tasks;
+    }
+
+    // Add costs summary with zeroed structure if job.costs is absent
+    if (job.costs && job.costs.summary) {
+      base.costsSummary = {
+        totalTokens: job.costs.summary.totalTokens || 0,
+        totalInputTokens: job.costs.summary.totalInputTokens || 0,
+        totalOutputTokens: job.costs.summary.totalOutputTokens || 0,
+        totalCost: job.costs.summary.totalCost || 0,
+        totalInputCost: job.costs.summary.totalInputCost || 0,
+        totalOutputCost: job.costs.summary.totalOutputCost || 0,
+      };
+    } else {
+      base.costsSummary = {
+        totalTokens: 0,
+        totalInputTokens: 0,
+        totalOutputTokens: 0,
+        totalCost: 0,
+        totalInputCost: 0,
+        totalOutputCost: 0,
+      };
     }
 
     // Only include pipeline metadata if option is enabled

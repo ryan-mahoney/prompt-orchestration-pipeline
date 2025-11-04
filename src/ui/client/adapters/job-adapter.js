@@ -66,6 +66,8 @@ function normalizeTasks(rawTasks) {
         artifacts: Array.isArray(t && t.artifacts)
           ? t.artifacts.slice()
           : undefined,
+        // Preserve tokenUsage if present
+        ...(t && t.tokenUsage ? { tokenUsage: t.tokenUsage } : {}),
       };
       tasks[name] = taskObj;
     });
@@ -100,6 +102,8 @@ function normalizeTasks(rawTasks) {
         artifacts: Array.isArray(t && t.artifacts)
           ? t.artifacts.slice()
           : undefined,
+        // Preserve tokenUsage if present
+        ...(t && t.tokenUsage ? { tokenUsage: t.tokenUsage } : {}),
       };
     });
     return { tasks, warnings };
@@ -158,7 +162,7 @@ export function adaptJobSummary(apiJob) {
   // Demo-only: read canonical fields strictly
   const id = apiJob.jobId;
   const name = apiJob.title || "";
-  const rawTasks = apiJob.tasksStatus;
+  const rawTasks = apiJob.tasks;
   const location = apiJob.location;
 
   // Job-level stage metadata
@@ -197,6 +201,21 @@ export function adaptJobSummary(apiJob) {
   if (pipeline != null) job.pipeline = pipeline;
   if (pipelineLabel != null) job.pipelineLabel = pipelineLabel;
 
+  // Costs summary from API
+  if (apiJob.costsSummary) {
+    job.costsSummary = {
+      totalTokens: apiJob.costsSummary.totalTokens || 0,
+      totalInputTokens: apiJob.costsSummary.totalInputTokens || 0,
+      totalOutputTokens: apiJob.costsSummary.totalOutputTokens || 0,
+      totalCost: apiJob.costsSummary.totalCost || 0,
+      totalInputCost: apiJob.costsSummary.totalInputCost || 0,
+      totalOutputCost: apiJob.costsSummary.totalOutputCost || 0,
+    };
+    // Add top-level numeric mirrors for convenience
+    job.totalCost = job.costsSummary.totalCost;
+    job.totalTokens = job.costsSummary.totalTokens;
+  }
+
   // Include warnings for debugging
   if (warnings.length > 0) job.__warnings = warnings;
 
@@ -212,7 +231,7 @@ export function adaptJobDetail(apiDetail) {
   // Demo-only: read canonical fields strictly
   const id = apiDetail.jobId;
   const name = apiDetail.title || "";
-  const rawTasks = apiDetail.tasksStatus;
+  const rawTasks = apiDetail.tasks;
   const location = apiDetail.location;
 
   // Job-level stage metadata
@@ -250,6 +269,11 @@ export function adaptJobDetail(apiDetail) {
   const { pipeline, pipelineLabel } = derivePipelineMetadata(apiDetail);
   if (pipeline != null) detail.pipeline = pipeline;
   if (pipelineLabel != null) detail.pipelineLabel = pipelineLabel;
+
+  // Preserve job detail costs
+  if (apiDetail.costs) {
+    detail.costs = apiDetail.costs;
+  }
 
   // Include warnings for debugging
   if (warnings.length > 0) detail.__warnings = warnings;

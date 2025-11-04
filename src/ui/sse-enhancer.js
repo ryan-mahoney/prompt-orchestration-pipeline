@@ -14,7 +14,6 @@
  *  - cleanup() clears timers
  */
 
-import { detectJobChange } from "./job-change-detector.js";
 import { transformJobStatus } from "./transformers/status-transformer.js";
 import { transformJobListForAPI } from "./transformers/list-transformer.js";
 

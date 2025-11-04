@@ -5,7 +5,6 @@
  *  - readJob(jobId)
  *  - readMultipleJobs(jobIds)
  *  - getJobReadingStats(jobIds, results)
- *  - validateJobData(jobData, expectedJobId)
  *
  * Uses config-bridge for paths/constants and file-reader for safe file I/O.
  */
@@ -43,14 +42,6 @@ export async function readJob(jobId) {
     console.log(
       `readJob: will check lock at ${jobDir} and attempt to read ${tasksPath}`
     );
-
-    // Check locks with retry
-    const maxLockAttempts =
-      configBridge.Constants?.RETRY_CONFIG?.MAX_ATTEMPTS ?? 3;
-    const configuredDelay =
-      configBridge.Constants?.RETRY_CONFIG?.DELAY_MS ?? 50;
-    // Cap lock retry delay during tests to avoid long waits; use small bound for responsiveness
-    const lockDelay = Math.min(configuredDelay, 20);
 
     // Check lock with a small, deterministic retry loop.
     // Tests mock isLocked to return true once then false; this loop allows that behavior.
@@ -172,103 +163,4 @@ export function getJobReadingStats(jobIds = [], results = []) {
     errorTypes,
     locations,
   };
-}
-
-/**
- * Validate job data conforms to minimal schema and expected job id.
- * Supports both legacy (id, name, tasks) and canonical (jobId, title, tasksStatus) fields.
- * Returns { valid: boolean, warnings: string[], error?: string }
- */
-export function validateJobData(jobData, expectedJobId) {
-  const warnings = [];
-
-  if (
-    jobData === null ||
-    typeof jobData !== "object" ||
-    Array.isArray(jobData)
-  ) {
-    return { valid: false, error: "Job data must be an object" };
-  }
-
-  // Support both legacy and canonical field names
-  const hasLegacyId = "id" in jobData;
-  const hasCanonicalId = "jobId" in jobData;
-  const hasLegacyName = "name" in jobData;
-  const hasCanonicalName = "title" in jobData;
-  const hasLegacyTasks = "tasks" in jobData;
-  const hasCanonicalTasks = "tasksStatus" in jobData;
-
-  // Required: at least one ID field
-  if (!hasLegacyId && !hasCanonicalId) {
-    return { valid: false, error: "Missing required field: id or jobId" };
-  }
-
-  // Required: at least one name field
-  if (!hasLegacyName && !hasCanonicalName) {
-    return { valid: false, error: "Missing required field: name or title" };
-  }
-
-  // Required: createdAt
-  if (!("createdAt" in jobData)) {
-    return { valid: false, error: "Missing required field: createdAt" };
-  }
-
-  // Required: at least one tasks field
-  if (!hasLegacyTasks && !hasCanonicalTasks) {
-    return {
-      valid: false,
-      error: "Missing required field: tasks or tasksStatus",
-    };
-  }
-
-  // Get actual ID for validation
-  const actualId = jobData.jobId ?? jobData.id;
-  if (actualId !== expectedJobId) {
-    warnings.push("Job ID mismatch");
-    console.warn(
-      `Job ID mismatch: expected ${expectedJobId}, found ${actualId}`
-    );
-  }
-
-  // Validate tasks (prefer canonical, fallback to legacy)
-  const tasks = jobData.tasksStatus ?? jobData.tasks;
-  if (typeof tasks !== "object" || tasks === null || Array.isArray(tasks)) {
-    return { valid: false, error: "Tasks must be an object" };
-  }
-
-  const validStates = configBridge.Constants?.TASK_STATES || [
-    "pending",
-    "running",
-    "done",
-    "error",
-  ];
-
-  for (const [taskName, task] of Object.entries(tasks)) {
-    if (!task || typeof task !== "object") {
-      return { valid: false, error: `Task ${taskName} missing state field` };
-    }
-
-    if (!("state" in task)) {
-      return { valid: false, error: `Task ${taskName} missing state field` };
-    }
-
-    const state = task.state;
-    if (!validStates.includes(state)) {
-      warnings.push(`Unknown state: ${state}`);
-      console.warn(`Unknown task state for ${taskName}: ${state}`);
-    }
-  }
-
-  // Add warnings for legacy field usage
-  if (hasLegacyId && hasCanonicalId) {
-    warnings.push("Both id and jobId present, using jobId");
-  }
-  if (hasLegacyName && hasCanonicalName) {
-    warnings.push("Both name and title present, using title");
-  }
-  if (hasLegacyTasks && hasCanonicalTasks) {
-    warnings.push("Both tasks and tasksStatus present, using tasksStatus");
-  }
-
-  return { valid: true, warnings };
 }

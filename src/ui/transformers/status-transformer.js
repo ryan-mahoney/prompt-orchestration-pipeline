@@ -1,5 +1,9 @@
 import { normalizeTaskFiles } from "../../utils/task-files.js";
 import { derivePipelineMetadata } from "../../utils/pipelines.js";
+import {
+  calculateJobCosts,
+  formatCostDataForAPI,
+} from "../../utils/token-cost-calculator.js";
 
 const VALID_TASK_STATES = new Set(["pending", "running", "done", "failed"]);
 
@@ -168,7 +172,7 @@ export function transformTasks(rawTasks) {
  *  - createdAt / updatedAt: ISO strings | null
  *  - location: lifecycle bucket
  *  - current / currentStage: stage metadata (optional)
- *  - tasksStatus: object keyed by task name
+ *  - tasks: object keyed by task name
  *  - files: normalized job-level files
  */
 export function transformJobStatus(raw, jobId, location) {
@@ -189,17 +193,13 @@ export function transformJobStatus(raw, jobId, location) {
   const updatedAt = raw.updatedAt || raw.lastUpdated || createdAt || null;
   const resolvedLocation = location || raw.location || null;
 
-  // Support both canonical (tasksStatus) and legacy (tasks) schema
-  const tasksStatus = transformTasks(raw.tasksStatus || raw.tasks);
-  const jobStatusObj = computeJobStatus(tasksStatus, raw.progress);
-
+  const tasks = transformTasks(raw.tasks);
+  const jobStatusObj = computeJobStatus(tasks, raw.progress);
   const jobFiles = normalizeTaskFiles(raw.files);
 
-  // Convert tasksStatus object to tasks array for API compatibility
-  const tasks = Object.entries(tasksStatus).map(([name, task]) => ({
-    name,
-    ...task,
-  }));
+  // Calculate costs for this job
+  const costs = calculateJobCosts(raw);
+  const costData = formatCostDataForAPI(costs);
 
   const job = {
     id: jobId, // API expects 'id' not 'jobId'
@@ -211,9 +211,9 @@ export function transformJobStatus(raw, jobId, location) {
     createdAt,
     updatedAt,
     location: resolvedLocation,
-    tasksStatus, // Keep tasksStatus for backward compatibility
     tasks, // API expects 'tasks' array
     files: jobFiles,
+    costs: costData, // Add cost data to job response
   };
 
   if (raw.current != null) job.current = raw.current;

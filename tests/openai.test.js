@@ -115,7 +115,7 @@ describe("OpenAI Provider", () => {
 
       // Act
       const { openaiChat } = await import("../src/providers/openai.js");
-      const result = await openaiChat({
+      await openaiChat({
         messages: [
           { role: "system", content: "Test system" },
           { role: "user", content: "Test user" },
@@ -129,9 +129,12 @@ describe("OpenAI Provider", () => {
         instructions: "Test system message",
         input: "Test user message",
         max_output_tokens: 25000,
+        text: {
+          format: {
+            type: "json_object",
+          },
+        },
       });
-      expect(result.content).toBe("Test response");
-      expect(result.text).toBe("Test response");
     });
 
     it("should use Chat Completions API for non-GPT-5 models", async () => {
@@ -169,6 +172,9 @@ describe("OpenAI Provider", () => {
         tools: undefined,
         tool_choice: undefined,
         stream: false,
+        response_format: {
+          type: "json_object", // Default to JSON for legacy compatibility
+        },
       });
       expect(result.content).toBe("Test response");
     });

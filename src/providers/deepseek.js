@@ -71,9 +71,25 @@ export async function deepseekChat({
       const data = await response.json();
       const content = data.choices[0].message.content;
 
+      // Only try JSON parsing if responseFormat indicates JSON output
+      if (responseFormat?.type === "json_object" || responseFormat === "json") {
+        const parsed = tryParseJSON(content);
+        if (parsed === null && attempt < maxRetries) {
+          // JSON parsing failed, retry
+          lastError = new Error("Failed to parse JSON response");
+          continue;
+        }
+        return {
+          content: parsed,
+          usage: data.usage,
+          raw: data,
+        };
+      }
+
       return {
-        content: tryParseJSON(content),
+        content,
         usage: data.usage,
+        raw: data,
       };
     } catch (error) {
       lastError = error;

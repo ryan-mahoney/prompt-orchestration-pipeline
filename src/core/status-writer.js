@@ -16,6 +16,9 @@ async function getSSERegistry() {
   return sseRegistry;
 }
 
+// Per-job write queues to serialize writes to tasks-status.json
+const writeQueues = new Map(); // Map<string jobDir, Promise<any>>
+
 // Instrumentation helper for status writer
 const createStatusWriterLogger = (jobId) => {
   const prefix = `[StatusWriter:${jobId || "unknown"}]`;
@@ -193,66 +196,74 @@ export async function writeJobStatus(jobDir, updateFn) {
   const jobId = path.basename(jobDir);
   const logger = createStatusWriterLogger(jobId);
 
-  logger.group("Status Write Operation");
-  logger.log(`Updating status for job: ${jobId}`);
-  logger.log(`Status file path: ${statusPath}`);
+  // Get or create the write queue for this job directory
+  const prev = writeQueues.get(jobDir) || Promise.resolve();
+  let resultSnapshot;
 
-  // Read existing status or create default
-  let snapshot = await readStatusFile(statusPath, jobId);
-  logger.log("Current status snapshot:", snapshot);
+  const next = prev
+    .then(async () => {
+      logger.group("Status Write Operation");
+      logger.log(`Updating status for job: ${jobId}`);
+      logger.log(`Status file path: ${statusPath}`);
 
-  // Validate basic structure
-  snapshot = validateStatusSnapshot(snapshot);
+      // Read existing status or create default
+      const current = await readStatusFile(statusPath, jobId);
+      logger.log("Current status snapshot:", current);
 
-  // Apply user updates
-  try {
-    const result = updateFn(snapshot);
-    // If updateFn returns a value, use it as new snapshot
-    if (result !== undefined) {
-      snapshot = result;
-    }
-    logger.log("Status after update function:", snapshot);
-  } catch (error) {
-    logger.error("Update function failed:", error);
-    throw new Error(`Update function failed: ${error.message}`);
-  }
+      // Validate basic structure
+      const validated = validateStatusSnapshot(current);
 
-  // Validate final structure
-  snapshot = validateStatusSnapshot(snapshot);
+      // Apply user updates
+      const maybeUpdated = updateFn(validated);
+      const snapshot = validateStatusSnapshot(
+        maybeUpdated === undefined ? validated : maybeUpdated
+      );
 
-  // Update timestamp
-  snapshot.lastUpdated = new Date().toISOString();
+      snapshot.lastUpdated = new Date().toISOString();
+      logger.log("Status after update function:", snapshot);
 
-  // Atomic write
-  await atomicWrite(statusPath, snapshot);
-  logger.log("Status file written successfully");
+      // Atomic write
+      await atomicWrite(statusPath, snapshot);
+      logger.log("Status file written successfully");
 
-  // Emit SSE event for tasks-status.json change
-  const registry = await getSSERegistry();
-  if (registry) {
-    try {
-      const eventData = {
-        type: "state:change",
-        data: {
-          path: path.join(jobDir, "tasks-status.json"),
-          id: jobId,
-          jobId,
-        },
-      };
-      registry.broadcast(eventData);
-      logger.sse("state:change", eventData.data);
-      logger.log("SSE event broadcasted successfully");
-    } catch (error) {
-      // Don't fail the write if SSE emission fails
-      logger.error("Failed to emit SSE event:", error);
-      console.warn(`Failed to emit SSE event: ${error.message}`);
-    }
-  } else {
-    logger.warn("SSE registry not available - no event broadcasted");
-  }
+      // Emit SSE event for tasks-status.json change
+      const registry = (await getSSERegistry().catch(() => null)) || null;
+      if (registry) {
+        try {
+          const eventData = {
+            type: "state:change",
+            data: {
+              path: path.join(jobDir, "tasks-status.json"),
+              id: jobId,
+              jobId,
+            },
+          };
+          registry.broadcast(eventData);
+          logger.sse("state:change", eventData.data);
+          logger.log("SSE event broadcasted successfully");
+        } catch (error) {
+          // Don't fail the write if SSE emission fails
+          logger.error("Failed to emit SSE event:", error);
+          console.warn(`Failed to emit SSE event: ${error.message}`);
+        }
+      } else {
+        logger.warn("SSE registry not available - no event broadcasted");
+      }
 
-  logger.groupEnd();
-  return snapshot;
+      logger.groupEnd();
+      resultSnapshot = snapshot;
+    })
+    .catch((e) => {
+      throw e;
+    });
+
+  // Store the promise chain and set up cleanup
+  writeQueues.set(
+    jobDir,
+    next.finally(() => {})
+  );
+
+  return next.then(() => resultSnapshot);
 }
 
 /**
