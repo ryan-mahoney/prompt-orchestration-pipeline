@@ -1,5 +1,9 @@
 import { normalizeTaskFiles } from "../../utils/task-files.js";
 import { derivePipelineMetadata } from "../../utils/pipelines.js";
+import {
+  calculateJobCosts,
+  formatCostDataForAPI,
+} from "../../utils/token-cost-calculator.js";
 
 const VALID_TASK_STATES = new Set(["pending", "running", "done", "failed"]);
 
@@ -120,6 +124,7 @@ export function transformTasks(rawTasks) {
         task.refinementAttempts = raw.refinementAttempts;
       if ("stageLogPath" in raw) task.stageLogPath = raw.stageLogPath;
       if ("errorContext" in raw) task.errorContext = raw.errorContext;
+      if ("tokenUsage" in raw) task.tokenUsage = raw.tokenUsage;
 
       if (typeof raw.currentStage === "string" && raw.currentStage.length > 0) {
         task.currentStage = raw.currentStage;
@@ -201,6 +206,10 @@ export function transformJobStatus(raw, jobId, location) {
     ...task,
   }));
 
+  // Calculate costs for this job
+  const costs = calculateJobCosts(raw);
+  const costData = formatCostDataForAPI(costs);
+
   const job = {
     id: jobId, // API expects 'id' not 'jobId'
     name: title, // API expects 'name' not 'title'
@@ -214,6 +223,7 @@ export function transformJobStatus(raw, jobId, location) {
     tasksStatus, // Keep tasksStatus for backward compatibility
     tasks, // API expects 'tasks' array
     files: jobFiles,
+    costs: costData, // Add cost data to job response
   };
 
   if (raw.current != null) job.current = raw.current;
