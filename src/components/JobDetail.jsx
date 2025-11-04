@@ -6,6 +6,25 @@ import DAGGrid from "./DAGGrid.jsx";
 import { computeDagItems, computeActiveIndex } from "../utils/dag.js";
 import { getTaskFilesForTask } from "../utils/task-files.js";
 
+// Local helpers for formatting costs and tokens
+function formatCurrency4(x) {
+  if (typeof x !== "number" || x === 0) return "$0.0000";
+  const formatted = x.toFixed(4);
+  // Trim trailing zeros and unnecessary decimal point
+  return `$${formatted.replace(/\.?0+$/, "")}`;
+}
+
+function formatTokensCompact(n) {
+  if (typeof n !== "number" || n === 0) return "0 tok";
+
+  if (n >= 1000000) {
+    return `${(n / 1000000).toFixed(1).replace(/\.0$/, "")}M tokens`;
+  } else if (n >= 1000) {
+    return `${(n / 1000).toFixed(1).replace(/\.0$/, "")}k tokens`;
+  }
+  return `${n} tokens`;
+}
+
 export default function JobDetail({ job, pipeline, onClose, onResume }) {
   const now = useTicker(1000);
   const [resumeFrom, setResumeFrom] = useState(
@@ -15,16 +34,6 @@ export default function JobDetail({ job, pipeline, onClose, onResume }) {
         : (pipeline.tasks[0].id ?? pipeline.tasks[0].name ?? "")
       : ""
   );
-
-  useEffect(() => {
-    setResumeFrom(
-      pipeline?.tasks?.[0]
-        ? typeof pipeline.tasks[0] === "string"
-          ? pipeline.tasks[0]
-          : (pipeline.tasks[0].id ?? pipeline.tasks[0].name ?? "")
-        : ""
-    );
-  }, [job.id, pipeline?.tasks?.length]);
 
   // job.tasks is expected to be an object keyed by task name; normalize from array if needed
   const taskById = React.useMemo(() => {
@@ -48,6 +57,16 @@ export default function JobDetail({ job, pipeline, onClose, onResume }) {
 
     return result;
   }, [job?.tasks]);
+
+  useEffect(() => {
+    setResumeFrom(
+      pipeline?.tasks?.[0]
+        ? typeof pipeline.tasks[0] === "string"
+          ? pipeline.tasks[0]
+          : (pipeline.tasks[0].id ?? pipeline.tasks[0].name ?? "")
+        : ""
+    );
+  }, [job.id, pipeline?.tasks?.length]);
 
   // Compute pipeline tasks from pipeline or derive from job tasks
   const computedPipeline = React.useMemo(() => {
@@ -112,9 +131,21 @@ export default function JobDetail({ job, pipeline, onClose, onResume }) {
         }
       }
 
-      // Include error message in body when task status is error
+      // Prefer taskBreakdown totals for consistency with backend
+      const taskBreakdown = job?.costs?.taskBreakdown?.[item.id]?.summary || {};
+      if (taskBreakdown.totalTokens > 0) {
+        subtitleParts.push(formatTokensCompact(taskBreakdown.totalTokens));
+      }
+      if (taskBreakdown.totalCost > 0) {
+        subtitleParts.push(formatCurrency4(taskBreakdown.totalCost));
+      }
+
+      // Include error message in body when task status is error or failed
       const errorMsg = task?.error?.message;
-      const body = item.status === "failed" && errorMsg ? errorMsg : null;
+      const body =
+        (item.status === "failed" || item.status === "error") && errorMsg
+          ? errorMsg
+          : null;
 
       const resultItem = {
         ...item,
@@ -145,6 +176,8 @@ export default function JobDetail({ job, pipeline, onClose, onResume }) {
     },
     [job]
   );
+
+  console.log("dagItems", dagItems);
 
   return (
     <div className="flex h-full flex-col">

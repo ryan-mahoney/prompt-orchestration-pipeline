@@ -185,6 +185,32 @@ describe("Token Cost Calculator", () => {
       expect(result.tasksLevel.analysis.summary.totalInputTokens).toBe(200);
     });
 
+    it("should aggregate job-level costs from raw tuples correctly", () => {
+      const tasksStatus = {
+        tasks: {
+          research: {
+            tokenUsage: [["openai:gpt-5-mini", 287, 2928]],
+          },
+          analysis: {
+            tokenUsage: [["deepseek:chat", 2144, 566]],
+          },
+        },
+      };
+
+      const result = calculateJobCosts(tasksStatus);
+
+      // Verify job-level totals match sum of task-level totals
+      expect(result.jobLevel.summary.totalInputTokens).toBe(287 + 2144);
+      expect(result.jobLevel.summary.totalOutputTokens).toBe(2928 + 566);
+      expect(result.jobLevel.summary.totalTokens).toBe(3215 + 2710);
+
+      // Verify modelBreakdown uses real modelKeys, not 'null'
+      expect(Object.keys(result.jobLevel.summary.modelBreakdown)).toEqual(
+        expect.arrayContaining(["openai:gpt-5-mini", "deepseek:chat"])
+      );
+      expect(result.jobLevel.summary.modelBreakdown["null"]).toBeUndefined();
+    });
+
     it("should calculate costs for specific task", () => {
       const tasksStatus = {
         tasks: {

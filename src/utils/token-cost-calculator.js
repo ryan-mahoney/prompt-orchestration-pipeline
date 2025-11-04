@@ -203,16 +203,18 @@ export function calculateJobCosts(tasksStatus, taskName = null) {
   // Calculate for all tasks
   const tasksLevel = {};
   const allEntries = [];
+  const allTuples = [];
 
   for (const [currentTaskName, taskData] of Object.entries(tasks)) {
     const taskTokenUsage = taskData.tokenUsage || [];
     const taskCosts = calculateMultipleTokenCosts(taskTokenUsage);
     tasksLevel[currentTaskName] = taskCosts;
     allEntries.push(...taskCosts.entries);
+    allTuples.push(...taskTokenUsage);
   }
 
-  // Calculate job-level aggregation
-  const jobLevel = calculateMultipleTokenCosts(allEntries);
+  // Calculate job-level aggregation from raw tuples
+  const jobLevel = calculateMultipleTokenCosts(allTuples);
 
   return {
     jobLevel,

@@ -20,6 +20,23 @@ describe("Job Detail API Integration Tests", () => {
     process.env.PO_ROOT = tempDir;
     process.env.NODE_ENV = "test";
 
+    // Create pipeline registry for token cost calculation
+    const registryDir = path.join(tempDir, "pipeline-config");
+    await fs.mkdir(registryDir, { recursive: true });
+    const registry = {
+      pipelines: {
+        "test-pipeline": {
+          name: "Test Pipeline",
+          description: "Test pipeline for integration tests",
+          tasks: ["task-1", "task-2"],
+        },
+      },
+    };
+    await fs.writeFile(
+      path.join(registryDir, "registry.json"),
+      JSON.stringify(registry, null, 2)
+    );
+
     // Create test job data
     jobId = "testJob123";
     const jobDir = path.join(tempDir, "pipeline-data", "current", jobId);
@@ -37,9 +54,10 @@ describe("Job Detail API Integration Tests", () => {
       },
       tasks: {
         "task-1": {
-          state: "pending",
-          startedAt: null,
-          completedAt: null,
+          state: "done",
+          startedAt: new Date().toISOString(),
+          completedAt: new Date().toISOString(),
+          tokenUsage: [["openai:gpt-5-mini", 1000, 500]],
           files: {
             artifacts: ["output.json"],
             logs: ["process.log"],
@@ -47,9 +65,10 @@ describe("Job Detail API Integration Tests", () => {
           },
         },
         "task-2": {
-          state: "pending",
-          startedAt: null,
-          completedAt: null,
+          state: "done",
+          startedAt: new Date().toISOString(),
+          completedAt: new Date().toISOString(),
+          tokenUsage: [["deepseek:chat", 2000, 300]],
           files: {
             artifacts: [],
             logs: [],
@@ -101,7 +120,7 @@ describe("Job Detail API Integration Tests", () => {
     expect(result).toHaveProperty("data");
     expect(result.data).toHaveProperty("id", jobId);
     expect(result.data).toHaveProperty("name", "Test Job");
-    expect(result.data).toHaveProperty("status", "pending");
+    expect(result.data).toHaveProperty("status", "complete");
     expect(result.data).toHaveProperty("pipeline");
     expect(result.data.pipeline).toHaveProperty("tasks", ["task-1", "task-2"]);
   });
@@ -171,6 +190,39 @@ describe("Job Detail API Integration Tests", () => {
     expect(result).toHaveProperty("code", "bad_request");
     expect(result).toHaveProperty("message");
     expect(result).toHaveProperty("path", "invalid@id");
+  });
+
+  it("returns non-zero costs when tasks have tokenUsage", async () => {
+    const response = await fetch(`${server.url}/api/jobs/${jobId}`);
+
+    expect(response.status).toBe(200);
+    const result = await response.json();
+
+    // Verify costs structure exists and has non-zero totals
+    expect(result.data).toHaveProperty("costs");
+    expect(result.data.costs).toHaveProperty("summary");
+    expect(result.data.costs.summary).toHaveProperty("totalTokens");
+    expect(result.data.costs.summary.totalTokens).toBeGreaterThan(0);
+    expect(result.data.costs.summary.totalInputTokens).toBeGreaterThan(0);
+    expect(result.data.costs.summary.totalOutputTokens).toBeGreaterThan(0);
+
+    // Verify modelBreakdown uses real model keys, not 'null'
+    expect(result.data.costs).toHaveProperty("modelBreakdown");
+    expect(result.data.costs.modelBreakdown).not.toHaveProperty("null");
+    expect(Object.keys(result.data.costs.modelBreakdown)).toEqual(
+      expect.arrayContaining(["openai:gpt-5-mini", "deepseek:chat"])
+    );
+
+    // Verify taskBreakdown reflects per-task totals
+    expect(result.data.costs).toHaveProperty("taskBreakdown");
+    expect(result.data.costs.taskBreakdown).toHaveProperty("task-1");
+    expect(result.data.costs.taskBreakdown).toHaveProperty("task-2");
+    expect(result.data.costs.taskBreakdown["task-1"].summary.totalTokens).toBe(
+      1500
+    ); // 1000 + 500
+    expect(result.data.costs.taskBreakdown["task-2"].summary.totalTokens).toBe(
+      2300
+    ); // 2000 + 300
   });
 
   it("maintains API contract consistency across successful and error responses", async () => {
