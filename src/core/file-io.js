@@ -1,5 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { writeJobStatus } from "./status-writer.js";
 
 /**
  * Creates a task-scoped file I/O interface that manages file operations
@@ -30,41 +31,25 @@ export function createTaskFileIO({ workDir, taskName, getStage, statusPath }) {
    * Updates tasks-status.json with file information, ensuring de-duplication
    */
   async function updateStatusWithFiles(fileType, fileName) {
-    try {
-      const statusContent = await fs.readFile(statusPath, "utf8");
-      const status = JSON.parse(statusContent);
+    const jobDir = path.dirname(statusPath);
+    await writeJobStatus(jobDir, (snapshot) => {
+      snapshot.files ||= { artifacts: [], logs: [], tmp: [] };
+      snapshot.tasks ||= {};
+      snapshot.tasks[taskName] ||= {};
+      snapshot.tasks[taskName].files ||= { artifacts: [], logs: [], tmp: [] };
 
-      // Initialize files object if it doesn't exist
-      if (!status.files) {
-        status.files = { artifacts: [], logs: [], tmp: [] };
-      }
-
-      // Initialize task files if they don't exist
-      if (!status.tasks[taskName].files) {
-        status.tasks[taskName].files = { artifacts: [], logs: [], tmp: [] };
-      }
-
-      // Add to job-level files array (de-duped)
-      const jobArray = status.files[fileType];
+      const jobArray = snapshot.files[fileType];
       if (!jobArray.includes(fileName)) {
         jobArray.push(fileName);
       }
 
-      // Add to task-level files array (de-duped)
-      const taskArray = status.tasks[taskName].files[fileType];
+      const taskArray = snapshot.tasks[taskName].files[fileType];
       if (!taskArray.includes(fileName)) {
         taskArray.push(fileName);
       }
 
-      // Write back to file atomically
-      await atomicWrite(statusPath, JSON.stringify(status, null, 2));
-    } catch (error) {
-      // If status file doesn't exist or is invalid, we'll log but not fail
-      console.warn(
-        `Failed to update status with file ${fileName}:`,
-        error.message
-      );
-    }
+      return snapshot;
+    });
   }
 
   /**

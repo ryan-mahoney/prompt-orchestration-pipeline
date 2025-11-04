@@ -581,6 +581,8 @@ export async function runPipeline(modulePath, initialContext = {}) {
               error: errInfo,
               refinementCycle: refinementCount,
             });
+            await tokenWriteQueue.catch(() => {});
+            llmEvents.off("llm:request:complete", onLLMComplete);
             return {
               ok: false,
               failedStage: s,
@@ -874,6 +876,9 @@ export async function runPipeline(modulePath, initialContext = {}) {
           }
         }
 
+        await tokenWriteQueue.catch(() => {});
+        llmEvents.off("llm:request:complete", onLLMComplete);
+
         // For non-validation stages or when refinements are exhausted, fail immediately
         return {
           ok: false,
@@ -909,6 +914,8 @@ export async function runPipeline(modulePath, initialContext = {}) {
     typeof tasks.validateQuality === "function";
 
   if (context.flags.validationFailed && hasValidation) {
+    await tokenWriteQueue.catch(() => {});
+    llmEvents.off("llm:request:complete", onLLMComplete);
     return {
       ok: false,
       failedStage: "final-validation",
