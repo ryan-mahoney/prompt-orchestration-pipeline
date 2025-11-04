@@ -182,39 +182,78 @@ export const defaultConfig = {
     llmRequestTimeout: 60000,
   },
   llm: {
-    defaultProvider: "openai",
-    defaultModel: "gpt-5-chat-latest",
+    defaultProvider: "deepseek",
+    defaultModel: "chat",
     maxConcurrency: 5,
     retryMaxAttempts: 3,
     retryBackoffMs: 1000,
     models: {
-      "openai:gpt-4": {
-        provider: "openai",
-        model: "gpt-4",
-      },
-      "openai:gpt-4-turbo": {
-        provider: "openai",
-        model: "gpt-4-turbo",
-      },
-      "openai:gpt-5": {
-        provider: "openai",
-        model: "gpt-5-chat-latest",
+      // DeepSeek (2025)
+      "deepseek:chat": {
+        provider: "deepseek",
+        model: "deepseek-chat", // V3.2 Exp (non-thinking) under the hood
       },
       "deepseek:reasoner": {
         provider: "deepseek",
-        model: "deepseek-reasoner",
+        model: "deepseek-reasoner", // serves the R1 reasoning model family
       },
-      "deepseek:chat": {
-        provider: "deepseek",
-        model: "deepseek-chat",
+
+      // — OpenAI (2024) —
+      "openai:gpt-4": { provider: "openai", model: "gpt-4" },
+      "openai:gpt-4-turbo": { provider: "openai", model: "gpt-4-turbo" },
+      "openai:gpt-5": { provider: "openai", model: "gpt-5-chat-latest" }, // keep for back-compat
+
+      // — OpenAI (2025) —
+      "openai:gpt-5-core": { provider: "openai", model: "gpt-5" }, // flagship
+      "openai:gpt-5-chat": { provider: "openai", model: "gpt-5-chat-latest" }, // Chat variant
+      "openai:gpt-5-pro": { provider: "openai", model: "gpt-5-pro" }, // higher-compute tier
+      "openai:gpt-5-mini": { provider: "openai", model: "gpt-5-mini" },
+      "openai:gpt-5-nano": { provider: "openai", model: "gpt-5-nano" },
+
+      // — Google Gemini (2025) —
+      "gemini:2.5-pro": { provider: "google", model: "gemini-2.5-pro" }, // “thinking”/reasoning
+      "gemini:2.5-flash": { provider: "google", model: "gemini-2.5-flash" }, // fast, multimodal
+      "gemini:2.5-flash-lite": {
+        provider: "google",
+        model: "gemini-2.5-flash-lite",
       },
-      "anthropic:opus": {
+      "gemini:2.5-flash-image": {
+        provider: "google",
+        model: "gemini-2.5-flash-image",
+      },
+
+      // — Z.ai (formerly Zhipu) —
+      "zai:glm-4.6": { provider: "zai", model: "GLM-4.6" }, // newest flagship
+      "zai:glm-4.5": { provider: "zai", model: "GLM-4.5" },
+      "zai:glm-4.5-air": { provider: "zai", model: "GLM-4.5-Air" },
+
+      // — Anthropic —
+      // --- current (Claude 4.5 / 4.1) ---
+      "anthropic:sonnet-4-5": {
         provider: "anthropic",
-        model: "claude-3-opus",
+        model: "claude-sonnet-4-5",
       },
-      "anthropic:sonnet": {
+
+      "anthropic:haiku-4-5": {
         provider: "anthropic",
-        model: "claude-3-sonnet",
+        model: "claude-haiku-4-5",
+      },
+
+      "anthropic:opus-4-1": { provider: "anthropic", model: "claude-opus-4-1" },
+
+      // --- still available / legacy (use if you need backward compat) ---
+      "anthropic:sonnet-4": {
+        provider: "anthropic",
+        model: "claude-sonnet-4-0",
+      }, // = 20250514
+      "anthropic:sonnet-3-7": {
+        provider: "anthropic",
+        model: "claude-3-7-sonnet-20250219",
+      }, // extended thinking (3.7)
+      "anthropic:opus-4": { provider: "anthropic", model: "claude-opus-4-0" },
+      "anthropic:haiku-3-5": {
+        provider: "anthropic",
+        model: "claude-3-5-haiku-20241022",
       },
     },
   },
