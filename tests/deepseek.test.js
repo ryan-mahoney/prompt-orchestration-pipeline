@@ -56,11 +56,12 @@ describe("DeepSeek Provider", () => {
       const mockResponse = {
         ok: true,
         json: vi.fn().mockResolvedValue({
-          choices: [{ message: { content: "Test response" } }],
+          choices: [{ message: { content: '{"key": "value"}' } }],
           usage: { total_tokens: 10 },
         }),
       };
       mockFetch.mockResolvedValue(mockResponse);
+      mockTryParseJSON.mockReturnValue({ key: "value" });
 
       // Act
       const { deepseekChat } = await import("../src/providers/deepseek.js");
@@ -87,6 +88,7 @@ describe("DeepSeek Provider", () => {
               { role: "user", content: "Test user message" },
             ],
             temperature: 0.7,
+            response_format: { type: "json_object" },
             max_tokens: undefined,
             top_p: undefined,
             frequency_penalty: undefined,
@@ -96,10 +98,10 @@ describe("DeepSeek Provider", () => {
         }
       );
       expect(result).toEqual({
-        content: "Test response",
+        content: { key: "value" },
         usage: { total_tokens: 10 },
         raw: {
-          choices: [{ message: { content: "Test response" } }],
+          choices: [{ message: { content: '{"key": "value"}' } }],
           usage: { total_tokens: 10 },
         },
       });
@@ -203,7 +205,7 @@ describe("DeepSeek Provider", () => {
       const successResponse = {
         ok: true,
         json: vi.fn().mockResolvedValue({
-          choices: [{ message: { content: "Success" } }],
+          choices: [{ message: { content: '{"result": "Success"}' } }],
           usage: { total_tokens: 10 },
         }),
       };
@@ -222,7 +224,7 @@ describe("DeepSeek Provider", () => {
       // Assert
       expect(mockFetch).toHaveBeenCalledTimes(2);
       expect(mockSleep).toHaveBeenCalledWith(2000); // 2^1 * 1000
-      expect(result?.content).toBe("Success");
+      expect(result?.content).toEqual({ result: "Success" });
     });
 
     it("should throw immediately on 401 errors", async () => {
@@ -276,12 +278,12 @@ describe("DeepSeek Provider", () => {
 
     it("should retry on JSON parsing failures", async () => {
       // Arrange
-      const jsonContent = '{"invalid": json}';
+      const invalidJsonContent = '{"invalid": json}';
       const validJsonContent = '{"valid": "json"}';
       const mockResponse = {
         ok: true,
         json: vi.fn().mockResolvedValue({
-          choices: [{ message: { content: jsonContent } }],
+          choices: [{ message: { content: invalidJsonContent } }],
           usage: { total_tokens: 10 },
         }),
       };
@@ -295,9 +297,13 @@ describe("DeepSeek Provider", () => {
       mockFetch
         .mockResolvedValueOnce(mockResponse)
         .mockResolvedValueOnce(mockResponse2);
-      mockTryParseJSON
-        .mockReturnValueOnce(null) // First call fails
-        .mockReturnValueOnce({ valid: "json" }); // Second call succeeds
+
+      // Override the default mock for this test
+      mockTryParseJSON.mockImplementation((str) => {
+        if (str === invalidJsonContent) return null; // First call fails
+        if (str === validJsonContent) return { valid: "json" }; // Second call succeeds
+        return JSON.parse(str); // Default behavior
+      });
 
       // Act
       const { deepseekChat } = await import("../src/providers/deepseek.js");

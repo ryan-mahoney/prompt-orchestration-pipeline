@@ -31,7 +31,7 @@ export async function openaiChat({
   temperature,
   maxTokens,
   max_tokens, // Explicitly destructure to prevent it from being in ...rest
-  responseFormat, // { type: 'json_object' } | { json_schema, name } | 'json'
+  responseFormat = "json", // Default to JSON for legacy compatibility
   tools,
   toolChoice,
   seed,

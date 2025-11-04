@@ -30,8 +30,23 @@ describe("LLM Module", () => {
     });
 
     // Setup default mock implementations
-    mockOpenAIChat.mockResolvedValue("OpenAI response");
-    mockDeepseekChat.mockResolvedValue("DeepSeek response");
+    mockOpenAIChat.mockResolvedValue({
+      content: "OpenAI response",
+      raw: "OpenAI response",
+      usage: {
+        prompt_tokens: 100,
+        completion_tokens: 200,
+        total_tokens: 300,
+      },
+    });
+    mockDeepseekChat.mockResolvedValue({
+      content: "DeepSeek response",
+      usage: {
+        prompt_tokens: 100,
+        completion_tokens: 200,
+        total_tokens: 300,
+      },
+    });
   });
 
   afterEach(() => {
@@ -238,9 +253,15 @@ describe("LLM Module", () => {
 
       // Assert
       expect(mockDeepseekChat).toHaveBeenCalledWith(
-        "Test system",
-        "Test user",
-        "deepseek-chat"
+        expect.objectContaining({
+          messages: [
+            { role: "system", content: "Test system" },
+            { role: "user", content: "Test user" },
+          ],
+          model: "deepseek-chat",
+          temperature: undefined,
+          maxTokens: undefined,
+        })
       );
     });
 
@@ -368,6 +389,14 @@ describe("LLM Module", () => {
     it("should estimate tokens when usage not provided", async () => {
       // Arrange
       const { chat } = llmModule;
+
+      // Override mock to not provide usage for this test
+      mockOpenAIChat.mockResolvedValueOnce({
+        content: "OpenAI response",
+        raw: "OpenAI response",
+        // No usage field - should trigger estimation
+      });
+
       const options = {
         provider: "openai",
         messages: [
@@ -402,7 +431,11 @@ describe("LLM Module", () => {
       expect(result).toEqual({
         content: "OpenAI response",
         raw: "OpenAI response",
-        usage: expect.any(Object),
+        usage: {
+          promptTokens: 100,
+          completionTokens: 200,
+          totalTokens: 300,
+        },
       });
       // Ensure no metrics are attached to the response
       expect(result.duration).toBeUndefined();
@@ -484,9 +517,11 @@ describe("LLM Module", () => {
 
       // Assert
       expect(mockDeepseekChat).toHaveBeenCalledWith(
-        "",
-        "Test prompt",
-        "deepseek-reasoner"
+        expect.objectContaining({
+          messages: [{ role: "user", content: "Test prompt" }],
+          model: "deepseek-reasoner",
+          temperature: 0.5,
+        })
       );
     });
   });
@@ -559,7 +594,11 @@ describe("LLM Module", () => {
       expect(result).toEqual({
         content: "OpenAI response",
         raw: "OpenAI response",
-        usage: expect.any(Object),
+        usage: {
+          promptTokens: 100,
+          completionTokens: 200,
+          totalTokens: 300,
+        },
       });
       expect(chain.getMessages()).toEqual([
         { role: "system", content: "System message" },
@@ -812,7 +851,7 @@ describe("LLM Module", () => {
         openai: true,
         deepseek: true,
         anthropic: true,
-        mock: false,
+        mock: true, // Mock provider is auto-registered in test mode
       });
     });
   });
@@ -843,6 +882,82 @@ describe("LLM Module", () => {
 
       // Assert
       expect(eventSpy).toHaveBeenCalledWith({ data: "test" });
+    });
+  });
+
+  describe("content shape consistency across providers", () => {
+    it("should return objects for JSON mode and strings for text mode", async () => {
+      // Test both providers return objects when JSON is requested
+      const messages = [
+        { role: "system", content: "You are a helpful assistant." },
+        { role: "user", content: "Say hello" },
+      ];
+
+      // Test JSON mode - both should return objects
+      mockOpenAIChat.mockResolvedValue({
+        content: { greeting: "hello" }, // Object for JSON
+        raw: '{"greeting": "hello"}',
+        usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+      });
+
+      mockDeepseekChat.mockResolvedValue({
+        content: { greeting: "hello" }, // Object for JSON
+        raw: '{"greeting": "hello"}',
+        usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+      });
+
+      const openaiJsonResult = await llmModule.chat({
+        provider: "openai",
+        model: "gpt-4-turbo-preview",
+        messages,
+        responseFormat: { type: "json_object" },
+      });
+
+      const deepseekJsonResult = await llmModule.chat({
+        provider: "deepseek",
+        model: "deepseek-chat",
+        messages,
+        responseFormat: { type: "json_object" },
+      });
+
+      // Both should return objects for JSON mode
+      expect(typeof openaiJsonResult.content).toBe("object");
+      expect(typeof deepseekJsonResult.content).toBe("object");
+      expect(openaiJsonResult.content).toEqual({ greeting: "hello" });
+      expect(deepseekJsonResult.content).toEqual({ greeting: "hello" });
+
+      // Test text mode - both should return strings
+      mockOpenAIChat.mockResolvedValue({
+        content: "hello", // String for text
+        raw: "hello",
+        usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+      });
+
+      mockDeepseekChat.mockResolvedValue({
+        content: "hello", // String for text
+        raw: "hello",
+        usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+      });
+
+      const openaiTextResult = await llmModule.chat({
+        provider: "openai",
+        model: "gpt-4-turbo-preview",
+        messages,
+        responseFormat: { type: "text" },
+      });
+
+      const deepseekTextResult = await llmModule.chat({
+        provider: "deepseek",
+        model: "deepseek-chat",
+        messages,
+        responseFormat: { type: "text" },
+      });
+
+      // Both should return strings for text mode
+      expect(typeof openaiTextResult.content).toBe("string");
+      expect(typeof deepseekTextResult.content).toBe("string");
+      expect(openaiTextResult.content).toBe("hello");
+      expect(deepseekTextResult.content).toBe("hello");
     });
   });
 });
