@@ -1404,6 +1404,55 @@ function createServer() {
       return;
     }
 
+    // Route: GET /api/llm/functions
+    if (pathname === "/api/llm/functions" && req.method === "GET") {
+      try {
+        const { getConfig } = await import("../core/config.js");
+        const config = getConfig();
+
+        // Helper to convert model alias to camelCase function name
+        const toCamelCase = (alias) => {
+          const [provider, ...modelParts] = alias.split(":");
+          const model = modelParts.join("-");
+          const camelModel = model.replace(/-([a-z0-9])/g, (match, char) =>
+            char.toUpperCase()
+          );
+          return camelModel;
+        };
+
+        // Filter for deepseek, openai only (no gemini provider exists)
+        const targetProviders = ["deepseek", "openai"];
+        const functions = {};
+
+        for (const [alias, modelConfig] of Object.entries(config.llm.models)) {
+          const { provider } = modelConfig;
+          if (!targetProviders.includes(provider)) continue;
+
+          if (!functions[provider]) {
+            functions[provider] = [];
+          }
+
+          const functionName = toCamelCase(alias);
+          functions[provider].push({
+            alias,
+            functionName,
+            fullPath: `llm.${provider}.${functionName}`,
+            model: modelConfig.model,
+          });
+        }
+
+        sendJson(res, 200, functions);
+      } catch (error) {
+        console.error("Error handling /api/llm/functions:", error);
+        sendJson(res, 500, {
+          ok: false,
+          error: "internal_error",
+          message: "Failed to get LLM functions",
+        });
+      }
+      return;
+    }
+
     // Route: GET /api/jobs/:jobId
     if (pathname.startsWith("/api/jobs/") && req.method === "GET") {
       const jobId = pathname.substring("/api/jobs/".length);

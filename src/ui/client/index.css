@@ -2,6 +2,11 @@
 @import "@radix-ui/themes/styles.css" layer(radix);
 @import "tailwindcss";
 
+.radix-themes {
+  --heading-font-family: "Source Sans 3", sans-serif;
+  --body-font-family: "Source Sans 3", sans-serif;
+}
+
 /* Reset and base styles */
 @layer base {
   * {
@@ -22,6 +27,7 @@ body {
   font-family: "Inter", sans-serif;
   line-height: 1.6;
   min-height: 100vh;
+  background-color: #dff2fe;
 }
 
 .container {

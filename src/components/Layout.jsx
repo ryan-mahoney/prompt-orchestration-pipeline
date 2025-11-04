@@ -3,7 +3,8 @@ import { useNavigate, useLocation } from "react-router-dom";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import { Box, Flex, Text, Heading, Link as RadixLink } from "@radix-ui/themes";
 import { Button } from "./ui/button.jsx";
-import { ArrowLeft, Home } from "lucide-react";
+import Logo from "./ui/Logo.jsx";
+import { ArrowLeft, Home, Code2 } from "lucide-react";
 import "./ui/focus-styles.css";
 
 /**
@@ -77,13 +78,27 @@ export default function Layout({
                 </Tooltip.Root>
               )}
 
+              {/* Logo */}
+              <Box
+                className="shrink-0"
+                style={{ width: "80px", height: "60px" }}
+              >
+                <Logo />
+              </Box>
+
               {/* App title */}
               <Heading
-                size="5"
+                size="6"
                 weight="medium"
                 className="text-gray-12 truncate"
               >
-                {title || "Prompt Pipeline"}
+                {title || (
+                  <>
+                    Prompt
+                    <br />
+                    Pipeline
+                  </>
+                )}
               </Heading>
             </Flex>
 
@@ -106,6 +121,20 @@ export default function Layout({
                   <Flex align="center" gap="2">
                     <Home className="h-4 w-4" />
                     Dashboard
+                  </Flex>
+                </RadixLink>
+                <RadixLink
+                  href="/code"
+                  className={`text-sm font-medium transition-colors hover:text-blue-600 ${
+                    isActivePath("/code")
+                      ? "text-blue-600"
+                      : "text-gray-11 hover:text-gray-12"
+                  }`}
+                  aria-current={isActivePath("/code") ? "page" : undefined}
+                >
+                  <Flex align="center" gap="2">
+                    <Code2 className="h-4 w-4" />
+                    Code
                   </Flex>
                 </RadixLink>
               </Flex>
