@@ -124,7 +124,6 @@ export function transformTasks(rawTasks) {
         task.refinementAttempts = raw.refinementAttempts;
       if ("stageLogPath" in raw) task.stageLogPath = raw.stageLogPath;
       if ("errorContext" in raw) task.errorContext = raw.errorContext;
-      if ("tokenUsage" in raw) task.tokenUsage = raw.tokenUsage;
 
       if (typeof raw.currentStage === "string" && raw.currentStage.length > 0) {
         task.currentStage = raw.currentStage;
