@@ -71,14 +71,14 @@ Now provide your research findings in the specified JSON format:`,
 // Step 4: Call LLM with prompt
 export const inference = async ({
   io,
-  llm: { deepseek },
+  llm: { deepseek, openai },
   data: {
     promptTemplating: { system, prompt },
   },
   meta,
   flags,
 }) => {
-  const response = await deepseek.chat({
+  const response = await openai.gpt5Mini({
     messages: [
       { role: "system", content: system },
       { role: "user", content: prompt },

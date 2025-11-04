@@ -487,7 +487,7 @@ describe("List Transformer", () => {
           createdAt: "2023-01-01T00:00:00Z",
           updatedAt: "2023-01-01T01:00:00Z",
           location: "current",
-          tasksStatus: {
+          tasks: {
             "task-1": {
               state: "running",
               startedAt: "2023-01-01T00:30:00Z",
@@ -508,6 +508,14 @@ describe("List Transformer", () => {
 
       expect(result).toEqual([
         {
+          costsSummary: {
+            totalCost: 0,
+            totalInputCost: 0,
+            totalInputTokens: 0,
+            totalOutputCost: 0,
+            totalOutputTokens: 0,
+            totalTokens: 0,
+          },
           jobId: "job-1",
           title: "Job 1",
           status: "running",
@@ -517,7 +525,7 @@ describe("List Transformer", () => {
           location: "current",
           current: "task-1",
           currentStage: "processing",
-          tasksStatus: {
+          tasks: {
             "task-1": {
               state: "running",
               startedAt: "2023-01-01T00:30:00Z",
@@ -566,6 +574,14 @@ describe("List Transformer", () => {
 
       expect(result).toEqual([
         {
+          costsSummary: {
+            totalCost: 0,
+            totalInputCost: 0,
+            totalInputTokens: 0,
+            totalOutputCost: 0,
+            totalOutputTokens: 0,
+            totalTokens: 0,
+          },
           jobId: "job-1",
           title: "Job 1",
           status: "running",
@@ -578,6 +594,14 @@ describe("List Transformer", () => {
           pipelineSlug: "content-generation",
         },
         {
+          costsSummary: {
+            totalCost: 0,
+            totalInputCost: 0,
+            totalInputTokens: 0,
+            totalOutputCost: 0,
+            totalOutputTokens: 0,
+            totalTokens: 0,
+          },
           jobId: "job-2",
           title: "Job 2",
           status: "pending",
@@ -625,6 +649,14 @@ describe("List Transformer", () => {
 
       expect(result).toEqual([
         {
+          costsSummary: {
+            totalCost: 0,
+            totalInputCost: 0,
+            totalInputTokens: 0,
+            totalOutputCost: 0,
+            totalOutputTokens: 0,
+            totalTokens: 0,
+          },
           jobId: "job-1",
           title: "Job 1",
           status: "running",
@@ -634,6 +666,14 @@ describe("List Transformer", () => {
           location: "current",
         },
         {
+          costsSummary: {
+            totalCost: 0,
+            totalInputCost: 0,
+            totalInputTokens: 0,
+            totalOutputCost: 0,
+            totalOutputTokens: 0,
+            totalTokens: 0,
+          },
           jobId: "job-2",
           title: "Job 2",
           status: "pending",
@@ -647,6 +687,14 @@ describe("List Transformer", () => {
     it("should include pipeline metadata by default", () => {
       const jobs = [
         {
+          costsSummary: {
+            totalCost: 0,
+            totalInputCost: 0,
+            totalInputTokens: 0,
+            totalOutputCost: 0,
+            totalOutputTokens: 0,
+            totalTokens: 0,
+          },
           jobId: "job-1",
           title: "Job 1",
           status: "running",
@@ -667,6 +715,14 @@ describe("List Transformer", () => {
 
       expect(result).toEqual([
         {
+          costsSummary: {
+            totalCost: 0,
+            totalInputCost: 0,
+            totalInputTokens: 0,
+            totalOutputCost: 0,
+            totalOutputTokens: 0,
+            totalTokens: 0,
+          },
           jobId: "job-1",
           title: "Job 1",
           status: "running",
@@ -723,7 +779,7 @@ describe("List Transformer", () => {
           location: "current",
           current: "ingestion-task",
           currentStage: "processing",
-          tasksStatus: {
+          tasks: {
             "ingestion-task": {
               state: "done",
               startedAt: "2023-01-01T00:05:00Z",
@@ -761,21 +817,21 @@ describe("List Transformer", () => {
       expect(job.current).toBe("ingestion-task");
       expect(job.currentStage).toBe("processing");
 
-      // Should include complete tasksStatus with all required fields
-      expect(job.tasksStatus).toBeDefined();
-      expect(job.tasksStatus["ingestion-task"]).toEqual({
+      // Should include complete tasks with all required fields
+      expect(job.tasks).toBeDefined();
+      expect(job.tasks["ingestion-task"]).toEqual({
         state: "done",
         startedAt: "2023-01-01T00:05:00Z",
         endedAt: "2023-01-01T00:15:00Z",
         executionTimeMs: 600000,
         currentStage: "completed",
       });
-      expect(job.tasksStatus["processing-task"]).toEqual({
+      expect(job.tasks["processing-task"]).toEqual({
         state: "running",
         startedAt: "2023-01-01T00:20:00Z",
         currentStage: "validating",
       });
-      expect(job.tasksStatus["output-task"]).toEqual({
+      expect(job.tasks["output-task"]).toEqual({
         state: "pending",
       });
 
@@ -853,7 +909,7 @@ describe("List Transformer", () => {
           location: "complete",
           current: null,
           currentStage: null,
-          tasksStatus: {
+          tasks: {
             "task-1": {
               state: "done",
               startedAt: "2023-01-01T00:00:00Z",
@@ -882,7 +938,7 @@ describe("List Transformer", () => {
           location: "current",
           current: "task-2",
           currentStage: "processing",
-          tasksStatus: {
+          tasks: {
             "task-1": {
               state: "done",
               startedAt: "2023-01-01T01:00:00Z",
@@ -915,11 +971,11 @@ describe("List Transformer", () => {
       expect(completeJob.jobId).toBe("job-complete");
       expect(completeJob.current).toBeUndefined();
       expect(completeJob.currentStage).toBeUndefined();
-      expect(completeJob.tasksStatus).toBeDefined();
-      expect(Object.keys(completeJob.tasksStatus)).toHaveLength(2);
+      expect(completeJob.tasks).toBeDefined();
+      expect(Object.keys(completeJob.tasks)).toHaveLength(2);
 
-      // Verify tasksStatus structure for complete job
-      const completeTask1 = completeJob.tasksStatus["task-1"];
+      // Verify tasks structure for complete job
+      const completeTask1 = completeJob.tasks["task-1"];
       expect(completeTask1.state).toBe("done");
       expect(completeTask1.executionTimeMs).toBe(1800000);
       expect(completeTask1.currentStage).toBe("completed");
@@ -929,20 +985,20 @@ describe("List Transformer", () => {
       expect(runningJob.jobId).toBe("job-running");
       expect(runningJob.current).toBe("task-2");
       expect(runningJob.currentStage).toBe("processing");
-      expect(runningJob.tasksStatus).toBeDefined();
-      expect(Object.keys(runningJob.tasksStatus)).toHaveLength(3);
+      expect(runningJob.tasks).toBeDefined();
+      expect(Object.keys(runningJob.tasks)).toHaveLength(3);
 
-      // Verify tasksStatus structure for running job
-      const runningTask1 = runningJob.tasksStatus["task-1"];
+      // Verify tasks structure for running job
+      const runningTask1 = runningJob.tasks["task-1"];
       expect(runningTask1.state).toBe("done");
       expect(runningTask1.executionTimeMs).toBe(900000);
 
-      const runningTask2 = runningJob.tasksStatus["task-2"];
+      const runningTask2 = runningJob.tasks["task-2"];
       expect(runningTask2.state).toBe("running");
       expect(runningTask2.currentStage).toBe("processing");
       expect(runningTask2.executionTimeMs).toBeUndefined(); // Still running
 
-      const runningTask3 = runningJob.tasksStatus["task-3"];
+      const runningTask3 = runningJob.tasks["task-3"];
       expect(runningTask3.state).toBe("pending");
       expect(runningTask3.startedAt).toBeUndefined();
       expect(runningTask3.endedAt).toBeUndefined();
@@ -969,7 +1025,7 @@ describe("List Transformer", () => {
           location: "complete",
           current: "task-2",
           currentStage: null, // Failed tasks don't have currentStage
-          tasksStatus: {
+          tasks: {
             "task-1": {
               state: "done",
               startedAt: "2023-01-01T00:00:00Z",
@@ -999,7 +1055,7 @@ describe("List Transformer", () => {
       expect(job.currentStage).toBeUndefined();
 
       // Verify failed task structure
-      const failedTask = job.tasksStatus["task-2"];
+      const failedTask = job.tasks["task-2"];
       expect(failedTask.state).toBe("failed");
       expect(failedTask.failedStage).toBe("error-processing");
       expect(failedTask.executionTimeMs).toBe(1800000);
@@ -1015,7 +1071,7 @@ describe("List Transformer", () => {
           progress: 0,
           createdAt: "2023-01-01T00:00:00Z",
           location: "current",
-          // Missing current, currentStage, tasksStatus, pipeline fields
+          // Missing current, currentStage, tasks, pipeline fields
         },
       ];
 
@@ -1034,7 +1090,7 @@ describe("List Transformer", () => {
       // Should not include missing optional fields
       expect(job.current).toBeUndefined();
       expect(job.currentStage).toBeUndefined();
-      expect(job.tasksStatus).toBeUndefined();
+      expect(job.tasks).toBeUndefined();
       expect(job.pipeline).toBeUndefined();
       expect(job.pipelineLabel).toBeUndefined();
     });

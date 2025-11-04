@@ -90,7 +90,7 @@ describe("useJobDetailWithUpdates", () => {
     jobId: "test-job-1",
     title: "Test Job",
     status: "pending",
-    tasksStatus: [
+    tasks: [
       { name: "task1", state: "pending" },
       { name: "task2", state: "pending" },
     ],

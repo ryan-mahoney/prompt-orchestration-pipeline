@@ -2,11 +2,13 @@
 pipeline-data/pending/*
 pipeline-data/current/*
 pipeline-data/complete/*
+pipeline-data/rejected/*
 
 # Keep directory structure
 !pipeline-data/pending/.gitkeep
 !pipeline-data/current/.gitkeep
 !pipeline-data/complete/.gitkeep
+!pipeline-data/rejected/.gitkeep
 
 # Environment variables
 .env

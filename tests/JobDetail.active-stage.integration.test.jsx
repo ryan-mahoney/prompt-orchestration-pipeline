@@ -12,6 +12,8 @@ vi.mock("../src/ui/client/hooks/useTicker.js", () => ({
 // Mock useParams for PipelineDetail
 vi.mock("react-router-dom", () => ({
   useParams: vi.fn(),
+  useNavigate: vi.fn(),
+  useLocation: vi.fn(() => ({ pathname: "/" })),
   // Don't mock other Router components to avoid import issues
 }));
 
@@ -188,7 +190,7 @@ describe("JobDetail Active Stage Integration", () => {
   });
 
   it("should verify stage property is passed through without modification", () => {
-    // This test verifies the core requirement: JobDetail should pass through
+    // This test verifies that core requirement: JobDetail should pass through
     // the stage property unchanged from computeDagItems to DAGGrid
 
     const job = {
@@ -214,6 +216,63 @@ describe("JobDetail Active Stage Integration", () => {
     expect(screen.getByTitle("api_call_validation")).toHaveTextContent(
       "Api call validation"
     );
+  });
+
+  it("should display tokens and costs from taskBreakdown when available", () => {
+    // Verify that per-task tokens and costs are displayed from costs.taskBreakdown
+    const job = {
+      id: "test-job-costs",
+      current: "analysis",
+      status: "completed",
+      costs: {
+        taskBreakdown: {
+          analysis: {
+            summary: {
+              totalTokens: 3215,
+              totalCost: 0.0059,
+            },
+          },
+          synthesis: {
+            summary: {
+              totalTokens: 1639,
+              totalCost: 0.0011,
+            },
+          },
+        },
+      },
+      tasks: {
+        analysis: {
+          state: "completed",
+          config: { model: "openai:gpt-5-mini" },
+        },
+        synthesis: {
+          state: "completed",
+          config: { model: "deepseek:chat" },
+        },
+      },
+    };
+
+    const pipeline = {
+      tasks: ["analysis", "synthesis"],
+    };
+
+    render(<JobDetail job={job} pipeline={pipeline} />);
+
+    // Analysis task should show tokens and cost
+    const analysisEl = screen
+      .getByText("Analysis")
+      .closest('[role="listitem"]');
+    expect(analysisEl).toBeInTheDocument();
+    expect(analysisEl).toHaveTextContent(/3\.2k tokens/);
+    expect(analysisEl).toHaveTextContent(/\$0\.0059/);
+
+    // Synthesis task should show tokens and cost
+    const synthesisEl = screen
+      .getByText("Synthesis")
+      .closest('[role="listitem"]');
+    expect(synthesisEl).toBeInTheDocument();
+    expect(synthesisEl).toHaveTextContent(/1\.6k tokens/);
+    expect(synthesisEl).toHaveTextContent(/\$0\.0011/);
   });
 
   it("should show stage from per-task currentStage when root currentStage is null", () => {
@@ -282,7 +341,7 @@ describe("JobDetail Active Stage Integration", () => {
     // Verify the component handles error state gracefully
     // The failed stage information is preserved in the data structure
     // but may not be displayed as a title attribute in error states
-    expect(screen.getByText("error")).toBeInTheDocument();
+    expect(screen.getByText("failed")).toBeInTheDocument();
   });
 
   it("should handle mixed per-task and root currentStage preferences correctly", () => {
@@ -357,7 +416,7 @@ describe("JobDetail Active Stage Integration", () => {
       });
 
       // Import PipelineDetail (which uses useJobDetailWithUpdates hook) for full integration test
-      const { PipelineDetail } = await import(
+      const { default: PipelineDetail } = await import(
         "../src/pages/PipelineDetail.jsx"
       );
 
@@ -449,7 +508,7 @@ describe("JobDetail Active Stage Integration", () => {
         }),
       });
 
-      const { PipelineDetail } = await import(
+      const { default: PipelineDetail } = await import(
         "../src/pages/PipelineDetail.jsx"
       );
       render(<PipelineDetail params={{ jobId: "sse-test-job-2" }} />);
@@ -530,7 +589,7 @@ describe("JobDetail Active Stage Integration", () => {
         }),
       });
 
-      const { PipelineDetail } = await import(
+      const { default: PipelineDetail } = await import(
         "../src/pages/PipelineDetail.jsx"
       );
       render(<PipelineDetail params={{ jobId: "sse-test-job-3" }} />);

@@ -28,7 +28,7 @@ describe("Status Transformer", () => {
         title: "Test Job",
         createdAt: "2023-01-01T00:00:00Z",
         updatedAt: "2023-01-01T01:00:00Z",
-        tasksStatus: {
+        tasks: {
           "task-1": {
             state: "done",
             startedAt: "2023-01-01T00:00:00Z",
@@ -61,13 +61,13 @@ describe("Status Transformer", () => {
       expect(result.files.logs).toEqual([]);
       expect(result.files.tmp).toEqual([]);
 
-      // Check tasksStatus structure
-      expect(result.tasksStatus).toBeDefined();
-      expect(result.tasksStatus["task-1"]).toBeDefined();
-      expect(result.tasksStatus["task-1"].state).toBe("done");
-      expect(result.tasksStatus["task-1"].executionTimeMs).toBe(1800000);
-      expect(result.tasksStatus["task-2"]).toBeDefined();
-      expect(result.tasksStatus["task-2"].state).toBe("running");
+      // Check tasks structure
+      expect(result.tasks).toBeDefined();
+      expect(result.tasks["task-1"]).toBeDefined();
+      expect(result.tasks["task-1"].state).toBe("done");
+      expect(result.tasks["task-1"].executionTimeMs).toBe(1800000);
+      expect(result.tasks["task-2"]).toBeDefined();
+      expect(result.tasks["task-2"].state).toBe("running");
     });
 
     it("should handle job ID mismatch with warning", () => {
@@ -75,7 +75,7 @@ describe("Status Transformer", () => {
         jobId: "different-id",
         title: "Test Job",
         createdAt: "2023-01-01T00:00:00Z",
-        tasksStatus: {
+        tasks: {
           "task-1": { state: "pending" },
         },
       };
@@ -92,7 +92,7 @@ describe("Status Transformer", () => {
       const rawJobData = {
         jobId: "job-123",
         createdAt: "2023-01-01T00:00:00Z",
-        tasksStatus: {
+        tasks: {
           "task-1": { state: "pending" },
         },
       };
@@ -107,7 +107,7 @@ describe("Status Transformer", () => {
         jobId: "job-123",
         title: "Test Job",
         createdAt: "2023-01-01T00:00:00Z",
-        tasksStatus: {
+        tasks: {
           "task-1": { state: "pending" },
         },
       };
@@ -128,7 +128,7 @@ describe("Status Transformer", () => {
         jobId: "job-123",
         title: "Test Job",
         createdAt: "2023-01-01T00:00:00Z",
-        tasksStatus: "invalid-tasks", // This will be handled gracefully
+        tasks: "invalid-tasks", // This will be handled gracefully
       };
 
       const result = transformJobStatus(rawJobData, "job-123", "current");
@@ -145,7 +145,7 @@ describe("Status Transformer", () => {
       expect(result.files.artifacts).toEqual([]);
       expect(result.files.logs).toEqual([]);
       expect(result.files.tmp).toEqual([]);
-      expect(result.tasksStatus).toEqual({});
+      expect(result.tasks).toEqual({});
     });
   });
 
@@ -323,7 +323,7 @@ describe("Status Transformer", () => {
             jobId: "job-1",
             title: "Job 1",
             createdAt: "2023-01-01T00:00:00Z",
-            tasksStatus: { "task-1": { state: "done" } },
+            tasks: { "task-1": { state: "done" } },
           },
           jobId: "job-1",
           location: "current",
@@ -334,7 +334,7 @@ describe("Status Transformer", () => {
             jobId: "job-2",
             title: "Job 2",
             createdAt: "2023-01-01T01:00:00Z",
-            tasksStatus: { "task-1": { state: "running" } },
+            tasks: { "task-1": { state: "running" } },
           },
           jobId: "job-2",
           location: "complete",
@@ -416,15 +416,15 @@ describe("Status Transformer", () => {
     });
   });
 
-  describe("tasksStatus structure validation", () => {
-    it("should preserve all required fields in tasksStatus", () => {
+  describe("tasks structure validation", () => {
+    it("should preserve all required fields in tasks", () => {
       const rawJobData = {
         jobId: "job-123",
         title: "Test Job",
         createdAt: "2023-01-01T00:00:00Z",
         current: "task-1",
         currentStage: "processing",
-        tasksStatus: {
+        tasks: {
           "task-1": {
             state: "running",
             startedAt: "2023-01-01T00:00:00Z",
@@ -453,7 +453,7 @@ describe("Status Transformer", () => {
       expect(result.current).toBe("task-1");
       expect(result.currentStage).toBe("processing");
 
-      // Verify tasksStatus structure
+      // Verify tasks structure
       expect(result.tasksStatus).toBeDefined();
       expect(Object.keys(result.tasksStatus)).toHaveLength(3);
 

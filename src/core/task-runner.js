@@ -4,10 +4,27 @@ import fs from "fs";
 import { createLLM, getLLMEvents } from "../llm/index.js";
 import { loadFreshModule } from "./module-loader.js";
 import { loadEnvironment } from "./environment.js";
-import { getConfig } from "./config.js";
 import { createTaskFileIO } from "./file-io.js";
 import { writeJobStatus } from "./status-writer.js";
 import { computeDeterministicProgress } from "./progress.js";
+
+/**
+ * Derives model key and token counts from LLM metric event.
+ * Returns a tuple: [modelKey, inputTokens, outputTokens].
+ *
+ * @param {Object} metric - The LLM metric event from llm:request:complete
+ * @returns {Array<string, number, number>} [modelKey, inputTokens, outputTokens]
+ */
+export function deriveModelKeyAndTokens(metric) {
+  const provider = metric?.provider || "undefined";
+  const model = metric?.model || "undefined";
+  const modelKey = metric?.metadata?.alias || `${provider}:${model}`;
+  const input = Number.isFinite(metric?.promptTokens) ? metric.promptTokens : 0;
+  const output = Number.isFinite(metric?.completionTokens)
+    ? metric.completionTokens
+    : 0;
+  return [modelKey, input, output];
+}
 
 /**
  * Validates that a value is a plain object (not array, null, or class instance).
@@ -365,12 +382,45 @@ export async function runPipeline(modulePath, initialContext = {}) {
   const llmMetrics = [];
   const llmEvents = getLLMEvents();
 
+  // Per-run write queue for serializing tokenUsage appends
+  let tokenWriteQueue = Promise.resolve();
+
+  /**
+   * Appends token usage tuple to tasks-status.json with serialized writes.
+   * @param {string} workDir - Working directory path
+   * @param {string} taskName - Task identifier
+   * @param {Array<string, number, number>} tuple - [modelKey, inputTokens, outputTokens]
+   */
+  function appendTokenUsage(workDir, taskName, tuple) {
+    tokenWriteQueue = tokenWriteQueue
+      .then(() =>
+        writeJobStatus(workDir, (snapshot) => {
+          if (!snapshot.tasks[taskName]) {
+            snapshot.tasks[taskName] = {};
+          }
+          const task = snapshot.tasks[taskName];
+          if (!Array.isArray(task.tokenUsage)) {
+            task.tokenUsage = [];
+          }
+          task.tokenUsage.push(tuple);
+          return snapshot;
+        })
+      )
+      .catch((e) => console.warn("[task-runner] tokenUsage append failed:", e));
+  }
+
   const onLLMComplete = (metric) => {
     llmMetrics.push({
       ...metric,
       task: context.meta.taskName,
       stage: context.currentStage,
     });
+
+    // Append token usage immediately for each successful LLM completion
+    if (context.meta.workDir && context.meta.taskName) {
+      const tuple = deriveModelKeyAndTokens(metric);
+      appendTokenUsage(context.meta.workDir, context.meta.taskName, tuple);
+    }
   };
 
   llmEvents.on("llm:request:complete", onLLMComplete);
@@ -531,6 +581,8 @@ export async function runPipeline(modulePath, initialContext = {}) {
               error: errInfo,
               refinementCycle: refinementCount,
             });
+            await tokenWriteQueue.catch(() => {});
+            llmEvents.off("llm:request:complete", onLLMComplete);
             return {
               ok: false,
               failedStage: s,
@@ -824,6 +876,9 @@ export async function runPipeline(modulePath, initialContext = {}) {
           }
         }
 
+        await tokenWriteQueue.catch(() => {});
+        llmEvents.off("llm:request:complete", onLLMComplete);
+
         // For non-validation stages or when refinements are exhausted, fail immediately
         return {
           ok: false,
@@ -859,6 +914,8 @@ export async function runPipeline(modulePath, initialContext = {}) {
     typeof tasks.validateQuality === "function";
 
   if (context.flags.validationFailed && hasValidation) {
+    await tokenWriteQueue.catch(() => {});
+    llmEvents.off("llm:request:complete", onLLMComplete);
     return {
       ok: false,
       failedStage: "final-validation",
@@ -868,6 +925,9 @@ export async function runPipeline(modulePath, initialContext = {}) {
       refinementAttempts: refinementCount,
     };
   }
+
+  // Flush any trailing token usage appends before cleanup
+  await tokenWriteQueue.catch(() => {}); // absorb last error to not mask pipeline result
 
   llmEvents.off("llm:request:complete", onLLMComplete);
 

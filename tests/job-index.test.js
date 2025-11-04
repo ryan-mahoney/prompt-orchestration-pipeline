@@ -25,7 +25,7 @@ describe("job-index", () => {
     const job1Tree = await createJobTree({
       jobId: "job-1",
       location: "current",
-      tasksStatus: {
+      tasks: {
         id: "job-1",
         name: "Job 1",
         createdAt: "2024-01-01T00:00:00Z",
@@ -36,7 +36,7 @@ describe("job-index", () => {
     const job2Tree = await createJobTree({
       jobId: "job-2",
       location: "complete",
-      tasksStatus: {
+      tasks: {
         id: "job-2",
         name: "Job 2",
         createdAt: "2024-01-01T00:00:00Z",
@@ -47,7 +47,7 @@ describe("job-index", () => {
     const job3Tree = await createJobTree({
       jobId: "job-3",
       location: "current",
-      tasksStatus: {
+      tasks: {
         id: "job-3",
         name: "Job 3",
         createdAt: "2024-01-01T00:00:00Z",

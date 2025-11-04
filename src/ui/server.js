@@ -1072,6 +1072,11 @@ function createServer() {
       `http://${req.headers.host}`
     );
 
+    // DEBUG: Log all API requests
+    if (pathname.startsWith("/api/")) {
+      console.log(`DEBUG: API Request: ${req.method} ${pathname}`);
+    }
+
     // CORS headers for API endpoints
     if (pathname.startsWith("/api/")) {
       // Important for tests: avoid idle keep-alive sockets on short API calls
