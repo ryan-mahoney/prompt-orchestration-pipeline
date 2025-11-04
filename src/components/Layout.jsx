@@ -1,10 +1,12 @@
-import React from "react";
-import { useNavigate, useLocation } from "react-router-dom";
+import React, { useState, useRef, useEffect } from "react";
+import { useNavigate, useLocation, Link } from "react-router-dom";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import { Box, Flex, Text, Heading, Link as RadixLink } from "@radix-ui/themes";
 import { Button } from "./ui/button.jsx";
 import Logo from "./ui/Logo.jsx";
-import { ArrowLeft, Home, Code2 } from "lucide-react";
+import PageSubheader from "./PageSubheader.jsx";
+import UploadSeed from "./UploadSeed.jsx";
+import { ArrowLeft, Code2, Upload } from "lucide-react";
 import "./ui/focus-styles.css";
 
 /**
@@ -14,6 +16,8 @@ import "./ui/focus-styles.css";
 export default function Layout({
   children,
   title,
+  pageTitle,
+  breadcrumbs,
   actions,
   showBackButton = false,
   backTo = "/",
@@ -21,6 +25,10 @@ export default function Layout({
 }) {
   const navigate = useNavigate();
   const location = useLocation();
+  const [isUploadOpen, setIsUploadOpen] = useState(false);
+  const [seedUploadSuccess, setSeedUploadSuccess] = useState(null);
+  const [seedUploadTimer, setSeedUploadTimer] = useState(null);
+  const uploadPanelRef = useRef(null);
 
   // Determine active navigation based on current path
   const isActivePath = (path) => {
@@ -32,6 +40,50 @@ export default function Layout({
   const handleBack = () => {
     navigate(backTo);
   };
+
+  const toggleUploadPanel = () => {
+    setIsUploadOpen(!isUploadOpen);
+  };
+
+  // Handle seed upload success
+  const handleSeedUploadSuccess = ({ jobName }) => {
+    // Clear any existing timer
+    if (seedUploadTimer) {
+      clearTimeout(seedUploadTimer);
+    }
+
+    // Set success message
+    setSeedUploadSuccess(jobName);
+
+    // Auto-clear after exactly 5000 ms
+    const timer = setTimeout(() => {
+      setSeedUploadSuccess(null);
+      setSeedUploadTimer(null);
+    }, 5000);
+
+    setSeedUploadTimer(timer);
+  };
+
+  // Cleanup timer on unmount
+  useEffect(() => {
+    return () => {
+      if (seedUploadTimer) {
+        clearTimeout(seedUploadTimer);
+      }
+    };
+  }, [seedUploadTimer]);
+
+  // Focus upload panel when opened
+  useEffect(() => {
+    if (isUploadOpen && uploadPanelRef.current) {
+      const uploadArea = uploadPanelRef.current.querySelector(
+        '[data-testid="upload-area"]'
+      );
+      if (uploadArea) {
+        uploadArea.focus();
+      }
+    }
+  }, [isUploadOpen]);
 
   return (
     <Tooltip.Provider delayDuration={200}>
@@ -57,7 +109,7 @@ export default function Layout({
             gap="4"
           >
             {/* Left side: Navigation and title */}
-            <Flex align="center" gap="3" className="min-w-0 flex-1">
+            <Flex align="center" className="min-w-0 flex-1">
               {/* Back button (conditional) */}
               {showBackButton && (
                 <Tooltip.Root delayDuration={200}>
@@ -80,26 +132,37 @@ export default function Layout({
 
               {/* Logo */}
               <Box
+                asChild
                 className="shrink-0"
                 style={{ width: "80px", height: "60px" }}
               >
-                <Logo />
+                <Link
+                  to="/"
+                  aria-label="Go to homepage"
+                  className="rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                >
+                  <Logo />
+                </Link>
               </Box>
 
-              {/* App title */}
-              <Heading
-                size="6"
-                weight="medium"
-                className="text-gray-12 truncate"
+              {/* App title - clickable to navigate to dashboard */}
+              <Box
+                asChild
+                className="shrink-0 cursor-pointer hover:bg-gray-3 rounded p-1 -m-1 transition-colors"
+                onClick={() => navigate("/")}
               >
-                {title || (
+                <Heading
+                  size="6"
+                  weight="medium"
+                  className="text-gray-12 truncate"
+                >
                   <>
                     Prompt
                     <br />
                     Pipeline
                   </>
-                )}
-              </Heading>
+                </Heading>
+              </Box>
             </Flex>
 
             {/* Center: Navigation */}
@@ -109,20 +172,6 @@ export default function Layout({
               className="hidden md:flex"
             >
               <Flex align="center" gap="6">
-                <RadixLink
-                  href="/"
-                  className={`text-sm font-medium transition-colors hover:text-blue-600 ${
-                    isActivePath("/")
-                      ? "text-blue-600"
-                      : "text-gray-11 hover:text-gray-12"
-                  }`}
-                  aria-current={isActivePath("/") ? "page" : undefined}
-                >
-                  <Flex align="center" gap="2">
-                    <Home className="h-4 w-4" />
-                    Dashboard
-                  </Flex>
-                </RadixLink>
                 <RadixLink
                   href="/code"
                   className={`text-sm font-medium transition-colors hover:text-blue-600 ${
@@ -134,26 +183,72 @@ export default function Layout({
                 >
                   <Flex align="center" gap="2">
                     <Code2 className="h-4 w-4" />
-                    Code
+                    Help
                   </Flex>
                 </RadixLink>
               </Flex>
             </nav>
 
             {/* Right side: Actions */}
-            {actions && (
-              <Flex align="center" gap="3" className="shrink-0">
-                {actions}
-              </Flex>
-            )}
+            <Flex align="center" gap="3" className="shrink-0">
+              {actions}
+              <Tooltip.Root delayDuration={200}>
+                <Tooltip.Trigger asChild>
+                  <Button
+                    size="sm"
+                    variant="default"
+                    onClick={toggleUploadPanel}
+                    aria-controls="layout-upload-panel"
+                    aria-expanded={isUploadOpen}
+                  >
+                    <Upload className="h-4 w-4" />
+                    <Text size="2" className="ml-2">
+                      Upload Seed
+                    </Text>
+                  </Button>
+                </Tooltip.Trigger>
+                <Tooltip.Content side="bottom" sideOffset={5}>
+                  <Text size="2">Upload seed file</Text>
+                </Tooltip.Content>
+              </Tooltip.Root>
+            </Flex>
           </Flex>
         </Box>
+
+        {/* Upload Panel */}
+        {isUploadOpen && (
+          <Box
+            id="layout-upload-panel"
+            ref={uploadPanelRef}
+            role="region"
+            aria-label="Upload seed file"
+            className="bg-blue-50"
+          >
+            <Flex
+              direction="column"
+              gap="3"
+              className={`mx-auto w-full ${maxWidth} px-4 sm:px-6 lg:px-8 py-4`}
+            >
+              {/* Success Message */}
+              {seedUploadSuccess && (
+                <Box className="rounded-md bg-green-50 p-3 border border-green-200">
+                  <Text size="2" className="text-green-800">
+                    Job <strong>{seedUploadSuccess}</strong> created
+                    successfully
+                  </Text>
+                </Box>
+              )}
+
+              <UploadSeed onUploadSuccess={handleSeedUploadSuccess} />
+            </Flex>
+          </Box>
+        )}
 
         {/* Main content */}
         <main
           id="main-content"
           role="main"
-          className={`mx-auto w-full ${maxWidth} px-4 sm:px-6 lg:px-8 py-6`}
+          className={`mx-auto w-full ${maxWidth} px-4 sm:px-6 lg:px-8`}
         >
           {children}
         </main>

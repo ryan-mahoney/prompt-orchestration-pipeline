@@ -2,7 +2,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
-import { Box, Flex, Text, Heading, Tabs, Card } from "@radix-ui/themes";
+import { Box, Flex, Text, Heading, Tabs } from "@radix-ui/themes";
 
 import { Progress } from "../components/ui/progress";
 import { useJobListWithUpdates } from "../ui/client/hooks/useJobListWithUpdates";
@@ -12,7 +12,6 @@ import { useTicker } from "../ui/client/hooks/useTicker";
 
 // Referenced components — leave these alone
 import JobTable from "../components/JobTable";
-import UploadSeed from "../components/UploadSeed";
 import Layout from "../components/Layout.jsx";
 
 export default function PromptPipelineDashboard({ isConnected }) {
@@ -55,8 +54,6 @@ export default function PromptPipelineDashboard({ isConnected }) {
     return src.map(adaptJobSummary);
   }, [apiJobs, error]);
   const [activeTab, setActiveTab] = useState("current");
-  const [seedUploadSuccess, setSeedUploadSuccess] = useState(null);
-  const [seedUploadTimer, setSeedUploadTimer] = useState(null);
 
   // Shared ticker for live duration updates
   const now = useTicker(10000);
@@ -111,34 +108,6 @@ export default function PromptPipelineDashboard({ isConnected }) {
     }
   };
 
-  // Handle seed upload success
-  const handleSeedUploadSuccess = ({ jobName }) => {
-    // Clear any existing timer
-    if (seedUploadTimer) {
-      clearTimeout(seedUploadTimer);
-    }
-
-    // Set success message
-    setSeedUploadSuccess(jobName);
-
-    // Auto-clear after exactly 5000 ms
-    const timer = setTimeout(() => {
-      setSeedUploadSuccess(null);
-      setSeedUploadTimer(null);
-    }, 5000);
-
-    setSeedUploadTimer(timer);
-  };
-
-  // Cleanup timer on unmount
-  useEffect(() => {
-    return () => {
-      if (seedUploadTimer) {
-        clearTimeout(seedUploadTimer);
-      }
-    };
-  }, [seedUploadTimer]);
-
   // Header actions for Layout
   const headerActions = runningJobs.length > 0 && (
     <Flex align="center" gap="2" className="text-gray-11">
@@ -154,26 +123,6 @@ export default function PromptPipelineDashboard({ isConnected }) {
 
   return (
     <Layout title="Prompt Pipeline" actions={headerActions}>
-      {/* Upload Seed File Section */}
-      <Card className="mb-6">
-        <Flex direction="column" gap="3">
-          <Heading size="4" weight="medium" className="text-gray-12">
-            Upload Seed File
-          </Heading>
-
-          {/* Success Message */}
-          {seedUploadSuccess && (
-            <Box className="rounded-md bg-green-50 p-3 border border-green-200">
-              <Text size="2" className="text-green-800">
-                Job <strong>{seedUploadSuccess}</strong> created successfully
-              </Text>
-            </Box>
-          )}
-
-          <UploadSeed onUploadSuccess={handleSeedUploadSuccess} />
-        </Flex>
-      </Card>
-
       {error && (
         <Box className="mb-4 rounded-md bg-yellow-50 p-3 border border-yellow-200">
           <Text size="2" className="text-yellow-800">
@@ -181,7 +130,11 @@ export default function PromptPipelineDashboard({ isConnected }) {
           </Text>
         </Box>
       )}
-      <Tabs.Root value={activeTab} onValueChange={setActiveTab}>
+      <Tabs.Root
+        value={activeTab}
+        onValueChange={setActiveTab}
+        className="mt-4"
+      >
         <Tabs.List aria-label="Job filters">
           <Tabs.Trigger value="current">Current ({currentCount})</Tabs.Trigger>
           <Tabs.Trigger value="errors">Errors ({errorCount})</Tabs.Trigger>

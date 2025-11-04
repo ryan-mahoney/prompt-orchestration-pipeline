@@ -4,6 +4,7 @@ import { Box, Flex, Text } from "@radix-ui/themes";
 import JobDetail from "../components/JobDetail.jsx";
 import { useJobDetailWithUpdates } from "../ui/client/hooks/useJobDetailWithUpdates.js";
 import Layout from "../components/Layout.jsx";
+import PageSubheader from "../components/PageSubheader.jsx";
 import { statusBadge } from "../utils/ui.jsx";
 
 export default function PipelineDetail() {
@@ -12,7 +13,14 @@ export default function PipelineDetail() {
   // Handle missing job ID (undefined/null)
   if (jobId === undefined || jobId === null) {
     return (
-      <Layout title="Pipeline Details" showBackButton={true}>
+      <Layout
+        pageTitle="Pipeline Details"
+        breadcrumbs={[
+          { label: "Home", href: "/" },
+          { label: "Pipeline Details" },
+        ]}
+        showBackButton={true}
+      >
         <Flex align="center" justify="center" className="min-h-64">
           <Box className="text-center">
             <Text size="5" weight="medium" color="red" className="mb-2">
@@ -28,7 +36,14 @@ export default function PipelineDetail() {
 
   if (loading) {
     return (
-      <Layout title="Pipeline Details" showBackButton={true}>
+      <Layout
+        pageTitle="Pipeline Details"
+        breadcrumbs={[
+          { label: "Home", href: "/" },
+          { label: "Pipeline Details" },
+        ]}
+        showBackButton={true}
+      >
         <Flex align="center" justify="center" className="min-h-64">
           <Box className="text-center">
             <Text size="5" weight="medium" className="mb-2">
@@ -42,7 +57,14 @@ export default function PipelineDetail() {
 
   if (error) {
     return (
-      <Layout title="Pipeline Details" showBackButton={true}>
+      <Layout
+        pageTitle="Pipeline Details"
+        breadcrumbs={[
+          { label: "Home", href: "/" },
+          { label: "Pipeline Details" },
+        ]}
+        showBackButton={true}
+      >
         <Flex align="center" justify="center" className="min-h-64">
           <Box className="text-center">
             <Text size="5" weight="medium" color="red" className="mb-2">
@@ -59,7 +81,14 @@ export default function PipelineDetail() {
 
   if (!job) {
     return (
-      <Layout title="Pipeline Details" showBackButton={true}>
+      <Layout
+        pageTitle="Pipeline Details"
+        breadcrumbs={[
+          { label: "Home", href: "/" },
+          { label: "Pipeline Details" },
+        ]}
+        showBackButton={true}
+      >
         <Flex align="center" justify="center" className="min-h-64">
           <Box className="text-center">
             <Text size="5" weight="medium" className="mb-2">
@@ -89,8 +118,15 @@ export default function PipelineDetail() {
       return { tasks: pipelineTasks };
     })();
 
-  // Header actions: job ID and status badge
-  const headerActions = (
+  const pageTitle = job.name || "Pipeline Details";
+  const breadcrumbs = [
+    { label: "Home", href: "/" },
+    { label: "Pipeline Details" },
+    ...(job.name ? [{ label: job.name }] : []),
+  ];
+
+  // Right side content for PageSubheader: job ID and status badge
+  const subheaderRightContent = (
     <Flex align="center" gap="3" className="shrink-0">
       <Text size="2" color="gray">
         ID: {job.id || jobId}
@@ -101,10 +137,13 @@ export default function PipelineDetail() {
 
   return (
     <Layout
-      title={job.name || "Pipeline Details"}
+      pageTitle={pageTitle}
+      breadcrumbs={breadcrumbs}
       showBackButton={true}
-      actions={headerActions}
     >
+      <PageSubheader breadcrumbs={breadcrumbs} maxWidth="max-w-7xl">
+        {subheaderRightContent}
+      </PageSubheader>
       <JobDetail job={job} pipeline={pipeline} />
     </Layout>
   );
