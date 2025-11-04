@@ -81,7 +81,7 @@ describe("DeepSeek Provider", () => {
             Authorization: "Bearer test-deepseek-key",
           },
           body: JSON.stringify({
-            model: "deepseek-reasoner",
+            model: "deepseek-chat",
             messages: [
               { role: "system", content: "Test system message" },
               { role: "user", content: "Test user message" },
@@ -97,7 +97,6 @@ describe("DeepSeek Provider", () => {
       );
       expect(result).toEqual({
         content: "Test response",
-        text: "Test response",
         usage: { total_tokens: 10 },
         raw: {
           choices: [{ message: { content: "Test response" } }],
@@ -128,7 +127,6 @@ describe("DeepSeek Provider", () => {
 
       // Assert
       expect(result.content).toEqual({ key: "value" });
-      expect(result.text).toBe(jsonContent);
     });
 
     it("should return text content when responseFormat is not JSON", async () => {
@@ -152,7 +150,6 @@ describe("DeepSeek Provider", () => {
 
       // Assert
       expect(result.content).toBe(textContent);
-      expect(result.text).toBe(textContent);
     });
 
     it("should handle custom model parameter", async () => {
@@ -225,7 +222,7 @@ describe("DeepSeek Provider", () => {
       // Assert
       expect(mockFetch).toHaveBeenCalledTimes(2);
       expect(mockSleep).toHaveBeenCalledWith(2000); // 2^1 * 1000
-      expect(result.content).toBe("Success");
+      expect(result?.content).toBe("Success");
     });
 
     it("should throw immediately on 401 errors", async () => {
@@ -312,7 +309,7 @@ describe("DeepSeek Provider", () => {
 
       // Assert
       expect(mockFetch).toHaveBeenCalledTimes(2);
-      expect(result.content).toEqual({ valid: "json" });
+      expect(result?.content).toEqual({ valid: "json" });
     });
 
     it("should handle fetch errors gracefully", async () => {

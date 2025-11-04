@@ -4,7 +4,6 @@ import fs from "fs";
 import { createLLM, getLLMEvents } from "../llm/index.js";
 import { loadFreshModule } from "./module-loader.js";
 import { loadEnvironment } from "./environment.js";
-import { getConfig } from "./config.js";
 import { createTaskFileIO } from "./file-io.js";
 import { writeJobStatus } from "./status-writer.js";
 import { computeDeterministicProgress } from "./progress.js";

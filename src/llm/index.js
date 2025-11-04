@@ -179,16 +179,18 @@ export async function chat(options) {
         totalTokens: promptTokens + completionTokens,
       };
     } else if (provider === "deepseek") {
-      const result = await deepseekChat(
-        {
-          messages,
-          model: "deepseek-chat",
-        }
-
-        // systemMsg,
-        // userMsg,
-        // model || "deepseek-reasoner"
-      );
+      const result = await deepseekChat({
+        messages,
+        model: model || "deepseek-reasoner",
+        temperature,
+        maxTokens,
+        topP,
+        frequencyPenalty,
+        presencePenalty,
+        stop,
+        responseFormat,
+        ...rest,
+      });
 
       response = {
         content: result.content,

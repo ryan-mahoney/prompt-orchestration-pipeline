@@ -78,7 +78,7 @@ export const inference = async ({
   meta,
   flags,
 }) => {
-  const response = await deepseek.chat({
+  const response = await deepseek.reasoner({
     messages: [
       { role: "system", content: system },
       { role: "user", content: prompt },
