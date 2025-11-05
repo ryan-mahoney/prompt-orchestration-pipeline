@@ -404,4 +404,34 @@ describe("PipelineDetail", () => {
     // Assert "Pipeline Details" is not present in breadcrumbs
     expect(screen.queryByText("Pipeline Details")).toBeNull();
   });
+
+  it("displays pipeline name from real-world job structure", () => {
+    const mockJob = {
+      id: "WCb6WJhZI0Ti",
+      name: "Market Analysis about Renewable Energy Storage",
+      status: "pending",
+      pipeline: "content-generation",
+    };
+
+    // Mock the hook to return data
+    vi.mocked(useJobDetailWithUpdates).mockReturnValue({
+      data: mockJob,
+      loading: false,
+      error: null,
+    });
+
+    __setParams({ jobId: "WCb6WJhZI0Ti" });
+
+    render(
+      <MemoryRouter>
+        <PipelineDetail />
+      </MemoryRouter>
+    );
+
+    // Assert pipeline name from slug is present in breadcrumbs
+    expect(screen.getByText("content-generation")).toBeDefined();
+
+    // Assert "Pipeline Details" is not present in breadcrumbs
+    expect(screen.queryByText("Pipeline Details")).toBeNull();
+  });
 });
