@@ -7,6 +7,9 @@ import React, {
 } from "react";
 import { Callout } from "@radix-ui/themes";
 import { TaskFilePane } from "./TaskFilePane.jsx";
+import { RestartJobModal } from "./ui/RestartJobModal.jsx";
+import { Button } from "./ui/button.jsx";
+import { restartJob } from "../ui/client/api.js";
 import { createEmptyTaskFiles } from "../utils/task-files.js";
 
 // Helpers: capitalize fallback step ids (upperFirst only; do not alter provided titles)
@@ -107,6 +110,13 @@ function DAGGrid({
   const [filePaneOpen, setFilePaneOpen] = useState(false);
   const [filePaneType, setFilePaneType] = useState("artifacts");
   const [filePaneFilename, setFilePaneFilename] = useState(null);
+
+  // Restart modal state
+  const [restartModalOpen, setRestartModalOpen] = useState(false);
+  const [restartTaskId, setRestartTaskId] = useState(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [alertMessage, setAlertMessage] = useState(null);
+  const [alertType, setAlertType] = useState("info"); // info, success, error, warning
 
   // Log component props and state changes
   React.useEffect(() => {
@@ -305,10 +315,11 @@ function DAGGrid({
     const item = items[index];
     const s = item?.status;
     if (s === "failed") return "failed";
+    if (s === "succeeded") return "succeeded";
     if (s === "done") return "done";
     if (s === "running") return "running";
     if (typeof activeIndex === "number") {
-      if (index < activeIndex) return "done";
+      if (index < activeIndex) return "succeeded";
       if (index === activeIndex) return "running";
       return "pending";
     }
@@ -319,6 +330,7 @@ function DAGGrid({
   const getHeaderClasses = (status) => {
     switch (status) {
       case "done":
+      case "succeeded":
         return "bg-green-50 border-green-200 text-green-700";
       case "running":
         return "bg-amber-50 border-amber-200 text-amber-700";
@@ -368,8 +380,123 @@ function DAGGrid({
     setFilePaneOpen(false);
   }, [openIdx]);
 
+  // Restart functionality
+  const handleRestartClick = (e, taskId) => {
+    e.stopPropagation(); // Prevent card click
+    setRestartTaskId(taskId);
+    setRestartModalOpen(true);
+  };
+
+  const handleRestartConfirm = async () => {
+    if (!jobId || isSubmitting) return;
+
+    setIsSubmitting(true);
+    setAlertMessage(null);
+
+    try {
+      await restartJob(jobId);
+      setAlertMessage(
+        "Restart requested. The job will reset to pending and start in the background."
+      );
+      setAlertType("success");
+      setRestartModalOpen(false);
+    } catch (error) {
+      let message = "Failed to start restart. Try again.";
+      let type = "error";
+
+      switch (error.code) {
+        case "job_running":
+          message = "Job is currently running; restart is unavailable.";
+          type = "warning";
+          break;
+        case "unsupported_lifecycle":
+          message = "Job must be in current lifecycle to restart.";
+          type = "warning";
+          break;
+        case "job_not_found":
+          message = "Job not found.";
+          type = "error";
+          break;
+        case "spawn_failed":
+          message = "Failed to start restart. Try again.";
+          type = "error";
+          break;
+        default:
+          message = error.message || "An unexpected error occurred.";
+          type = "error";
+      }
+
+      setAlertMessage(message);
+      setAlertType(type);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleRestartCancel = () => {
+    setRestartModalOpen(false);
+    setRestartTaskId(null);
+  };
+
+  // Clear alert after 5 seconds
+  React.useEffect(() => {
+    if (alertMessage) {
+      const timer = setTimeout(() => {
+        setAlertMessage(null);
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [alertMessage]);
+
+  // Check if restart should be enabled (job lifecycle = current and not running)
+  const isRestartEnabled = (item) => {
+    const status = getStatus(items.findIndex((i) => i.id === item.id));
+    const jobStatus = items[0]?.jobStatus; // Get job status from first item or parent
+    return (
+      status !== "running" &&
+      jobStatus !== "running" &&
+      item.lifecycle === "current"
+    );
+  };
+
   return (
     <div className="relative w-full" role="list">
+      {/* Alert notification */}
+      {alertMessage && (
+        <div
+          className={`fixed top-4 right-4 z-[3000] max-w-sm p-4 rounded-lg shadow-lg border ${
+            alertType === "success"
+              ? "bg-green-50 border-green-200 text-green-800"
+              : alertType === "error"
+                ? "bg-red-50 border-red-200 text-red-800"
+                : alertType === "warning"
+                  ? "bg-yellow-50 border-yellow-200 text-yellow-800"
+                  : "bg-blue-50 border-blue-200 text-blue-800"
+          }`}
+          role="alert"
+          aria-live="polite"
+        >
+          <div className="flex items-start">
+            <div className="flex-1">
+              <p className="text-sm font-medium">{alertMessage}</p>
+            </div>
+            <button
+              onClick={() => setAlertMessage(null)}
+              className="ml-3 flex-shrink-0 inline-flex text-gray-400 hover:text-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              aria-label="Dismiss notification"
+            >
+              <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
+                <path
+                  fillRule="evenodd"
+                  d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
+                  clipRule="evenodd"
+                />
+              </svg>
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* SVG overlay for connector lines */}
       <svg
         ref={overlayRef}
@@ -456,8 +583,8 @@ function DAGGrid({
                 <div className="flex items-center gap-2">
                   {status === "running" ? (
                     <>
-                      <div className="relative h-4 w-4" aria-label="Running">
-                        <span className="sr-only">Running</span>
+                      <div className="relative h-4 w-4" aria-label="Active">
+                        <span className="sr-only">Active</span>
                         <span className="absolute inset-0 rounded-full border-2 border-amber-200" />
                         <span className="absolute inset-0 rounded-full border-2 border-transparent border-t-amber-600 animate-spin" />
                       </div>
@@ -492,6 +619,24 @@ function DAGGrid({
                 {item.body && (
                   <div className="mt-2 text-sm text-gray-700">{item.body}</div>
                 )}
+
+                {/* Restart button */}
+                <div className="mt-3 pt-3 border-t border-gray-100">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={(e) => handleRestartClick(e, item.id)}
+                    disabled={!isRestartEnabled(item) || isSubmitting}
+                    className="text-xs"
+                    title={
+                      !isRestartEnabled(item)
+                        ? "Restart is only available for jobs in current lifecycle that are not running"
+                        : "Restart job from clean slate"
+                    }
+                  >
+                    Restart
+                  </Button>
+                </div>
               </div>
             </div>
           );
@@ -642,6 +787,16 @@ function DAGGrid({
           </>
         )}
       </aside>
+
+      {/* Restart Job Modal */}
+      <RestartJobModal
+        open={restartModalOpen}
+        onClose={handleRestartCancel}
+        onConfirm={handleRestartConfirm}
+        jobId={jobId}
+        taskId={restartTaskId}
+        isSubmitting={isSubmitting}
+      />
     </div>
   );
 }
