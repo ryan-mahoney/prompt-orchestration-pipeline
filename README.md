@@ -61,8 +61,7 @@ flowchart TD
   B --> D["init pipeline-data/current/{jobId}/tasks-status.json"]
   B --> E[Read pipeline-config/pipeline.json]
   E --> F[Spawn task runner]
-  F --> G["write tasks/<task>/letter.json"]
-  G --> H[Run task inner pipeline]
+  F --> H[Run task inner pipeline]
   H --> I["write tasks/<task>/output.json"]
   I --> J[Update tasks-status.json]
   J --> K{More tasks?}

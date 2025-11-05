@@ -78,10 +78,6 @@ for (const taskName of pipeline.tasks) {
 
   const taskDir = path.join(workDir, "tasks", taskName);
   await fs.mkdir(taskDir, { recursive: true });
-  await atomicWrite(
-    path.join(taskDir, "letter.json"),
-    JSON.stringify({ task: taskName, at: now() }, null, 2)
-  );
 
   try {
     const ctx = {
