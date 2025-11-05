@@ -15,10 +15,7 @@ export default function PipelineDetail() {
     return (
       <Layout
         pageTitle="Pipeline Details"
-        breadcrumbs={[
-          { label: "Home", href: "/" },
-          { label: "Pipeline Details" },
-        ]}
+        breadcrumbs={[{ label: "Home", href: "/" }]}
         showBackButton={true}
       >
         <Flex align="center" justify="center" className="min-h-64">
@@ -34,14 +31,39 @@ export default function PipelineDetail() {
 
   const { data: job, loading, error } = useJobDetailWithUpdates(jobId);
 
+  // Try to get pipeline info from job list while loading detail
+  const [pipelineFromList, setPipelineFromList] = React.useState(null);
+
+  React.useEffect(() => {
+    if (loading && !pipelineFromList && typeof fetch !== "undefined") {
+      // Try to get pipeline info from job list cache
+      fetch("/api/jobs")
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.ok && data.data) {
+            const jobInList = data.data.find((j) => j.jobId === jobId);
+            if (jobInList) {
+              const pipeline =
+                jobInList.pipeline?.name ||
+                (typeof jobInList.pipeline === "string"
+                  ? jobInList.pipeline
+                  : null);
+              setPipelineFromList(pipeline);
+            }
+          }
+        })
+        .catch(() => {
+          // Ignore errors, we'll fallback to "Pipeline Details"
+        });
+    }
+  }, [jobId, loading, pipelineFromList]);
+
   if (loading) {
+    const pipelineDisplay = pipelineFromList || "Pipeline Details";
     return (
       <Layout
         pageTitle="Pipeline Details"
-        breadcrumbs={[
-          { label: "Home", href: "/" },
-          { label: "Pipeline Details" },
-        ]}
+        breadcrumbs={[{ label: "Home", href: "/" }, { label: pipelineDisplay }]}
         showBackButton={true}
       >
         <Flex align="center" justify="center" className="min-h-64">
@@ -56,13 +78,11 @@ export default function PipelineDetail() {
   }
 
   if (error) {
+    const pipelineDisplay = pipelineFromList || "Pipeline Details";
     return (
       <Layout
         pageTitle="Pipeline Details"
-        breadcrumbs={[
-          { label: "Home", href: "/" },
-          { label: "Pipeline Details" },
-        ]}
+        breadcrumbs={[{ label: "Home", href: "/" }, { label: pipelineDisplay }]}
         showBackButton={true}
       >
         <Flex align="center" justify="center" className="min-h-64">
@@ -80,13 +100,11 @@ export default function PipelineDetail() {
   }
 
   if (!job) {
+    const pipelineDisplay = pipelineFromList || "Pipeline Details";
     return (
       <Layout
         pageTitle="Pipeline Details"
-        breadcrumbs={[
-          { label: "Home", href: "/" },
-          { label: "Pipeline Details" },
-        ]}
+        breadcrumbs={[{ label: "Home", href: "/" }, { label: pipelineDisplay }]}
         showBackButton={true}
       >
         <Flex align="center" justify="center" className="min-h-64">
@@ -121,7 +139,9 @@ export default function PipelineDetail() {
   const pageTitle = job.name || "Pipeline Details";
   const pipelineDisplay =
     job?.pipeline?.name ||
-    (typeof job?.pipeline === "string" ? job.pipeline : "Pipeline Details");
+    (typeof job?.pipeline === "string"
+      ? job.pipeline
+      : pipelineFromList || "Pipeline Details");
   const breadcrumbs = [
     { label: "Home", href: "/" },
     { label: pipelineDisplay },

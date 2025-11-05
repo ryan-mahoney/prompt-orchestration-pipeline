@@ -99,7 +99,7 @@ vi.mock("react-router-dom", async (importOriginal) => {
   };
 });
 
-// Mock the SSE hook that's causing the hang - return a simple implementation
+// Mock SSE hook that's causing hang - return a simple implementation
 vi.mock("../src/ui/client/hooks/useJobDetailWithUpdates.js", () => ({
   useJobDetailWithUpdates: vi.fn(() => ({
     data: null,
@@ -171,6 +171,12 @@ import { useJobDetailWithUpdates } from "../src/ui/client/hooks/useJobDetailWith
 
 describe("PipelineDetail", () => {
   it("renders loading state initially", () => {
+    // Mock the fetch call for /api/jobs that PipelineDetail now makes
+    mockFetch.mockResolvedValue({
+      ok: true,
+      data: [{ jobId: "testjob123", pipeline: "content-generation" }],
+    });
+
     // Mock the hook to return loading state
     vi.mocked(useJobDetailWithUpdates).mockReturnValue({
       data: null,
@@ -202,6 +208,12 @@ describe("PipelineDetail", () => {
   });
 
   it("renders error state when hook returns error", () => {
+    // Mock the fetch call for /api/jobs that PipelineDetail now makes
+    mockFetch.mockResolvedValue({
+      ok: true,
+      data: [],
+    });
+
     // Mock the hook to return an error
     vi.mocked(useJobDetailWithUpdates).mockReturnValue({
       data: null,
@@ -234,6 +246,12 @@ describe("PipelineDetail", () => {
         tasks: ["research", "analysis"],
       },
     };
+
+    // Mock the fetch call for /api/jobs
+    mockFetch.mockResolvedValue({
+      ok: true,
+      data: [],
+    });
 
     // Mock the hook to return data
     vi.mocked(useJobDetailWithUpdates).mockReturnValue({
@@ -268,6 +286,12 @@ describe("PipelineDetail", () => {
       },
     };
 
+    // Mock the fetch call for /api/jobs
+    mockFetch.mockResolvedValue({
+      ok: true,
+      data: [],
+    });
+
     // Mock the hook to return job data but no pipeline
     vi.mocked(useJobDetailWithUpdates).mockReturnValue({
       data: mockJob,
@@ -289,6 +313,12 @@ describe("PipelineDetail", () => {
   });
 
   it("calls useJobDetailWithUpdates for valid job IDs", () => {
+    // Mock the fetch call for /api/jobs
+    mockFetch.mockResolvedValue({
+      ok: true,
+      data: [],
+    });
+
     vi.mocked(useJobDetailWithUpdates).mockReturnValue({
       data: null,
       loading: true,
@@ -321,6 +351,12 @@ describe("PipelineDetail", () => {
       },
     };
 
+    // Mock the fetch call for /api/jobs
+    mockFetch.mockResolvedValue({
+      ok: true,
+      data: [],
+    });
+
     // Mock the hook to return data with running status
     vi.mocked(useJobDetailWithUpdates).mockReturnValue({
       data: mockJob,
@@ -351,6 +387,12 @@ describe("PipelineDetail", () => {
       pipeline: { name: "content-generation", tasks: ["research"] },
       tasks: [{ name: "research", status: "pending" }],
     };
+
+    // Mock the fetch call for /api/jobs
+    mockFetch.mockResolvedValue({
+      ok: true,
+      data: [],
+    });
 
     // Mock the hook to return data
     vi.mocked(useJobDetailWithUpdates).mockReturnValue({
@@ -383,6 +425,12 @@ describe("PipelineDetail", () => {
       tasks: [{ name: "t1", status: "pending" }],
     };
 
+    // Mock the fetch call for /api/jobs
+    mockFetch.mockResolvedValue({
+      ok: true,
+      data: [],
+    });
+
     // Mock the hook to return data
     vi.mocked(useJobDetailWithUpdates).mockReturnValue({
       data: mockJob,
@@ -412,6 +460,12 @@ describe("PipelineDetail", () => {
       status: "pending",
       pipeline: "content-generation",
     };
+
+    // Mock the fetch call for /api/jobs
+    mockFetch.mockResolvedValue({
+      ok: true,
+      data: [],
+    });
 
     // Mock the hook to return data
     vi.mocked(useJobDetailWithUpdates).mockReturnValue({
