@@ -119,9 +119,12 @@ export default function PipelineDetail() {
     })();
 
   const pageTitle = job.name || "Pipeline Details";
+  const pipelineDisplay =
+    job?.pipeline?.name ||
+    (typeof job?.pipeline === "string" ? job.pipeline : "Pipeline Details");
   const breadcrumbs = [
     { label: "Home", href: "/" },
-    { label: "Pipeline Details" },
+    { label: pipelineDisplay },
     ...(job.name ? [{ label: job.name }] : []),
   ];
 

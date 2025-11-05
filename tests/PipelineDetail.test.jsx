@@ -342,4 +342,66 @@ describe("PipelineDetail", () => {
     // Check for status badge content "Running"
     expect(screen.getByText("Running")).toBeDefined();
   });
+
+  it("displays pipeline name from snapshot in breadcrumbs", () => {
+    const mockJob = {
+      id: "job1",
+      name: "Test Job",
+      status: "pending",
+      pipeline: { name: "content-generation", tasks: ["research"] },
+      tasks: [{ name: "research", status: "pending" }],
+    };
+
+    // Mock the hook to return data
+    vi.mocked(useJobDetailWithUpdates).mockReturnValue({
+      data: mockJob,
+      loading: false,
+      error: null,
+    });
+
+    __setParams({ jobId: "job1" });
+
+    render(
+      <MemoryRouter>
+        <PipelineDetail />
+      </MemoryRouter>
+    );
+
+    // Assert pipeline name from snapshot is present in breadcrumbs
+    expect(screen.getByText("content-generation")).toBeDefined();
+
+    // Assert "Pipeline Details" is not present in breadcrumbs
+    expect(screen.queryByText("Pipeline Details")).toBeNull();
+  });
+
+  it("displays pipeline name fallback to slug in breadcrumbs", () => {
+    const mockJob = {
+      id: "job2",
+      name: "Job With Slug Only",
+      status: "pending",
+      pipeline: "content-generation",
+      tasks: [{ name: "t1", status: "pending" }],
+    };
+
+    // Mock the hook to return data
+    vi.mocked(useJobDetailWithUpdates).mockReturnValue({
+      data: mockJob,
+      loading: false,
+      error: null,
+    });
+
+    __setParams({ jobId: "job2" });
+
+    render(
+      <MemoryRouter>
+        <PipelineDetail />
+      </MemoryRouter>
+    );
+
+    // Assert pipeline name from slug is present in breadcrumbs
+    expect(screen.getByText("content-generation")).toBeDefined();
+
+    // Assert "Pipeline Details" is not present in breadcrumbs
+    expect(screen.queryByText("Pipeline Details")).toBeNull();
+  });
 });
