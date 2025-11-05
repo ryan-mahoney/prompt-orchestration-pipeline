@@ -214,7 +214,13 @@ export async function writeJobStatus(jobDir, updateFn) {
       const validated = validateStatusSnapshot(current);
 
       // Apply user updates
-      const maybeUpdated = updateFn(validated);
+      let maybeUpdated;
+      try {
+        maybeUpdated = updateFn(validated);
+      } catch (error) {
+        console.error(`[${jobId}] Error executing update function:`, error);
+        throw new Error(`Update function failed: ${error.message}`);
+      }
       const snapshot = validateStatusSnapshot(
         maybeUpdated === undefined ? validated : maybeUpdated
       );
