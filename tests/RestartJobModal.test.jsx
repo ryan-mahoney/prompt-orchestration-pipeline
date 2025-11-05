@@ -129,7 +129,7 @@ describe("RestartJobModal", () => {
   it("has proper accessibility attributes", () => {
     render(<RestartJobModal {...defaultProps} />);
 
-    const dialog = screen.getByRole("dialog");
+    const dialog = screen.getAllByRole("dialog")[0];
     expect(dialog).toHaveAttribute("aria-modal", "true");
     expect(dialog).toHaveAttribute("aria-labelledby", "restart-modal-title");
     expect(dialog).toHaveAttribute(
