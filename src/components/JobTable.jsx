@@ -5,7 +5,7 @@ import { Clock, TimerReset, ChevronRight } from "lucide-react";
 import { fmtDuration } from "../utils/duration.js";
 import { taskDisplayDurationMs } from "../utils/duration.js";
 import { countCompleted } from "../utils/jobs";
-import { progressClasses, statusBadge } from "../utils/ui.js";
+import { progressClasses, statusBadge } from "../utils/ui";
 
 // Local helpers for formatting costs and tokens
 function formatCurrency4(x) {
