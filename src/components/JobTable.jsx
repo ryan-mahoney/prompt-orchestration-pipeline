@@ -5,7 +5,7 @@ import { Clock, TimerReset, ChevronRight } from "lucide-react";
 import { fmtDuration } from "../utils/duration.js";
 import { taskDisplayDurationMs } from "../utils/duration.js";
 import { countCompleted } from "../utils/jobs";
-import { progressClasses, statusBadge } from "../utils/ui";
+import { progressClasses, statusBadge } from "../utils/ui.js";
 
 // Local helpers for formatting costs and tokens
 function formatCurrency4(x) {
@@ -157,7 +157,7 @@ export default function JobTable({
                     <Text size="2" className="text-slate-700">
                       {currentTaskName
                         ? currentTaskName
-                        : job.status === "completed"
+                        : job.status === "done"
                           ? "—"
                           : (job.current ?? "—")}
                     </Text>

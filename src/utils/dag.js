@@ -1,3 +1,5 @@
+import { TaskState } from "../config/statuses.js";
+
 function normalizeJobTasks(tasks) {
   if (!tasks) return {};
 
@@ -53,7 +55,7 @@ export function computeDagItems(job, pipeline) {
     const jobTask = jobTasks[taskId];
     return {
       id: taskId,
-      status: jobTask ? jobTask.state : "pending",
+      status: jobTask ? jobTask.state : TaskState.PENDING,
       source: "pipeline",
       stage: computeTaskStage(job, taskId),
     };
@@ -82,18 +84,20 @@ export function computeActiveIndex(items) {
 
   // Find first running task
   const firstRunningIndex = items.findIndex(
-    (item) => item.status === "running"
+    (item) => item.status === TaskState.RUNNING
   );
   if (firstRunningIndex !== -1) return firstRunningIndex;
 
   // Find first failed task
-  const firstFailedIndex = items.findIndex((item) => item.status === "failed");
+  const firstFailedIndex = items.findIndex(
+    (item) => item.status === TaskState.FAILED
+  );
   if (firstFailedIndex !== -1) return firstFailedIndex;
 
   // Find last completed task
   let lastDoneIndex = -1;
   items.forEach((item, index) => {
-    if (item.status === "done") lastDoneIndex = index;
+    if (item.status === TaskState.DONE) lastDoneIndex = index;
   });
 
   if (lastDoneIndex !== -1) return lastDoneIndex;

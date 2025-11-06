@@ -1,6 +1,7 @@
 /**
  * Duration policy utilities for consistent time display across components
  */
+import { TaskState, normalizeTaskState } from "../config/statuses.js";
 
 /**
  * Normalizes task state names to canonical values
@@ -8,21 +9,15 @@
  * @returns {string} Normalized state
  */
 export function normalizeState(state) {
-  switch (state) {
-    case "done":
-      return "completed";
-    case "failed":
-    case "error":
-      return "error";
-    case "pending":
-    case "running":
-    case "current":
-    case "completed":
-    case "rejected":
-      return state;
-    default:
-      return state; // Pass through unknown states
+  // Use centralized normalization, then map to duration-specific canonical forms
+  const canonicalState = normalizeTaskState(state);
+
+  // Duration utilities use "completed" instead of "done" for legacy compatibility
+  if (canonicalState === TaskState.DONE) {
+    return "completed";
   }
+
+  return canonicalState;
 }
 
 /**
@@ -36,18 +31,17 @@ export function taskDisplayDurationMs(task, now = Date.now()) {
   const normalizedState = normalizeState(state);
 
   switch (normalizedState) {
-    case "pending":
+    case TaskState.PENDING:
       return 0;
 
-    case "running":
-    case "current":
+    case TaskState.RUNNING:
       if (!startedAt) {
         return 0;
       }
       const startTime = Date.parse(startedAt);
       return Math.max(0, now - startTime);
 
-    case "completed":
+    case "completed": // Duration utilities still use "completed" for legacy compatibility
       // Prefer executionTimeMs or executionTime if available, even without startedAt
       const execTime =
         executionTimeMs != null ? executionTimeMs : executionTime;
@@ -63,7 +57,7 @@ export function taskDisplayDurationMs(task, now = Date.now()) {
       const endTime = endedAt ? Date.parse(endedAt) : now;
       return Math.max(0, endTime - completedStartTime);
 
-    case "rejected":
+    case TaskState.FAILED:
       return 0;
 
     default:

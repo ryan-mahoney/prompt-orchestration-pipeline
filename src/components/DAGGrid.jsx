@@ -11,6 +11,7 @@ import { RestartJobModal } from "./ui/RestartJobModal.jsx";
 import { Button } from "./ui/button.jsx";
 import { restartJob } from "../ui/client/api.js";
 import { createEmptyTaskFiles } from "../utils/task-files.js";
+import { TaskState } from "../config/statuses.js";
 
 // Helpers: capitalize fallback step ids (upperFirst only; do not alter provided titles)
 function upperFirst(s) {
@@ -279,27 +280,25 @@ function DAGGrid({
   const getStatus = (index) => {
     const item = items[index];
     const s = item?.status;
-    if (s === "failed") return "failed";
-    if (s === "succeeded") return "succeeded";
-    if (s === "done") return "done";
-    if (s === "running") return "running";
+    if (s === TaskState.FAILED) return TaskState.FAILED;
+    if (s === TaskState.DONE) return TaskState.DONE;
+    if (s === TaskState.RUNNING) return TaskState.RUNNING;
     if (typeof activeIndex === "number") {
-      if (index < activeIndex) return "succeeded";
-      if (index === activeIndex) return "running";
-      return "pending";
+      if (index < activeIndex) return TaskState.DONE;
+      if (index === activeIndex) return TaskState.RUNNING;
+      return TaskState.PENDING;
     }
-    return "pending";
+    return TaskState.PENDING;
   };
 
   // Get CSS classes for card header based on status
   const getHeaderClasses = (status) => {
     switch (status) {
-      case "done":
-      case "succeeded":
+      case TaskState.DONE:
         return "bg-green-50 border-green-200 text-green-700";
-      case "running":
+      case TaskState.RUNNING:
         return "bg-amber-50 border-amber-200 text-amber-700";
-      case "failed":
+      case TaskState.FAILED:
         return "bg-pink-50 border-pink-200 text-pink-700";
       default:
         return "bg-gray-100 border-gray-200 text-gray-700";
@@ -308,7 +307,7 @@ function DAGGrid({
 
   // Check if Restart button should be shown for a given status
   const canShowRestart = (status) => {
-    return status === "failed" || status === "done" || status === "succeeded";
+    return status === TaskState.FAILED || status === TaskState.DONE;
   };
 
   // Handle Escape key to close slide-over
@@ -429,10 +428,14 @@ function DAGGrid({
   // Check if restart should be enabled (job lifecycle = current and not running)
   const isRestartEnabled = React.useCallback(() => {
     // Check if any item indicates the job is running (job-level state)
-    const isJobRunning = items.some((item) => item?.state === "running");
+    const isJobRunning = items.some(
+      (item) => item?.state === TaskState.RUNNING
+    );
 
     // Check if any task has explicit running status (not derived from activeIndex)
-    const hasRunningTask = items.some((item) => item?.status === "running");
+    const hasRunningTask = items.some(
+      (item) => item?.status === TaskState.RUNNING
+    );
 
     const jobLifecycle = items[0]?.lifecycle || "current";
 
@@ -442,10 +445,14 @@ function DAGGrid({
   // Get disabled reason for tooltip
   const getRestartDisabledReason = React.useCallback(() => {
     // Check if any item indicates the job is running (job-level state)
-    const isJobRunning = items.some((item) => item?.state === "running");
+    const isJobRunning = items.some(
+      (item) => item?.state === TaskState.RUNNING
+    );
 
     // Check if any task has explicit running status (not derived from activeIndex)
-    const hasRunningTask = items.some((item) => item?.status === "running");
+    const hasRunningTask = items.some(
+      (item) => item?.status === TaskState.RUNNING
+    );
 
     const jobLifecycle = items[0]?.lifecycle || "current";
 
@@ -569,7 +576,7 @@ function DAGGrid({
                   setSelectedFile(null);
                 }
               }}
-              className={`cursor-pointer rounded-lg border border-gray-400 ${status === "pending" ? "bg-gray-50" : "bg-white"} overflow-hidden flex flex-col transition outline outline-2 outline-transparent hover:outline-gray-400/70 focus-visible:outline-blue-500/60 ${cardClass}`}
+              className={`cursor-pointer rounded-lg border border-gray-400 ${status === TaskState.PENDING ? "bg-gray-50" : "bg-white"} overflow-hidden flex flex-col transition outline outline-2 outline-transparent hover:outline-gray-400/70 focus-visible:outline-blue-500/60 ${cardClass}`}
             >
               <div
                 data-role="card-header"
@@ -579,7 +586,7 @@ function DAGGrid({
                   {formatStepName(item, idx)}
                 </div>
                 <div className="flex items-center gap-2">
-                  {status === "running" ? (
+                  {status === TaskState.RUNNING ? (
                     <>
                       <div className="relative h-4 w-4" aria-label="Active">
                         <span className="sr-only">Active</span>
@@ -598,7 +605,7 @@ function DAGGrid({
                   ) : (
                     <span className="text-[11px] uppercase tracking-wide opacity-80">
                       {status}
-                      {status === "failed" && item.stage && (
+                      {status === TaskState.FAILED && item.stage && (
                         <span
                           className="text-[11px] font-medium opacity-80 truncate ml-2"
                           title={item.stage}
@@ -679,15 +686,16 @@ function DAGGrid({
             </div>
             <div className="p-6 space-y-8 overflow-y-auto h-full">
               {/* Error Callout - shown when task has error status and body */}
-              {items[openIdx]?.status === "failed" && items[openIdx]?.body && (
-                <section aria-label="Error">
-                  <Callout.Root role="alert" aria-live="assertive">
-                    <Callout.Text className="whitespace-pre-wrap break-words">
-                      {items[openIdx].body}
-                    </Callout.Text>
-                  </Callout.Root>
-                </section>
-              )}
+              {items[openIdx]?.status === TaskState.FAILED &&
+                items[openIdx]?.body && (
+                  <section aria-label="Error">
+                    <Callout.Root role="alert" aria-live="assertive">
+                      <Callout.Text className="whitespace-pre-wrap break-words">
+                        {items[openIdx].body}
+                      </Callout.Text>
+                    </Callout.Root>
+                  </section>
+                )}
 
               {/* File Display Area with Type Tabs */}
               <section className="mt-6">
