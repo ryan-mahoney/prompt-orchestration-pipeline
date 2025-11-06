@@ -18,23 +18,26 @@ import PromptPipelineDashboard from "@/pages/PromptPipelineDashboard.jsx";
 import PipelineDetail from "@/pages/PipelineDetail.jsx";
 import Code from "@/pages/Code.jsx";
 import { Theme } from "@radix-ui/themes";
+import { ToastProvider } from "@/components/ui/toast.jsx";
 
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
-    <Theme
-      accentColor="iris"
-      grayColor="gray"
-      panelBackground="solid"
-      scaling="100%"
-      radius="full"
-    >
-      <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<PromptPipelineDashboard />} />
-          <Route path="/pipeline/:jobId" element={<PipelineDetail />} />
-          <Route path="/code" element={<Code />} />
-        </Routes>
-      </BrowserRouter>
-    </Theme>
+    <ToastProvider>
+      <Theme
+        accentColor="iris"
+        grayColor="gray"
+        panelBackground="solid"
+        scaling="100%"
+        radius="full"
+      >
+        <BrowserRouter>
+          <Routes>
+            <Route path="/" element={<PromptPipelineDashboard />} />
+            <Route path="/pipeline/:jobId" element={<PipelineDetail />} />
+            <Route path="/code" element={<Code />} />
+          </Routes>
+        </BrowserRouter>
+      </Theme>
+    </ToastProvider>
   </React.StrictMode>
 );

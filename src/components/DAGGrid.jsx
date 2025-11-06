@@ -508,8 +508,9 @@ function DAGGrid({
             markerHeight="8"
             orient="auto"
             markerUnits="userSpaceOnUse"
+            className="text-gray-400"
           >
-            <path d="M 0 0 L 10 5 L 0 10 z" fill="#9ca3af" />
+            <path d="M 0 0 L 10 5 L 0 10 z" />
           </marker>
         </defs>
         {lines.map((line, idx) => (
@@ -518,9 +519,9 @@ function DAGGrid({
               d={line.d}
               fill="none"
               stroke="currentColor"
-              strokeWidth="3"
-              strokeLinecap="round"
-              className="text-gray-300"
+              strokeWidth="1"
+              strokeLinecap="square"
+              className="text-gray-400"
               strokeLinejoin="round"
               markerEnd="url(#arrow)"
             />
@@ -568,7 +569,7 @@ function DAGGrid({
                   setSelectedFile(null);
                 }
               }}
-              className={`cursor-pointer rounded-lg border border-gray-400 bg-white overflow-hidden flex flex-col transition outline outline-2 outline-transparent hover:outline-gray-400/70 focus-visible:outline-blue-500/60 ${cardClass}`}
+              className={`cursor-pointer rounded-lg border border-gray-400 ${status === "pending" ? "bg-gray-50" : "bg-white"} overflow-hidden flex flex-col transition outline outline-2 outline-transparent hover:outline-gray-400/70 focus-visible:outline-blue-500/60 ${cardClass}`}
             >
               <div
                 data-role="card-header"
