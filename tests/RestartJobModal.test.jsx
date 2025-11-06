@@ -32,10 +32,10 @@ describe("RestartJobModal", () => {
 
     expect(screen.getByRole("dialog")).toBeInTheDocument();
     expect(
-      screen.getByText("Restart job from clean slate")
+      screen.getByText("Restart job (reset progress)")
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/Restarting from this task will reset/)
+      screen.getByText(/This will clear the job’s progress and active stage/)
     ).toBeInTheDocument();
   });
 
@@ -138,12 +138,12 @@ describe("RestartJobModal", () => {
     );
 
     const title = screen.getByRole("heading", {
-      name: "Restart job from clean slate",
+      name: "Restart job (reset progress)",
     });
     expect(title).toHaveAttribute("id", "restart-modal-title");
 
     const description = screen.getByText(
-      /Restarting from this task will reset/
+      /This will clear the job’s progress and active stage/
     ).parentElement;
     expect(description).toHaveAttribute("id", "restart-modal-description");
   });

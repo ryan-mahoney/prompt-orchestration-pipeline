@@ -107,7 +107,7 @@ describe("API Client - restartJob", () => {
 
     await expect(restartJob("non-existent")).rejects.toEqual({
       code: "job_not_found",
-      message: "Job not found",
+      message: "Job not found.",
       status: 404,
     });
   });
@@ -126,7 +126,7 @@ describe("API Client - restartJob", () => {
 
     await expect(restartJob("running-job")).rejects.toEqual({
       code: "job_running",
-      message: "Job is currently running",
+      message: "Job is currently running; restart is unavailable.",
       status: 409,
     });
   });
@@ -145,7 +145,7 @@ describe("API Client - restartJob", () => {
 
     await expect(restartJob("failed-job")).rejects.toEqual({
       code: "spawn_failed",
-      message: "Failed to start restart",
+      message: "Failed to start restart. Try again.",
       status: 500,
     });
   });
@@ -161,7 +161,7 @@ describe("API Client - restartJob", () => {
 
     await expect(restartJob("test-job")).rejects.toEqual({
       code: "job_not_found",
-      message: "Not Found",
+      message: "Job not found.",
       status: 404,
     });
   });
@@ -201,7 +201,7 @@ describe("API Client - restartJob", () => {
 
     await expect(restartJob("test-job")).rejects.toEqual({
       code: "unsupported_lifecycle",
-      message: "Job restart is only supported for jobs in 'current' lifecycle",
+      message: "Job must be in current to restart.",
       status: 409,
     });
   });
