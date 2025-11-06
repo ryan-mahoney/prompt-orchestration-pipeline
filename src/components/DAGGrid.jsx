@@ -54,7 +54,7 @@ function formatStageLabel(s) {
 
 function formatStepName(item, idx) {
   const raw = item.title ?? item.id ?? `Step ${idx + 1}`;
-  // If item has a title, assume it’s curated and leave unchanged; otherwise capitalize fallback
+  // If item has a title, assume it's curated and leave unchanged; otherwise capitalize fallback
   return upperFirst(item.title ? item.title : raw);
 }
 
@@ -68,27 +68,6 @@ function formatStepName(item, idx) {
  * @param {string} props.jobId - Job ID for file operations
  * @param {Function} props.filesByTypeForItem - Selector returning { artifacts, logs, tmp }
  */
-// Instrumentation helper for DAGGrid
-const createDAGGridLogger = (jobId) => {
-  const prefix = `[DAGGrid:${jobId || "unknown"}]`;
-  return {
-    log: (message, data = null) => {
-      console.log(`${prefix} ${message}`, data ? data : "");
-    },
-    warn: (message, data = null) => {
-      console.warn(`${prefix} ${message}`, data ? data : "");
-    },
-    error: (message, data = null) => {
-      console.error(`${prefix} ${message}`, data ? data : "");
-    },
-    group: (label) => console.group(`${prefix} ${label}`),
-    groupEnd: () => console.groupEnd(),
-    table: (data, title) => {
-      console.log(`${prefix} ${title}:`);
-      console.table(data);
-    },
-  };
-};
 
 function DAGGrid({
   items,
@@ -98,8 +77,6 @@ function DAGGrid({
   jobId,
   filesByTypeForItem = () => createEmptyTaskFiles(),
 }) {
-  const logger = React.useMemo(() => createDAGGridLogger(jobId), [jobId]);
-
   const overlayRef = useRef(null);
   const gridRef = useRef(null);
   const nodeRefs = useRef([]);
@@ -117,19 +94,6 @@ function DAGGrid({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [alertMessage, setAlertMessage] = useState(null);
   const [alertType, setAlertType] = useState("info"); // info, success, error, warning
-
-  // Log component props and state changes
-  React.useEffect(() => {
-    logger.group("Component Render");
-    logger.log("Props received:", {
-      itemCount: items?.length,
-      cols,
-      activeIndex,
-      jobId,
-    });
-    logger.log("Items data:", items);
-    logger.groupEnd();
-  }, [items, cols, activeIndex, jobId, logger]);
 
   // Create refs for each node
   nodeRefs.current = useMemo(
@@ -175,12 +139,17 @@ function DAGGrid({
       const end = Math.min(start + effectiveCols, items.length);
       const slice = Array.from({ length: end - start }, (_, k) => start + k);
       const rowLen = slice.length;
-      const pad = Math.max(0, effectiveCols - rowLen);
 
       if (r % 2 === 1) {
         // Reverse order for odd rows (snake pattern)
         const reversed = slice.reverse();
-        order.push(...Array(pad).fill(-1), ...reversed);
+        // Only add padding if this is not the last row
+        if (r < rows - 1) {
+          const pad = effectiveCols - rowLen;
+          order.push(...Array(pad).fill(-1), ...reversed);
+        } else {
+          order.push(...reversed);
+        }
       } else {
         order.push(...slice);
       }
@@ -341,6 +310,11 @@ function DAGGrid({
     }
   };
 
+  // Check if Restart button should be shown for a given status
+  const canShowRestart = (status) => {
+    return status === "failed" || status === "done" || status === "succeeded";
+  };
+
   // Handle Escape key to close slide-over
   React.useEffect(() => {
     const handleKeyDown = (e) => {
@@ -394,12 +368,20 @@ function DAGGrid({
     setAlertMessage(null);
 
     try {
-      await restartJob(jobId);
-      setAlertMessage(
-        "Restart requested. The job will reset to pending and start in the background."
-      );
+      const restartOptions = {};
+      if (restartTaskId) {
+        restartOptions.fromTask = restartTaskId;
+      }
+
+      await restartJob(jobId, restartOptions);
+
+      const successMessage = restartTaskId
+        ? `Restart requested from ${restartTaskId}. The job will start from that task in the background.`
+        : "Restart requested. The job will reset to pending and start in the background.";
+      setAlertMessage(successMessage);
       setAlertType("success");
       setRestartModalOpen(false);
+      setRestartTaskId(null);
     } catch (error) {
       let message = "Failed to start restart. Try again.";
       let type = "error";
@@ -449,15 +431,32 @@ function DAGGrid({
   }, [alertMessage]);
 
   // Check if restart should be enabled (job lifecycle = current and not running)
-  const isRestartEnabled = (item) => {
-    const status = getStatus(items.findIndex((i) => i.id === item.id));
-    const jobStatus = items[0]?.jobStatus; // Get job status from first item or parent
-    return (
-      status !== "running" &&
-      jobStatus !== "running" &&
-      item.lifecycle === "current"
-    );
-  };
+  const isRestartEnabled = React.useCallback(() => {
+    // Check if any item indicates the job is running (job-level state)
+    const isJobRunning = items.some((item) => item?.state === "running");
+
+    // Check if any task has explicit running status (not derived from activeIndex)
+    const hasRunningTask = items.some((item) => item?.status === "running");
+
+    const jobLifecycle = items[0]?.lifecycle || "current";
+
+    return jobLifecycle === "current" && !isJobRunning && !hasRunningTask;
+  }, [items]);
+
+  // Get disabled reason for tooltip
+  const getRestartDisabledReason = React.useCallback(() => {
+    // Check if any item indicates the job is running (job-level state)
+    const isJobRunning = items.some((item) => item?.state === "running");
+
+    // Check if any task has explicit running status (not derived from activeIndex)
+    const hasRunningTask = items.some((item) => item?.status === "running");
+
+    const jobLifecycle = items[0]?.lifecycle || "current";
+
+    if (isJobRunning || hasRunningTask) return "Job is currently running";
+    if (jobLifecycle !== "current") return "Job must be in current lifecycle";
+    return "";
+  }, [items]);
 
   return (
     <div className="relative w-full" role="list">
@@ -552,6 +551,8 @@ function DAGGrid({
           const item = items[idx];
           const status = getStatus(idx);
           const isActive = idx === activeIndex;
+          const canRestart = isRestartEnabled();
+          const showRestartButton = canShowRestart(status);
 
           return (
             <div
@@ -575,7 +576,7 @@ function DAGGrid({
             >
               <div
                 data-role="card-header"
-                className={`rounded-t-lg px-4 py-2 border-b flex items-center justify-between gap-3 ${getHeaderClasses(status)}`}
+                className={`rounded-t-lg p-4 border-b flex items-center justify-between gap-3 ${getHeaderClasses(status)}`}
               >
                 <div className="font-medium truncate">
                   {formatStepName(item, idx)}
@@ -621,22 +622,26 @@ function DAGGrid({
                 )}
 
                 {/* Restart button */}
-                <div className="mt-3 pt-3 border-t border-gray-100">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={(e) => handleRestartClick(e, item.id)}
-                    disabled={!isRestartEnabled(item) || isSubmitting}
-                    className="text-xs"
-                    title={
-                      !isRestartEnabled(item)
-                        ? "Restart is only available for jobs in current lifecycle that are not running"
-                        : "Restart job from clean slate"
-                    }
-                  >
-                    Restart
-                  </Button>
-                </div>
+                {canShowRestart(status) && (
+                  <div className="mt-3 pt-3 border-t border-gray-100">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={(e) => handleRestartClick(e, item.id)}
+                      disabled={!canRestart || isSubmitting}
+                      className="text-xs"
+                      title={
+                        !canRestart
+                          ? getRestartDisabledReason()
+                          : restartTaskId
+                            ? `Restart job from ${restartTaskId}`
+                            : "Restart job from clean slate"
+                      }
+                    >
+                      Restart
+                    </Button>
+                  </div>
+                )}
               </div>
             </div>
           );
