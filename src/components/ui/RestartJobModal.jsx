@@ -73,7 +73,8 @@ export function RestartJobModal({
           aria-modal="true"
           aria-labelledby="restart-modal-title"
           aria-describedby="restart-modal-description"
-          className="relative bg-white rounded-lg shadow-xl max-w-md w-full mx-4 outline-none"
+          className="relative bg-white rounded-lg shadow-2xl border border-gray-200 max-w-lg w-full mx-4 outline-none"
+          style={{ minWidth: "320px", maxWidth: "560px" }}
           tabIndex={-1}
           onKeyDown={handleKeyDown}
         >
@@ -85,15 +86,17 @@ export function RestartJobModal({
               size="5"
               className="mb-4 text-gray-900"
             >
-              Restart job from clean slate
+              {taskId
+                ? `Restart from ${taskId}`
+                : "Restart job (reset progress)"}
             </Heading>
 
             {/* Body */}
             <Box id="restart-modal-description" className="mb-6">
               <Text as="p" className="text-gray-700 mb-4">
-                Restarting from this task will reset the entire job's status to
-                pending. Files and artifacts will not be deleted. A new
-                background run will start automatically. This cannot be undone.
+                {taskId
+                  ? `This will restart the job from the "${taskId}" task. Tasks before ${taskId} will remain completed, while ${taskId} and all subsequent tasks will be reset to pending. Files and artifacts are preserved. A new background run will start automatically. This cannot be undone.`
+                  : "This will clear the job's progress and active stage and reset all tasks to pending. Files and artifacts are preserved. A new background run will start automatically. This cannot be undone."}
               </Text>
 
               {taskId && (
