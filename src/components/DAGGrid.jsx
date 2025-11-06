@@ -140,16 +140,12 @@ function DAGGrid({
       const slice = Array.from({ length: end - start }, (_, k) => start + k);
       const rowLen = slice.length;
 
-      if (r % 2 === 1) {
-        // Reverse order for odd rows (snake pattern)
+      const isReversedRow = r % 2 === 1; // odd rows RTL
+      if (isReversedRow) {
+        // Reverse order for even rows (snake pattern)
         const reversed = slice.reverse();
-        // Only add padding if this is not the last row
-        if (r < rows - 1) {
-          const pad = effectiveCols - rowLen;
-          order.push(...Array(pad).fill(-1), ...reversed);
-        } else {
-          order.push(...reversed);
-        }
+        const pad = effectiveCols - rowLen;
+        order.push(...Array(pad).fill(-1), ...reversed);
       } else {
         order.push(...slice);
       }
@@ -576,7 +572,7 @@ function DAGGrid({
             >
               <div
                 data-role="card-header"
-                className={`rounded-t-lg p-4 border-b flex items-center justify-between gap-3 ${getHeaderClasses(status)}`}
+                className={`rounded-t-lg px-4 py-2 border-b flex items-center justify-between gap-3 ${getHeaderClasses(status)}`}
               >
                 <div className="font-medium truncate">
                   {formatStepName(item, idx)}
@@ -629,7 +625,7 @@ function DAGGrid({
                       size="sm"
                       onClick={(e) => handleRestartClick(e, item.id)}
                       disabled={!canRestart || isSubmitting}
-                      className="text-xs"
+                      className="text-xs cursor-pointer"
                       title={
                         !canRestart
                           ? getRestartDisabledReason()
