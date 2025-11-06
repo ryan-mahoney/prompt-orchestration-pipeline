@@ -1,17 +1,24 @@
 import { derivePipelineMetadata } from "../../../utils/pipelines.js";
-
-const ALLOWED_STATES = new Set(["pending", "running", "done", "failed"]);
+import {
+  normalizeTaskState,
+  deriveJobStatusFromTasks,
+} from "../../../config/statuses.js";
 
 /**
  * Normalize a raw task state into canonical enum.
  * Returns { state, warning? } where warning is a string if normalization occurred.
  */
-function normalizeTaskState(raw) {
+function normalizeTaskStateWithWarning(raw) {
   if (!raw || typeof raw !== "string")
     return { state: "pending", warning: "missing_state" };
-  const s = raw.toLowerCase();
-  if (ALLOWED_STATES.has(s)) return { state: s };
-  return { state: "pending", warning: `unknown_state:${raw}` };
+
+  const normalizedState = normalizeTaskState(raw);
+
+  if (raw !== normalizedState) {
+    return { state: normalizedState, warning: `unknown_state:${raw}` };
+  }
+
+  return { state: normalizedState };
 }
 
 /**
@@ -28,7 +35,7 @@ function normalizeTasks(rawTasks) {
     // Object shape - canonical format
     const tasks = {};
     Object.entries(rawTasks).forEach(([name, t]) => {
-      const ns = normalizeTaskState(t && t.state);
+      const ns = normalizeTaskStateWithWarning(t && t.state);
       if (ns.warning) warnings.push(`${name}:${ns.warning}`);
       const taskObj = {
         name,
@@ -79,7 +86,7 @@ function normalizeTasks(rawTasks) {
     const tasks = {};
     rawTasks.forEach((t, idx) => {
       const name = t && t.name ? String(t.name) : `task-${idx}`;
-      const ns = normalizeTaskState(t && t.state);
+      const ns = normalizeTaskStateWithWarning(t && t.state);
       if (ns.warning) warnings.push(`${name}:${ns.warning}`);
       tasks[name] = {
         name,
@@ -113,23 +120,6 @@ function normalizeTasks(rawTasks) {
 }
 
 /**
- * Derive status from tasks when status is missing/invalid.
- * Rules:
- * - failed if any task state === 'failed'
- * - running if >=1 running and none failed
- * - complete if all done
- * - pending otherwise
- */
-function deriveStatusFromTasks(tasks) {
-  const taskList = Object.values(tasks);
-  if (!Array.isArray(taskList) || taskList.length === 0) return "pending";
-  if (taskList.some((t) => t.state === "failed")) return "failed";
-  if (taskList.some((t) => t.state === "running")) return "running";
-  if (taskList.every((t) => t.state === "done")) return "complete";
-  return "pending";
-}
-
-/**
  * Clamp number to 0..100 and ensure integer.
  */
 function clampProgress(n) {
@@ -147,7 +137,7 @@ function computeJobSummaryStats(tasks) {
     (acc, t) => acc + (t.state === "done" ? 1 : 0),
     0
   );
-  const status = deriveStatusFromTasks(tasks);
+  const status = deriveJobStatusFromTasks(Object.values(tasks));
   const progress =
     taskCount > 0 ? Math.round((doneCount / taskCount) * 100) : 0;
   return { status, progress, doneCount, taskCount };

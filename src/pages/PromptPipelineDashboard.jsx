@@ -7,8 +7,9 @@ import { Box, Flex, Text, Heading, Tabs } from "@radix-ui/themes";
 import { Progress } from "../components/ui/progress";
 import { useJobListWithUpdates } from "../ui/client/hooks/useJobListWithUpdates";
 import { adaptJobSummary } from "../ui/client/adapters/job-adapter";
-import { jobCumulativeDurationMs } from "../utils/duration";
-import { useTicker } from "../ui/client/hooks/useTicker";
+import { jobCumulativeDurationMs } from "../utils/duration.js";
+import { useTicker } from "../ui/client/hooks/useTicker.js";
+import { TaskState } from "../config/statuses.js";
 
 // Referenced components — leave these alone
 import JobTable from "../components/JobTable";
@@ -59,26 +60,26 @@ export default function PromptPipelineDashboard({ isConnected }) {
   const now = useTicker(10000);
 
   const errorCount = useMemo(
-    () => jobs.filter((j) => j.status === "failed").length,
+    () => jobs.filter((j) => j.status === TaskState.FAILED).length,
     [jobs]
   );
   const currentCount = useMemo(
-    () => jobs.filter((j) => j.status === "running").length,
+    () => jobs.filter((j) => j.status === TaskState.RUNNING).length,
     [jobs]
   );
   const completedCount = useMemo(
-    () => jobs.filter((j) => j.status === "complete").length,
+    () => jobs.filter((j) => j.status === TaskState.DONE).length,
     [jobs]
   );
 
   const filteredJobs = useMemo(() => {
     switch (activeTab) {
       case "current":
-        return jobs.filter((j) => j.status === "running");
+        return jobs.filter((j) => j.status === TaskState.RUNNING);
       case "errors":
-        return jobs.filter((j) => j.status === "failed");
+        return jobs.filter((j) => j.status === TaskState.FAILED);
       case "complete":
-        return jobs.filter((j) => j.status === "complete");
+        return jobs.filter((j) => j.status === TaskState.DONE);
       default:
         return [];
     }
@@ -88,7 +89,7 @@ export default function PromptPipelineDashboard({ isConnected }) {
 
   // Aggregate progress for currently running jobs (for a subtle top progress bar)
   const runningJobs = useMemo(
-    () => jobs.filter((j) => j.status === "running"),
+    () => jobs.filter((j) => j.status === TaskState.RUNNING),
     [jobs]
   );
   const aggregateProgress = useMemo(() => {

@@ -5,6 +5,7 @@ import { loadFreshModule } from "./module-loader.js";
 import { validatePipelineOrThrow } from "./validation.js";
 import { getPipelineConfig } from "./config.js";
 import { writeJobStatus } from "./status-writer.js";
+import { TaskState } from "../config/statuses.js";
 
 const ROOT = process.env.PO_ROOT || process.cwd();
 const DATA_DIR = path.join(ROOT, process.env.PO_DATA_DIR || "pipeline-data");
@@ -71,7 +72,7 @@ for (const taskName of pipeline.tasks) {
     continue;
   }
 
-  if (status.tasks[taskName]?.state === "done") {
+  if (status.tasks[taskName]?.state === TaskState.DONE) {
     try {
       const outputPath = path.join(workDir, "tasks", taskName, "output.json");
       const output = JSON.parse(await fs.readFile(outputPath, "utf8"));
@@ -81,7 +82,7 @@ for (const taskName of pipeline.tasks) {
   }
 
   await updateStatus(taskName, {
-    state: "running",
+    state: TaskState.RUNNING,
     startedAt: now(),
     attempts: (status.tasks[taskName]?.attempts || 0) + 1,
   });
@@ -134,7 +135,7 @@ for (const taskName of pipeline.tasks) {
 
       // Update tasks-status.json with enriched failure context
       await updateStatus(taskName, {
-        state: "failed",
+        state: TaskState.FAILED,
         endedAt: now(),
         error: result.error, // Don't double-normalize - use result.error as-is
         failedStage: result.failedStage,
@@ -169,7 +170,7 @@ for (const taskName of pipeline.tasks) {
     }
 
     await updateStatus(taskName, {
-      state: "done",
+      state: TaskState.DONE,
       endedAt: now(),
       executionTimeMs:
         result.logs?.reduce((total, log) => total + (log.ms || 0), 0) || 0,
@@ -177,7 +178,7 @@ for (const taskName of pipeline.tasks) {
     });
   } catch (err) {
     await updateStatus(taskName, {
-      state: "failed",
+      state: TaskState.FAILED,
       endedAt: now(),
       error: normalizeError(err),
     });
