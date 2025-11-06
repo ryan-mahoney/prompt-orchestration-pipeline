@@ -18,10 +18,9 @@ export async function restartJob(jobId, opts = {}) {
     ...opts.options,
   };
 
-  const requestBody = {
-    mode: "clean-slate",
-    options,
-  };
+  const requestBody = opts.fromTask
+    ? { fromTask: opts.fromTask, options }
+    : { mode: "clean-slate", options };
 
   try {
     const response = await fetch(
@@ -47,8 +46,7 @@ export async function restartJob(jobId, opts = {}) {
       // Throw structured error with code and message
       throw {
         code: errorData.code || getErrorCodeFromStatus(response.status),
-        message:
-          errorData.message || getErrorMessageFromStatus(response.status),
+        message: getRestartErrorMessage(errorData, response.status),
         status: response.status,
       };
     }
@@ -99,4 +97,38 @@ function getErrorMessageFromStatus(status) {
     default:
       return `Request failed with status ${status}`;
   }
+}
+
+/**
+ * Get specific error message from error response for restart functionality
+ */
+function getRestartErrorMessage(errorData, status) {
+  // Handle specific 409 conflict errors
+  if (status === 409) {
+    if (errorData.code === "job_running") {
+      return "Job is currently running; restart is unavailable.";
+    }
+    if (errorData.code === "unsupported_lifecycle") {
+      return "Job must be in current to restart.";
+    }
+    if (errorData.message?.includes("job_running")) {
+      return "Job is currently running; restart is unavailable.";
+    }
+    if (errorData.message?.includes("unsupported_lifecycle")) {
+      return "Job must be in current to restart.";
+    }
+  }
+
+  // Handle 404 errors
+  if (status === 404) {
+    return "Job not found.";
+  }
+
+  // Handle 500 errors
+  if (status === 500) {
+    return "Failed to start restart. Try again.";
+  }
+
+  // Fall back to provided message or default
+  return errorData.message || "Failed to restart job.";
 }
