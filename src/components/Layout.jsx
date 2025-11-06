@@ -19,7 +19,6 @@ export default function Layout({
   pageTitle,
   breadcrumbs,
   actions,
-  showBackButton = false,
   backTo = "/",
   maxWidth = "max-w-7xl",
 }) {
@@ -110,26 +109,6 @@ export default function Layout({
           >
             {/* Left side: Navigation and title */}
             <Flex align="center" className="min-w-0 flex-1">
-              {/* Back button (conditional) */}
-              {showBackButton && (
-                <Tooltip.Root delayDuration={200}>
-                  <Tooltip.Trigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={handleBack}
-                      className="shrink-0"
-                      aria-label="Go back"
-                    >
-                      <ArrowLeft className="h-4 w-4" />
-                    </Button>
-                  </Tooltip.Trigger>
-                  <Tooltip.Content side="bottom" sideOffset={5}>
-                    <Text size="2">Go back</Text>
-                  </Tooltip.Content>
-                </Tooltip.Root>
-              )}
-
               {/* Logo */}
               <Box
                 asChild

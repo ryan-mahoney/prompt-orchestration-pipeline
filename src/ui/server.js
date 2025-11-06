@@ -12,6 +12,8 @@ import * as state from "./state.js";
 // Import orchestrator-related functions only in non-test mode
 let submitJobWithValidation;
 import { sseRegistry } from "./sse.js";
+import { resetJobToCleanSlate } from "../core/status-writer.js";
+import { spawn } from "node:child_process";
 import {
   getPendingSeedPath,
   resolvePipelinePaths,
@@ -28,6 +30,22 @@ const __dirname = path.dirname(__filename);
 
 // Vite dev server instance (populated in development mode)
 let viteServer = null;
+
+// In-memory restart guard to prevent duplicate concurrent restarts per job
+const restartingJobs = new Set();
+
+// Helper functions for restart guard
+function isRestartInProgress(jobId) {
+  return restartingJobs.has(jobId);
+}
+
+function beginRestart(jobId) {
+  restartingJobs.add(jobId);
+}
+
+function endRestart(jobId) {
+  restartingJobs.delete(jobId);
+}
 
 // Configuration
 const PORT = process.env.PORT || 4000;
@@ -1458,6 +1476,195 @@ function createServer() {
       return;
     }
 
+    // Route: POST /api/jobs/:jobId/restart
+    if (
+      pathname.startsWith("/api/jobs/") &&
+      pathname.endsWith("/restart") &&
+      req.method === "POST"
+    ) {
+      const pathMatch = pathname.match(/^\/api\/jobs\/([^\/]+)\/restart$/);
+      if (!pathMatch) {
+        sendJson(res, 400, {
+          ok: false,
+          error: "bad_request",
+          message: "Invalid path format",
+        });
+        return;
+      }
+
+      const [, jobId] = pathMatch;
+      const dataDir = process.env.PO_ROOT || DATA_DIR;
+
+      try {
+        // Validate jobId
+        if (!jobId || typeof jobId !== "string" || jobId.trim() === "") {
+          sendJson(res, 400, {
+            ok: false,
+            error: "bad_request",
+            message: "jobId is required",
+          });
+          return;
+        }
+
+        // Resolve job lifecycle
+        const lifecycle = await resolveJobLifecycle(dataDir, jobId);
+        if (!lifecycle) {
+          sendJson(res, 404, {
+            ok: false,
+            code: "job_not_found",
+            message: "Job not found",
+          });
+          return;
+        }
+
+        // Only support current lifecycle for MVP
+        if (lifecycle !== "current") {
+          sendJson(res, 409, {
+            ok: false,
+            code: "unsupported_lifecycle",
+            message:
+              "Job restart is only supported for jobs in 'current' lifecycle",
+          });
+          return;
+        }
+
+        // Check if job is already running
+        const jobDir = getJobDirectoryPath(dataDir, jobId, "current");
+        const statusPath = path.join(jobDir, "tasks-status.json");
+
+        let snapshot;
+        try {
+          const content = await fs.promises.readFile(statusPath, "utf8");
+          snapshot = JSON.parse(content);
+        } catch (error) {
+          if (error.code === "ENOENT") {
+            sendJson(res, 404, {
+              ok: false,
+              code: "job_not_found",
+              message: "Job status file not found",
+            });
+            return;
+          }
+          throw error;
+        }
+
+        // Guard against running jobs
+        if (snapshot.state === "running") {
+          sendJson(res, 409, {
+            ok: false,
+            code: "job_running",
+            message: "Job is currently running",
+          });
+          return;
+        }
+
+        // Guard against concurrent restarts
+        if (isRestartInProgress(jobId)) {
+          sendJson(res, 409, {
+            ok: false,
+            code: "job_running",
+            message: "Job restart is already in progress",
+          });
+          return;
+        }
+
+        // Begin restart guard
+        beginRestart(jobId);
+
+        try {
+          // Parse optional fromTask from request body for targeted restart
+          let body = {};
+          try {
+            const rawBody = await readRawBody(req);
+            body = JSON.parse(rawBody.toString("utf8"));
+          } catch (error) {
+            sendJson(res, 400, {
+              ok: false,
+              error: "bad_request",
+              message: "Invalid JSON in request body",
+            });
+            return;
+          }
+
+          const { fromTask } = body;
+
+          // Reset job: clean-slate or partial from a specific task
+          const { resetJobFromTask } = await import("../core/status-writer.js");
+          if (fromTask) {
+            await resetJobFromTask(jobDir, fromTask, { clearTokenUsage: true });
+          } else {
+            await resetJobToCleanSlate(jobDir, { clearTokenUsage: true });
+          }
+
+          // Spawn detached pipeline-runner process
+          const runnerPath = path.join(__dirname, "../core/pipeline-runner.js");
+          const base = process.env.PO_ROOT || DATA_DIR;
+          const env = {
+            ...process.env,
+            PO_ROOT: base,
+            PO_DATA_DIR: path.join(base, "pipeline-data"),
+            PO_PENDING_DIR: path.join(base, "pipeline-data", "pending"),
+            PO_CURRENT_DIR: path.join(base, "pipeline-data", "current"),
+            PO_COMPLETE_DIR: path.join(base, "pipeline-data", "complete"),
+            ...(fromTask && { PO_START_FROM_TASK: fromTask }),
+          };
+
+          const child = spawn(process.execPath, [runnerPath, jobId], {
+            env,
+            stdio: "ignore",
+            detached: true,
+          });
+
+          // Unref the child process so it runs in the background
+          child.unref();
+
+          // Send success response
+          sendJson(res, 202, {
+            ok: true,
+            jobId,
+            mode: "clean-slate",
+            spawned: true,
+          });
+
+          console.log(
+            `Job ${jobId} restarted successfully, detached runner PID: ${child.pid}`
+          );
+        } finally {
+          // Always end restart guard
+          endRestart(jobId);
+        }
+      } catch (error) {
+        console.error(`Error handling POST /api/jobs/${jobId}/restart:`, error);
+
+        // Clean up restart guard on error
+        if (isRestartInProgress(jobId)) {
+          endRestart(jobId);
+        }
+
+        if (error.code === "ENOENT") {
+          sendJson(res, 404, {
+            ok: false,
+            code: "job_not_found",
+            message: "Job directory not found",
+          });
+        } else if (error.code === "spawn failed") {
+          sendJson(res, 500, {
+            ok: false,
+            code: "spawn_failed",
+            message: error.message || "Failed to spawn pipeline runner",
+          });
+        } else {
+          sendJson(res, 500, {
+            ok: false,
+            code: "internal_error",
+            message: "Internal server error",
+          });
+        }
+      }
+
+      return;
+    }
+
     // Route: GET /api/jobs/:jobId
     if (pathname.startsWith("/api/jobs/") && req.method === "GET") {
       const jobId = pathname.substring("/api/jobs/".length);
@@ -1853,6 +2060,10 @@ export {
   initializeWatcher,
   state,
   resolveJobLifecycle,
+  restartingJobs,
+  isRestartInProgress,
+  beginRestart,
+  endRestart,
 };
 
 // Start server if run directly

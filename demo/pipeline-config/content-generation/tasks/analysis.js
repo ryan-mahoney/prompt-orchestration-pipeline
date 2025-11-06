@@ -97,6 +97,8 @@ export const inference = async ({
   meta,
   flags,
 }) => {
+  //throw new Error("Disabled for demo purposes");
+
   const response = await deepseek.chat({
     messages: [
       { role: "system", content: system },

@@ -99,12 +99,6 @@ describe("Layout", () => {
     expect(screen.queryByTestId("page-subheader")).toBeFalsy();
   });
 
-  it("shows back button when showBackButton is true", () => {
-    // Skip this test due to Button component mock issues
-    // The back button functionality is tested manually and works in the app
-    expect(true).toBe(true);
-  });
-
   it("navigates back when back button is clicked", () => {
     // Skip this test due to Button component mock issues
     // The back button functionality is tested manually and works in the app

@@ -214,7 +214,13 @@ export async function writeJobStatus(jobDir, updateFn) {
       const validated = validateStatusSnapshot(current);
 
       // Apply user updates
-      const maybeUpdated = updateFn(validated);
+      let maybeUpdated;
+      try {
+        maybeUpdated = updateFn(validated);
+      } catch (error) {
+        console.error(`[${jobId}] Error executing update function:`, error);
+        throw new Error(`Update function failed: ${error.message}`);
+      }
       const snapshot = validateStatusSnapshot(
         maybeUpdated === undefined ? validated : maybeUpdated
       );
@@ -336,6 +342,143 @@ export async function updateTaskStatus(jobDir, taskId, taskUpdateFn) {
     if (result !== undefined) {
       snapshot.tasks[taskId] = result;
     }
+
+    return snapshot;
+  });
+}
+
+/**
+ * Reset a job from a specific task onward, preserving prior completed tasks
+ *
+ * @param {string} jobDir - Job directory path containing tasks-status.json
+ * @param {string} fromTask - Task identifier to restart from (inclusive)
+ * @param {Object} options - Reset options
+ * @param {boolean} [options.clearTokenUsage=true] - Whether to clear token usage arrays
+ * @returns {Promise<Object>} The updated status snapshot
+ */
+export async function resetJobFromTask(
+  jobDir,
+  fromTask,
+  { clearTokenUsage = true } = {}
+) {
+  if (!jobDir || typeof jobDir !== "string") {
+    throw new Error("jobDir must be a non-empty string");
+  }
+
+  if (!fromTask || typeof fromTask !== "string") {
+    throw new Error("fromTask must be a non-empty string");
+  }
+
+  return writeJobStatus(jobDir, (snapshot) => {
+    // Reset root-level status
+    snapshot.state = "pending";
+    snapshot.current = null;
+    snapshot.currentStage = null;
+    snapshot.progress = 0;
+    snapshot.lastUpdated = new Date().toISOString();
+
+    // Ensure tasks object exists
+    if (!snapshot.tasks || typeof snapshot.tasks !== "object") {
+      snapshot.tasks = {};
+    }
+
+    // Compute progress based on preserved (done) tasks before fromTask
+    let doneCount = 0;
+    const taskKeys = Object.keys(snapshot.tasks);
+    for (const taskId of taskKeys) {
+      if (snapshot.tasks[taskId]?.state === "done") {
+        doneCount++;
+      }
+    }
+    snapshot.progress =
+      taskKeys.length > 0 ? (doneCount / taskKeys.length) * 100 : 0;
+
+    // Reset tasks from fromTask onward to pending; keep earlier tasks as-is
+    for (const taskId of taskKeys) {
+      const task = snapshot.tasks[taskId];
+      if (!task) continue; // ensure task object exists
+
+      const shouldReset =
+        taskKeys.indexOf(taskId) >= taskKeys.indexOf(fromTask);
+      if (shouldReset) {
+        // Reset task state and metadata
+        task.state = "pending";
+        task.currentStage = null;
+
+        // Remove error-related fields
+        delete task.failedStage;
+        delete task.error;
+
+        // Reset counters
+        task.attempts = 0;
+        task.refinementAttempts = 0;
+
+        // Clear token usage if requested
+        if (clearTokenUsage) {
+          task.tokenUsage = [];
+        }
+      }
+      // If task appears before fromTask and is not done, keep its state untouched
+      // This preserves upstream work if user restarts from a mid-pipeline task
+    }
+
+    // Preserve files.* arrays - do not modify them
+    // This ensures generated files are preserved during restart
+
+    return snapshot;
+  });
+}
+
+/**
+ * Reset a job and all its tasks to clean-slate state atomically
+ *
+ * @param {string} jobDir - Job directory path containing tasks-status.json
+ * @param {Object} options - Reset options
+ * @param {boolean} [options.clearTokenUsage=true] - Whether to clear token usage arrays
+ * @returns {Promise<Object>} The updated status snapshot
+ */
+export async function resetJobToCleanSlate(
+  jobDir,
+  { clearTokenUsage = true } = {}
+) {
+  if (!jobDir || typeof jobDir !== "string") {
+    throw new Error("jobDir must be a non-empty string");
+  }
+
+  return writeJobStatus(jobDir, (snapshot) => {
+    // Reset root-level status
+    snapshot.state = "pending";
+    snapshot.current = null;
+    snapshot.currentStage = null;
+    snapshot.progress = 0;
+    snapshot.lastUpdated = new Date().toISOString();
+
+    // Reset all tasks
+    if (snapshot.tasks && typeof snapshot.tasks === "object") {
+      for (const taskId of Object.keys(snapshot.tasks)) {
+        const task = snapshot.tasks[taskId];
+
+        // Reset task state
+        task.state = "pending";
+        task.currentStage = null;
+
+        // Remove error-related fields
+        delete task.failedStage;
+        delete task.error;
+
+        // Reset counters
+        task.attempts = 0;
+        task.refinementAttempts = 0;
+
+        // Clear token usage if requested
+        if (clearTokenUsage) {
+          task.tokenUsage = [];
+        }
+      }
+    }
+
+    // Preserve files.* arrays - do not modify them
+    // This ensures generated files are preserved during restart
 
     return snapshot;
   });
