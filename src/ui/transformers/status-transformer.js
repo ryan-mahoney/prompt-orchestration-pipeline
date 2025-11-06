@@ -4,24 +4,12 @@ import {
   calculateJobCosts,
   formatCostDataForAPI,
 } from "../../utils/token-cost-calculator.js";
-
-const VALID_TASK_STATES = new Set(["pending", "running", "done", "failed"]);
-
-/**
- * Determine job-level status from tasks mapping.
- */
-export function determineJobStatus(tasks = {}) {
-  if (!tasks || typeof tasks !== "object") return "pending";
-  const names = Object.keys(tasks);
-  if (names.length === 0) return "pending";
-
-  const states = names.map((n) => tasks[n]?.state);
-
-  if (states.includes("failed")) return "failed";
-  if (states.includes("running")) return "running";
-  if (states.every((s) => s === "done")) return "complete";
-  return "pending";
-}
+import {
+  VALID_TASK_STATES,
+  normalizeTaskState,
+  deriveJobStatusFromTasks,
+  TaskState,
+} from "../../config/statuses.js";
 
 /**
  * Compute job status object { status, progress } and emit warnings for unknown states.
@@ -50,14 +38,14 @@ export function computeJobStatus(tasksInput, existingProgress = null) {
     const t = tasksInput[name];
     const state = t && typeof t === "object" ? t.state : undefined;
 
-    if (state == null || !VALID_TASK_STATES.has(state)) {
-      if (state != null && !VALID_TASK_STATES.has(state)) {
-        unknownStatesFound.add(state);
-      }
-      normalized[name] = { state: "pending" };
-    } else {
-      normalized[name] = { state };
+    const normalizedState = normalizeTaskState(state);
+
+    // Track unknown states for warning
+    if (state != null && state !== normalizedState) {
+      unknownStatesFound.add(state);
     }
+
+    normalized[name] = { state: normalizedState };
   }
 
   // Warn for unknown states
@@ -65,7 +53,7 @@ export function computeJobStatus(tasksInput, existingProgress = null) {
     console.warn(`Unknown task state "${s}"`);
   }
 
-  const status = determineJobStatus(normalized);
+  const status = deriveJobStatusFromTasks(Object.values(normalized));
   // Use existing progress if provided, otherwise default to 0
   // Progress is pre-calculated in task-statuses.json, not computed from task states
   const progress = existingProgress !== null ? existingProgress : 0;
@@ -103,12 +91,11 @@ export function transformTasks(rawTasks) {
     const rawState =
       raw && typeof raw === "object" && "state" in raw ? raw.state : undefined;
 
-    let finalState = "pending";
-    if (rawState != null && VALID_TASK_STATES.has(rawState)) {
-      finalState = rawState;
-    } else if (rawState != null && !VALID_TASK_STATES.has(rawState)) {
+    const finalState = normalizeTaskState(rawState);
+
+    // Warn for invalid states (different from normalized)
+    if (rawState != null && rawState !== finalState) {
       console.warn(`Invalid task state "${rawState}"`);
-      finalState = "pending";
     }
 
     const task = {

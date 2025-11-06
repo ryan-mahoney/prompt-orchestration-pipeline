@@ -7,6 +7,7 @@ import { loadEnvironment } from "./environment.js";
 import { createTaskFileIO } from "./file-io.js";
 import { writeJobStatus } from "./status-writer.js";
 import { computeDeterministicProgress } from "./progress.js";
+import { TaskState } from "../config/statuses.js";
 
 /**
  * Derives model key and token counts from LLM metric event.
@@ -641,7 +642,7 @@ export async function runPipeline(modulePath, initialContext = {}) {
               snapshot.tasks[context.meta.taskName] = {};
             }
             snapshot.tasks[context.meta.taskName].currentStage = stageName;
-            snapshot.tasks[context.meta.taskName].state = "running";
+            snapshot.tasks[context.meta.taskName].state = TaskState.RUNNING;
           });
         } catch (error) {
           // Don't fail the pipeline if status write fails
@@ -782,7 +783,7 @@ export async function runPipeline(modulePath, initialContext = {}) {
                 snapshot.tasks[context.meta.taskName] = {};
               }
               snapshot.tasks[context.meta.taskName].currentStage = stageName;
-              snapshot.tasks[context.meta.taskName].state = "running";
+              snapshot.tasks[context.meta.taskName].state = TaskState.RUNNING;
             });
           } catch (error) {
             // Don't fail the pipeline if status write fails
@@ -859,14 +860,14 @@ export async function runPipeline(modulePath, initialContext = {}) {
             await writeJobStatus(context.meta.workDir, (snapshot) => {
               snapshot.current = context.meta.taskName;
               snapshot.currentStage = stageName;
-              snapshot.state = "failed";
+              snapshot.state = TaskState.FAILED;
               snapshot.lastUpdated = new Date().toISOString();
 
               // Ensure task exists and update task-specific fields
               if (!snapshot.tasks[context.meta.taskName]) {
                 snapshot.tasks[context.meta.taskName] = {};
               }
-              snapshot.tasks[context.meta.taskName].state = "failed";
+              snapshot.tasks[context.meta.taskName].state = TaskState.FAILED;
               snapshot.tasks[context.meta.taskName].failedStage = stageName;
               snapshot.tasks[context.meta.taskName].currentStage = stageName;
             });
@@ -937,7 +938,7 @@ export async function runPipeline(modulePath, initialContext = {}) {
       await writeJobStatus(context.meta.workDir, (snapshot) => {
         snapshot.current = null;
         snapshot.currentStage = null;
-        snapshot.state = "done";
+        snapshot.state = TaskState.DONE;
         snapshot.progress = 100;
         snapshot.lastUpdated = new Date().toISOString();
 
@@ -945,7 +946,7 @@ export async function runPipeline(modulePath, initialContext = {}) {
         if (!snapshot.tasks[context.meta.taskName]) {
           snapshot.tasks[context.meta.taskName] = {};
         }
-        snapshot.tasks[context.meta.taskName].state = "done";
+        snapshot.tasks[context.meta.taskName].state = TaskState.DONE;
         snapshot.tasks[context.meta.taskName].currentStage = null;
       });
     } catch (error) {

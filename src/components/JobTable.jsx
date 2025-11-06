@@ -157,7 +157,7 @@ export default function JobTable({
                     <Text size="2" className="text-slate-700">
                       {currentTaskName
                         ? currentTaskName
-                        : job.status === "completed"
+                        : job.status === "done"
                           ? "—"
                           : (job.current ?? "—")}
                     </Text>

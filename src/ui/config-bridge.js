@@ -2,6 +2,12 @@
  * Universal configuration bridge for UI helpers.
  * Works in both browser and Node environments.
  */
+import {
+  TaskState,
+  JobStatus,
+  JobLocation,
+  deriveJobStatusFromTasks,
+} from "../config/statuses.js";
 
 /**
  * Global constants and contracts for project data display system
@@ -18,19 +24,24 @@ export const Constants = {
    * Valid task states
    * @type {string[]}
    */
-  TASK_STATES: ["pending", "running", "done", "failed"],
+  TASK_STATES: Object.values(TaskState),
 
   /**
    * Valid job locations
    * @type {string[]}
    */
-  JOB_LOCATIONS: ["current", "complete"],
+  JOB_LOCATIONS: Object.values(JobLocation),
 
   /**
    * Status sort order (descending priority)
    * @type {string[]}
    */
-  STATUS_ORDER: ["running", "failed", "pending", "complete"],
+  STATUS_ORDER: [
+    JobStatus.RUNNING,
+    JobStatus.FAILED,
+    JobStatus.PENDING,
+    JobStatus.COMPLETE,
+  ],
 
   /**
    * File size limits for reading
@@ -104,27 +115,7 @@ export function getStatusPriority(status) {
  * @returns {string} Job status
  */
 export function determineJobStatus(tasks = {}) {
-  const taskEntries = Object.entries(tasks);
-
-  if (taskEntries.length === 0) {
-    return "pending";
-  }
-
-  const taskStates = taskEntries.map(([_, task]) => task.state);
-
-  if (taskStates.includes("failed")) {
-    return "failed";
-  }
-
-  if (taskStates.includes("running")) {
-    return "running";
-  }
-
-  if (taskStates.every((state) => state === "done")) {
-    return "complete";
-  }
-
-  return "pending";
+  return deriveJobStatusFromTasks(Object.values(tasks));
 }
 
 /**

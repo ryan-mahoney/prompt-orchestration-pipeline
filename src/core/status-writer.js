@@ -1,5 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { TaskState } from "../config/statuses.js";
 
 // Lazy import SSE registry to avoid circular dependencies
 let sseRegistry = null;
@@ -57,7 +58,7 @@ const createStatusWriterLogger = (jobId) => {
 function createDefaultStatus(jobId) {
   return {
     id: jobId,
-    state: "pending",
+    state: TaskState.PENDING,
     current: null,
     currentStage: null,
     lastUpdated: new Date().toISOString(),
@@ -131,7 +132,7 @@ function validateStatusSnapshot(snapshot) {
 
   // Ensure required root fields exist
   if (typeof snapshot.state !== "string") {
-    snapshot.state = "pending";
+    snapshot.state = TaskState.PENDING;
   }
   if (snapshot.current !== null && typeof snapshot.current !== "string") {
     snapshot.current = null;
@@ -371,7 +372,7 @@ export async function resetJobFromTask(
 
   return writeJobStatus(jobDir, (snapshot) => {
     // Reset root-level status
-    snapshot.state = "pending";
+    snapshot.state = TaskState.PENDING;
     snapshot.current = null;
     snapshot.currentStage = null;
     snapshot.progress = 0;
@@ -386,7 +387,7 @@ export async function resetJobFromTask(
     let doneCount = 0;
     const taskKeys = Object.keys(snapshot.tasks);
     for (const taskId of taskKeys) {
-      if (snapshot.tasks[taskId]?.state === "done") {
+      if (snapshot.tasks[taskId]?.state === TaskState.DONE) {
         doneCount++;
       }
     }
@@ -402,7 +403,7 @@ export async function resetJobFromTask(
         taskKeys.indexOf(taskId) >= taskKeys.indexOf(fromTask);
       if (shouldReset) {
         // Reset task state and metadata
-        task.state = "pending";
+        task.state = TaskState.PENDING;
         task.currentStage = null;
 
         // Remove error-related fields
@@ -447,7 +448,7 @@ export async function resetJobToCleanSlate(
 
   return writeJobStatus(jobDir, (snapshot) => {
     // Reset root-level status
-    snapshot.state = "pending";
+    snapshot.state = TaskState.PENDING;
     snapshot.current = null;
     snapshot.currentStage = null;
     snapshot.progress = 0;
@@ -459,7 +460,7 @@ export async function resetJobToCleanSlate(
         const task = snapshot.tasks[taskId];
 
         // Reset task state
-        task.state = "pending";
+        task.state = TaskState.PENDING;
         task.currentStage = null;
 
         // Remove error-related fields
