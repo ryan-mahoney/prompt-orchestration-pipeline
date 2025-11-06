@@ -18,6 +18,8 @@ if (!jobId) throw new Error("runner requires jobId as argument");
 
 const workDir = path.join(CURRENT_DIR, jobId);
 
+const startFromTask = process.env.PO_START_FROM_TASK;
+
 // Get pipeline slug from environment or fallback to seed.json
 let pipelineSlug = process.env.PO_PIPELINE_SLUG;
 if (!pipelineSlug) {
@@ -61,6 +63,14 @@ const seed = JSON.parse(
 let pipelineArtifacts = {};
 
 for (const taskName of pipeline.tasks) {
+  // Skip tasks before startFromTask when targeting a specific restart point
+  if (
+    startFromTask &&
+    pipeline.tasks.indexOf(taskName) < pipeline.tasks.indexOf(startFromTask)
+  ) {
+    continue;
+  }
+
   if (status.tasks[taskName]?.state === "done") {
     try {
       const outputPath = path.join(workDir, "tasks", taskName, "output.json");
@@ -78,10 +88,6 @@ for (const taskName of pipeline.tasks) {
 
   const taskDir = path.join(workDir, "tasks", taskName);
   await fs.mkdir(taskDir, { recursive: true });
-  await atomicWrite(
-    path.join(taskDir, "letter.json"),
-    JSON.stringify({ task: taskName, at: now() }, null, 2)
-  );
 
   try {
     const ctx = {

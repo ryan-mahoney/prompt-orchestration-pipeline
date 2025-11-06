@@ -149,4 +149,6 @@ tmp-payload.json
 .clinerules/workflows/pr-*
 
 # Temporary task modules
-.tmp-task-modules
+.tmp-task-modules/
+debug-*.js
+.tmp-task-modules/

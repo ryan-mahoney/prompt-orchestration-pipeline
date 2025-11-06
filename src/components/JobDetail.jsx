@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React from "react";
 import { fmtDuration } from "../utils/duration.js";
 import { taskDisplayDurationMs } from "../utils/duration.js";
 import { useTicker } from "../ui/client/hooks/useTicker.js";
@@ -25,15 +25,8 @@ function formatTokensCompact(n) {
   return `${n} tokens`;
 }
 
-export default function JobDetail({ job, pipeline, onClose, onResume }) {
+export default function JobDetail({ job, pipeline }) {
   const now = useTicker(1000);
-  const [resumeFrom, setResumeFrom] = useState(
-    pipeline?.tasks?.[0]
-      ? typeof pipeline.tasks[0] === "string"
-        ? pipeline.tasks[0]
-        : (pipeline.tasks[0].id ?? pipeline.tasks[0].name ?? "")
-      : ""
-  );
 
   // job.tasks is expected to be an object keyed by task name; normalize from array if needed
   const taskById = React.useMemo(() => {
@@ -57,16 +50,6 @@ export default function JobDetail({ job, pipeline, onClose, onResume }) {
 
     return result;
   }, [job?.tasks]);
-
-  useEffect(() => {
-    setResumeFrom(
-      pipeline?.tasks?.[0]
-        ? typeof pipeline.tasks[0] === "string"
-          ? pipeline.tasks[0]
-          : (pipeline.tasks[0].id ?? pipeline.tasks[0].name ?? "")
-        : ""
-    );
-  }, [job.id, pipeline?.tasks?.length]);
 
   // Compute pipeline tasks from pipeline or derive from job tasks
   const computedPipeline = React.useMemo(() => {
@@ -96,16 +79,6 @@ export default function JobDetail({ job, pipeline, onClose, onResume }) {
     const rawDagItems = computeDagItems(job, computedPipeline);
 
     const processedItems = rawDagItems.map((item, index) => {
-      if (process.env.NODE_ENV !== "test") {
-        console.debug("[JobDetail] computed DAG item", {
-          id: item.id,
-          status: item.status,
-          stage: item.stage,
-          jobHasTasks: !!job?.tasks,
-          taskKeys: job?.tasks ? Object.keys(job.tasks) : null,
-        });
-      }
-
       const task = taskById[item.id];
 
       const taskConfig = task?.config || {};
@@ -177,10 +150,10 @@ export default function JobDetail({ job, pipeline, onClose, onResume }) {
     [job]
   );
 
-  console.log("dagItems", dagItems);
-
   return (
     <div className="flex h-full flex-col">
+      {/* Job Header */}
+
       <DAGGrid
         items={dagItems}
         activeIndex={activeIndex}

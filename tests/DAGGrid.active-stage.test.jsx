@@ -54,8 +54,10 @@ describe("DAGGrid Active Stage Rendering", () => {
     const spinner = screen.getByLabelText("Active");
     expect(spinner).toBeInTheDocument();
 
-    // No element with title should exist for stage
-    expect(screen.queryByTitle(/.+/)).not.toBeInTheDocument();
+    // No element with stage-related title should exist (restart buttons have titles but are not stage-related)
+    expect(
+      screen.queryByTitle(/^[a-zA-Z_][a-zA-Z0-9_]*$/)
+    ).not.toBeInTheDocument();
   });
 
   it("formats different stage tokens correctly", () => {

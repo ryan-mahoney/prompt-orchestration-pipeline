@@ -33,8 +33,12 @@ export function derivePipelineMetadata(source = {}) {
       ? pipelineSlugFromSource
       : null);
 
+  // Also return string pipeline value directly if it's a string
+  const stringPipeline =
+    typeof pipelineValue === "string" ? pipelineValue : null;
+
   return {
-    pipeline,
+    pipeline: pipeline || stringPipeline,
     pipelineSlug:
       typeof pipelineSlugFromSource === "string"
         ? pipelineSlugFromSource

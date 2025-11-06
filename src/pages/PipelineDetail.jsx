@@ -1,5 +1,5 @@
 import React from "react";
-import { useParams } from "react-router-dom";
+import { data, useParams } from "react-router-dom";
 import { Box, Flex, Text } from "@radix-ui/themes";
 import JobDetail from "../components/JobDetail.jsx";
 import { useJobDetailWithUpdates } from "../ui/client/hooks/useJobDetailWithUpdates.js";
@@ -15,11 +15,7 @@ export default function PipelineDetail() {
     return (
       <Layout
         pageTitle="Pipeline Details"
-        breadcrumbs={[
-          { label: "Home", href: "/" },
-          { label: "Pipeline Details" },
-        ]}
-        showBackButton={true}
+        breadcrumbs={[{ label: "Home", href: "/" }]}
       >
         <Flex align="center" justify="center" className="min-h-64">
           <Box className="text-center">
@@ -40,9 +36,13 @@ export default function PipelineDetail() {
         pageTitle="Pipeline Details"
         breadcrumbs={[
           { label: "Home", href: "/" },
-          { label: "Pipeline Details" },
+          {
+            label:
+              job && job?.pipelineLabel
+                ? job.pipelineLabel
+                : "Pipeline Details",
+          },
         ]}
-        showBackButton={true}
       >
         <Flex align="center" justify="center" className="min-h-64">
           <Box className="text-center">
@@ -61,9 +61,13 @@ export default function PipelineDetail() {
         pageTitle="Pipeline Details"
         breadcrumbs={[
           { label: "Home", href: "/" },
-          { label: "Pipeline Details" },
+          {
+            label:
+              job && job?.pipelineLabel
+                ? job.pipelineLabel
+                : "Pipeline Details",
+          },
         ]}
-        showBackButton={true}
       >
         <Flex align="center" justify="center" className="min-h-64">
           <Box className="text-center">
@@ -80,14 +84,14 @@ export default function PipelineDetail() {
   }
 
   if (!job) {
+    const pipelineDisplay = "Pipeline Details";
     return (
       <Layout
         pageTitle="Pipeline Details"
         breadcrumbs={[
           { label: "Home", href: "/" },
-          { label: "Pipeline Details" },
+          { label: job.pipelineLabel || "Pipeline Details" },
         ]}
-        showBackButton={true}
       >
         <Flex align="center" justify="center" className="min-h-64">
           <Box className="text-center">
@@ -119,9 +123,12 @@ export default function PipelineDetail() {
     })();
 
   const pageTitle = job.name || "Pipeline Details";
+
   const breadcrumbs = [
     { label: "Home", href: "/" },
-    { label: "Pipeline Details" },
+    {
+      label: job && job?.pipelineLabel ? job.pipelineLabel : "Pipeline Details",
+    },
     ...(job.name ? [{ label: job.name }] : []),
   ];
 
@@ -136,11 +143,7 @@ export default function PipelineDetail() {
   );
 
   return (
-    <Layout
-      pageTitle={pageTitle}
-      breadcrumbs={breadcrumbs}
-      showBackButton={true}
-    >
+    <Layout pageTitle={pageTitle} breadcrumbs={breadcrumbs}>
       <PageSubheader breadcrumbs={breadcrumbs} maxWidth="max-w-7xl">
         {subheaderRightContent}
       </PageSubheader>

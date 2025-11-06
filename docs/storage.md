@@ -46,7 +46,6 @@ pipeline-data/
 │       └── tasks/                  # Task execution directories (legacy files below)
 │           └── {task-name}/
 │               ├── output.json     # Legacy task results (deprecated)
-│               ├── letter.json     # Task metadata
 │               └── execution-logs.json # Execution logs
 ├── complete/
 │   └── {jobId}/                    # Completed pipeline directory
@@ -59,7 +58,6 @@ pipeline-data/
 │       └── tasks/
 │           └── {task-name}/
 │               ├── output.json     # Legacy task results (deprecated)
-│               ├── letter.json     # Task metadata
 │               └── execution-logs.json # Execution logs
 └── rejected/                       # Rejected pipelines
 ```
@@ -293,7 +291,7 @@ export default {
         "logs": ["execution.log"],
         "tmp": ["temp-file.json"]
       },
-      "artifacts": ["output.json", "letter.json", "execution-logs.json"],
+      "artifacts": ["output.json", "execution-logs.json"],
       "executionTime": 12345.67,
       "refinementAttempts": 0
     }
@@ -371,7 +369,7 @@ The status file provides atomic, synchronous updates at stage boundaries:
         "logs": ["research.log"],
         "tmp": ["temp-research.json"]
       },
-      "artifacts": ["output.json", "letter.json", "execution-logs.json"],
+      "artifacts": ["output.json", "execution-logs.json"],
       "executionTime": 18176.66,
       "refinementAttempts": 0
     },
@@ -385,7 +383,7 @@ The status file provides atomic, synchronous updates at stage boundaries:
         "logs": ["analysis.log"],
         "tmp": ["temp-analysis.json"]
       },
-      "artifacts": ["output.json", "letter.json", "execution-logs.json"],
+      "artifacts": ["output.json", "execution-logs.json"],
       "executionTime": 11910.35,
       "refinementAttempts": 0
     }
@@ -444,20 +442,7 @@ Important: On-disk files vs index in tasks-status.json
 }
 ```
 
-### 6. Task Metadata Files (`letter.json`)
-
-**Purpose**: Store metadata about task execution.
-
-**Location**: `{job-directory}/tasks/{task-name}/letter.json`
-
-**Schema**: Varies by task, typically includes:
-
-- Task configuration
-- Execution parameters
-- LLM request details
-- Validation results
-
-### 7. Execution Logs (`execution-logs.json`)
+### 6. Execution Logs (`execution-logs.json`)
 
 **Purpose**: Store detailed execution logs for debugging and monitoring.
 
@@ -465,7 +450,7 @@ Important: On-disk files vs index in tasks-status.json
 
 **Schema**: Array of log entries with timestamps, levels, and messages.
 
-### 8. Completion Log (`runs.jsonl`)
+### 7. Completion Log (`runs.jsonl`)
 
 **Purpose**: Append-only log of completed pipeline runs.
 
@@ -523,7 +508,6 @@ Important: On-disk files vs index in tasks-status.json
   - Creates task directory `tasks/{task-name}/`
   - Executes task through 11-stage pipeline
   - Saves results to `output.json`
-  - Saves metadata to `letter.json`
   - Saves logs to `execution-logs.json`
   - Updates task state to "done"
 
@@ -679,7 +663,7 @@ This SSE filtering approach ensures that:
 
 ## Integration with Architecture
 
-The storage system integrates with pipeline architecture as follows:
+The storage system integrates with the pipeline architecture as follows:
 
 - **Orchestrator**: Monitors `pending/` directory and manages job lifecycle
 - **Pipeline Runner**: Reads from `current/{job}/` and writes task results
