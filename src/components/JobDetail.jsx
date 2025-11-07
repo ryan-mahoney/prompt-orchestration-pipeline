@@ -1,7 +1,4 @@
 import React from "react";
-import { fmtDuration } from "../utils/duration.js";
-import { taskDisplayDurationMs } from "../utils/duration.js";
-import { useTicker } from "../ui/client/hooks/useTicker.js";
 import DAGGrid from "./DAGGrid.jsx";
 import { computeDagItems, computeActiveIndex } from "../utils/dag.js";
 import { getTaskFilesForTask } from "../utils/task-files.js";
@@ -26,8 +23,6 @@ function formatTokensCompact(n) {
 }
 
 export default function JobDetail({ job, pipeline }) {
-  const now = useTicker(1000);
-
   // job.tasks is expected to be an object keyed by task name; normalize from array if needed
   const taskById = React.useMemo(() => {
     const tasks = job?.tasks;
@@ -97,12 +92,6 @@ export default function JobDetail({ job, pipeline }) {
       if (task?.refinementAttempts != null) {
         subtitleParts.push(`${task.refinementAttempts} refinements`);
       }
-      if (task?.startedAt) {
-        const durationMs = taskDisplayDurationMs(task, now);
-        if (durationMs > 0) {
-          subtitleParts.push(fmtDuration(durationMs));
-        }
-      }
 
       // Prefer taskBreakdown totals for consistency with backend
       const taskBreakdown = job?.costs?.taskBreakdown?.[item.id]?.summary || {};
@@ -128,13 +117,15 @@ export default function JobDetail({ job, pipeline }) {
             : item.id?.name || item.id?.id || `Task ${item.id}`,
         subtitle: subtitleParts.length > 0 ? subtitleParts.join(" · ") : null,
         body,
+        startedAt: task?.startedAt,
+        endedAt: task?.endedAt,
       };
 
       return resultItem;
     });
 
     return processedItems;
-  }, [job, computedPipeline, taskById, now]);
+  }, [job, computedPipeline, taskById]);
 
   const activeIndex = React.useMemo(() => {
     const index = computeActiveIndex(dagItems);

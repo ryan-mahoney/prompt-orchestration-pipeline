@@ -12,6 +12,7 @@ import { Button } from "./ui/button.jsx";
 import { restartJob } from "../ui/client/api.js";
 import { createEmptyTaskFiles } from "../utils/task-files.js";
 import { TaskState } from "../config/statuses.js";
+import TimerText from "./TimerText.jsx";
 
 // Helpers: capitalize fallback step ids (upperFirst only; do not alter provided titles)
 function upperFirst(s) {
@@ -601,19 +602,36 @@ function DAGGrid({
                           {formatStageLabel(item.stage)}
                         </span>
                       )}
+                      {items[idx]?.startedAt && (
+                        <TimerText
+                          startMs={items[idx].startedAt}
+                          granularity="second"
+                          className="text-[11px] opacity-80"
+                        />
+                      )}
                     </>
                   ) : (
-                    <span className="text-[11px] uppercase tracking-wide opacity-80">
-                      {status}
-                      {status === TaskState.FAILED && item.stage && (
-                        <span
-                          className="text-[11px] font-medium opacity-80 truncate ml-2"
-                          title={item.stage}
-                        >
-                          ({formatStageLabel(item.stage)})
-                        </span>
+                    <>
+                      <span className="text-[11px] uppercase tracking-wide opacity-80">
+                        {status}
+                        {status === TaskState.FAILED && item.stage && (
+                          <span
+                            className="text-[11px] font-medium opacity-80 truncate ml-2"
+                            title={item.stage}
+                          >
+                            ({formatStageLabel(item.stage)})
+                          </span>
+                        )}
+                      </span>
+                      {status === TaskState.DONE && items[idx]?.startedAt && (
+                        <TimerText
+                          startMs={items[idx].startedAt}
+                          endMs={items[idx].endedAt || items[idx].finishedAt}
+                          granularity="minute"
+                          className="text-[11px] opacity-80"
+                        />
                       )}
-                    </span>
+                    </>
                   )}
                 </div>
               </div>

@@ -90,12 +90,12 @@ function recalculateInterval() {
 }
 
 /**
- * Start the timer interval
+ * Start the timer interval with minute boundary alignment for >= 60s cadence
  */
 function startTimer() {
   if (timerId !== null) return;
 
-  timerId = setInterval(() => {
+  const tick = () => {
     currentNow = Math.floor(performance.now() + offset);
 
     // Notify all listeners
@@ -106,14 +106,30 @@ function startTimer() {
         console.error("Error in time store listener:", error);
       }
     });
-  }, activeIntervalMs);
-}
+  };
 
+  // Align to minute boundary for >= 60s cadence
+  if (activeIntervalMs >= 60000) {
+    const now = Date.now();
+    const nextMinuteBoundary = Math.ceil(now / 60000) * 60000;
+    const initialDelay = nextMinuteBoundary - now;
+
+    // Initial delay to align to minute boundary, then regular intervals
+    timerId = setTimeout(() => {
+      tick();
+      timerId = setInterval(tick, 60000);
+    }, initialDelay);
+  } else {
+    // Immediate start for sub-minute cadences
+    timerId = setInterval(tick, activeIntervalMs);
+  }
+}
 /**
  * Stop the timer interval
  */
 function stopTimer() {
   if (timerId !== null) {
+    clearTimeout(timerId);
     clearInterval(timerId);
     timerId = null;
   }

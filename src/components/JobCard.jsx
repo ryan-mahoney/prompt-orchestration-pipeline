@@ -2,10 +2,10 @@ import React from "react";
 import { Card, CardHeader, CardTitle, CardContent } from "./ui/card";
 import { Progress } from "./ui/progress";
 import { Clock, TimerReset, ChevronRight } from "lucide-react";
-import { fmtDuration, taskDisplayDurationMs } from "../utils/duration";
+import { fmtDuration } from "../utils/duration";
 import { countCompleted } from "../utils/jobs";
 import { progressClasses, statusBadge } from "../utils/ui";
-import { useTicker } from "../ui/client/hooks/useTicker";
+import TimerText from "./TimerText";
 
 export default function JobCard({
   job,
@@ -14,11 +14,7 @@ export default function JobCard({
   progressPct,
   overallElapsedMs,
 }) {
-  const now = useTicker(60000);
   const currentTask = job.current ? job.tasks[job.current] : undefined;
-  const currentElapsedMs = currentTask
-    ? taskDisplayDurationMs(currentTask, now)
-    : 0;
   const totalCompleted = countCompleted(job);
   const hasValidId = Boolean(job.id);
   const jobTitle = job.title;
@@ -68,10 +64,13 @@ export default function JobCard({
                 ? "—"
                 : (job.current ?? "—")}
           </div>
-          {currentTask && currentElapsedMs > 0 && (
-            <div className="text-slate-500">
-              {fmtDuration(currentElapsedMs)}
-            </div>
+          {currentTask?.startedAt && (
+            <TimerText
+              startMs={currentTask.startedAt}
+              endMs={currentTask.endedAt}
+              granularity="second"
+              className="text-slate-500"
+            />
           )}
         </div>
 
