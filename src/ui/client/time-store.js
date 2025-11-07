@@ -4,7 +4,8 @@
  */
 
 // Internal state
-let currentNow = Date.now();
+const offset = Date.now() - performance.now();
+let currentNow = Math.floor(performance.now() + offset);
 const listeners = new Set();
 const cadenceHints = new Map();
 let timerId = null;
@@ -95,7 +96,7 @@ function startTimer() {
   if (timerId !== null) return;
 
   timerId = setInterval(() => {
-    currentNow = Date.now();
+    currentNow = Math.floor(performance.now() + offset);
 
     // Notify all listeners
     listeners.forEach((listener) => {
