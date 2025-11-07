@@ -7,6 +7,7 @@ import { countCompleted } from "../utils/jobs";
 import { progressClasses, statusBadge } from "../utils/ui";
 import TimerText from "./TimerText.jsx";
 import LiveText from "./LiveText.jsx";
+import { taskToTimerProps } from "../utils/time-utils.js";
 
 // Local helpers for formatting costs and tokens
 function formatCurrency4(x) {
@@ -160,14 +161,18 @@ export default function JobTable({ jobs, pipeline, onOpenJob }) {
                           currentTask?.temperature != null
                             ? `temp ${currentTaskConfig?.temperature ?? currentTask?.temperature}`
                             : null,
-                          currentTask?.startedAt ? (
-                            <TimerText
-                              startMs={currentTask.startedAt}
-                              endMs={currentTask.endedAt}
-                              granularity="second"
-                              className="text-slate-500"
-                            />
-                          ) : null,
+                          (() => {
+                            const { startMs, endMs } =
+                              taskToTimerProps(currentTask);
+                            return startMs ? (
+                              <TimerText
+                                startMs={startMs}
+                                endMs={endMs}
+                                granularity="second"
+                                className="text-slate-500"
+                              />
+                            ) : null;
+                          })(),
                         ]
                           .filter(Boolean)
                           .map((item, index) => (

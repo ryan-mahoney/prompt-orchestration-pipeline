@@ -13,6 +13,7 @@ import { restartJob } from "../ui/client/api.js";
 import { createEmptyTaskFiles } from "../utils/task-files.js";
 import { TaskState } from "../config/statuses.js";
 import TimerText from "./TimerText.jsx";
+import { taskToTimerProps } from "../utils/time-utils.js";
 
 // Helpers: capitalize fallback step ids (upperFirst only; do not alter provided titles)
 function upperFirst(s) {
@@ -347,7 +348,6 @@ function DAGGrid({
     }
     setFilePaneType("artifacts");
     setFilePaneFilename(null);
-    setFilePaneOpen(false);
   }, [openIdx]);
 
   // Restart functionality
@@ -558,6 +558,7 @@ function DAGGrid({
           const isActive = idx === activeIndex;
           const canRestart = isRestartEnabled();
           const showRestartButton = canShowRestart(status);
+          const { startMs, endMs } = taskToTimerProps(item);
 
           return (
             <div
@@ -602,9 +603,9 @@ function DAGGrid({
                           {formatStageLabel(item.stage)}
                         </span>
                       )}
-                      {items[idx]?.startedAt && (
+                      {startMs && (
                         <TimerText
-                          startMs={items[idx].startedAt}
+                          startMs={startMs}
                           granularity="second"
                           className="text-[11px] opacity-80"
                         />
@@ -623,10 +624,10 @@ function DAGGrid({
                           </span>
                         )}
                       </span>
-                      {status === TaskState.DONE && items[idx]?.startedAt && (
+                      {status === TaskState.DONE && startMs && (
                         <TimerText
-                          startMs={items[idx].startedAt}
-                          endMs={items[idx].endedAt || items[idx].finishedAt}
+                          startMs={startMs}
+                          endMs={endMs || item.finishedAt}
                           granularity="minute"
                           className="text-[11px] opacity-80"
                         />
