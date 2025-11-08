@@ -6,6 +6,7 @@ import { validatePipelineOrThrow } from "./validation.js";
 import { getPipelineConfig } from "./config.js";
 import { writeJobStatus } from "./status-writer.js";
 import { TaskState } from "../config/statuses.js";
+import { ensureTaskSymlinkBridge } from "./symlink-bridge.js";
 
 const ROOT = process.env.PO_ROOT || process.cwd();
 const DATA_DIR = path.join(ROOT, process.env.PO_DATA_DIR || "pipeline-data");
@@ -111,7 +112,15 @@ for (const taskName of pipeline.tasks) {
       ? modulePath
       : path.resolve(path.dirname(TASK_REGISTRY), modulePath);
 
-    const result = await runPipeline(absoluteModulePath, ctx);
+    // Create symlink bridge for deterministic module resolution
+    const poRoot = process.env.PO_ROOT || process.cwd();
+    const relocatedEntry = await ensureTaskSymlinkBridge({
+      taskDir,
+      poRoot,
+      taskModulePath: absoluteModulePath,
+    });
+
+    const result = await runPipeline(relocatedEntry, ctx);
 
     if (!result.ok) {
       // Persist execution-logs.json and failure-details.json on task failure
