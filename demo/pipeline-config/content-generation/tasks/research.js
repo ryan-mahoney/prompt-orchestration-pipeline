@@ -1,5 +1,7 @@
 // Research Task - Gather information based on seed input
 import { test } from "../libs/test.js";
+import { validateWithSchema } from "../../../../src/api/validators/json.js";
+import path from "node:path";
 
 // Step 1: Load and prepare input data
 export const ingestion = ({
@@ -87,9 +89,24 @@ export const inference = async ({
     ],
   });
 
+  // Normalize model output to ensure canonical JSON object
+  let parsed;
+  if (typeof response.content === "string") {
+    parsed = JSON.parse(response.content);
+  } else if (
+    typeof response.content === "object" &&
+    response.content !== null
+  ) {
+    parsed = response.content;
+  } else {
+    throw new Error(
+      "LLM response content must be a JSON object or a JSON stringified object"
+    );
+  }
+
   await io.writeArtifact(
     "research-output.json",
-    JSON.stringify(response.content)
+    JSON.stringify(parsed, null, 2)
   );
 
   return {
@@ -98,39 +115,47 @@ export const inference = async ({
   };
 };
 
-// Step 6: Validate prompt response structure and completeness
+// Step 6: Validate prompt response structure using JSON schema
 export const validateStructure = async ({ io, llm, data, meta, flags }) => {
   const researchContent = await io.readArtifact("research-output.json");
-  let jsonValid = false;
-  let structureValid = false;
 
   try {
     const parsedContent = JSON.parse(researchContent);
-    jsonValid = true;
 
-    // Validate required fields
-    const requiredFields = [
-      "researchSummary",
-      "keyFindings",
-      "additionalInsights",
-      "researchCompleteness",
-    ];
-    const missingFields = requiredFields.filter(
-      (field) => !parsedContent.hasOwnProperty(field)
+    // Resolve schema path relative to repo root
+    const schemaPath = path.join(
+      process.cwd(),
+      "demo/pipeline-config/content-generation/schemas/research-output.schema.json"
     );
-    if (missingFields.length > 0) {
-      structureValid = false;
-    } else {
-      structureValid = true;
+
+    // Validate using Ajv
+    const result = await validateWithSchema({
+      schemaPath,
+      data: parsedContent,
+    });
+
+    if (!result.valid) {
+      console.warn(
+        "[Research:validateStructure] Validation failed",
+        result.errors
+      );
+      return {
+        output: {},
+        flags: { ...flags, validationFailed: true },
+      };
     }
+
+    return {
+      output: {},
+      flags: { ...flags, validationFailed: false },
+    };
   } catch (parseError) {
     console.warn(
       `[Research:validateStructure] ⚠ JSON parsing failed: ${parseError.message}`
     );
+    return {
+      output: {},
+      flags: { ...flags, validationFailed: true },
+    };
   }
-
-  return {
-    output: {},
-    flags: { ...flags, validationFailed: !(jsonValid && structureValid) },
-  };
 };
