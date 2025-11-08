@@ -66,7 +66,7 @@ function formatStepName(item, idx) {
  * @param {Array} props.items - Array of DAG items with id, status, and optional title/subtitle
  * @param {number} props.cols - Number of columns for grid layout (default: 3)
  * @param {string} props.cardClass - Additional CSS classes for cards
- * @param {number} props.activeIndex - Index of the active item
+ * @param {number} props.activeIndex - Index of active item
  * @param {string} props.jobId - Job ID for file operations
  * @param {Function} props.filesByTypeForItem - Selector returning { artifacts, logs, tmp }
  */
@@ -84,7 +84,7 @@ function DAGGrid({
   const nodeRefs = useRef([]);
   const [lines, setLines] = useState([]);
   const [effectiveCols, setEffectiveCols] = useState(cols);
-  const [openIdx, setOpenIdx] = useState(null);
+  const [openIdx, setOpenIdx] = useState(-1);
 
   // Restart modal state
   const [restartModalOpen, setRestartModalOpen] = useState(false);
@@ -310,12 +310,12 @@ function DAGGrid({
   // Handle Escape key to close slide-over
   React.useEffect(() => {
     const handleKeyDown = (e) => {
-      if (e.key === "Escape" && openIdx !== null) {
-        setOpenIdx(null);
+      if (e.key === "Escape" && openIdx !== -1) {
+        setOpenIdx(-1);
       }
     };
 
-    if (openIdx !== null) {
+    if (openIdx !== -1) {
       document.addEventListener("keydown", handleKeyDown);
       return () => document.removeEventListener("keydown", handleKeyDown);
     }
@@ -399,7 +399,7 @@ function DAGGrid({
 
   // Check if restart should be enabled (job lifecycle = current and not running)
   const isRestartEnabled = React.useCallback(() => {
-    // Check if any item indicates the job is running (job-level state)
+    // Check if any item indicates that job is running (job-level state)
     const isJobRunning = items.some(
       (item) => item?.state === TaskState.RUNNING
     );
@@ -416,7 +416,7 @@ function DAGGrid({
 
   // Get disabled reason for tooltip
   const getRestartDisabledReason = React.useCallback(() => {
-    // Check if any item indicates the job is running (job-level state)
+    // Check if any item indicates that job is running (job-level state)
     const isJobRunning = items.some(
       (item) => item?.state === TaskState.RUNNING
     );
@@ -641,9 +641,9 @@ function DAGGrid({
       </div>
 
       {/* TaskDetailSidebar */}
-      {openIdx !== null && (
+      {openIdx !== -1 && (
         <TaskDetailSidebar
-          open={openIdx !== null}
+          open={openIdx !== -1}
           title={formatStepName(items[openIdx], openIdx)}
           status={getStatus(openIdx)}
           jobId={jobId}
@@ -652,7 +652,7 @@ function DAGGrid({
           filesByTypeForItem={filesByTypeForItem}
           task={items[openIdx]}
           taskIndex={openIdx}
-          onClose={() => setOpenIdx(null)}
+          onClose={() => setOpenIdx(-1)}
         />
       )}
 
