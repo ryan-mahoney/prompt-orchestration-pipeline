@@ -348,6 +348,7 @@ function DAGGrid({
     }
     setFilePaneType("artifacts");
     setFilePaneFilename(null);
+    setFilePaneOpen(false);
   }, [openIdx]);
 
   // Restart functionality
