@@ -157,24 +157,6 @@ function ensureLogDirectory(workDir, jobId) {
 }
 
 /**
- * Writes a compact pre-execution snapshot for debugging stage inputs.
- * Safe: does not throw on write failure; logs warnings instead.
- * @param {string} stageName - Name of the stage
- * @param {object} snapshot - Summary data to persist
- * @param {string} logsDir - Directory to write the snapshot into
- */
-function writePreExecutionSnapshot(stageName, snapshot, logsDir) {
-  const snapshotPath = path.join(logsDir, `stage-${stageName}-context.json`);
-  try {
-    fs.writeFileSync(snapshotPath, JSON.stringify(snapshot, null, 2));
-  } catch (error) {
-    console.warn(
-      `[task-runner] Failed to write pre-execution snapshot for ${stageName}: ${error.message}`
-    );
-  }
-}
-
-/**
  * Redirects console output to a log file for a stage.
  * @param {string} logPath - The path to the log file
  * @returns {() => void} A function that restores console output and closes the log stream
@@ -447,20 +429,23 @@ export async function runPipeline(modulePath, initialContext = {}) {
     }
   });
 
-  // Create fileIO singleton if we have the required context
-  let fileIO = null;
+  // fileIO is mandatory for runner execution
   if (
-    initialContext.workDir &&
-    initialContext.taskName &&
-    initialContext.statusPath
+    !initialContext.workDir ||
+    !initialContext.taskName ||
+    !initialContext.statusPath
   ) {
-    fileIO = createTaskFileIO({
-      workDir: initialContext.workDir,
-      taskName: initialContext.taskName,
-      getStage: () => context.currentStage,
-      statusPath: initialContext.statusPath,
-    });
+    throw new Error(
+      `fileIO is required for task execution but missing required context. workDir: ${initialContext.workDir}, taskName: ${initialContext.taskName}, statusPath: ${initialContext.statusPath}`
+    );
   }
+
+  const fileIO = createTaskFileIO({
+    workDir: initialContext.workDir,
+    taskName: initialContext.taskName,
+    getStage: () => context.currentStage,
+    statusPath: initialContext.statusPath,
+  });
 
   // Extract seed and maxRefinements for new context structure
   const seed = initialContext.seed || initialContext;
@@ -611,17 +596,20 @@ export async function runPipeline(modulePath, initialContext = {}) {
         continue;
       }
 
-      // Add console output capture before stage execution
-      const logPath = path.join(
-        context.meta.workDir,
-        "files",
-        "logs",
-        `stage-${stageName}.log`
-      );
-      console.debug("[task-runner] stage log path resolution", {
+      // Add console output capture before stage execution using IO
+      if (!context.io) {
+        throw new Error(
+          `fileIO is required for stage execution but not provided for task ${context.meta.taskName}`
+        );
+      }
+      const logName = `stage-${stageName}.log`;
+      await context.io.writeLog(logName, "", { mode: "replace" });
+      const logPath = path.join(context.meta.workDir, "files", "logs", logName);
+      console.debug("[task-runner] stage log path resolution via IO", {
         stage: stageName,
         workDir: context.meta.workDir,
         jobId: context.meta.jobId,
+        logName,
         logPath,
       });
       const restoreConsole = captureConsoleOutput(logPath);
@@ -670,7 +658,7 @@ export async function runPipeline(modulePath, initialContext = {}) {
         previousStage: lastExecutedStageName,
       };
 
-      // Write pre-execution snapshot for debugging inputs
+      // Write pre-execution snapshot for debugging inputs via IO
       const snapshot = {
         meta: { taskName: context.meta.taskName, jobId: context.meta.jobId },
         previousStage: lastExecutedStageName,
@@ -692,7 +680,11 @@ export async function runPipeline(modulePath, initialContext = {}) {
               : [],
         },
       };
-      writePreExecutionSnapshot(stageName, snapshot, logsDir);
+      await context.io.writeLog(
+        `stage-${stageName}-context.json`,
+        JSON.stringify(snapshot, null, 2),
+        { mode: "replace" }
+      );
 
       // Validate prerequisite flags before stage execution
       const requiredFlags = FLAG_SCHEMAS[stageName]?.requires;
