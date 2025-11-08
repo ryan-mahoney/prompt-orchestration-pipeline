@@ -95,8 +95,8 @@ export function TaskDetailSidebar({
       role="dialog"
       aria-modal="true"
       aria-labelledby={`slide-over-title-${taskIndex}`}
-      aria-hidden={!open}
-      className={`fixed inset-y-0 right-0 z-[2000] w-full max-w-4xl bg-white border-l border-gray-200 transform transition-transform duration-300 ease-out ${open ? "translate-x-0" : "translate-x-full"}`}
+      aria-hidden={false}
+      className={`fixed inset-y-0 right-0 z-[2000] w-full max-w-4xl bg-white border-l border-gray-200 transform transition-transform duration-300 ease-out translate-x-0`}
     >
       {/* Header */}
       <div
