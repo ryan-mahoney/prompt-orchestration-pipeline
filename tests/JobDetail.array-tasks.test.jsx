@@ -11,7 +11,7 @@ vi.mock("../src/components/DAGGrid.jsx", () => ({
   ),
 }));
 
-// Mock the computeDagItems and computeActiveIndex to spy on them
+// Mock computeDagItems and computeActiveIndex to spy on them
 vi.mock("../src/utils/dag.js", () => ({
   computeDagItems: vi.fn(),
   computeActiveIndex: vi.fn(),
@@ -251,7 +251,7 @@ describe("JobDetail - Duration Policy with Task Shape Variants", () => {
       />
     );
 
-    // Verify the component renders successfully
+    // Verify component renders successfully
     expect(screen.getByTestId("dag-grid")).toBeDefined();
     expect(screen.getByTestId("dag-items")).toBeDefined();
     expect(screen.getByTestId("active-index")).toBeDefined();
@@ -289,59 +289,9 @@ describe("JobDetail - Duration Policy with Task Shape Variants", () => {
       />
     );
 
-    // Verify the component renders successfully with mixed statuses
+    // Verify component renders successfully with mixed statuses
     expect(screen.getByTestId("dag-grid")).toBeDefined();
     expect(screen.getByTestId("dag-items")).toBeDefined();
-  });
-
-  it("handles live updates with useTicker", () => {
-    const job = {
-      id: "test-job",
-      name: "Live Update Job",
-      status: "running",
-      tasks: {
-        analysis: {
-          state: "running",
-          startedAt: "2025-10-06T00:25:00Z", // 5 minutes ago initially
-        },
-      },
-    };
-
-    const pipeline = { tasks: ["analysis"] };
-
-    const { rerender } = render(
-      <JobDetail
-        job={job}
-        pipeline={pipeline}
-        onClose={mockOnClose}
-        onResume={mockOnResume}
-      />
-    );
-
-    // Verify initial render
-    expect(screen.getByTestId("dag-grid")).toBeDefined();
-
-    // Advance time and verify component still works
-    act(() => {
-      vi.advanceTimersByTime(120000); // 2 minutes
-    });
-
-    act(() => {
-      vi.runOnlyPendingTimers();
-    });
-
-    // Re-render to trigger the ticker update
-    rerender(
-      <JobDetail
-        job={job}
-        pipeline={pipeline}
-        onClose={mockOnClose}
-        onResume={mockOnResume}
-      />
-    );
-
-    // Component should still render after time advance
-    expect(screen.getByTestId("dag-grid")).toBeDefined();
   });
 
   it("handles executionTime preference for completed tasks", () => {
@@ -370,7 +320,7 @@ describe("JobDetail - Duration Policy with Task Shape Variants", () => {
       />
     );
 
-    // Verify the component renders successfully
+    // Verify component renders successfully
     expect(screen.getByTestId("dag-grid")).toBeDefined();
     expect(screen.getByTestId("dag-items")).toBeDefined();
   });

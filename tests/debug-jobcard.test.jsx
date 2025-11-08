@@ -22,11 +22,6 @@ vi.mock("../src/utils/ui.js", () => ({
   progressClasses: vi.fn(() => "bg-blue-500"),
 }));
 
-// Mock the ticker to return a fixed time
-vi.mock("../src/ui/client/hooks/useTicker.js", () => ({
-  useTicker: vi.fn(() => new Date("2025-10-06T00:30:00Z").getTime()),
-}));
-
 describe("JobCard - Debug", () => {
   const mockOnClick = vi.fn();
   const mockProgressPct = 50;

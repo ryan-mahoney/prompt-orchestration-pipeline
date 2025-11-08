@@ -1,14 +1,12 @@
 // PromptPipelineDashboard.jsx
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
-import { Box, Flex, Text, Heading, Tabs } from "@radix-ui/themes";
+import { Box, Flex, Text, Tabs } from "@radix-ui/themes";
 
 import { Progress } from "../components/ui/progress";
 import { useJobListWithUpdates } from "../ui/client/hooks/useJobListWithUpdates";
 import { adaptJobSummary } from "../ui/client/adapters/job-adapter";
-import { jobCumulativeDurationMs } from "../utils/duration.js";
-import { useTicker } from "../ui/client/hooks/useTicker.js";
 import { TaskState } from "../config/statuses.js";
 
 // Referenced components — leave these alone
@@ -56,8 +54,7 @@ export default function PromptPipelineDashboard({ isConnected }) {
   }, [apiJobs, error]);
   const [activeTab, setActiveTab] = useState("current");
 
-  // Shared ticker for live duration updates
-  const now = useTicker(10000);
+  // Shared ticker for live duration updates - removed useTicker
 
   const errorCount = useMemo(
     () => jobs.filter((j) => j.status === TaskState.FAILED).length,
@@ -85,7 +82,7 @@ export default function PromptPipelineDashboard({ isConnected }) {
     }
   }, [jobs, activeTab]);
 
-  const overallElapsed = (job) => jobCumulativeDurationMs(job, now);
+  // overallElapsed function removed - JobTable now uses LiveText for duration calculations
 
   // Aggregate progress for currently running jobs (for a subtle top progress bar)
   const runningJobs = useMemo(
@@ -143,33 +140,14 @@ export default function PromptPipelineDashboard({ isConnected }) {
             Completed ({completedCount})
           </Tabs.Trigger>
         </Tabs.List>
-
         <Tabs.Content value="current">
-          <JobTable
-            jobs={filteredJobs}
-            pipeline={null}
-            onOpenJob={openJob}
-            overallElapsed={overallElapsed}
-            now={now}
-          />
+          <JobTable jobs={filteredJobs} pipeline={null} onOpenJob={openJob} />
         </Tabs.Content>
         <Tabs.Content value="errors">
-          <JobTable
-            jobs={filteredJobs}
-            pipeline={null}
-            onOpenJob={openJob}
-            overallElapsed={overallElapsed}
-            now={now}
-          />
+          <JobTable jobs={filteredJobs} pipeline={null} onOpenJob={openJob} />
         </Tabs.Content>
         <Tabs.Content value="complete">
-          <JobTable
-            jobs={filteredJobs}
-            pipeline={null}
-            onOpenJob={openJob}
-            overallElapsed={overallElapsed}
-            now={now}
-          />
+          <JobTable jobs={filteredJobs} pipeline={null} onOpenJob={openJob} />
         </Tabs.Content>
       </Tabs.Root>
     </Layout>

@@ -4,11 +4,6 @@ import { render, screen, cleanup, act, waitFor } from "@testing-library/react";
 import JobDetail from "../src/components/JobDetail.jsx";
 import { useParams } from "react-router-dom";
 
-// Mock useTicker hook to provide stable time
-vi.mock("../src/ui/client/hooks/useTicker.js", () => ({
-  useTicker: vi.fn(() => new Date("2024-01-01T00:00:00.000Z").getTime()),
-}));
-
 // Mock useParams for PipelineDetail
 vi.mock("react-router-dom", () => ({
   useParams: vi.fn(),

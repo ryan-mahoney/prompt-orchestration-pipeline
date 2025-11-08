@@ -5,22 +5,16 @@ import { MemoryRouter } from "react-router-dom";
 import PromptPipelineDashboard from "../src/pages/PromptPipelineDashboard.jsx";
 import { jobCumulativeDurationMs } from "../src/utils/duration.js";
 
-// Mock the dependencies
+// Mock dependencies
 vi.mock("../src/ui/client/hooks/useJobListWithUpdates.js", () => ({
   useJobListWithUpdates: vi.fn(),
 }));
 
-vi.mock("../src/ui/client/hooks/useTicker.js", () => ({
-  useTicker: vi.fn(() => new Date("2025-10-06T00:30:00Z").getTime()),
-}));
-
 // Get mock references after mocking
 import * as useJobListWithUpdatesModule from "../src/ui/client/hooks/useJobListWithUpdates.js";
-import * as useTickerModule from "../src/ui/client/hooks/useTicker.js";
 
 const mockUseJobListWithUpdates =
   useJobListWithUpdatesModule.useJobListWithUpdates;
-const mockUseTicker = useTickerModule.useTicker;
 
 vi.mock("../src/components/UploadSeed.jsx", () => ({
   default: ({ onUploadSuccess }) => (
@@ -87,7 +81,7 @@ describe("PromptPipelineDashboard - Duration Policy", () => {
     // Verify that the job is displayed
     expect(screen.getByText("Test Job")).toBeDefined();
 
-    // The overall elapsed time should be calculated using the policy
+    // The overall elapsed time should be calculated using policy
     // For a running task that started 5 minutes ago, it should be 5 minutes
     const expectedDuration = jobCumulativeDurationMs(
       mockJobs[0],
@@ -129,7 +123,7 @@ describe("PromptPipelineDashboard - Duration Policy", () => {
       </MemoryRouter>
     );
 
-    // The key test is that the overallElapsed function uses the policy correctly
+    // The key test is that overallElapsed function uses policy correctly
     // For completed jobs, should use executionTime when available
     const expectedDuration = jobCumulativeDurationMs(
       mockJobs[0],

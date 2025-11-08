@@ -1,11 +1,13 @@
 import React from "react";
 import { Box, Flex, Table, Text, Button } from "@radix-ui/themes";
 import { Progress } from "./ui/progress";
-import { Clock, TimerReset, ChevronRight } from "lucide-react";
-import { fmtDuration } from "../utils/duration.js";
-import { taskDisplayDurationMs } from "../utils/duration.js";
+import { TimerReset, ChevronRight } from "lucide-react";
+import { fmtDuration, jobCumulativeDurationMs } from "../utils/duration.js";
 import { countCompleted } from "../utils/jobs";
 import { progressClasses, statusBadge } from "../utils/ui";
+import TimerText from "./TimerText.jsx";
+import LiveText from "./LiveText.jsx";
+import { taskToTimerProps } from "../utils/time-utils.js";
 
 // Local helpers for formatting costs and tokens
 function formatCurrency4(x) {
@@ -26,13 +28,7 @@ function formatTokensCompact(n) {
   return `${n} tok`;
 }
 
-export default function JobTable({
-  jobs,
-  pipeline,
-  onOpenJob,
-  overallElapsed,
-  now,
-}) {
+export default function JobTable({ jobs, pipeline, onOpenJob }) {
   if (jobs.length === 0) {
     return (
       <Box className="p-6">
@@ -72,9 +68,6 @@ export default function JobTable({
                 )
               : job.tasks || {};
             const currentTask = job.current ? taskById[job.current] : undefined;
-            const currentElapsedMs = currentTask
-              ? taskDisplayDurationMs(currentTask, now)
-              : 0;
             const totalCompleted = countCompleted(job);
             const totalTasks =
               pipeline?.tasks?.length ??
@@ -84,7 +77,6 @@ export default function JobTable({
             const progress = Number.isFinite(job.progress)
               ? Math.round(job.progress)
               : 0;
-            const duration = overallElapsed(job);
             const currentTaskName = currentTask
               ? (currentTask.name ?? currentTask.id ?? job.current)
               : undefined;
@@ -169,12 +161,26 @@ export default function JobTable({
                           currentTask?.temperature != null
                             ? `temp ${currentTaskConfig?.temperature ?? currentTask?.temperature}`
                             : null,
-                          currentElapsedMs > 0
-                            ? fmtDuration(currentElapsedMs)
-                            : null,
+                          (() => {
+                            const { startMs, endMs } =
+                              taskToTimerProps(currentTask);
+                            return startMs ? (
+                              <TimerText
+                                startMs={startMs}
+                                endMs={endMs}
+                                granularity="second"
+                                className="text-slate-500"
+                              />
+                            ) : null;
+                          })(),
                         ]
                           .filter(Boolean)
-                          .join(" · ")}
+                          .map((item, index) => (
+                            <React.Fragment key={index}>
+                              {typeof item === "string" ? item : item}
+                              {index < 2 && " · "}
+                            </React.Fragment>
+                          ))}
                       </Text>
                     )}
                   </Flex>
@@ -215,9 +221,13 @@ export default function JobTable({
                 <Table.Cell>
                   <Flex align="center" gap="1">
                     <TimerReset className="h-3 w-3 text-slate-500" />
-                    <Text size="2" className="text-slate-700">
-                      {fmtDuration(duration)}
-                    </Text>
+                    <LiveText
+                      cadenceMs={10000}
+                      compute={(now) =>
+                        fmtDuration(jobCumulativeDurationMs(job, now))
+                      }
+                      className="text-slate-700"
+                    />
                   </Flex>
                 </Table.Cell>
 
