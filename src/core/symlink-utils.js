@@ -45,3 +45,50 @@ export async function ensureSymlink(linkPath, targetPath, type) {
     );
   }
 }
+
+/**
+ * Removes task symlinks from a completed job directory to avoid dangling links.
+ *
+ * @param {string} completedJobDir - Path to the completed job directory (e.g., COMPLETE_DIR/jobId)
+ */
+export async function cleanupTaskSymlinks(completedJobDir) {
+  const tasksDir = path.join(completedJobDir, "tasks");
+
+  try {
+    // Check if tasks directory exists
+    const tasksStats = await fs.lstat(tasksDir).catch(() => null);
+    if (!tasksStats || !tasksStats.isDirectory()) {
+      return; // No tasks directory to clean up
+    }
+
+    // Get all task directories
+    const taskDirs = await fs.readdir(tasksDir, { withFileTypes: true });
+
+    for (const taskDir of taskDirs) {
+      if (!taskDir.isDirectory()) continue;
+
+      const taskPath = path.join(tasksDir, taskDir.name);
+
+      // Remove specific symlinks if they exist and are actually symlinks
+      const symlinksToRemove = ["node_modules", "project", "_task_root"];
+
+      for (const linkName of symlinksToRemove) {
+        const linkPath = path.join(taskPath, linkName);
+
+        try {
+          const stats = await fs.lstat(linkPath);
+          if (stats.isSymbolicLink()) {
+            await fs.unlink(linkPath);
+          }
+        } catch {
+          // Ignore errors (file doesn't exist, permissions, etc.)
+        }
+      }
+    }
+  } catch (error) {
+    // Log but don't fail - cleanup is optional
+    console.warn(
+      `Warning: Failed to cleanup task symlinks in ${completedJobDir}: ${error.message}`
+    );
+  }
+}

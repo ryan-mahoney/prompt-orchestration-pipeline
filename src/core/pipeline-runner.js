@@ -7,6 +7,7 @@ import { getPipelineConfig } from "./config.js";
 import { writeJobStatus } from "./status-writer.js";
 import { TaskState } from "../config/statuses.js";
 import { ensureTaskSymlinkBridge } from "./symlink-bridge.js";
+import { cleanupTaskSymlinks } from "./symlink-utils.js";
 
 const ROOT = process.env.PO_ROOT || process.cwd();
 const DATA_DIR = path.join(ROOT, process.env.PO_DATA_DIR || "pipeline-data");
@@ -216,6 +217,9 @@ await appendLine(
     finalArtifacts: Object.keys(pipelineArtifacts),
   }) + "\n"
 );
+
+// Clean up task symlinks to avoid dangling links in archives
+await cleanupTaskSymlinks(dest);
 
 function now() {
   return new Date().toISOString();

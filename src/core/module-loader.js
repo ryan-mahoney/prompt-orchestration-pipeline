@@ -141,8 +141,9 @@ export async function loadFreshModule(modulePath) {
       }
 
       // Third attempt: copy adjacent and import
+      let adjacentCopy;
       try {
-        const adjacentCopy = await copyModuleAdjacent(absolutePath);
+        adjacentCopy = await copyModuleAdjacent(absolutePath);
         const adjacentUrl = `${pathToFileURL(adjacentCopy).href}?t=${Date.now()}`;
         return await import(adjacentUrl);
       } catch (fallbackError) {
@@ -150,6 +151,7 @@ export async function loadFreshModule(modulePath) {
           `Failed to load module "${absolutePath}" after attempting direct import, cache-busting import, and adjacent copy fallback.`,
           `Direct import URL: ${fileUrl.href}`,
           `Cache-busted URL: ${cacheBustedUrl}`,
+          `Adjacent fallback path attempted: ${adjacentCopy || "[adjacent copy creation failed]"}`,
           `Original error: ${/** @type {Error} */ (error).message}`,
           `Cache-bust error: ${/** @type {Error} */ (cacheBustedError).message}`,
           `Fallback error: ${/** @type {Error} */ (fallbackError).message}`,
