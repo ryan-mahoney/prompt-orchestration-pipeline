@@ -1,7 +1,56 @@
 // Research Task - Gather information based on seed input
 import { test } from "../libs/test.js";
-import { validateWithSchema } from "../../../../src/api/validators/json.js";
-import path from "node:path";
+
+export const researchJsonSchema = {
+  $schema: "http://json-schema.org/draft-07/schema#",
+  type: "object",
+  additionalProperties: false,
+  required: [
+    "researchSummary",
+    "keyFindings",
+    "additionalInsights",
+    "researchCompleteness",
+  ],
+  properties: {
+    researchSummary: {
+      type: "string",
+      minLength: 1,
+    },
+    keyFindings: {
+      type: "array",
+      minItems: 1,
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["area", "findings"],
+        properties: {
+          area: {
+            type: "string",
+            minLength: 1,
+          },
+          findings: {
+            type: "string",
+            minLength: 1,
+          },
+          sources: {
+            type: "array",
+            items: {
+              type: "string",
+              minLength: 1,
+            },
+          },
+        },
+      },
+    },
+    additionalInsights: {
+      type: "string",
+    },
+    researchCompleteness: {
+      type: "string",
+      minLength: 1,
+    },
+  },
+};
 
 // Step 1: Load and prepare input data
 export const ingestion = ({
@@ -75,14 +124,14 @@ Now provide your research findings in the specified JSON format:`,
 // Step 4: Call LLM with prompt
 export const inference = async ({
   io,
-  llm: { deepseek, openai },
+  llm: { deepseek },
   data: {
     promptTemplating: { system, prompt },
   },
   meta,
   flags,
 }) => {
-  const response = await openai.gpt5Mini({
+  const response = await deepseek.chat({
     messages: [
       { role: "system", content: system },
       { role: "user", content: prompt },
@@ -116,46 +165,27 @@ export const inference = async ({
 };
 
 // Step 6: Validate prompt response structure using JSON schema
-export const validateStructure = async ({ io, llm, data, meta, flags }) => {
+export const validateStructure = async ({
+  io,
+  flags,
+  validators: { validateWithSchema },
+}) => {
   const researchContent = await io.readArtifact("research-output.json");
+  const result = validateWithSchema(researchJsonSchema, researchContent);
 
-  try {
-    const parsedContent = JSON.parse(researchContent);
-
-    // Resolve schema path relative to repo root
-    const schemaPath = path.join(
-      process.cwd(),
-      "demo/pipeline-config/content-generation/schemas/research-output.schema.json"
-    );
-
-    // Validate using Ajv
-    const result = await validateWithSchema({
-      schemaPath,
-      data: parsedContent,
-    });
-
-    if (!result.valid) {
-      console.warn(
-        "[Research:validateStructure] Validation failed",
-        result.errors
-      );
-      return {
-        output: {},
-        flags: { ...flags, validationFailed: true },
-      };
-    }
-
-    return {
-      output: {},
-      flags: { ...flags, validationFailed: false },
-    };
-  } catch (parseError) {
+  if (!result.valid) {
     console.warn(
-      `[Research:validateStructure] ⚠ JSON parsing failed: ${parseError.message}`
+      "[Research:validateStructure] Validation failed",
+      result.errors
     );
     return {
       output: {},
       flags: { ...flags, validationFailed: true },
     };
   }
+
+  return {
+    output: {},
+    flags,
+  };
 };

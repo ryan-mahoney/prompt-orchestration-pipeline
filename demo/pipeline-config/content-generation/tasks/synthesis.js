@@ -1,5 +1,30 @@
 // Synthesis Task - Combine analysis outputs into coherent narrative
 
+export const synthesisJsonSchema = {
+  $schema: "http://json-schema.org/draft-07/schema#",
+  type: "object",
+  additionalProperties: false,
+  required: ["title", "paragraphs", "conclusion"],
+  properties: {
+    title: {
+      type: "string",
+      minLength: 1,
+    },
+    paragraphs: {
+      type: "array",
+      minItems: 1,
+      items: {
+        type: "string",
+        minLength: 1,
+      },
+    },
+    conclusion: {
+      type: "string",
+      minLength: 1,
+    },
+  },
+};
+
 export const preProcessing = async ({
   data: {
     seed: {
@@ -122,27 +147,27 @@ export const inference = async ({
   };
 };
 
-export const validateStructure = async ({ io, llm, data, meta, flags }) => {
+export const validateStructure = async ({
+  io,
+  flags,
+  validators: { validateWithSchema },
+}) => {
   const synthesisContent = await io.readArtifact("synthesis-output.json");
-  let jsonValid = false;
-  let structureValid = false;
+  const result = validateWithSchema(synthesisJsonSchema, synthesisContent);
 
-  try {
-    const parsed = JSON.parse(synthesisContent);
-    jsonValid = true;
-
-    // 1) Validate required top-level fields and basic types
-    const requiredFields = ["title", "paragraphs", "conclusion"];
-    const missing = requiredFields.filter((f) => !parsed.hasOwnProperty(f));
-    if (missing.length === 0) structureValid = true;
-  } catch (parseError) {
+  if (!result.valid) {
     console.warn(
-      `[Synthesis:validateStructure] ⚠ JSON parsing failed: ${parseError.message}`
+      "[Synthesis:validateStructure] Validation failed",
+      result.errors
     );
+    return {
+      output: {},
+      flags: { ...flags, validationFailed: true },
+    };
   }
 
   return {
     output: {},
-    flags: { ...flags, validationFailed: !(jsonValid && structureValid) },
+    flags,
   };
 };
