@@ -5,8 +5,7 @@ import React, {
   useState,
   createRef,
 } from "react";
-import { Callout } from "@radix-ui/themes";
-import { TaskFilePane } from "./TaskFilePane.jsx";
+import { TaskDetailSidebar } from "./TaskDetailSidebar.jsx";
 import { RestartJobModal } from "./ui/RestartJobModal.jsx";
 import { Button } from "./ui/button.jsx";
 import { restartJob } from "../ui/client/api.js";
@@ -86,10 +85,6 @@ function DAGGrid({
   const [lines, setLines] = useState([]);
   const [effectiveCols, setEffectiveCols] = useState(cols);
   const [openIdx, setOpenIdx] = useState(null);
-  const [selectedFile, setSelectedFile] = useState(null);
-  const [filePaneOpen, setFilePaneOpen] = useState(false);
-  const [filePaneType, setFilePaneType] = useState("artifacts");
-  const [filePaneFilename, setFilePaneFilename] = useState(null);
 
   // Restart modal state
   const [restartModalOpen, setRestartModalOpen] = useState(false);
@@ -317,7 +312,6 @@ function DAGGrid({
     const handleKeyDown = (e) => {
       if (e.key === "Escape" && openIdx !== null) {
         setOpenIdx(null);
-        setSelectedFile(null);
       }
     };
 
@@ -325,30 +319,6 @@ function DAGGrid({
       document.addEventListener("keydown", handleKeyDown);
       return () => document.removeEventListener("keydown", handleKeyDown);
     }
-  }, [openIdx]);
-
-  // Focus management for slide-over
-  const closeButtonRef = useRef(null);
-  React.useEffect(() => {
-    if (openIdx !== null && closeButtonRef.current) {
-      closeButtonRef.current.focus();
-    }
-  }, [openIdx]);
-
-  React.useEffect(() => {
-    setFilePaneFilename(null);
-    setFilePaneOpen(false);
-  }, [filePaneType]);
-
-  React.useEffect(() => {
-    if (openIdx === null) {
-      setFilePaneFilename(null);
-      setFilePaneOpen(false);
-      return;
-    }
-    setFilePaneType("artifacts");
-    setFilePaneFilename(null);
-    setFilePaneOpen(false);
   }, [openIdx]);
 
   // Restart functionality
@@ -570,13 +540,11 @@ function DAGGrid({
               tabIndex={0}
               onClick={() => {
                 setOpenIdx(idx);
-                setSelectedFile(null);
               }}
               onKeyDown={(e) => {
                 if (e.key === "Enter" || e.key === " ") {
                   e.preventDefault();
                   setOpenIdx(idx);
-                  setSelectedFile(null);
                 }
               }}
               className={`cursor-pointer rounded-lg border border-gray-400 ${status === TaskState.PENDING ? "bg-gray-50" : "bg-white"} overflow-hidden flex flex-col transition outline outline-2 outline-transparent hover:outline-gray-400/70 focus-visible:outline-blue-500/60 ${cardClass}`}
@@ -672,151 +640,21 @@ function DAGGrid({
         })}
       </div>
 
-      {/* Slide-over panel for task details */}
-      <aside
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={`slide-over-title-${openIdx}`}
-        aria-hidden={openIdx === null}
-        className={`fixed inset-y-0 right-0 z-[2000] w-full max-w-4xl bg-white border-l border-gray-200 transform transition-transform duration-300 ease-out ${openIdx !== null ? "translate-x-0" : "translate-x-full"}`}
-      >
-        {openIdx !== null && (
-          <>
-            <div
-              className={`px-6 py-4 border-b flex items-center justify-between ${getHeaderClasses(getStatus(openIdx))}`}
-            >
-              <div
-                id={`slide-over-title-${openIdx}`}
-                className="text-lg font-semibold truncate"
-              >
-                {formatStepName(items[openIdx], openIdx)}
-              </div>
-              <button
-                ref={closeButtonRef}
-                type="button"
-                aria-label="Close details"
-                onClick={() => {
-                  setOpenIdx(null);
-                  setSelectedFile(null);
-                }}
-                className="rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50 px-3 py-1.5 text-base"
-              >
-                ×
-              </button>
-            </div>
-            <div className="p-6 space-y-8 overflow-y-auto h-full">
-              {/* Error Callout - shown when task has error status and body */}
-              {items[openIdx]?.status === TaskState.FAILED &&
-                items[openIdx]?.body && (
-                  <section aria-label="Error">
-                    <Callout.Root role="alert" aria-live="assertive">
-                      <Callout.Text className="whitespace-pre-wrap break-words">
-                        {items[openIdx].body}
-                      </Callout.Text>
-                    </Callout.Root>
-                  </section>
-                )}
-
-              {/* File Display Area with Type Tabs */}
-              <section className="mt-6">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-base font-semibold text-gray-900">
-                    Files
-                  </h3>
-                  <div className="flex items-center space-x-2">
-                    <div className="flex rounded-lg border border-gray-200 bg-gray-50 p-1">
-                      <button
-                        onClick={() => setFilePaneType("artifacts")}
-                        className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
-                          filePaneType === "artifacts"
-                            ? "bg-white text-gray-900 shadow-sm"
-                            : "text-gray-600 hover:text-gray-900"
-                        }`}
-                      >
-                        Artifacts
-                      </button>
-                      <button
-                        onClick={() => setFilePaneType("logs")}
-                        className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
-                          filePaneType === "logs"
-                            ? "bg-white text-gray-900 shadow-sm"
-                            : "text-gray-600 hover:text-gray-900"
-                        }`}
-                      >
-                        Logs
-                      </button>
-                      <button
-                        onClick={() => setFilePaneType("tmp")}
-                        className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
-                          filePaneType === "tmp"
-                            ? "bg-white text-gray-900 shadow-sm"
-                            : "text-gray-600 hover:text-gray-900"
-                        }`}
-                      >
-                        Temp
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </section>
-
-              {/* File List */}
-              <div className="space-y-2">
-                <div className="text-sm text-gray-600">
-                  {filePaneType.charAt(0).toUpperCase() + filePaneType.slice(1)}{" "}
-                  files for {items[openIdx]?.id || `Task ${openIdx + 1}`}
-                </div>
-                <div className="space-y-1">
-                  {(() => {
-                    const filesForStep = filesByTypeForItem(items[openIdx]);
-                    const filesForTab = filesForStep[filePaneType] ?? [];
-
-                    if (filesForTab.length === 0) {
-                      return (
-                        <div className="text-sm text-gray-500 italic py-4 text-center">
-                          No {filePaneType} files available for this task
-                        </div>
-                      );
-                    }
-
-                    return filesForTab.map((name) => {
-                      return (
-                        <div
-                          key={`${filePaneType}-${name}`}
-                          className="flex items-center justify-between p-2 rounded border border-gray-200 hover:border-gray-300 hover:bg-gray-50 cursor-pointer transition-colors"
-                          onClick={() => {
-                            setFilePaneFilename(name);
-                            setFilePaneOpen(true);
-                          }}
-                        >
-                          <div className="flex items-center space-x-2">
-                            <span className="text-sm text-gray-700">
-                              {name}
-                            </span>
-                          </div>
-                        </div>
-                      );
-                    });
-                  })()}
-                </div>
-              </div>
-
-              {/* TaskFilePane Modal */}
-              <TaskFilePane
-                isOpen={filePaneOpen}
-                jobId={jobId}
-                taskId={items[openIdx]?.id || `task-${openIdx}`}
-                type={filePaneType}
-                filename={filePaneFilename}
-                onClose={() => {
-                  setFilePaneOpen(false);
-                  setFilePaneFilename(null);
-                }}
-              />
-            </div>
-          </>
-        )}
-      </aside>
+      {/* TaskDetailSidebar */}
+      {openIdx !== null && (
+        <TaskDetailSidebar
+          open={openIdx !== null}
+          title={formatStepName(items[openIdx], openIdx)}
+          status={getStatus(openIdx)}
+          jobId={jobId}
+          taskId={items[openIdx]?.id || `task-${openIdx}`}
+          taskBody={items[openIdx]?.body || null}
+          filesByTypeForItem={filesByTypeForItem}
+          task={items[openIdx]}
+          taskIndex={openIdx}
+          onClose={() => setOpenIdx(null)}
+        />
+      )}
 
       {/* Restart Job Modal */}
       <RestartJobModal
