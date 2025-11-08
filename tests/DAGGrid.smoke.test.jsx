@@ -9,6 +9,7 @@ import {
   within,
 } from "@testing-library/react";
 import DAGGrid from "../src/components/DAGGrid.jsx";
+import { TaskState } from "../src/config/statuses.js";
 
 // Mock layout APIs to prevent JSDOM errors
 beforeEach(() => {
@@ -49,19 +50,19 @@ describe("DAGGrid", () => {
   const mockItems = [
     {
       id: "research",
-      status: "succeeded",
+      status: TaskState.DONE,
       title: "Research",
       subtitle: "Gather data",
     },
     {
       id: "analysis",
-      status: "active",
+      status: TaskState.RUNNING,
       title: "Analysis",
       subtitle: "Process data",
     },
     {
       id: "synthesis",
-      status: "pending",
+      status: TaskState.PENDING,
       title: "Synthesis",
       subtitle: "Create output",
     },
@@ -118,8 +119,8 @@ describe("DAGGrid", () => {
 
   it("handles items without titles", () => {
     const itemsWithoutTitles = [
-      { id: "task1", status: "pending" },
-      { id: "task2", status: "active" },
+      { id: "task1", status: TaskState.PENDING },
+      { id: "task2", status: TaskState.RUNNING },
     ];
 
     render(<DAGGrid items={itemsWithoutTitles} activeIndex={1} />);
@@ -130,8 +131,8 @@ describe("DAGGrid", () => {
 
   it("handles items without subtitles", () => {
     const itemsWithoutSubtitles = [
-      { id: "task1", status: "pending", title: "Task 1" },
-      { id: "task2", status: "active", title: "Task 2" },
+      { id: "task1", status: TaskState.PENDING, title: "Task 1" },
+      { id: "task2", status: TaskState.RUNNING, title: "Task 2" },
     ];
 
     render(<DAGGrid items={itemsWithoutSubtitles} activeIndex={1} />);
@@ -146,8 +147,8 @@ describe("DAGGrid", () => {
 
     const cards = screen.getAllByRole("listitem");
 
-    // First card should show "succeeded" status
-    expect(cards[0].innerHTML).toContain("succeeded");
+    // First card should show "done" status
+    expect(cards[0].innerHTML).toContain("done");
 
     // Second card should show active state (either spinner or text)
     expect(cards[1].innerHTML).toContain("Active");
@@ -167,8 +168,8 @@ describe("DAGGrid", () => {
 
     const cards = screen.getAllByRole("listitem");
 
-    // First card should show "succeeded" (index < activeIndex)
-    expect(cards[0].innerHTML).toContain("succeeded");
+    // First card should show "done" (index < activeIndex)
+    expect(cards[0].innerHTML).toContain("done");
 
     // Second card should show "active" (index === activeIndex)
     expect(cards[1].innerHTML).toContain("Active");
@@ -179,17 +180,17 @@ describe("DAGGrid", () => {
 
   it("slide-over header uses capitalized fallback id", () => {
     const itemsWithoutTitles = [
-      { id: "task1", status: "pending" },
-      { id: "task2", status: "active" },
+      { id: "task1", status: TaskState.PENDING },
+      { id: "task2", status: TaskState.RUNNING },
     ];
 
     render(<DAGGrid items={itemsWithoutTitles} activeIndex={0} />);
 
-    // Click the first card to open the slide-over
+    // Click the first card to open slide-over
     const cards = screen.getAllByRole("listitem");
     fireEvent.click(cards[0]);
 
-    // Assert the slide-over header shows the capitalized fallback id
+    // Assert that slide-over header shows capitalized fallback id
     // Use getByTestId or specific selector to target only the slide-over header
     expect(screen.getByRole("dialog")).toBeTruthy();
     const slideOverTitle = document.getElementById("slide-over-title-0");
