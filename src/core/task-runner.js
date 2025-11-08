@@ -603,7 +603,6 @@ export async function runPipeline(modulePath, initialContext = {}) {
         );
       }
       const logName = `stage-${stageName}.log`;
-      await context.io.writeLog(logName, "", { mode: "replace" });
       const logPath = path.join(context.meta.workDir, "files", "logs", logName);
       console.debug("[task-runner] stage log path resolution via IO", {
         stage: stageName,
