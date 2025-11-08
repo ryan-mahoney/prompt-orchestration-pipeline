@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import React from "react";
 
-// Mock it's DAGGrid component to focus on JobDetail logic
+// Mock the DAGGrid component to focus on JobDetail logic
 vi.mock("../src/components/DAGGrid.jsx", () => ({
   default: ({ items, activeIndex }) => (
     <div data-testid="dag-grid">
