@@ -1,4 +1,5 @@
 // Research Task - Gather information based on seed input
+import { test } from "../libs/test.js";
 
 // Step 1: Load and prepare input data
 export const ingestion = ({
@@ -30,6 +31,7 @@ export const promptTemplating = ({
   meta,
   flags,
 }) => {
+  test();
   return {
     output: {
       system:

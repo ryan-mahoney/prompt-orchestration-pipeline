@@ -2,8 +2,6 @@ import fsp from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-const WORKSPACE_CACHE_DIR = path.join(process.cwd(), ".tmp-task-modules");
-
 /**
  * Convert supported modulePath formats into a file:// URL.
  * @param {string | URL} modulePath
@@ -88,70 +86,86 @@ function createMissingModuleError(modulePath, originalError) {
 }
 
 /**
- * Copy a module file into a workspace-local cache directory so Vite/Vitest can load it.
+ * Copy a module file adjacent to its original location with a unique name.
  * @param {string} sourcePath
  * @returns {Promise<string>}
  */
-async function copyModuleToWorkspaceCache(sourcePath) {
-  await fsp.mkdir(WORKSPACE_CACHE_DIR, { recursive: true });
+async function copyModuleAdjacent(sourcePath) {
+  const dir = path.dirname(sourcePath);
   const ext = path.extname(sourcePath) || ".js";
   const base = path.basename(sourcePath, ext);
   const uniqueSuffix = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  const destFile = path.join(
-    WORKSPACE_CACHE_DIR,
-    `${base}.${uniqueSuffix}${ext}`
-  );
+  const destFile = path.join(dir, `.cache.${base}.${uniqueSuffix}${ext}`);
   await fsp.copyFile(sourcePath, destFile);
   return destFile;
 }
 
 /**
  * Dynamically import a module with cache busting while remaining compatible with Node's file:/// resolution.
- * Falls back to copying the module into a workspace-local cache when query parameters break filesystem resolution.
+ * Falls back to copying the module adjacent to its original location when query parameters break filesystem resolution.
  * @param {string | URL} modulePath
  * @returns {Promise<any>} Module namespace object
  */
 export async function loadFreshModule(modulePath) {
   const fileUrl = resolveToFileURL(modulePath);
-  const cacheBustedUrl = `${fileUrl.href}?t=${Date.now()}`;
 
+  // First attempt direct import without cache busting
   try {
-    return await import(cacheBustedUrl);
+    return await import(fileUrl.href);
   } catch (error) {
-    if (!isModuleNotFoundError(error) || fileUrl.protocol !== "file:") {
+    if (!isModuleNotFoundError(error)) {
       throw error;
     }
 
-    const absolutePath = fileURLToPath(fileUrl);
-
+    // Second attempt: try cache-busted import
+    const cacheBustedUrl = `${fileUrl.href}?t=${Date.now()}`;
     try {
-      await fsp.access(absolutePath);
-    } catch {
-      throw createMissingModuleError(
-        absolutePath,
-        /** @type {Error} */ (error)
-      );
-    }
-
-    try {
-      const cacheCopy = await copyModuleToWorkspaceCache(absolutePath);
-      const cacheUrl = `${pathToFileURL(cacheCopy).href}?t=${Date.now()}`;
-      return await import(cacheUrl);
-    } catch (fallbackError) {
-      const messageLines = [
-        `Failed to load module "${absolutePath}" after attempting cache-busting import.`,
-        `Cache-busted URL: ${cacheBustedUrl}`,
-        `Original error: ${/** @type {Error} */ (error).message}`,
-        `Fallback error: ${/** @type {Error} */ (fallbackError).message}`,
-      ];
-      const combined = new Error(messageLines.join("\n"));
-      if ("cause" in Error.prototype) {
-        combined.cause = fallbackError;
-      } else {
-        combined.fallbackError = fallbackError;
+      return await import(cacheBustedUrl);
+    } catch (cacheBustedError) {
+      if (
+        !isModuleNotFoundError(cacheBustedError) ||
+        fileUrl.protocol !== "file:"
+      ) {
+        throw cacheBustedError;
       }
-      combined.initialError = error;
-      throw combined;
+
+      const absolutePath = fileURLToPath(fileUrl);
+
+      try {
+        await fsp.access(absolutePath);
+      } catch {
+        throw createMissingModuleError(
+          absolutePath,
+          /** @type {Error} */ (cacheBustedError)
+        );
+      }
+
+      // Third attempt: copy adjacent and import
+      let adjacentCopy;
+      try {
+        adjacentCopy = await copyModuleAdjacent(absolutePath);
+        const adjacentUrl = `${pathToFileURL(adjacentCopy).href}?t=${Date.now()}`;
+        return await import(adjacentUrl);
+      } catch (fallbackError) {
+        const messageLines = [
+          `Failed to load module "${absolutePath}" after attempting direct import, cache-busting import, and adjacent copy fallback.`,
+          `Direct import URL: ${fileUrl.href}`,
+          `Cache-busted URL: ${cacheBustedUrl}`,
+          `Adjacent fallback path attempted: ${adjacentCopy || "[adjacent copy creation failed]"}`,
+          `Original error: ${/** @type {Error} */ (error).message}`,
+          `Cache-bust error: ${/** @type {Error} */ (cacheBustedError).message}`,
+          `Fallback error: ${/** @type {Error} */ (fallbackError).message}`,
+        ];
+        const combined = new Error(messageLines.join("\n"));
+        if ("cause" in Error.prototype) {
+          combined.cause = fallbackError;
+        } else {
+          combined.fallbackError = fallbackError;
+        }
+        combined.initialError = error;
+        combined.cacheBustedError = cacheBustedError;
+        throw combined;
+      }
     }
   }
 }
