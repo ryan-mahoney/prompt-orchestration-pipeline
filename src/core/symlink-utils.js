@@ -23,8 +23,11 @@ export async function ensureSymlink(linkPath, targetPath, type) {
         }
         // If it points to a different target, remove it
         await fs.unlink(linkPath);
+      } else if (stats.isDirectory()) {
+        // If it's a directory, remove it recursively
+        await fs.rmdir(linkPath, { recursive: true });
       } else {
-        // If it's a file or directory, remove it
+        // If it's a file, remove it
         await fs.unlink(linkPath);
       }
     }
