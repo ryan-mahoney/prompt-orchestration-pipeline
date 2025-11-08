@@ -117,7 +117,7 @@ export function createTaskFileIO({ workDir, taskName, getStage, statusPath }) {
         logsDir,
         name,
         content,
-        options.mode || "append"
+        options.mode || "replace"
       );
       await updateStatusWithFiles("logs", name);
       return filePath;
