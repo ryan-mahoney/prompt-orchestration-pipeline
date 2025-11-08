@@ -597,11 +597,6 @@ export async function runPipeline(modulePath, initialContext = {}) {
       }
 
       // Add console output capture before stage execution using IO
-      if (!context.io) {
-        throw new Error(
-          `fileIO is required for stage execution but not provided for task ${context.meta.taskName}`
-        );
-      }
       const logName = `stage-${stageName}.log`;
       const logPath = path.join(context.meta.workDir, "files", "logs", logName);
       console.debug("[task-runner] stage log path resolution via IO", {
