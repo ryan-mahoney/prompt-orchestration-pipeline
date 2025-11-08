@@ -9,7 +9,7 @@ import {
 import { fmtDuration } from "../utils/duration.js";
 
 /**
- * TimerText component for displaying live-upping durations without parent re-renders
+ * TimerText component for displaying live-updating durations without parent re-renders
  *
  * @param {Object} props
  * @param {number} props.startMs - Start timestamp in milliseconds
