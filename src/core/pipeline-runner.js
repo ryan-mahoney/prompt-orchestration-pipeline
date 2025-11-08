@@ -8,6 +8,7 @@ import { writeJobStatus } from "./status-writer.js";
 import { TaskState } from "../config/statuses.js";
 import { ensureTaskSymlinkBridge } from "./symlink-bridge.js";
 import { cleanupTaskSymlinks } from "./symlink-utils.js";
+import { createTaskFileIO } from "./file-io.js";
 
 const ROOT = process.env.PO_ROOT || process.cwd();
 const DATA_DIR = path.join(ROOT, process.env.PO_DATA_DIR || "pipeline-data");
@@ -121,14 +122,23 @@ for (const taskName of pipeline.tasks) {
       taskModulePath: absoluteModulePath,
     });
 
+    // Create fileIO for this task
+    const fileIO = createTaskFileIO({
+      workDir,
+      taskName,
+      getStage: () => null, // pipeline-runner doesn't have stages
+      statusPath: tasksStatusPath,
+    });
+
     const result = await runPipeline(relocatedEntry, ctx);
 
     if (!result.ok) {
-      // Persist execution-logs.json and failure-details.json on task failure
+      // Persist execution-logs.json and failure-details.json on task failure via IO
       if (result.logs) {
-        await atomicWrite(
-          path.join(taskDir, "execution-logs.json"),
-          JSON.stringify(result.logs, null, 2)
+        await fileIO.writeLog(
+          "execution-logs.json",
+          JSON.stringify(result.logs, null, 2),
+          { mode: "replace" }
         );
       }
       const failureDetails = {
@@ -138,9 +148,10 @@ for (const taskName of pipeline.tasks) {
         context: result.context,
         refinementAttempts: result.refinementAttempts || 0,
       };
-      await atomicWrite(
-        path.join(taskDir, "failure-details.json"),
-        JSON.stringify(failureDetails, null, 2)
+      await fileIO.writeLog(
+        "failure-details.json",
+        JSON.stringify(failureDetails, null, 2),
+        { mode: "replace" }
       );
 
       // Update tasks-status.json with enriched failure context
@@ -173,9 +184,10 @@ for (const taskName of pipeline.tasks) {
     // No need to manually write output.json or enumerate artifacts
 
     if (result.logs) {
-      await atomicWrite(
-        path.join(taskDir, "execution-logs.json"),
-        JSON.stringify(result.logs, null, 2)
+      await fileIO.writeLog(
+        "execution-logs.json",
+        JSON.stringify(result.logs, null, 2),
+        { mode: "replace" }
       );
     }
 
