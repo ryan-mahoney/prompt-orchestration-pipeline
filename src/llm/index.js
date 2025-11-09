@@ -1,5 +1,6 @@
 import { openaiChat } from "../providers/openai.js";
 import { deepseekChat } from "../providers/deepseek.js";
+import { anthropicChat } from "../providers/anthropic.js";
 import { EventEmitter } from "node:events";
 import { getConfig } from "../core/config.js";
 import fs from "node:fs";
@@ -233,6 +234,44 @@ export async function chat(options) {
       };
 
       // Use actual usage from deepseek API if available; otherwise estimate
+      if (result?.usage) {
+        const { prompt_tokens, completion_tokens, total_tokens } = result.usage;
+        usage = {
+          promptTokens: prompt_tokens,
+          completionTokens: completion_tokens,
+          totalTokens: total_tokens,
+        };
+      } else {
+        const promptTokens = estimateTokens(systemMsg + userMsg);
+        const completionTokens = estimateTokens(
+          typeof result === "string" ? result : JSON.stringify(result)
+        );
+        usage = {
+          promptTokens,
+          completionTokens,
+          totalTokens: promptTokens + completionTokens,
+        };
+      }
+    } else if (provider === "anthropic") {
+      const anthropicArgs = {
+        messages,
+        model: model || "claude-3-sonnet",
+        temperature,
+        maxTokens,
+        ...rest,
+      };
+      if (topP !== undefined) anthropicArgs.topP = topP;
+      if (stop !== undefined) anthropicArgs.stop = stop;
+      anthropicArgs.responseFormat = finalResponseFormat;
+
+      const result = await anthropicChat(anthropicArgs);
+
+      response = {
+        content: result.content,
+        raw: result.raw,
+      };
+
+      // Use actual usage from anthropic API if available; otherwise estimate
       if (result?.usage) {
         const { prompt_tokens, completion_tokens, total_tokens } = result.usage;
         usage = {

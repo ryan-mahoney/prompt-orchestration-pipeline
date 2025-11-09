@@ -1,54 +1,42 @@
-import Anthropic from "@anthropic-ai/sdk";
 import {
   extractMessages,
   isRetryableError,
   sleep,
   tryParseJSON,
+  ensureJsonResponseFormat,
+  ProviderJsonParseError,
 } from "./base.js";
-
-let client = null;
-
-function getClient() {
-  if (!client && process.env.ANTHROPIC_API_KEY) {
-    client = new Anthropic({
-      apiKey: process.env.ANTHROPIC_API_KEY,
-      baseURL: process.env.ANTHROPIC_BASE_URL,
-    });
-  }
-  return client;
-}
 
 export async function anthropicChat({
   messages,
-  model = "claude-3-opus-20240229",
+  model = "claude-3-sonnet",
   temperature = 0.7,
-  maxTokens = 4096,
+  maxTokens,
   responseFormat,
   topP,
-  topK,
-  stopSequences,
+  frequencyPenalty,
+  presencePenalty,
+  stop,
   maxRetries = 3,
 }) {
-  const anthropic = getClient();
-  if (!anthropic) throw new Error("Anthropic API key not configured");
+  // Enforce JSON mode - reject calls without proper JSON responseFormat
+  ensureJsonResponseFormat(responseFormat, "Anthropic");
 
-  const { systemMsg, userMessages, assistantMessages } =
-    extractMessages(messages);
-
-  // Convert messages to Anthropic format
-  const anthropicMessages = [];
-  for (const msg of messages) {
-    if (msg.role === "user" || msg.role === "assistant") {
-      anthropicMessages.push({
-        role: msg.role,
-        content: msg.content,
-      });
-    }
+  if (!process.env.ANTHROPIC_API_KEY) {
+    throw new Error("Anthropic API key not configured");
   }
 
-  // Ensure messages alternate and start with user
-  if (anthropicMessages.length === 0 || anthropicMessages[0].role !== "user") {
-    anthropicMessages.unshift({ role: "user", content: "Hello" });
+  const { systemMsg, userMsg } = extractMessages(messages);
+
+  // Build system guard for JSON enforcement
+  let system = systemMsg;
+
+  if (responseFormat === "json" || responseFormat?.type === "json_object") {
+    system = `${systemMsg}\n\nYou must output strict JSON only with no extra text.`;
+  }
+
+  if (responseFormat?.json_schema) {
+    system = `${systemMsg}\n\nYou must output strict JSON only matching this schema (no extra text):\n${JSON.stringify(responseFormat.json_schema)}`;
   }
 
   let lastError;
@@ -58,47 +46,71 @@ export async function anthropicChat({
     }
 
     try {
-      const request = {
+      const requestBody = {
         model,
-        messages: anthropicMessages,
-        max_tokens: maxTokens,
+        system,
+        messages: [{ role: "user", content: userMsg }],
         temperature,
-        top_p: topP,
-        top_k: topK,
-        stop_sequences: stopSequences,
+        max_tokens: maxTokens,
+        ...(topP !== undefined ? { top_p: topP } : {}),
+        ...(stop !== undefined ? { stop_sequences: stop } : {}),
       };
 
-      // Add system message if present
-      if (systemMsg) {
-        request.system = systemMsg;
-      }
-
-      const result = await anthropic.messages.create(request);
-
-      // Extract text content
-      const content = result.content[0].text;
-
-      // Try to parse JSON if expected
-      let parsed = null;
-      if (responseFormat?.type === "json_object" || responseFormat === "json") {
-        parsed = tryParseJSON(content);
-        if (!parsed && attempt < maxRetries) {
-          lastError = new Error("Failed to parse JSON response");
-          continue;
+      const response = await fetch(
+        process.env.ANTHROPIC_BASE_URL ||
+          "https://api.anthropic.com/v1/messages",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${process.env.ANTHROPIC_API_KEY}`,
+            "anthropic-version": "2023-06-01",
+          },
+          body: JSON.stringify(requestBody),
         }
+      );
+
+      if (!response.ok) {
+        const error = await response
+          .json()
+          .catch(() => ({ error: response.statusText }));
+        throw { status: response.status, ...error };
       }
+
+      const data = await response.json();
+
+      // Extract text from response.content blocks
+      const blocks = Array.isArray(data?.content) ? data.content : [];
+      const text = blocks
+        .filter((b) => b?.type === "text" && typeof b.text === "string")
+        .map((b) => b.text)
+        .join("");
+
+      // Parse JSON - this is required for all calls
+      const parsed = tryParseJSON(text);
+      if (!parsed) {
+        throw new ProviderJsonParseError(
+          "Anthropic",
+          model,
+          text.substring(0, 200),
+          "Failed to parse JSON response from Anthropic API"
+        );
+      }
+
+      // Normalize usage (if provided)
+      const prompt_tokens = data?.usage?.input_tokens;
+      const completion_tokens = data?.usage?.output_tokens;
+      const total_tokens = (prompt_tokens ?? 0) + (completion_tokens ?? 0);
+      const usage =
+        prompt_tokens != null && completion_tokens != null
+          ? { prompt_tokens, completion_tokens, total_tokens }
+          : undefined;
 
       return {
-        content: parsed || content,
-        text: content,
-        usage: {
-          prompt_tokens: result.usage.input_tokens,
-          completion_tokens: result.usage.output_tokens,
-          total_tokens: result.usage.input_tokens + result.usage.output_tokens,
-          cache_read_input_tokens: result.usage.cache_creation_input_tokens,
-          cache_write_input_tokens: result.usage.cache_write_input_tokens,
-        },
-        raw: result,
+        content: parsed,
+        text,
+        ...(usage ? { usage } : {}),
+        raw: data,
       };
     } catch (error) {
       lastError = error;
@@ -114,4 +126,22 @@ export async function anthropicChat({
   }
 
   throw lastError || new Error(`Failed after ${maxRetries + 1} attempts`);
+}
+
+// Keep backward compatibility
+export async function queryAnthropic(
+  system,
+  prompt,
+  model = "claude-3-sonnet"
+) {
+  const response = await anthropicChat({
+    messages: [
+      { role: "system", content: system },
+      { role: "user", content: prompt },
+    ],
+    model,
+    responseFormat: "json",
+  });
+
+  return response.content;
 }
