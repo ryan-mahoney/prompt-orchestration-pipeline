@@ -18,6 +18,7 @@ export async function anthropicChat({
   presencePenalty,
   stop,
   maxRetries = 3,
+  ...rest
 }) {
   // Enforce JSON mode - reject calls without proper JSON responseFormat
   ensureJsonResponseFormat(responseFormat, "Anthropic");
