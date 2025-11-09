@@ -6,6 +6,7 @@ import React, {
   createRef,
   memo,
 } from "react";
+import { areGeometriesEqual } from "../utils/geometry-equality.js";
 import { TaskDetailSidebar } from "./TaskDetailSidebar.jsx";
 import { RestartJobModal } from "./ui/RestartJobModal.jsx";
 import { Button } from "./ui/button.jsx";
@@ -146,7 +147,9 @@ const TaskCard = memo(function TaskCard({
             </>
           ) : (
             <>
-              <span className={`text-[11px] uppercase tracking-wide opacity-80${reducedMotion ? "" : " transition-opacity duration-200"}`}>
+              <span
+                className={`text-[11px] uppercase tracking-wide opacity-80${reducedMotion ? "" : " transition-opacity duration-200"}`}
+              >
                 {status}
                 {status === TaskState.FAILED && item.stage && (
                   <span
@@ -358,8 +361,7 @@ function DAGGrid({
 
         const geometryChanged =
           !prevGeometryRef.current ||
-          JSON.stringify(currentGeometry) !==
-            JSON.stringify(prevGeometryRef.current);
+          !areGeometriesEqual(prevGeometryRef.current, currentGeometry);
 
         if (!geometryChanged) {
           rafRef.current = null;
