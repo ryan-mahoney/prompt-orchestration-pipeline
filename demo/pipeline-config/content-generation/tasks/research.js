@@ -294,7 +294,7 @@ OUTPUT FORMAT:
 };
 
 // Step 9: Refine (optional) — apply critique to produce an improved output
-// Contract: can depend on flags.validationFailed; should set refined=true when implemented
+// Contract: can depend on flags.needsRefinement; should set refined=true when implemented
 export const refine = async ({
   io,
   llm: { deepseek },
