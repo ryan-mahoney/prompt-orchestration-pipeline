@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { startTransition, useTransition } from "react";
 import { adaptJobDetail } from "../adapters/job-adapter.js";
 
 // Export debounce constant for tests
@@ -141,6 +142,8 @@ export function useJobDetailWithUpdates(jobId) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [connectionStatus, setConnectionStatus] = useState("disconnected");
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isPending, startTransition] = useTransition();
 
   const esRef = useRef(null);
   const reconnectTimer = useRef(null);
@@ -161,15 +164,28 @@ export function useJobDetailWithUpdates(jobId) {
         }
         const abortController = new AbortController();
         try {
+          startTransition(() => {
+            setIsRefreshing(true);
+          });
+
           const jobData = await fetchJobDetail(jobId, {
             signal: abortController.signal,
           });
+
           if (mountedRef.current) {
-            setData(jobData);
-            setError(null);
+            startTransition(() => {
+              setData(jobData);
+              setError(null);
+              setIsRefreshing(false);
+            });
           }
         } catch (err) {
-          if (mountedRef.current) setError(err.message);
+          if (mountedRef.current) {
+            startTransition(() => {
+              setError(err.message);
+              setIsRefreshing(false);
+            });
+          }
         } finally {
           refetchTimerRef.current = null;
         }
@@ -198,7 +214,10 @@ export function useJobDetailWithUpdates(jobId) {
 
     const doFetch = async () => {
       try {
-        setLoading(true);
+        // Only set loading to true if we haven't hydrated yet
+        if (!hydratedRef.current) {
+          setLoading(true);
+        }
         setError(null);
 
         const jobData = await fetchJobDetail(jobId);
@@ -224,9 +243,16 @@ export function useJobDetailWithUpdates(jobId) {
         }
 
         if (mountedRef.current) {
-          setData(finalData);
-          setError(null);
-          hydratedRef.current = true;
+          startTransition(() => {
+            setData(finalData);
+            setError(null);
+            hydratedRef.current = true;
+
+            // Only set loading to false if we haven't hydrated yet
+            if (!hydratedRef.current) {
+              setLoading(false);
+            }
+          });
 
           // Now that we're hydrated, if any queued path-only change was seen, schedule a refetch
           if (queuedNeedsRefetch) {
@@ -235,11 +261,16 @@ export function useJobDetailWithUpdates(jobId) {
         }
       } catch (err) {
         if (mountedRef.current) {
-          setError(err.message);
-          setData(null);
+          startTransition(() => {
+            setError(err.message);
+            setData(null);
+            if (!hydratedRef.current) {
+              setLoading(false);
+            }
+          });
         }
       } finally {
-        if (mountedRef.current) {
+        if (mountedRef.current && !hydratedRef.current) {
           setLoading(false);
         }
       }
@@ -354,16 +385,18 @@ export function useJobDetailWithUpdates(jobId) {
           }
 
           // Apply event using pure reducer (includes direct state:change with id)
-          setData((prev) => {
-            const next = applyJobEvent(prev, eventObj, jobId);
-            try {
-              if (JSON.stringify(prev) === JSON.stringify(next)) {
-                return prev;
+          startTransition(() => {
+            setData((prev) => {
+              const next = applyJobEvent(prev, eventObj, jobId);
+              try {
+                if (JSON.stringify(prev) === JSON.stringify(next)) {
+                  return prev;
+                }
+              } catch (e) {
+                console.error("Error comparing states:", e);
               }
-            } catch (e) {
-              console.error("Error comparing states:", e);
-            }
-            return next;
+              return next;
+            });
           });
         } catch (err) {
           // Non-fatal: keep queue intact and continue
@@ -461,5 +494,8 @@ export function useJobDetailWithUpdates(jobId) {
     loading,
     error,
     connectionStatus,
+    isRefreshing,
+    isTransitioning: isPending,
+    isHydrated: hydratedRef.current,
   };
 }

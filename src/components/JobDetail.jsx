@@ -51,11 +51,11 @@ export default function JobDetail({ job, pipeline }) {
     return result;
   }, [pipeline, job?.tasks]);
 
-  // Compute DAG items and active index for visualization
-  const dagItems = React.useMemo(() => {
+  // Memoized helper to preserve DAG item identity and minimize churn
+  const stableDagItems = React.useMemo(() => {
     const rawDagItems = computeDagItems(job, computedPipeline);
 
-    const processedItems = rawDagItems.map((item, index) => {
+    return rawDagItems.map((item, index) => {
       const task = taskById[item.id];
 
       const taskConfig = task?.config || {};
@@ -91,7 +91,7 @@ export default function JobDetail({ job, pipeline }) {
           ? errorMsg
           : null;
 
-      const resultItem = {
+      return {
         ...item,
         title:
           typeof item.id === "string"
@@ -102,12 +102,44 @@ export default function JobDetail({ job, pipeline }) {
         startedAt: task?.startedAt,
         endedAt: task?.endedAt,
       };
+    });
+  }, [job, computedPipeline, taskById]);
 
-      return resultItem;
+  // Previous dagItems reference for identity comparison
+  const prevDagItemsRef = React.useRef([]);
+
+  // Compute DAG items with identity preservation
+  const dagItems = React.useMemo(() => {
+    const prevItems = prevDagItemsRef.current;
+
+    // Create new array but reuse objects when possible to maintain identity
+    const newItems = stableDagItems.map((item, index) => {
+      const prevItem = prevItems[index];
+
+      // Reuse previous object if key properties are unchanged
+      if (
+        prevItem &&
+        prevItem.id === item.id &&
+        prevItem.status === item.status &&
+        prevItem.stage === item.stage
+      ) {
+        return {
+          ...prevItem,
+          // Update only properties that might change
+          ...(prevItem.title !== item.title && { title: item.title }),
+          ...(prevItem.subtitle !== item.subtitle && {
+            subtitle: item.subtitle,
+          }),
+          ...(prevItem.body !== item.body && { body: item.body }),
+        };
+      }
+
+      return item;
     });
 
-    return processedItems;
-  }, [job, computedPipeline, taskById]);
+    prevDagItemsRef.current = newItems;
+    return newItems;
+  }, [stableDagItems]);
 
   const activeIndex = React.useMemo(() => {
     const index = computeActiveIndex(dagItems);
