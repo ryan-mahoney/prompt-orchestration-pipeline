@@ -144,6 +144,7 @@ export function useJobDetailWithUpdates(jobId) {
   const [connectionStatus, setConnectionStatus] = useState("disconnected");
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isPending, startTransition] = useTransition();
+  const [isHydrated, setIsHydrated] = useState(false);
 
   const esRef = useRef(null);
   const reconnectTimer = useRef(null);
@@ -200,6 +201,7 @@ export function useJobDetailWithUpdates(jobId) {
     setLoading(true);
     setError(null);
     setConnectionStatus("disconnected");
+    setIsHydrated(false);
     hydratedRef.current = false;
     eventQueue.current = [];
     if (refetchTimerRef.current) {
@@ -249,8 +251,9 @@ export function useJobDetailWithUpdates(jobId) {
             const wasHydrated = hydratedRef.current;
             hydratedRef.current = true;
 
-            // Only set loading to false if we haven't hydrated yet
+            // Update state only when transitioning to hydrated
             if (!wasHydrated) {
+              setIsHydrated(true);
               setLoading(false);
             }
           });
@@ -497,6 +500,6 @@ export function useJobDetailWithUpdates(jobId) {
     connectionStatus,
     isRefreshing,
     isTransitioning: isPending,
-    isHydrated: hydratedRef.current,
+    isHydrated,
   };
 }
