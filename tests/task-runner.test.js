@@ -22,17 +22,22 @@ describe("Task Runner - Real Implementation", () => {
     // Create vi.fn() spies with implementations
     const validateStructure = vi.fn().mockImplementation(async (context) => ({
       output: { validationPassed: true },
-      flags: { validationFailed: false }, // Set to false so critique/refine are skipped
+      flags: {}, // No control flags for validateStructure
+    }));
+
+    const validateQuality = vi.fn().mockImplementation(async (context) => ({
+      output: { feedback: "quality feedback" },
+      flags: { needsRefinement: false }, // Set to false so critique/refine are skipped
     }));
 
     const critique = vi.fn().mockImplementation(async (context) => ({
       output: { critique: "good" },
-      flags: { critiqueComplete: true },
+      flags: {}, // No control flags for critique
     }));
 
     const refine = vi.fn().mockImplementation(async (context) => ({
       output: { refined: true },
-      flags: { refined: true },
+      flags: {}, // No control flags for refine
     }));
 
     // Store references for test assertions
@@ -60,10 +65,6 @@ describe("Task Runner - Real Implementation", () => {
       parsing: vi.fn().mockImplementation(async (context) => ({
         output: { parsed: true, data: context.output },
         flags: { parsingComplete: true },
-      })),
-      validateQuality: vi.fn().mockImplementation(async (context) => ({
-        output: { qualityValid: true, data: context.output },
-        flags: { qualityValidationPassed: true },
       })),
       finalValidation: vi.fn().mockImplementation(async (context) => ({
         output: { finalResult: true, data: context.output },
@@ -130,7 +131,7 @@ describe("Task Runner - Real Implementation", () => {
           validateStructure: { validationPassed: true },
         },
         flags: {
-          validationFailed: false,
+          needsRefinement: false,
         },
         currentStage: expect.any(String),
       });
@@ -367,10 +368,10 @@ describe("Task Runner - Real Implementation", () => {
         tasksOverride: mockTasksModule,
       });
 
-      expect(result.refinementAttempts).toBe(1);
-      expect(callCount).toBe(2); // Should be called twice: initial + refinement
-      expect(mockTasksModule.critique).toHaveBeenCalled();
-      expect(mockTasksModule.refine).toHaveBeenCalled();
+      // Single-pass: critique and refine execute once when validationFailed is true
+      expect(callCount).toBe(1); // Called once in single-pass
+      expect(mockTasksModule.critique).toHaveBeenCalledTimes(1);
+      expect(mockTasksModule.refine).toHaveBeenCalledTimes(1);
     });
 
     it("should respect maxRefinements from seed", async () => {
@@ -396,8 +397,10 @@ describe("Task Runner - Real Implementation", () => {
         tasksOverride: mockTasksModule,
       });
 
-      expect(result.refinementAttempts).toBe(2);
-      expect(mockTasksModule.validateStructure).toHaveBeenCalledTimes(3); // initial + 2 refinements
+      // Single-pass: validateStructure called once, critique and refine called once
+      expect(mockTasksModule.validateStructure).toHaveBeenCalledTimes(1);
+      expect(mockTasksModule.critique).toHaveBeenCalledTimes(1);
+      expect(mockTasksModule.refine).toHaveBeenCalledTimes(1);
     });
 
     it("should default maxRefinements to 1 when not specified", async () => {
@@ -423,8 +426,10 @@ describe("Task Runner - Real Implementation", () => {
         tasksOverride: mockTasksModule,
       });
 
-      expect(result.refinementAttempts).toBe(1);
-      expect(mockTasksModule.validateStructure).toHaveBeenCalledTimes(2); // initial + 1 refinement
+      // Single-pass: validateStructure called once, critique and refine called once
+      expect(mockTasksModule.validateStructure).toHaveBeenCalledTimes(1);
+      expect(mockTasksModule.critique).toHaveBeenCalledTimes(1);
+      expect(mockTasksModule.refine).toHaveBeenCalledTimes(1);
     });
   });
 
