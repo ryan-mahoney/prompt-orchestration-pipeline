@@ -7,7 +7,7 @@ import { Box, Flex, Text, Tabs } from "@radix-ui/themes";
 import { Progress } from "../components/ui/progress";
 import { useJobListWithUpdates } from "../ui/client/hooks/useJobListWithUpdates";
 import { adaptJobSummary } from "../ui/client/adapters/job-adapter";
-import { TaskState } from "../config/statuses.js";
+import { TaskState, JobStatus } from "../config/statuses.js";
 
 // Referenced components — leave these alone
 import JobTable from "../components/JobTable";
@@ -65,7 +65,7 @@ export default function PromptPipelineDashboard({ isConnected }) {
     [jobs]
   );
   const completedCount = useMemo(
-    () => jobs.filter((j) => j.status === TaskState.DONE).length,
+    () => jobs.filter((j) => j.status === JobStatus.COMPLETE).length,
     [jobs]
   );
 
@@ -76,7 +76,7 @@ export default function PromptPipelineDashboard({ isConnected }) {
       case "errors":
         return jobs.filter((j) => j.status === TaskState.FAILED);
       case "complete":
-        return jobs.filter((j) => j.status === TaskState.DONE);
+        return jobs.filter((j) => j.status === JobStatus.COMPLETE);
       default:
         return [];
     }
