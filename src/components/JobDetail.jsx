@@ -68,9 +68,6 @@ export default function JobDetail({ job, pipeline }) {
       if (taskConfig?.temperature != null) {
         subtitleParts.push(`temp ${taskConfig.temperature}`);
       }
-      if (task?.attempts != null) {
-        subtitleParts.push(`${task.attempts} attempts`);
-      }
       if (task?.refinementAttempts != null) {
         subtitleParts.push(`${task.refinementAttempts} refinements`);
       }
