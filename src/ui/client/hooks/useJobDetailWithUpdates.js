@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import { startTransition, useTransition } from "react";
+import { useTransition } from "react";
 import { adaptJobDetail } from "../adapters/job-adapter.js";
 
 // Export debounce constant for tests
