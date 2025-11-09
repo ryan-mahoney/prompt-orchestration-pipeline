@@ -612,7 +612,6 @@ export async function runPipeline(modulePath, initialContext = {}) {
 
       // Store stage output in context.data
       context.data[stageName] = stageResult.output;
-      lastStageName = stageName;
 
       // Only update lastStageOutput and lastExecutedStageName for non-validation stages
       // This ensures previousStage and context.output skip validation stages
