@@ -2,25 +2,7 @@ import React from "react";
 import DAGGrid from "./DAGGrid.jsx";
 import { computeDagItems, computeActiveIndex } from "../utils/dag.js";
 import { getTaskFilesForTask } from "../utils/task-files.js";
-
-// Local helpers for formatting costs and tokens
-function formatCurrency4(x) {
-  if (typeof x !== "number" || x === 0) return "$0.0000";
-  const formatted = x.toFixed(4);
-  // Trim trailing zeros and unnecessary decimal point
-  return `$${formatted.replace(/\.?0+$/, "")}`;
-}
-
-function formatTokensCompact(n) {
-  if (typeof n !== "number" || n === 0) return "0 tok";
-
-  if (n >= 1000000) {
-    return `${(n / 1000000).toFixed(1).replace(/\.0$/, "")}M tokens`;
-  } else if (n >= 1000) {
-    return `${(n / 1000).toFixed(1).replace(/\.0$/, "")}k tokens`;
-  }
-  return `${n} tokens`;
-}
+import { formatCurrency4, formatTokensCompact } from "../utils/formatters.js";
 
 export default function JobDetail({ job, pipeline }) {
   // job.tasks is expected to be an object keyed by task name; normalize from array if needed
