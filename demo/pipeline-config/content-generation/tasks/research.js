@@ -343,7 +343,7 @@ export const refine = async ({
 };
 
 // Step 10: Final validation — ensure refined output satisfies all constraints
-// Contract: last validation gate; may set validationFailed and lastValidationError
+// Contract: last validation gate; throws an error on validation failure
 export const finalValidation = async ({
   io,
   llm,
