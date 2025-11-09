@@ -69,3 +69,55 @@ export function tryParseJSON(text) {
     }
   }
 }
+
+/**
+ * Error thrown when JSON response format is required but not provided
+ */
+export class ProviderJsonModeError extends Error {
+  constructor(providerName, message) {
+    super(message);
+    this.name = "ProviderJsonModeError";
+    this.provider = providerName;
+  }
+}
+
+/**
+ * Error thrown when JSON parsing fails and should not be retried
+ */
+export class ProviderJsonParseError extends Error {
+  constructor(provider, model, sample, message = "Failed to parse JSON response") {
+    super(message);
+    this.name = "ProviderJsonParseError";
+    this.provider = provider;
+    this.model = model;
+    this.sample = sample;
+  }
+}
+
+/**
+ * Ensures that responseFormat is configured for JSON output
+ * @param {*} responseFormat - The response format object or string
+ * @param {string} providerName - Name of the provider for error reporting
+ * @throws {ProviderJsonModeError} When JSON format is not properly configured
+ */
+export function ensureJsonResponseFormat(responseFormat, providerName) {
+  if (!responseFormat) {
+    throw new ProviderJsonModeError(
+      providerName,
+      `${providerName} requires responseFormat to be set for JSON mode`
+    );
+  }
+
+  // Check for valid JSON format types
+  const isValidJsonFormat = 
+    responseFormat === "json" ||
+    responseFormat?.type === "json_object" ||
+    responseFormat?.type === "json_schema";
+
+  if (!isValidJsonFormat) {
+    throw new ProviderJsonModeError(
+      providerName,
+      `${providerName} only supports JSON response format. Got: ${JSON.stringify(responseFormat)}`
+    );
+  }
+}

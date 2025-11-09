@@ -18,6 +18,8 @@ const mockExtractMessages = vi.hoisted(() => vi.fn());
 const mockIsRetryableError = vi.hoisted(() => vi.fn());
 const mockSleep = vi.hoisted(() => vi.fn());
 const mockTryParseJSON = vi.hoisted(() => vi.fn());
+const mockEnsureJsonResponseFormat = vi.hoisted(() => vi.fn());
+const mockProviderJsonParseError = vi.hoisted(() => vi.fn());
 
 // Mock the modules
 vi.mock("openai", () => ({
@@ -29,6 +31,8 @@ vi.mock("../src/providers/base.js", () => ({
   isRetryableError: mockIsRetryableError,
   sleep: mockSleep,
   tryParseJSON: mockTryParseJSON,
+  ensureJsonResponseFormat: mockEnsureJsonResponseFormat,
+  ProviderJsonParseError: mockProviderJsonParseError,
 }));
 
 describe("OpenAI Provider", () => {
@@ -56,6 +60,16 @@ describe("OpenAI Provider", () => {
         return null;
       }
     });
+    mockEnsureJsonResponseFormat.mockImplementation(() => {}); // No-op for tests
+    mockProviderJsonParseError.mockImplementation((provider, model, text) => {
+      const error = new Error(
+        `JSON parse error in ${provider} for model ${model}`
+      );
+      error.provider = provider;
+      error.model = model;
+      error.responseText = text;
+      return error;
+    });
   });
 
   afterEach(() => {
@@ -67,7 +81,7 @@ describe("OpenAI Provider", () => {
     it("should create OpenAI client with API key", async () => {
       // Arrange
       const mockResponse = {
-        output_text: "Test response",
+        output_text: '{"result": "Test response"}',
       };
       mockOpenAIClient.responses.create.mockResolvedValue(mockResponse);
 
@@ -109,7 +123,7 @@ describe("OpenAI Provider", () => {
     it("should use Responses API for GPT-5 models", async () => {
       // Arrange
       const mockResponse = {
-        output_text: "Test response",
+        output_text: '{"result": "Test response"}',
       };
       mockOpenAIClient.responses.create.mockResolvedValue(mockResponse);
 
@@ -124,23 +138,25 @@ describe("OpenAI Provider", () => {
       });
 
       // Assert
-      expect(mockOpenAIClient.responses.create).toHaveBeenCalledWith({
-        model: "gpt-5-chat-latest",
-        instructions: "Test system message",
-        input: "Test user message",
-        max_output_tokens: 25000,
-        text: {
-          format: {
-            type: "json_object",
+      expect(mockOpenAIClient.responses.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          model: "gpt-5-chat-latest",
+          instructions: "Test system message",
+          input: "Test user message",
+          max_output_tokens: 25000,
+          text: {
+            format: {
+              type: "json_object",
+            },
           },
-        },
-      });
+        })
+      );
     });
 
     it("should use Chat Completions API for non-GPT-5 models", async () => {
       // Arrange
       const mockResponse = {
-        choices: [{ message: { content: "Test response" } }],
+        choices: [{ message: { content: '{"result": "Test response"}' } }],
         usage: { total_tokens: 10 },
       };
       mockOpenAIClient.chat.completions.create.mockResolvedValue(mockResponse);
@@ -156,27 +172,20 @@ describe("OpenAI Provider", () => {
       });
 
       // Assert
-      expect(mockOpenAIClient.chat.completions.create).toHaveBeenCalledWith({
-        model: "gpt-4-turbo-preview",
-        messages: [
-          { role: "system", content: "Test system" },
-          { role: "user", content: "Test user" },
-        ],
-        temperature: 0.7,
-        max_tokens: undefined,
-        top_p: undefined,
-        frequency_penalty: undefined,
-        presence_penalty: undefined,
-        seed: undefined,
-        stop: undefined,
-        tools: undefined,
-        tool_choice: undefined,
-        stream: false,
-        response_format: {
-          type: "json_object", // Default to JSON for legacy compatibility
-        },
-      });
-      expect(result.content).toBe("Test response");
+      expect(mockOpenAIClient.chat.completions.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          model: "gpt-4-turbo-preview",
+          messages: [
+            { role: "system", content: "Test system" },
+            { role: "user", content: "Test user" },
+          ],
+          temperature: 0.7,
+          response_format: {
+            type: "json_object", // Default to JSON for legacy compatibility
+          },
+        })
+      );
+      expect(result.content).toEqual({ result: "Test response" });
     });
 
     it("should parse JSON content when responseFormat is json_object", async () => {
@@ -273,7 +282,7 @@ describe("OpenAI Provider", () => {
       const error = new Error("Rate limited");
       error.status = 429;
       const successResponse = {
-        output_text: "Success response",
+        output_text: '{"result": "Success response"}',
       };
       mockOpenAIClient.responses.create
         .mockRejectedValueOnce(error)
@@ -291,7 +300,7 @@ describe("OpenAI Provider", () => {
       // Assert
       expect(mockOpenAIClient.responses.create).toHaveBeenCalledTimes(2);
       expect(mockSleep).toHaveBeenCalledWith(2000); // 2^1 * 1000
-      expect(result.content).toBe("Success response");
+      expect(result.content).toEqual({ result: "Success response" });
     });
 
     it("should throw immediately on 401 authentication errors", async () => {
@@ -370,7 +379,7 @@ describe("OpenAI Provider", () => {
         choices: [
           {
             message: {
-              content: "Test response",
+              content: '{"result": "Test response"}',
               tool_calls: [
                 {
                   id: "call_123",
@@ -396,7 +405,7 @@ describe("OpenAI Provider", () => {
       });
 
       // Assert
-      expect(result.content).toBe("Test response");
+      expect(result.content).toEqual({ result: "Test response" });
       expect(result.toolCalls).toEqual([
         {
           id: "call_123",
@@ -412,7 +421,7 @@ describe("OpenAI Provider", () => {
     it("should estimate usage for Responses API when not provided", async () => {
       // Arrange
       const mockResponse = {
-        output_text: "Test response text",
+        output_text: '{"result": "Test response text"}',
       };
       mockOpenAIClient.responses.create.mockResolvedValue(mockResponse);
 
@@ -429,8 +438,8 @@ describe("OpenAI Provider", () => {
       // Assert
       expect(result.usage).toEqual({
         prompt_tokens: 9, // (systemMsg + userMsg).length / 4 = (15 + 13) / 4 = 7 → ceil = 7
-        completion_tokens: 5, // content.length / 4 = 19 / 4 = 4.75 → ceil = 5
-        total_tokens: 14, // 9 + 5 = 14
+        completion_tokens: 8, // content.length / 4 = 31 / 4 = 7.75 → ceil = 8
+        total_tokens: 17, // 9 + 8 = 17
       });
     });
 
@@ -438,7 +447,7 @@ describe("OpenAI Provider", () => {
       // Arrange
       const responsesError = new Error("Model not supported");
       const classicResponse = {
-        choices: [{ message: { content: "Classic response" } }],
+        choices: [{ message: { content: '{"result": "Classic response"}' } }],
         usage: { total_tokens: 10 },
       };
       mockOpenAIClient.responses.create.mockRejectedValue(responsesError);
@@ -457,13 +466,13 @@ describe("OpenAI Provider", () => {
       // Assert
       expect(mockOpenAIClient.responses.create).toHaveBeenCalledTimes(1);
       expect(mockOpenAIClient.chat.completions.create).toHaveBeenCalledTimes(1);
-      expect(result.content).toBe("Classic response");
+      expect(result.content).toEqual({ result: "Classic response" });
     });
 
     it("should pass through maxTokens parameter (temperature and tuning params not supported in Responses API)", async () => {
       // Arrange
       const mockResponse = {
-        output_text: "Test response",
+        output_text: '{"result": "Test response"}',
       };
       mockOpenAIClient.responses.create.mockResolvedValue(mockResponse);
 

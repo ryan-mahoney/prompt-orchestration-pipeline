@@ -3,6 +3,8 @@ import {
   isRetryableError,
   sleep,
   tryParseJSON,
+  ensureJsonResponseFormat,
+  ProviderJsonParseError,
 } from "./base.js";
 
 export async function deepseekChat({
@@ -10,13 +12,16 @@ export async function deepseekChat({
   model = "deepseek-chat",
   temperature = 0.7,
   maxTokens,
-  responseFormat = "json",
+  responseFormat,
   topP,
   frequencyPenalty,
   presencePenalty,
   stop,
   maxRetries = 3,
 }) {
+  // Enforce JSON mode - reject calls without proper JSON responseFormat
+  ensureJsonResponseFormat(responseFormat, "DeepSeek");
+
   if (!process.env.DEEPSEEK_API_KEY) {
     throw new Error("DeepSeek API key not configured");
   }
@@ -44,7 +49,7 @@ export async function deepseekChat({
         stop,
       };
 
-      // Add response format if needed
+      // Add response format - this is now required for all calls
       if (responseFormat?.type === "json_object" || responseFormat === "json") {
         requestBody.response_format = { type: "json_object" };
       }
@@ -71,23 +76,19 @@ export async function deepseekChat({
       const data = await response.json();
       const content = data.choices[0].message.content;
 
-      // Only try JSON parsing if responseFormat indicates JSON output
-      if (responseFormat?.type === "json_object" || responseFormat === "json") {
-        const parsed = tryParseJSON(content);
-        if (parsed === null && attempt < maxRetries) {
-          // JSON parsing failed, retry
-          lastError = new Error("Failed to parse JSON response");
-          continue;
-        }
-        return {
-          content: parsed,
-          usage: data.usage,
-          raw: data,
-        };
+      // Parse JSON - this is now required for all calls
+      const parsed = tryParseJSON(content);
+      if (!parsed) {
+        throw new ProviderJsonParseError(
+          "DeepSeek",
+          model,
+          content.substring(0, 200),
+          "Failed to parse JSON response from DeepSeek API"
+        );
       }
 
       return {
-        content,
+        content: parsed,
         usage: data.usage,
         raw: data,
       };
