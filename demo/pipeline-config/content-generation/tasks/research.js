@@ -335,7 +335,7 @@ export const refine = async ({
     JSON.stringify(parsed, null, 2)
   );
 
-  // No-op for now; implement refinement on prior output as needed
+  // Refine output by calling LLM, parsing response, and writing artifacts
   return {
     output,
     flags,
