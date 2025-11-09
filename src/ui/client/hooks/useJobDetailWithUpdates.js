@@ -246,10 +246,11 @@ export function useJobDetailWithUpdates(jobId) {
           startTransition(() => {
             setData(finalData);
             setError(null);
+            const wasHydrated = hydratedRef.current;
             hydratedRef.current = true;
 
             // Only set loading to false if we haven't hydrated yet
-            if (!hydratedRef.current) {
+            if (!wasHydrated) {
               setLoading(false);
             }
           });
