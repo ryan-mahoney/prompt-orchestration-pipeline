@@ -254,25 +254,10 @@ function persistStatusSnapshot(statusPath, updates) {
  * Defines required flags (prerequisites) and produced flags (outputs) with their types.
  */
 const FLAG_SCHEMAS = {
-  validateStructure: {
+  validateQuality: {
     requires: {},
     produces: {
-      validationFailed: "boolean",
-      lastValidationError: ["string", "object", "undefined"],
-    },
-  },
-  critique: {
-    requires: {},
-    produces: {
-      critiqueComplete: "boolean",
-    },
-  },
-  refine: {
-    requires: {
-      validationFailed: "boolean",
-    },
-    produces: {
-      refined: "boolean",
+      needsRefinement: "boolean",
     },
   },
 };
@@ -329,19 +314,19 @@ const PIPELINE_STAGES = [
   {
     name: "critique",
     handler: null, // Will be populated from dynamic module import
-    skipIf: (flags) => flags.validationFailed === false,
+    skipIf: (flags) => flags.needsRefinement !== true,
     maxIterations: null,
   },
   {
     name: "refine",
     handler: null, // Will be populated from dynamic module import
-    skipIf: (flags) => flags.validationFailed === false,
-    maxIterations: (seed) => seed.maxRefinements || 1,
+    skipIf: (flags) => flags.needsRefinement !== true,
+    maxIterations: null,
   },
   {
     name: "finalValidation",
     handler: null, // Will be populated from dynamic module import
-    skipIf: null,
+    skipIf: (flags) => flags.needsRefinement !== true,
     maxIterations: null,
   },
   {
@@ -448,9 +433,8 @@ export async function runPipeline(modulePath, initialContext = {}) {
     statusPath: initialContext.statusPath,
   });
 
-  // Extract seed and maxRefinements for new context structure
+  // Extract seed for new context structure
   const seed = initialContext.seed || initialContext;
-  const maxRefinements = seed.maxRefinements ?? 1; // Default to 1 unless explicitly set
 
   // Create new context structure with io, llm, meta, data, flags, logs, currentStage
   const context = {
@@ -479,8 +463,6 @@ export async function runPipeline(modulePath, initialContext = {}) {
     },
   };
   const logs = [];
-  let needsRefinement = false;
-  let refinementCount = 0;
   let lastStageOutput = context.data.seed;
   let lastStageName = "seed";
   let lastExecutedStageName = "seed";
@@ -488,140 +470,197 @@ export async function runPipeline(modulePath, initialContext = {}) {
   // Ensure log directory exists before stage execution
   const logsDir = ensureLogDirectory(context.meta.workDir, context.meta.jobId);
 
-  do {
-    needsRefinement = false;
-    let preRefinedThisCycle = false;
+  // Single-pass pipeline execution
+  for (const stageConfig of PIPELINE_STAGES) {
+    const stageName = stageConfig.name;
+    const stageHandler = stageConfig.handler;
 
-    for (const stageConfig of PIPELINE_STAGES) {
-      const stageName = stageConfig.name;
-      const stageHandler = stageConfig.handler;
-
-      // Skip stages when skipIf predicate returns true
-      if (stageConfig.skipIf && stageConfig.skipIf(context.flags)) {
-        context.logs.push({
-          stage: stageName,
-          action: "skipped",
-          reason: "skipIf predicate returned true",
-          timestamp: new Date().toISOString(),
-        });
-        continue;
-      }
-
-      // Skip if handler is not available (not implemented)
-      if (typeof stageHandler !== "function") {
-        logs.push({
-          stage: stageName,
-          skipped: true,
-          refinementCycle: refinementCount,
-        });
-        continue;
-      }
-
-      // Skip ingestion and preProcessing during refinement cycles
-      if (
-        refinementCount > 0 &&
-        ["ingestion", "preProcessing"].includes(stageName)
-      ) {
-        logs.push({
-          stage: stageName,
-          skipped: true,
-          reason: "refinement-cycle",
-          refinementCycle: refinementCount,
-        });
-        continue;
-      }
-
-      // Handle pre-refinement logic for validation stages
-      if (
-        refinementCount > 0 &&
-        !preRefinedThisCycle &&
-        !context.flags.refined &&
-        (stageName === "validateStructure" || stageName === "validateQuality")
-      ) {
-        for (const s of ["critique", "refine"]) {
-          const sConfig = PIPELINE_STAGES.find((config) => config.name === s);
-          const sHandler = sConfig?.handler;
-          if (typeof sHandler !== "function") {
-            logs.push({
-              stage: s,
-              skipped: true,
-              reason: "pre-refine-missing",
-              refinementCycle: refinementCount,
-            });
-            continue;
-          }
-          const sStart = performance.now();
-          try {
-            const r = await sHandler(context);
-            const sMs = +(performance.now() - sStart).toFixed(2);
-            logs.push({
-              stage: s,
-              ok: true,
-              ms: sMs,
-              refinementCycle: refinementCount,
-              reason: "pre-validate",
-            });
-          } catch (error) {
-            const sMs = +(performance.now() - sStart).toFixed(2);
-            const errInfo = normalizeError(error);
-            logs.push({
-              stage: s,
-              ok: false,
-              ms: sMs,
-              error: errInfo,
-              refinementCycle: refinementCount,
-            });
-            await tokenWriteQueue.catch(() => {});
-            llmEvents.off("llm:request:complete", onLLMComplete);
-            return {
-              ok: false,
-              failedStage: s,
-              error: errInfo,
-              logs,
-              context,
-              refinementAttempts: refinementCount,
-            };
-          }
-        }
-        preRefinedThisCycle = true;
-      }
-
-      // Skip critique and refine if already pre-refined
-      if (
-        preRefinedThisCycle &&
-        (stageName === "critique" || stageName === "refine")
-      ) {
-        logs.push({
-          stage: stageName,
-          skipped: true,
-          reason: "already-pre-refined",
-          refinementCycle: refinementCount,
-        });
-        continue;
-      }
-
-      // Add console output capture before stage execution using IO
-      const logName = `stage-${stageName}.log`;
-      const logPath = path.join(context.meta.workDir, "files", "logs", logName);
-      console.debug("[task-runner] stage log path resolution via IO", {
+    // Skip stages when skipIf predicate returns true
+    if (stageConfig.skipIf && stageConfig.skipIf(context.flags)) {
+      context.logs.push({
         stage: stageName,
-        workDir: context.meta.workDir,
-        jobId: context.meta.jobId,
-        logName,
-        logPath,
+        action: "skipped",
+        reason: "skipIf predicate returned true",
+        timestamp: new Date().toISOString(),
       });
-      const restoreConsole = captureConsoleOutput(logPath);
+      continue;
+    }
 
-      // Set current stage before execution
-      context.currentStage = stageName;
+    // Skip if handler is not available (not implemented)
+    if (typeof stageHandler !== "function") {
+      logs.push({
+        stage: stageName,
+        skipped: true,
+      });
+      continue;
+    }
 
-      // Write stage start status using writeJobStatus
+    // Add console output capture before stage execution using IO
+    const logName = `stage-${stageName}.log`;
+    const logPath = path.join(context.meta.workDir, "files", "logs", logName);
+    console.debug("[task-runner] stage log path resolution via IO", {
+      stage: stageName,
+      workDir: context.meta.workDir,
+      jobId: context.meta.jobId,
+      logName,
+      logPath,
+    });
+    const restoreConsole = captureConsoleOutput(logPath);
+
+    // Set current stage before execution
+    context.currentStage = stageName;
+
+    // Write stage start status using writeJobStatus
+    if (context.meta.workDir && context.meta.taskName) {
+      try {
+        await writeJobStatus(context.meta.workDir, (snapshot) => {
+          snapshot.current = context.meta.taskName;
+          snapshot.currentStage = stageName;
+          snapshot.lastUpdated = new Date().toISOString();
+
+          // Ensure task exists and update task-specific fields
+          if (!snapshot.tasks[context.meta.taskName]) {
+            snapshot.tasks[context.meta.taskName] = {};
+          }
+          snapshot.tasks[context.meta.taskName].currentStage = stageName;
+          snapshot.tasks[context.meta.taskName].state = TaskState.RUNNING;
+        });
+      } catch (error) {
+        // Don't fail the pipeline if status write fails
+        console.warn(`Failed to write stage start status: ${error.message}`);
+      }
+    }
+
+    // Clone data and flags before stage execution
+    const stageData = JSON.parse(JSON.stringify(context.data));
+    const stageFlags = JSON.parse(JSON.stringify(context.flags));
+    const stageContext = {
+      io: context.io,
+      llm: context.llm,
+      meta: context.meta,
+      data: stageData,
+      flags: stageFlags,
+      currentStage: stageName,
+      output: JSON.parse(
+        JSON.stringify(
+          lastStageOutput !== undefined
+            ? lastStageOutput
+            : (context.data.seed ?? null)
+        )
+      ),
+      previousStage: lastExecutedStageName,
+      validators: context.validators,
+    };
+
+    // Write pre-execution snapshot for debugging inputs via IO
+    const snapshot = {
+      meta: { taskName: context.meta.taskName, jobId: context.meta.jobId },
+      previousStage: lastExecutedStageName,
+      dataSummary: {
+        keys: Object.keys(context.data),
+        hasSeed: !!context.data?.seed,
+        seedKeys: Object.keys(context.data?.seed || {}),
+        seedHasData: context.data?.seed?.data !== undefined,
+      },
+      flagsSummary: {
+        keys: Object.keys(context.flags),
+      },
+      outputSummary: {
+        type: typeof stageContext.output,
+        keys:
+          stageContext.output && typeof stageContext.output === "object"
+            ? Object.keys(stageContext.output).slice(0, 20)
+            : [],
+      },
+    };
+    await context.io.writeLog(
+      `stage-${stageName}-context.json`,
+      JSON.stringify(snapshot, null, 2),
+      { mode: "replace" }
+    );
+
+    // Validate prerequisite flags before stage execution
+    const requiredFlags = FLAG_SCHEMAS[stageName]?.requires;
+    if (requiredFlags && Object.keys(requiredFlags).length > 0) {
+      validateFlagTypes(stageName, context.flags, requiredFlags);
+    }
+
+    // Execute the stage
+    const start = performance.now();
+    let stageResult;
+    try {
+      context.logs.push({
+        stage: stageName,
+        action: "debugging",
+        data: stageContext,
+      });
+
+      console.log("STAGE CONTEXT", JSON.stringify(stageContext, null, 2));
+      stageResult = await stageHandler(stageContext);
+
+      // Validate stage result shape after execution
+      assertStageResult(stageName, stageResult);
+
+      // Validate produced flags against schema
+      const producedFlagsSchema = FLAG_SCHEMAS[stageName]?.produces;
+      if (producedFlagsSchema) {
+        validateFlagTypes(stageName, stageResult.flags, producedFlagsSchema);
+      }
+
+      // Check for flag type conflicts before merging
+      checkFlagTypeConflicts(context.flags, stageResult.flags, stageName);
+
+      // Store stage output in context.data
+      context.data[stageName] = stageResult.output;
+
+      // Only update lastStageOutput and lastExecutedStageName for non-validation stages
+      // This ensures previousStage and context.output skip validation stages
+      const validationStages = [
+        "validateStructure",
+        "validateQuality",
+        "validateFinal",
+        "finalValidation",
+      ];
+      if (!validationStages.includes(stageName)) {
+        lastStageOutput = stageResult.output;
+        lastExecutedStageName = stageName;
+      }
+
+      // Merge stage flags into context.flags
+      context.flags = { ...context.flags, ...stageResult.flags };
+
+      // Add audit log entry after stage completes
+      context.logs.push({
+        stage: stageName,
+        action: "completed",
+        outputType: typeof stageResult.output,
+        flagKeys: Object.keys(stageResult.flags),
+        timestamp: new Date().toISOString(),
+      });
+
+      // Write stage completion status
       if (context.meta.workDir && context.meta.taskName) {
         try {
           await writeJobStatus(context.meta.workDir, (snapshot) => {
+            // Keep current task and stage as-is since we're still within the same task
             snapshot.current = context.meta.taskName;
             snapshot.currentStage = stageName;
             snapshot.lastUpdated = new Date().toISOString();
+
+            // Compute deterministic progress after stage completion
+            const pct = computeDeterministicProgress(
+              context.meta.pipelineTasks || [],
+              context.meta.taskName,
+              stageName
+            );
+            snapshot.progress = pct;
+
+            // Debug log for progress computation
+            console.debug("[task-runner] stage completion progress", {
+              task: context.meta.taskName,
+              stage: stageName,
+              progress: pct,
+            });
 
             // Ensure task exists and update task-specific fields
             if (!snapshot.tasks[context.meta.taskName]) {
@@ -632,290 +671,84 @@ export async function runPipeline(modulePath, initialContext = {}) {
           });
         } catch (error) {
           // Don't fail the pipeline if status write fails
-          console.warn(`Failed to write stage start status: ${error.message}`);
+          console.warn(
+            `Failed to write stage completion status: ${error.message}`
+          );
         }
       }
 
-      // Clone data and flags before stage execution
-      const stageData = JSON.parse(JSON.stringify(context.data));
-      const stageFlags = JSON.parse(JSON.stringify(context.flags));
-      const stageContext = {
-        io: context.io,
-        llm: context.llm,
-        meta: context.meta,
-        data: stageData,
-        flags: stageFlags,
-        currentStage: stageName,
-        output: JSON.parse(
-          JSON.stringify(
-            lastStageOutput !== undefined
-              ? lastStageOutput
-              : (context.data.seed ?? null)
-          )
-        ),
-        previousStage: lastExecutedStageName,
-        validators: context.validators,
-      };
-
-      // Write pre-execution snapshot for debugging inputs via IO
-      const snapshot = {
-        meta: { taskName: context.meta.taskName, jobId: context.meta.jobId },
-        previousStage: lastExecutedStageName,
-        refinementCycle: refinementCount,
-        dataSummary: {
-          keys: Object.keys(context.data),
-          hasSeed: !!context.data?.seed,
-          seedKeys: Object.keys(context.data?.seed || {}),
-          seedHasData: context.data?.seed?.data !== undefined,
-        },
-        flagsSummary: {
-          keys: Object.keys(context.flags),
-        },
-        outputSummary: {
-          type: typeof stageContext.output,
-          keys:
-            stageContext.output && typeof stageContext.output === "object"
-              ? Object.keys(stageContext.output).slice(0, 20)
-              : [],
-        },
-      };
-      await context.io.writeLog(
-        `stage-${stageName}-context.json`,
-        JSON.stringify(snapshot, null, 2),
-        { mode: "replace" }
-      );
-
-      // Validate prerequisite flags before stage execution
-      const requiredFlags = FLAG_SCHEMAS[stageName]?.requires;
-      if (requiredFlags && Object.keys(requiredFlags).length > 0) {
-        validateFlagTypes(stageName, context.flags, requiredFlags);
-      }
-
-      // Execute the stage
-      const start = performance.now();
-      let stageResult;
-      try {
-        context.logs.push({
-          stage: stageName,
-          action: "debugging",
-          data: stageContext,
-        });
-
-        console.log("STAGE CONTEXT", JSON.stringify(stageContext, null, 2));
-        stageResult = await stageHandler(stageContext);
-
-        // Validate stage result shape after execution
-        assertStageResult(stageName, stageResult);
-
-        // Validate produced flags against schema
-        const producedFlagsSchema = FLAG_SCHEMAS[stageName]?.produces;
-        if (producedFlagsSchema) {
-          validateFlagTypes(stageName, stageResult.flags, producedFlagsSchema);
-        }
-
-        // Check for flag type conflicts before merging
-        checkFlagTypeConflicts(context.flags, stageResult.flags, stageName);
-
-        // Store stage output in context.data
-        context.data[stageName] = stageResult.output;
-        lastStageName = stageName;
-
-        // Only update lastStageOutput and lastExecutedStageName for non-validation stages
-        // This ensures previousStage and context.output skip validation stages
-        const validationStages = [
-          "validateStructure",
-          "validateQuality",
-          "validateFinal",
-          "finalValidation",
-        ];
-        if (!validationStages.includes(stageName)) {
-          lastStageOutput = stageResult.output;
-          lastExecutedStageName = stageName;
-        }
-
-        // Merge stage flags into context.flags
-        context.flags = { ...context.flags, ...stageResult.flags };
-
-        // Add audit log entry after stage completes
-        context.logs.push({
-          stage: stageName,
-          action: "completed",
-          outputType: typeof stageResult.output,
-          flagKeys: Object.keys(stageResult.flags),
-          timestamp: new Date().toISOString(),
-        });
-
-        // Write stage completion status
-        if (context.meta.workDir && context.meta.taskName) {
-          try {
-            await writeJobStatus(context.meta.workDir, (snapshot) => {
-              // Keep current task and stage as-is since we're still within the same task
-              snapshot.current = context.meta.taskName;
-              snapshot.currentStage = stageName;
-              snapshot.lastUpdated = new Date().toISOString();
-
-              // Compute deterministic progress after stage completion
-              const pct = computeDeterministicProgress(
-                context.meta.pipelineTasks || [],
-                context.meta.taskName,
-                stageName
-              );
-              snapshot.progress = pct;
-
-              // Debug log for progress computation
-              console.debug("[task-runner] stage completion progress", {
-                task: context.meta.taskName,
-                stage: stageName,
-                progress: pct,
-              });
-
-              // Ensure task exists and update task-specific fields
-              if (!snapshot.tasks[context.meta.taskName]) {
-                snapshot.tasks[context.meta.taskName] = {};
-              }
-              snapshot.tasks[context.meta.taskName].currentStage = stageName;
-              snapshot.tasks[context.meta.taskName].state = TaskState.RUNNING;
-            });
-          } catch (error) {
-            // Don't fail the pipeline if status write fails
-            console.warn(
-              `Failed to write stage completion status: ${error.message}`
-            );
-          }
-        }
-
-        const ms = +(performance.now() - start).toFixed(2);
-        logs.push({
-          stage: stageName,
-          ok: true,
-          ms,
-          refinementCycle: refinementCount,
-        });
-
-        if (
-          (stageName === "validateStructure" ||
-            stageName === "validateQuality") &&
-          context.flags.validationFailed &&
-          refinementCount < maxRefinements
-        ) {
-          needsRefinement = true;
-          // Don't reset validationFailed here - let the refinement cycle handle it
-          break;
-        }
-      } catch (error) {
-        console.error(`Stage ${stageName} failed:`, error);
-        const ms = +(performance.now() - start).toFixed(2);
-        const errInfo = normalizeError(error);
-
-        // Attach debug metadata to the error envelope for richer diagnostics
-        errInfo.debug = {
-          stage: stageName,
-          previousStage: lastExecutedStageName,
-          refinementCycle: refinementCount,
-          logPath: path.join(
-            context.meta.workDir,
-            "files",
-            "logs",
-            `stage-${stageName}.log`
-          ),
-          snapshotPath: path.join(logsDir, `stage-${stageName}-context.json`),
-          dataHasSeed: !!context.data?.seed,
-          seedHasData: context.data?.seed?.data !== undefined,
-          flagsKeys: Object.keys(context.flags || {}),
-        };
-
-        logs.push({
-          stage: stageName,
-          ok: false,
-          ms,
-          error: errInfo,
-          refinementCycle: refinementCount,
-        });
-
-        // For validation stages, trigger refinement if we haven't exceeded max refinements AND maxRefinements > 0
-        if (
-          (stageName === "validateStructure" ||
-            stageName === "validateQuality") &&
-          maxRefinements > 0 &&
-          refinementCount < maxRefinements
-        ) {
-          context.flags.lastValidationError = errInfo;
-          context.flags.validationFailed = true; // Set the flag to trigger refinement
-          needsRefinement = true;
-          break;
-        }
-
-        // Write failure status using writeJobStatus
-        if (context.meta.workDir && context.meta.taskName) {
-          try {
-            await writeJobStatus(context.meta.workDir, (snapshot) => {
-              snapshot.current = context.meta.taskName;
-              snapshot.currentStage = stageName;
-              snapshot.state = TaskState.FAILED;
-              snapshot.lastUpdated = new Date().toISOString();
-
-              // Ensure task exists and update task-specific fields
-              if (!snapshot.tasks[context.meta.taskName]) {
-                snapshot.tasks[context.meta.taskName] = {};
-              }
-              snapshot.tasks[context.meta.taskName].state = TaskState.FAILED;
-              snapshot.tasks[context.meta.taskName].failedStage = stageName;
-              snapshot.tasks[context.meta.taskName].currentStage = stageName;
-            });
-          } catch (error) {
-            // Don't fail the pipeline if status write fails
-            console.warn(`Failed to write failure status: ${error.message}`);
-          }
-        }
-
-        await tokenWriteQueue.catch(() => {});
-        llmEvents.off("llm:request:complete", onLLMComplete);
-
-        // For non-validation stages or when refinements are exhausted, fail immediately
-        return {
-          ok: false,
-          failedStage: stageName,
-          error: errInfo,
-          logs,
-          context,
-          refinementAttempts: refinementCount,
-        };
-      } finally {
-        // Add console output restoration after stage execution
-        if (restoreConsole) {
-          restoreConsole();
-        }
-      }
-    }
-
-    if (needsRefinement) {
-      refinementCount++;
+      const ms = +(performance.now() - start).toFixed(2);
       logs.push({
-        stage: "refinement-trigger",
-        refinementCycle: refinementCount,
-        reason: context.flags.lastValidationError
-          ? "validation-error"
-          : "validation-failed-flag",
+        stage: stageName,
+        ok: true,
+        ms,
       });
+    } catch (error) {
+      console.error(`Stage ${stageName} failed:`, error);
+      const ms = +(performance.now() - start).toFixed(2);
+      const errInfo = normalizeError(error);
+
+      // Attach debug metadata to the error envelope for richer diagnostics
+      errInfo.debug = {
+        stage: stageName,
+        previousStage: lastExecutedStageName,
+        logPath: path.join(
+          context.meta.workDir,
+          "files",
+          "logs",
+          `stage-${stageName}.log`
+        ),
+        snapshotPath: path.join(logsDir, `stage-${stageName}-context.json`),
+        dataHasSeed: !!context.data?.seed,
+        seedHasData: context.data?.seed?.data !== undefined,
+        flagsKeys: Object.keys(context.flags || {}),
+      };
+
+      logs.push({
+        stage: stageName,
+        ok: false,
+        ms,
+        error: errInfo,
+      });
+
+      // Write failure status using writeJobStatus
+      if (context.meta.workDir && context.meta.taskName) {
+        try {
+          await writeJobStatus(context.meta.workDir, (snapshot) => {
+            snapshot.current = context.meta.taskName;
+            snapshot.currentStage = stageName;
+            snapshot.state = TaskState.FAILED;
+            snapshot.lastUpdated = new Date().toISOString();
+
+            // Ensure task exists and update task-specific fields
+            if (!snapshot.tasks[context.meta.taskName]) {
+              snapshot.tasks[context.meta.taskName] = {};
+            }
+            snapshot.tasks[context.meta.taskName].state = TaskState.FAILED;
+            snapshot.tasks[context.meta.taskName].failedStage = stageName;
+            snapshot.tasks[context.meta.taskName].currentStage = stageName;
+          });
+        } catch (error) {
+          // Don't fail the pipeline if status write fails
+          console.warn(`Failed to write failure status: ${error.message}`);
+        }
+      }
+
+      await tokenWriteQueue.catch(() => {});
+      llmEvents.off("llm:request:complete", onLLMComplete);
+
+      // Fail immediately on any stage error
+      return {
+        ok: false,
+        failedStage: stageName,
+        error: errInfo,
+        logs,
+        context,
+      };
+    } finally {
+      // Add console output restoration after stage execution
+      restoreConsole();
     }
-  } while (needsRefinement && refinementCount <= maxRefinements);
-
-  // Only fail on validationFailed if we actually have validation functions
-  const hasValidation =
-    typeof tasks.validateStructure === "function" ||
-    typeof tasks.validateQuality === "function";
-
-  if (context.flags.validationFailed && hasValidation) {
-    await tokenWriteQueue.catch(() => {});
-    llmEvents.off("llm:request:complete", onLLMComplete);
-    return {
-      ok: false,
-      failedStage: "final-validation",
-      error: { message: "Validation failed after all refinement attempts" },
-      logs,
-      context,
-      refinementAttempts: refinementCount,
-    };
   }
 
   // Flush any trailing token usage appends before cleanup
@@ -950,7 +783,6 @@ export async function runPipeline(modulePath, initialContext = {}) {
     ok: true,
     logs,
     context,
-    refinementAttempts: refinementCount,
     llmMetrics,
   };
 }
