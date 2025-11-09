@@ -1,6 +1,7 @@
 import { openaiChat } from "../providers/openai.js";
 import { deepseekChat } from "../providers/deepseek.js";
 import { anthropicChat } from "../providers/anthropic.js";
+import { geminiChat } from "../providers/gemini.js";
 import { EventEmitter } from "node:events";
 import { getConfig } from "../core/config.js";
 import fs from "node:fs";
@@ -45,6 +46,7 @@ export function getAvailableProviders() {
     openai: !!process.env.OPENAI_API_KEY,
     deepseek: !!process.env.DEEPSEEK_API_KEY,
     anthropic: !!process.env.ANTHROPIC_API_KEY,
+    gemini: !!process.env.GEMINI_API_KEY,
     mock: !!mockProviderInstance,
   };
 }
@@ -75,6 +77,12 @@ export function calculateCost(provider, model, usage) {
     anthropic: {
       "claude-3-opus": { prompt: 0.015, completion: 0.075 },
       "claude-3-sonnet": { prompt: 0.003, completion: 0.015 },
+    },
+    gemini: {
+      "gemini-2.5-pro": { prompt: 1.25, completion: 5.0 },
+      "gemini-2.5-flash": { prompt: 0.075, completion: 0.3 },
+      "gemini-2.5-flash-lite": { prompt: 0.025, completion: 0.1 },
+      "gemini-2.5-flash-image": { prompt: 0.075, completion: 30.0 },
     },
   };
 
@@ -272,6 +280,44 @@ export async function chat(options) {
       };
 
       // Use actual usage from anthropic API if available; otherwise estimate
+      if (result?.usage) {
+        const { prompt_tokens, completion_tokens, total_tokens } = result.usage;
+        usage = {
+          promptTokens: prompt_tokens,
+          completionTokens: completion_tokens,
+          totalTokens: total_tokens,
+        };
+      } else {
+        const promptTokens = estimateTokens(systemMsg + userMsg);
+        const completionTokens = estimateTokens(
+          typeof result === "string" ? result : JSON.stringify(result)
+        );
+        usage = {
+          promptTokens,
+          completionTokens,
+          totalTokens: promptTokens + completionTokens,
+        };
+      }
+    } else if (provider === "gemini") {
+      const geminiArgs = {
+        messages,
+        model: model || "gemini-2.5-flash",
+        temperature,
+        maxTokens,
+        ...rest,
+      };
+      if (topP !== undefined) geminiArgs.topP = topP;
+      if (stop !== undefined) geminiArgs.stop = stop;
+      geminiArgs.responseFormat = finalResponseFormat;
+
+      const result = await geminiChat(geminiArgs);
+
+      response = {
+        content: result.content,
+        raw: result.raw,
+      };
+
+      // Use actual usage from gemini API if available; otherwise estimate
       if (result?.usage) {
         const { prompt_tokens, completion_tokens, total_tokens } = result.usage;
         usage = {
