@@ -8,6 +8,7 @@ import { createTaskFileIO } from "./file-io.js";
 import { writeJobStatus } from "./status-writer.js";
 import { computeDeterministicProgress } from "./progress.js";
 import { TaskState } from "../config/statuses.js";
+import { validateWithSchema } from "../api/validators/json.js";
 
 /**
  * Derives model key and token counts from LLM metric event.
@@ -473,6 +474,9 @@ export async function runPipeline(modulePath, initialContext = {}) {
     flags: {},
     logs: [],
     currentStage: null,
+    validators: {
+      validateWithSchema,
+    },
   };
   const logs = [];
   let needsRefinement = false;
@@ -650,6 +654,7 @@ export async function runPipeline(modulePath, initialContext = {}) {
           )
         ),
         previousStage: lastExecutedStageName,
+        validators: context.validators,
       };
 
       // Write pre-execution snapshot for debugging inputs via IO

@@ -1,5 +1,41 @@
 // Analysis Task - Analyze research findings and extract insights
 
+export const analysisJsonSchema = {
+  $schema: "http://json-schema.org/draft-07/schema#",
+  type: "object",
+  additionalProperties: false,
+  required: ["reaction", "insightByArea"],
+  properties: {
+    reaction: {
+      type: "string",
+      minLength: 1,
+    },
+    insightByArea: {
+      type: "array",
+      minItems: 1,
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["area", "alternatePerspective", "implications"],
+        properties: {
+          area: {
+            type: "string",
+            minLength: 1,
+          },
+          alternatePerspective: {
+            type: "string",
+            minLength: 1,
+          },
+          implications: {
+            type: "string",
+            minLength: 1,
+          },
+        },
+      },
+    },
+  },
+};
+
 // Step 1: Load and prepare input data
 export const ingestion = async ({
   io,
@@ -119,28 +155,28 @@ export const inference = async ({
   };
 };
 
-// Step 4: Validate prompt response structure and completeness
-export const validateStructure = async ({ io, llm, data, meta, flags }) => {
+// Step 4: Validate prompt response structure using JSON schema
+export const validateStructure = async ({
+  io,
+  flags,
+  validators: { validateWithSchema },
+}) => {
   const analysisContent = await io.readArtifact("analysis-output.json");
-  let jsonValid = false;
-  let structureValid = false;
+  const result = validateWithSchema(analysisJsonSchema, analysisContent);
 
-  try {
-    const parsed = JSON.parse(analysisContent);
-    jsonValid = true;
-
-    // 1) Validate required top-level fields and basic types
-    const requiredFields = ["reaction", "insightByArea"];
-    const missing = requiredFields.filter((f) => !parsed.hasOwnProperty(f));
-    if (missing.length === 0) structureValid = true;
-  } catch (parseError) {
+  if (!result.valid) {
     console.warn(
-      `[Analysis:validateStructure] ⚠ JSON parsing failed: ${parseError.message}`
+      "[Analysis:validateStructure] Validation failed",
+      result.errors
     );
+    return {
+      output: {},
+      flags: { ...flags, validationFailed: true },
+    };
   }
 
   return {
     output: {},
-    flags: { ...flags, validationFailed: !(jsonValid && structureValid) },
+    flags,
   };
 };

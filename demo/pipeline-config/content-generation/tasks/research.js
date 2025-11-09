@@ -1,6 +1,57 @@
 // Research Task - Gather information based on seed input
 import { test } from "../libs/test.js";
 
+export const researchJsonSchema = {
+  $schema: "http://json-schema.org/draft-07/schema#",
+  type: "object",
+  additionalProperties: false,
+  required: [
+    "researchSummary",
+    "keyFindings",
+    "additionalInsights",
+    "researchCompleteness",
+  ],
+  properties: {
+    researchSummary: {
+      type: "string",
+      minLength: 1,
+    },
+    keyFindings: {
+      type: "array",
+      minItems: 1,
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["area", "findings"],
+        properties: {
+          area: {
+            type: "string",
+            minLength: 1,
+          },
+          findings: {
+            type: "string",
+            minLength: 1,
+          },
+          sources: {
+            type: "array",
+            items: {
+              type: "string",
+              minLength: 1,
+            },
+          },
+        },
+      },
+    },
+    additionalInsights: {
+      type: "string",
+    },
+    researchCompleteness: {
+      type: "string",
+      minLength: 1,
+    },
+  },
+};
+
 // Step 1: Load and prepare input data
 export const ingestion = ({
   io,
@@ -73,23 +124,38 @@ Now provide your research findings in the specified JSON format:`,
 // Step 4: Call LLM with prompt
 export const inference = async ({
   io,
-  llm: { deepseek, openai },
+  llm: { deepseek },
   data: {
     promptTemplating: { system, prompt },
   },
   meta,
   flags,
 }) => {
-  const response = await openai.gpt5Mini({
+  const response = await deepseek.chat({
     messages: [
       { role: "system", content: system },
       { role: "user", content: prompt },
     ],
   });
 
+  // Normalize model output to ensure canonical JSON object
+  let parsed;
+  if (typeof response.content === "string") {
+    parsed = JSON.parse(response.content);
+  } else if (
+    typeof response.content === "object" &&
+    response.content !== null
+  ) {
+    parsed = response.content;
+  } else {
+    throw new Error(
+      "LLM response content must be a JSON object or a JSON stringified object"
+    );
+  }
+
   await io.writeArtifact(
     "research-output.json",
-    JSON.stringify(response.content)
+    JSON.stringify(parsed, null, 2)
   );
 
   return {
@@ -98,39 +164,28 @@ export const inference = async ({
   };
 };
 
-// Step 6: Validate prompt response structure and completeness
-export const validateStructure = async ({ io, llm, data, meta, flags }) => {
+// Step 6: Validate prompt response structure using JSON schema
+export const validateStructure = async ({
+  io,
+  flags,
+  validators: { validateWithSchema },
+}) => {
   const researchContent = await io.readArtifact("research-output.json");
-  let jsonValid = false;
-  let structureValid = false;
+  const result = validateWithSchema(researchJsonSchema, researchContent);
 
-  try {
-    const parsedContent = JSON.parse(researchContent);
-    jsonValid = true;
-
-    // Validate required fields
-    const requiredFields = [
-      "researchSummary",
-      "keyFindings",
-      "additionalInsights",
-      "researchCompleteness",
-    ];
-    const missingFields = requiredFields.filter(
-      (field) => !parsedContent.hasOwnProperty(field)
-    );
-    if (missingFields.length > 0) {
-      structureValid = false;
-    } else {
-      structureValid = true;
-    }
-  } catch (parseError) {
+  if (!result.valid) {
     console.warn(
-      `[Research:validateStructure] ⚠ JSON parsing failed: ${parseError.message}`
+      "[Research:validateStructure] Validation failed",
+      result.errors
     );
+    return {
+      output: {},
+      flags: { ...flags, validationFailed: true },
+    };
   }
 
   return {
     output: {},
-    flags: { ...flags, validationFailed: !(jsonValid && structureValid) },
+    flags,
   };
 };
