@@ -119,7 +119,7 @@ This document describes the standard phases in an LLM task pipeline. Each phase 
 
 **Sets Flags**:
 
-- `validationFailed: true` if structure is invalid
+- `needsRefinement: true` if structure is invalid
 - Logs specific validation errors for debugging
 
 ---
