@@ -438,7 +438,6 @@ Events:
 **Functions**:
 
 - `openaiChat(options)` - Main unified interface
-- `queryChatGPT(system, prompt, options)` - Legacy helper
 
 #### DeepSeek Provider (`src/providers/deepseek.js`)
 
