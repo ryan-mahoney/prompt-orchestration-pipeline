@@ -4,7 +4,9 @@ import React, {
   useRef,
   useState,
   createRef,
+  memo,
 } from "react";
+import { areGeometriesEqual } from "../utils/geometry-equality.js";
 import { TaskDetailSidebar } from "./TaskDetailSidebar.jsx";
 import { RestartJobModal } from "./ui/RestartJobModal.jsx";
 import { Button } from "./ui/button.jsx";
@@ -13,6 +15,12 @@ import { createEmptyTaskFiles } from "../utils/task-files.js";
 import { TaskState } from "../config/statuses.js";
 import TimerText from "./TimerText.jsx";
 import { taskToTimerProps } from "../utils/time-utils.js";
+
+// Utility to check for reduced motion preference
+const prefersReducedMotion = () => {
+  if (typeof window === "undefined") return false;
+  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+};
 
 // Helpers: capitalize fallback step ids (upperFirst only; do not alter provided titles)
 function upperFirst(s) {
@@ -60,6 +68,142 @@ function formatStepName(item, idx) {
   return upperFirst(item.title ? item.title : raw);
 }
 
+// Get CSS classes for card header based on status
+const getHeaderClasses = (status) => {
+  switch (status) {
+    case TaskState.DONE:
+      return "bg-green-50 border-green-200 text-green-700";
+    case TaskState.RUNNING:
+      return "bg-amber-50 border-amber-200 text-amber-700";
+    case TaskState.FAILED:
+      return "bg-pink-50 border-pink-200 text-pink-700";
+    default:
+      return "bg-gray-100 border-gray-200 text-gray-700";
+  }
+};
+
+// Check if Restart button should be shown for a given status
+const canShowRestart = (status) => {
+  return status === TaskState.FAILED || status === TaskState.DONE;
+};
+
+// Memoized card component to prevent unnecessary re-renders
+const TaskCard = memo(function TaskCard({
+  item,
+  idx,
+  nodeRef,
+  status,
+  isActive,
+  canRestart,
+  isSubmitting,
+  getRestartDisabledReason,
+  onClick,
+  onKeyDown,
+  handleRestartClick,
+}) {
+  const { startMs, endMs } = taskToTimerProps(item);
+  const reducedMotion = prefersReducedMotion();
+
+  return (
+    <div
+      ref={nodeRef}
+      role="listitem"
+      aria-current={isActive ? "step" : undefined}
+      tabIndex={0}
+      onClick={onClick}
+      onKeyDown={onKeyDown}
+      className={`cursor-pointer rounded-lg border border-gray-400 ${status === TaskState.PENDING ? "bg-gray-50" : "bg-white"} overflow-hidden flex flex-col ${reducedMotion ? "" : "transition-all duration-200 ease-in-out"} outline outline-2 outline-transparent hover:outline-gray-400/70 focus-visible:outline-blue-500/60`}
+    >
+      <div
+        data-role="card-header"
+        className={`rounded-t-lg px-4 py-2 border-b flex items-center justify-between gap-3 ${reducedMotion ? "" : "transition-opacity duration-300 ease-in-out"} ${getHeaderClasses(status)}`}
+      >
+        <div className="font-medium truncate">{formatStepName(item, idx)}</div>
+        <div className="flex items-center gap-2">
+          {status === TaskState.RUNNING ? (
+            <>
+              <div className="relative h-4 w-4" aria-label="Active">
+                <span className="sr-only">Active</span>
+                <span className="absolute inset-0 rounded-full border-2 border-amber-200" />
+                <span
+                  className={`absolute inset-0 rounded-full border-2 border-transparent border-t-amber-600 ${reducedMotion ? "" : "animate-spin"}`}
+                />
+              </div>
+              {item.stage && (
+                <span
+                  className="text-[11px] font-medium opacity-80 truncate"
+                  title={item.stage}
+                >
+                  {formatStageLabel(item.stage)}
+                </span>
+              )}
+              {startMs && (
+                <TimerText
+                  startMs={startMs}
+                  granularity="second"
+                  className="text-[11px] opacity-80"
+                />
+              )}
+            </>
+          ) : (
+            <>
+              <span
+                className={`text-[11px] uppercase tracking-wide opacity-80${reducedMotion ? "" : " transition-opacity duration-200"}`}
+              >
+                {status}
+                {status === TaskState.FAILED && item.stage && (
+                  <span
+                    className="text-[11px] font-medium opacity-80 truncate ml-2"
+                    title={item.stage}
+                  >
+                    ({formatStageLabel(item.stage)})
+                  </span>
+                )}
+              </span>
+              {status === TaskState.DONE && startMs && (
+                <TimerText
+                  startMs={startMs}
+                  endMs={endMs || item.finishedAt}
+                  granularity="minute"
+                  className="text-[11px] opacity-80"
+                />
+              )}
+            </>
+          )}
+        </div>
+      </div>
+      <div className="p-4">
+        {item.subtitle && (
+          <div className="text-sm text-gray-600">{item.subtitle}</div>
+        )}
+        {item.body && (
+          <div className="mt-2 text-sm text-gray-700">{item.body}</div>
+        )}
+
+        {/* Restart button */}
+        {canShowRestart(status) && (
+          <div className="mt-3 pt-3 border-t border-gray-100">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={(e) => handleRestartClick(e, item.id)}
+              disabled={!canRestart || isSubmitting}
+              className="text-xs cursor-pointer"
+              title={
+                !canRestart
+                  ? getRestartDisabledReason()
+                  : `Restart job from ${item.id}`
+              }
+            >
+              Restart
+            </Button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+});
+
 /**
  * DAGGrid component for visualizing pipeline tasks with connectors and slide-over details
  * @param {Object} props
@@ -92,6 +236,10 @@ function DAGGrid({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [alertMessage, setAlertMessage] = useState(null);
   const [alertType, setAlertType] = useState("info"); // info, success, error, warning
+
+  // Previous geometry snapshot for throttling connector recomputation
+  const prevGeometryRef = useRef(null);
+  const rafRef = useRef(null);
 
   // Create refs for each node
   nodeRefs.current = useMemo(
@@ -152,7 +300,7 @@ function DAGGrid({
     return order;
   }, [items.length, effectiveCols]);
 
-  // Calculate connector lines between cards
+  // Calculate connector lines between cards with throttling
   useLayoutEffect(() => {
     // Skip entirely in test environment to prevent hanging
     if (process.env.NODE_ENV === "test") {
@@ -168,12 +316,14 @@ function DAGGrid({
       return;
     }
 
-    let isComputing = false;
+    // Throttled compute function using requestAnimationFrame
     const compute = () => {
-      if (isComputing) return; // Prevent infinite loops
-      isComputing = true;
+      // Cancel any pending RAF
+      if (rafRef.current) {
+        cancelAnimationFrame(rafRef.current);
+      }
 
-      try {
+      rafRef.current = requestAnimationFrame(() => {
         if (!overlayRef.current) return;
 
         const overlayBox = overlayRef.current.getBoundingClientRect();
@@ -200,6 +350,23 @@ function DAGGrid({
             headerMidY,
           };
         });
+
+        // Check if geometry changed significantly
+        const currentGeometry = {
+          overlayBox,
+          boxes: boxes.filter(Boolean),
+          effectiveCols,
+          itemsLength: items.length,
+        };
+
+        const geometryChanged =
+          !prevGeometryRef.current ||
+          !areGeometriesEqual(prevGeometryRef.current, currentGeometry);
+
+        if (!geometryChanged) {
+          rafRef.current = null;
+          return;
+        }
 
         const newLines = [];
         for (let i = 0; i < items.length - 1; i++) {
@@ -240,10 +407,10 @@ function DAGGrid({
           }
         }
 
+        prevGeometryRef.current = currentGeometry;
         setLines(newLines);
-      } finally {
-        isComputing = false;
-      }
+        rafRef.current = null;
+      });
     };
 
     // Initial compute
@@ -270,6 +437,9 @@ function DAGGrid({
       if (ro) ro.disconnect();
       window.removeEventListener("resize", handleResize);
       window.removeEventListener("scroll", handleScroll, true);
+      if (rafRef.current) {
+        cancelAnimationFrame(rafRef.current);
+      }
     };
   }, [items, effectiveCols, visualOrder]);
 
@@ -286,25 +456,6 @@ function DAGGrid({
       return TaskState.PENDING;
     }
     return TaskState.PENDING;
-  };
-
-  // Get CSS classes for card header based on status
-  const getHeaderClasses = (status) => {
-    switch (status) {
-      case TaskState.DONE:
-        return "bg-green-50 border-green-200 text-green-700";
-      case TaskState.RUNNING:
-        return "bg-amber-50 border-amber-200 text-amber-700";
-      case TaskState.FAILED:
-        return "bg-pink-50 border-pink-200 text-pink-700";
-      default:
-        return "bg-gray-100 border-gray-200 text-gray-700";
-    }
-  };
-
-  // Check if Restart button should be shown for a given status
-  const canShowRestart = (status) => {
-    return status === TaskState.FAILED || status === TaskState.DONE;
   };
 
   // Handle Escape key to close slide-over
@@ -528,16 +679,17 @@ function DAGGrid({
           const status = getStatus(idx);
           const isActive = idx === activeIndex;
           const canRestart = isRestartEnabled();
-          const showRestartButton = canShowRestart(status);
-          const { startMs, endMs } = taskToTimerProps(item);
 
           return (
-            <div
+            <TaskCard
               key={item.id ?? idx}
-              ref={nodeRefs.current[idx]}
-              role="listitem"
-              aria-current={isActive ? "step" : undefined}
-              tabIndex={0}
+              idx={idx}
+              nodeRef={nodeRefs.current[idx]}
+              status={status}
+              isActive={isActive}
+              canRestart={canRestart}
+              isSubmitting={isSubmitting}
+              getRestartDisabledReason={getRestartDisabledReason}
               onClick={() => {
                 setOpenIdx(idx);
               }}
@@ -547,95 +699,9 @@ function DAGGrid({
                   setOpenIdx(idx);
                 }
               }}
-              className={`cursor-pointer rounded-lg border border-gray-400 ${status === TaskState.PENDING ? "bg-gray-50" : "bg-white"} overflow-hidden flex flex-col transition outline outline-2 outline-transparent hover:outline-gray-400/70 focus-visible:outline-blue-500/60 ${cardClass}`}
-            >
-              <div
-                data-role="card-header"
-                className={`rounded-t-lg px-4 py-2 border-b flex items-center justify-between gap-3 ${getHeaderClasses(status)}`}
-              >
-                <div className="font-medium truncate">
-                  {formatStepName(item, idx)}
-                </div>
-                <div className="flex items-center gap-2">
-                  {status === TaskState.RUNNING ? (
-                    <>
-                      <div className="relative h-4 w-4" aria-label="Active">
-                        <span className="sr-only">Active</span>
-                        <span className="absolute inset-0 rounded-full border-2 border-amber-200" />
-                        <span className="absolute inset-0 rounded-full border-2 border-transparent border-t-amber-600 animate-spin" />
-                      </div>
-                      {item.stage && (
-                        <span
-                          className="text-[11px] font-medium opacity-80 truncate"
-                          title={item.stage}
-                        >
-                          {formatStageLabel(item.stage)}
-                        </span>
-                      )}
-                      {startMs && (
-                        <TimerText
-                          startMs={startMs}
-                          granularity="second"
-                          className="text-[11px] opacity-80"
-                        />
-                      )}
-                    </>
-                  ) : (
-                    <>
-                      <span className="text-[11px] uppercase tracking-wide opacity-80">
-                        {status}
-                        {status === TaskState.FAILED && item.stage && (
-                          <span
-                            className="text-[11px] font-medium opacity-80 truncate ml-2"
-                            title={item.stage}
-                          >
-                            ({formatStageLabel(item.stage)})
-                          </span>
-                        )}
-                      </span>
-                      {status === TaskState.DONE && startMs && (
-                        <TimerText
-                          startMs={startMs}
-                          endMs={endMs || item.finishedAt}
-                          granularity="minute"
-                          className="text-[11px] opacity-80"
-                        />
-                      )}
-                    </>
-                  )}
-                </div>
-              </div>
-              <div className="p-4">
-                {item.subtitle && (
-                  <div className="text-sm text-gray-600">{item.subtitle}</div>
-                )}
-                {item.body && (
-                  <div className="mt-2 text-sm text-gray-700">{item.body}</div>
-                )}
-
-                {/* Restart button */}
-                {canShowRestart(status) && (
-                  <div className="mt-3 pt-3 border-t border-gray-100">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={(e) => handleRestartClick(e, item.id)}
-                      disabled={!canRestart || isSubmitting}
-                      className="text-xs cursor-pointer"
-                      title={
-                        !canRestart
-                          ? getRestartDisabledReason()
-                          : restartTaskId
-                            ? `Restart job from ${restartTaskId}`
-                            : "Restart job from clean slate"
-                      }
-                    >
-                      Restart
-                    </Button>
-                  </div>
-                )}
-              </div>
-            </div>
+              handleRestartClick={handleRestartClick}
+              item={item}
+            />
           );
         })}
       </div>

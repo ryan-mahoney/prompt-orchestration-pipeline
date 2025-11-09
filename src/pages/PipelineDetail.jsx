@@ -30,9 +30,18 @@ export default function PipelineDetail() {
     );
   }
 
-  const { data: job, loading, error } = useJobDetailWithUpdates(jobId);
+  const {
+    data: job,
+    loading,
+    error,
+    isRefreshing,
+    isHydrated,
+  } = useJobDetailWithUpdates(jobId);
 
-  if (loading) {
+  // Only show loading screen on initial load, not during refresh
+  const showLoadingScreen = loading && !isHydrated;
+
+  if (showLoadingScreen) {
     return (
       <Layout
         pageTitle="Pipeline Details"
@@ -199,6 +208,11 @@ export default function PipelineDetail() {
     <Layout pageTitle={pageTitle} breadcrumbs={breadcrumbs}>
       <PageSubheader breadcrumbs={breadcrumbs} maxWidth="max-w-7xl">
         {subheaderRightContent}
+        {isRefreshing && (
+          <Text size="2" color="blue" className="ml-3 animate-pulse">
+            Refreshing...
+          </Text>
+        )}
       </PageSubheader>
       <JobDetail job={job} pipeline={pipeline} />
     </Layout>

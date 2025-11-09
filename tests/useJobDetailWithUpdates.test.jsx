@@ -72,7 +72,7 @@ afterEach(() => {
 import { useJobDetailWithUpdates } from "../src/ui/client/hooks/useJobDetailWithUpdates.js";
 
 function TestComp({ jobId }) {
-  const { data, loading, error, connectionStatus } =
+  const { data, loading, error, connectionStatus, isHydrated } =
     useJobDetailWithUpdates(jobId);
   return (
     <div>
@@ -81,6 +81,7 @@ function TestComp({ jobId }) {
       <div data-testid="error">{error || ""}</div>
       <div data-testid="job-id">{data?.jobId || ""}</div>
       <div data-testid="job-status">{data?.status || ""}</div>
+      <div data-testid="hydrated">{String(isHydrated)}</div>
     </div>
   );
 }
@@ -108,8 +109,9 @@ describe("useJobDetailWithUpdates", () => {
 
     render(<TestComp jobId="test-job-1" />);
 
-    // Initially loading
+    // Initially loading and not hydrated
     expect(screen.getByTestId("loading").textContent).toBe("true");
+    expect(screen.getByTestId("hydrated").textContent).toBe("false");
     expect(screen.getByTestId("job-id").textContent).toBe("");
 
     // Wait for fetch to complete
@@ -117,7 +119,8 @@ describe("useJobDetailWithUpdates", () => {
       expect(screen.getByTestId("loading").textContent).toBe("false");
     });
 
-    // Should have fetched the job
+    // Should have hydrated and fetched job
+    expect(screen.getByTestId("hydrated").textContent).toBe("true");
     expect(mockFetch).toHaveBeenCalledWith("/api/jobs/test-job-1", {
       signal: undefined,
     });
@@ -194,8 +197,9 @@ describe("useJobDetailWithUpdates", () => {
       });
     });
 
-    // Still loading, no status update yet
+    // Still loading and not hydrated, no status update yet
     expect(screen.getByTestId("loading").textContent).toBe("true");
+    expect(screen.getByTestId("hydrated").textContent).toBe("false");
     expect(screen.getByTestId("job-status").textContent).toBe("");
 
     // Now resolve the fetch
@@ -212,6 +216,9 @@ describe("useJobDetailWithUpdates", () => {
     // After hydration, queued event should be applied
     await waitFor(() => {
       expect(screen.getByTestId("loading").textContent).toBe("false");
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId("hydrated").textContent).toBe("true");
     });
     await waitFor(() => {
       expect(screen.getByTestId("job-status").textContent).toBe("running");
@@ -727,6 +734,137 @@ describe("useJobDetailWithUpdates", () => {
       await waitFor(() => {
         expect(screen.getByTestId("job-status").textContent).toBe("running");
       });
+    });
+  });
+
+  describe("isHydrated state transitions", () => {
+    it("resets isHydrated to false when jobId changes", async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          ok: true,
+          data: mockJobData,
+        }),
+      });
+
+      const { rerender } = render(<TestComp jobId="test-job-1" />);
+
+      // Wait for initial hydration
+      await waitFor(() => {
+        expect(screen.getByTestId("hydrated")).toHaveTextContent("true");
+      });
+
+      // Change jobId
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          ok: true,
+          data: { ...mockJobData, jobId: "test-job-2" },
+        }),
+      });
+
+      rerender(<TestComp jobId="test-job-2" />);
+
+      // Should reset to not hydrated for new jobId
+      expect(screen.getByTestId("hydrated")).toHaveTextContent("false");
+      expect(screen.getByTestId("loading")).toHaveTextContent("true");
+
+      // Wait for re-hydration
+      await waitFor(() => {
+        expect(screen.getByTestId("hydrated")).toHaveTextContent("true");
+      });
+      expect(screen.getByTestId("job-id")).toHaveTextContent("test-job-2");
+    });
+
+    it("remains hydrated after SSE events", async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          ok: true,
+          data: mockJobData,
+        }),
+      });
+
+      render(<TestComp jobId="test-job-1" />);
+
+      // Wait for hydration
+      await waitFor(() => {
+        expect(screen.getByTestId("hydrated")).toHaveTextContent("true");
+      });
+
+      const es =
+        FakeEventSource.instances[FakeEventSource.instances.length - 1];
+
+      // Send SSE event after hydration
+      act(() => {
+        es.dispatchEvent("job:updated", {
+          data: JSON.stringify({
+            jobId: "test-job-1",
+            status: "running",
+          }),
+        });
+      });
+
+      // Should remain hydrated after event
+      await waitFor(() => {
+        expect(screen.getByTestId("job-status")).toHaveTextContent("running");
+      });
+      expect(screen.getByTestId("hydrated")).toHaveTextContent("true");
+    });
+
+    it("does not re-render isHydrated unnecessarily", async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          ok: true,
+          data: mockJobData,
+        }),
+      });
+
+      render(<TestComp jobId="test-job-1" />);
+
+      // Wait for hydration
+      await waitFor(() => {
+        expect(screen.getByTestId("hydrated")).toHaveTextContent("true");
+      });
+
+      const es =
+        FakeEventSource.instances[FakeEventSource.instances.length - 1];
+
+      // Track isHydrated element to detect unnecessary re-renders
+      const hydratedElement = screen.getByTestId("hydrated");
+      const initialText = hydratedElement.textContent;
+
+      // Send multiple SSE events that don't change hydration state
+      act(() => {
+        es.dispatchEvent("job:updated", {
+          data: JSON.stringify({
+            jobId: "test-job-1",
+            status: "running",
+          }),
+        });
+      });
+
+      await waitFor(() => {
+        expect(screen.getByTestId("job-status")).toHaveTextContent("running");
+      });
+
+      act(() => {
+        es.dispatchEvent("job:updated", {
+          data: JSON.stringify({
+            jobId: "test-job-1",
+            status: "completed",
+          }),
+        });
+      });
+
+      await waitFor(() => {
+        expect(screen.getByTestId("job-status")).toHaveTextContent("completed");
+      });
+
+      // isHydrated should remain true without flickering
+      expect(hydratedElement.textContent).toBe(initialText);
+      expect(hydratedElement.textContent).toBe("true");
     });
   });
 });
