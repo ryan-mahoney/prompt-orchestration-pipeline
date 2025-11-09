@@ -146,7 +146,7 @@ const TaskCard = memo(function TaskCard({
             </>
           ) : (
             <>
-              <span className="text-[11px] uppercase tracking-wide opacity-80 transition-opacity duration-200">
+              <span className={`text-[11px] uppercase tracking-wide opacity-80${reducedMotion ? "" : " transition-opacity duration-200"}`}>
                 {status}
                 {status === TaskState.FAILED && item.stage && (
                   <span
