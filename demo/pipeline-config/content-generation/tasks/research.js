@@ -242,7 +242,7 @@ export const critique = async ({
   flags,
   output,
 }) => {
-  // No-op for now; set critiqueComplete to signal completion when implemented
+  // Analyze feedback and original prompt, call LLM to generate a revised prompt, and return the result.
 
   const template = {
     system:
