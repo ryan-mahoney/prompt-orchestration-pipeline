@@ -1,5 +1,7 @@
 import Ajv from "ajv";
 
+const ajv = new Ajv({ allErrors: true, strict: false });
+
 export const validateWithSchema = (schema, data) => {
   let parsedData = data;
 
@@ -23,7 +25,6 @@ export const validateWithSchema = (schema, data) => {
     }
   }
 
-  const ajv = new Ajv({ allErrors: true, strict: false });
   const validateFunction = ajv.compile(schema);
   const isValid = validateFunction(parsedData);
 
