@@ -748,9 +748,7 @@ export async function runPipeline(modulePath, initialContext = {}) {
       };
     } finally {
       // Add console output restoration after stage execution
-      if (restoreConsole) {
-        restoreConsole();
-      }
+      restoreConsole();
     }
   }
 
