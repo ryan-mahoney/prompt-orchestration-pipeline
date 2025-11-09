@@ -35,7 +35,6 @@ export default function PipelineDetail() {
     loading,
     error,
     isRefreshing,
-    isTransitioning,
     isHydrated,
   } = useJobDetailWithUpdates(jobId);
 
