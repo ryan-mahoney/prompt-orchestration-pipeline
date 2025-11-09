@@ -116,6 +116,9 @@ export async function chat(options) {
   const startTime = Date.now();
   const requestId = `req_${Date.now()}_${Math.random().toString(36).substring(7)}`;
 
+  // Default to JSON mode if not specified
+  const finalResponseFormat = responseFormat ?? "json";
+
   // Extract system and user messages
   const systemMsg = messages.find((m) => m.role === "system")?.content || "";
   const userMessages = messages.filter((m) => m.role === "user");
@@ -173,8 +176,7 @@ export async function chat(options) {
         maxTokens,
         ...rest,
       };
-      if (responseFormat !== undefined)
-        openaiArgs.responseFormat = responseFormat;
+      openaiArgs.responseFormat = finalResponseFormat;
       if (topP !== undefined) openaiArgs.topP = topP;
       if (frequencyPenalty !== undefined)
         openaiArgs.frequencyPenalty = frequencyPenalty;
@@ -222,8 +224,7 @@ export async function chat(options) {
       if (presencePenalty !== undefined)
         deepseekArgs.presencePenalty = presencePenalty;
       if (stop !== undefined) deepseekArgs.stop = stop;
-      if (responseFormat !== undefined)
-        deepseekArgs.responseFormat = responseFormat;
+      deepseekArgs.responseFormat = finalResponseFormat;
 
       const result = await deepseekChat(deepseekArgs);
 
