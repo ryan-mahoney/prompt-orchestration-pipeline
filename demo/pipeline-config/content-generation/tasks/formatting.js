@@ -1,5 +1,18 @@
 // Formatting Task - Format final output according to specifications
 
+export const formattingJsonSchema = {
+  $schema: "http://json-schema.org/draft-07/schema#",
+  type: "object",
+  additionalProperties: false,
+  required: ["formattedContent"],
+  properties: {
+    formattedContent: {
+      type: "string",
+      minLength: 1,
+    },
+  },
+};
+
 export const preProcessing = async ({ flags, io }) => {
   const raw = await io.readArtifact("synthesis-output.json");
   const { title, paragraphs, conclusion } = JSON.parse(raw);
@@ -68,6 +81,12 @@ export const inference = async ({
         ? JSON.parse(response.content)
         : response.content;
 
+    // Persist the raw LLM JSON for validation
+    await io.writeArtifact(
+      "formatting-output.json",
+      JSON.stringify(parsedResponse, null, 2)
+    );
+
     content = parsedResponse.formattedContent;
   } catch (error) {
     console.warn("Failed to parse LLM response as JSON:", error.message);
@@ -79,6 +98,31 @@ export const inference = async ({
   }
 
   await io.writeArtifact("formatted-output.md", content || "");
+
+  return {
+    output: {},
+    flags,
+  };
+};
+
+export const validateStructure = async ({
+  io,
+  flags,
+  validators: { validateWithSchema },
+}) => {
+  const formattingContent = await io.readArtifact("formatting-output.json");
+  const result = validateWithSchema(formattingJsonSchema, formattingContent);
+
+  if (!result.valid) {
+    console.warn(
+      "[Formatting:validateStructure] Validation failed",
+      result.errors
+    );
+    return {
+      output: {},
+      flags: { ...flags, validationFailed: true },
+    };
+  }
 
   return {
     output: {},

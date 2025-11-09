@@ -246,6 +246,62 @@ export default function CodePage() {
         )}
 
         <Heading size="6" mt="8" mb="4">
+          Validation API
+        </Heading>
+        <Text as="p" mb="3" size="2">
+          Schema validation helper available to task stages via validators.
+        </Text>
+        <Box mb="4">
+          <Heading size="4" mb="2">
+            Function Signature
+          </Heading>
+          <Code size="3">
+            {`validateWithSchema(schema: object, data: object | string): { valid: true } | { valid: false, errors: AjvError[] }`}
+          </Code>
+          <Heading size="4" mb="2" mt="4">
+            Behavior
+          </Heading>
+          <ul className="list-disc list-inside mb-4 space-y-1">
+            <li className="text-sm text-gray-700">
+              <Text as="span">
+                Parses string data to JSON; on parse failure returns{" "}
+                {`{ valid:false, errors:[{ keyword:"type", message:"must be a valid JSON object (string parsing failed)"} ]`}
+              </Text>
+            </li>
+            <li className="text-sm text-gray-700">
+              <Text as="span">
+                Uses Ajv({`{ allErrors: true, strict: false }`}); compiles
+                provided schema
+              </Text>
+            </li>
+            <li className="text-sm text-gray-700">
+              <Text as="span">Returns AJV errors array when invalid</Text>
+            </li>
+          </ul>
+          <Heading size="4" mb="2">
+            Source
+          </Heading>
+          <Code size="3">src/api/validators/json.js</Code>
+          <Heading size="4" mb="2" mt="4">
+            Usage Example
+          </Heading>
+          <Code size="3">{`export const validateStructure = async ({
+  io,
+  flags,
+  validators: { validateWithSchema },
+}) => {
+  const content = await io.readArtifact("research-output.json");
+  const result = validateWithSchema(researchJsonSchema, content);
+
+  if (!result.valid) {
+    console.warn("[Research:validateStructure] Validation failed", result.errors);
+    return { output: {}, flags: { ...flags, validationFailed: true } };
+  }
+  return { output: {}, flags };
+};`}</Code>
+        </Box>
+
+        <Heading size="6" mt="8" mb="4">
           Environment Configuration
         </Heading>
         <Box mb="4">
