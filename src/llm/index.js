@@ -4,7 +4,8 @@ import { anthropicChat } from "../providers/anthropic.js";
 import { geminiChat } from "../providers/gemini.js";
 import { zhipuChat } from "../providers/zhipu.js";
 import { EventEmitter } from "node:events";
-import { getConfig } from "../core/config.js";
+import { getConfig, defaultConfig } from "../core/config.js";
+import { DEFAULT_MODEL_BY_PROVIDER } from "../config/models.js";
 import fs from "node:fs";
 
 // Global mock provider instance (for demo/testing)
@@ -48,7 +49,8 @@ export function getAvailableProviders() {
     deepseek: !!process.env.DEEPSEEK_API_KEY,
     anthropic: !!process.env.ANTHROPIC_API_KEY,
     gemini: !!process.env.GEMINI_API_KEY,
-    zhipu: !!process.env.ZHIPU_API_KEY,
+    zai: !!process.env.ZHIPU_API_KEY, // zai is the canonical provider id
+    zhipu: !!process.env.ZHIPU_API_KEY, // zhipu alias for backward compatibility
     mock: !!mockProviderInstance,
   };
 }
@@ -58,49 +60,39 @@ export function estimateTokens(text) {
   return Math.ceil((text || "").length / 4);
 }
 
-// Calculate cost based on provider and model
+// Calculate cost based on provider and model, derived from config
 export function calculateCost(provider, model, usage) {
-  const pricing = {
-    mock: {
-      "gpt-3.5-turbo": { prompt: 0.0005, completion: 0.0015 },
-      "gpt-4": { prompt: 0.03, completion: 0.06 },
-      "gpt-4-turbo": { prompt: 0.01, completion: 0.03 },
-    },
-    openai: {
-      "gpt-5-chat-latest": { prompt: 0.015, completion: 0.06 },
-      "gpt-4": { prompt: 0.03, completion: 0.06 },
-      "gpt-4-turbo": { prompt: 0.01, completion: 0.03 },
-      "gpt-3.5-turbo": { prompt: 0.0005, completion: 0.0015 },
-    },
-    deepseek: {
-      "deepseek-reasoner": { prompt: 0.001, completion: 0.002 },
-      "deepseek-chat": { prompt: 0.0005, completion: 0.001 },
-    },
-    anthropic: {
-      "claude-3-opus": { prompt: 0.015, completion: 0.075 },
-      "claude-3-sonnet": { prompt: 0.003, completion: 0.015 },
-    },
-    gemini: {
-      "gemini-2.5-pro": { prompt: 1.25, completion: 5.0 },
-      "gemini-2.5-flash": { prompt: 0.075, completion: 0.3 },
-      "gemini-2.5-flash-lite": { prompt: 0.025, completion: 0.1 },
-      "gemini-2.5-flash-image": { prompt: 0.075, completion: 30.0 },
-    },
-    zhipu: {
-      "glm-4-plus": { prompt: 0.01, completion: 0.02 },
-      "glm-4": { prompt: 0.007, completion: 0.014 },
-      "glm-4-0520": { prompt: 0.007, completion: 0.014 },
-      "glm-4-air": { prompt: 0.001, completion: 0.002 },
-      "glm-4-airx": { prompt: 0.001, completion: 0.002 },
-    },
-  };
+  if (!usage) {
+    // Fallback for missing usage
+    return 0;
+  }
 
-  const modelPricing = pricing[provider]?.[model];
-  if (!modelPricing || !usage) return 0;
+  // In tests, use default config to avoid PO_ROOT requirement
+  const isTest =
+    process.env.NODE_ENV === "test" || process.env.VITEST === "true";
 
-  const promptCost = ((usage.promptTokens || 0) / 1000) * modelPricing.prompt;
+  let config;
+  if (isTest) {
+    config = { llm: { models: defaultConfig.llm.models } };
+  } else {
+    config = getConfig();
+  }
+
+  const modelConfig = Object.values(config.llm.models).find(
+    (cfg) => cfg.provider === provider && cfg.model === model
+  );
+
+  if (!modelConfig) {
+    return 0;
+  }
+
+  // Convert per-million pricing to per-1k for calculation
+  const promptCostPer1k = modelConfig.tokenCostInPerMillion / 1000;
+  const completionCostPer1k = modelConfig.tokenCostOutPerMillion / 1000;
+
+  const promptCost = ((usage.promptTokens || 0) / 1000) * promptCostPer1k;
   const completionCost =
-    ((usage.completionTokens || 0) / 1000) * modelPricing.completion;
+    ((usage.completionTokens || 0) / 1000) * completionCostPer1k;
 
   return promptCost + completionCost;
 }
@@ -270,9 +262,14 @@ export async function chat(options) {
         };
       }
     } else if (provider === "anthropic") {
+      const defaultAlias = DEFAULT_MODEL_BY_PROVIDER.anthropic;
+      const config = getConfig();
+      const defaultModelConfig = config.llm.models[defaultAlias];
+      const defaultModel = defaultModelConfig?.model;
+
       const anthropicArgs = {
         messages,
-        model: model || "claude-3-sonnet",
+        model: model || defaultModel,
         temperature,
         maxTokens,
         ...rest,
@@ -345,10 +342,15 @@ export async function chat(options) {
           totalTokens: promptTokens + completionTokens,
         };
       }
-    } else if (provider === "zhipu") {
+    } else if (provider === "zhipu" || provider === "zai") {
+      const defaultAlias = DEFAULT_MODEL_BY_PROVIDER.zai;
+      const config = getConfig();
+      const defaultModelConfig = config.llm.models[defaultAlias];
+      const defaultModel = defaultModelConfig?.model;
+
       const zhipuArgs = {
         messages,
-        model: model || "glm-4-plus",
+        model: model || defaultModel,
         temperature,
         maxTokens,
         ...rest,
@@ -428,10 +430,10 @@ export async function chat(options) {
 // Helper to convert model alias to camelCase function name
 function toCamelCase(alias) {
   const [provider, ...modelParts] = alias.split(":");
-  const model = modelParts.join("-");
+  const model = modelParts.join(":");
 
-  // Convert to camelCase (handle both letters and numbers after hyphens)
-  const camelModel = model.replace(/-([a-z0-9])/g, (match, char) =>
+  // Convert to camelCase (handle both letters and numbers after hyphens and dots)
+  const camelModel = model.replace(/[-.]([a-z0-9])/g, (match, char) =>
     char.toUpperCase()
   );
 
@@ -593,7 +595,17 @@ export async function parallel(workerFn, items, concurrency = 5) {
 
 // Create a bound LLM interface - for named-models tests, only return provider functions
 export function createLLM() {
-  const config = getConfig();
+  // Skip config check in tests to avoid PO_ROOT requirement
+  const isTest =
+    process.env.NODE_ENV === "test" || process.env.VITEST === "true";
+
+  let config;
+  if (isTest) {
+    // In test mode, use default config models for testing
+    config = { llm: { models: defaultConfig.llm.models } };
+  } else {
+    config = getConfig();
+  }
 
   // Build functions from registry
   const providerFunctions = buildProviderFunctions(config.llm.models);

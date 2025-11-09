@@ -7,6 +7,7 @@
 
 import { promises as fs, existsSync, readFileSync } from "node:fs";
 import path from "node:path";
+import { ModelAlias } from "../config/models.js";
 
 async function checkFileExistence(filePath) {
   try {
@@ -189,13 +190,13 @@ export const defaultConfig = {
     retryBackoffMs: 1000,
     models: {
       // DeepSeek (2025)
-      "deepseek:chat": {
+      [ModelAlias.DEEPSEEK_CHAT]: {
         provider: "deepseek",
         model: "deepseek-chat", // V3.2 Exp (non-thinking) under the hood
         tokenCostInPerMillion: 0.27,
         tokenCostOutPerMillion: 1.1,
       },
-      "deepseek:reasoner": {
+      [ModelAlias.DEEPSEEK_REASONER]: {
         provider: "deepseek",
         model: "deepseek-reasoner", // R1 family
         tokenCostInPerMillion: 0.55,
@@ -203,13 +204,13 @@ export const defaultConfig = {
       },
 
       // — OpenAI (2024 legacy still callable) —
-      "openai:gpt-4": {
+      [ModelAlias.OPENAI_GPT_4]: {
         provider: "openai",
         model: "gpt-4",
         tokenCostInPerMillion: 30.0,
         tokenCostOutPerMillion: 60.0,
       },
-      "openai:gpt-4-turbo": {
+      [ModelAlias.OPENAI_GPT_4_TURBO]: {
         provider: "openai",
         model: "gpt-4-turbo",
         tokenCostInPerMillion: 10.0,
@@ -217,38 +218,38 @@ export const defaultConfig = {
       },
 
       // — OpenAI (2025) —
-      "openai:gpt-5": {
+      [ModelAlias.OPENAI_GPT_5]: {
         provider: "openai",
         model: "gpt-5-chat-latest", // alias tracks GPT-5 pricing
         tokenCostInPerMillion: 1.25,
         tokenCostOutPerMillion: 10.0,
       },
 
-      "openai:gpt-5-core": {
+      [ModelAlias.OPENAI_GPT_5_CORE]: {
         provider: "openai",
         model: "gpt-5", // flagship
         tokenCostInPerMillion: 1.25,
         tokenCostOutPerMillion: 10.0,
       },
-      "openai:gpt-5-chat": {
+      [ModelAlias.OPENAI_GPT_5_CHAT]: {
         provider: "openai",
         model: "gpt-5-chat-latest", // Chat variant
         tokenCostInPerMillion: 1.25,
         tokenCostOutPerMillion: 10.0,
       },
-      "openai:gpt-5-pro": {
+      [ModelAlias.OPENAI_GPT_5_PRO]: {
         provider: "openai",
         model: "gpt-5-pro", // higher-compute tier
         tokenCostInPerMillion: 15.0,
         tokenCostOutPerMillion: 120.0,
       },
-      "openai:gpt-5-mini": {
+      [ModelAlias.OPENAI_GPT_5_MINI]: {
         provider: "openai",
         model: "gpt-5-mini",
         tokenCostInPerMillion: 0.25,
         tokenCostOutPerMillion: 2.0,
       },
-      "openai:gpt-5-nano": {
+      [ModelAlias.OPENAI_GPT_5_NANO]: {
         provider: "openai",
         model: "gpt-5-nano",
         tokenCostInPerMillion: 0.05,
@@ -256,25 +257,25 @@ export const defaultConfig = {
       },
 
       // — Google Gemini (2025) —
-      "gemini:2.5-pro": {
+      [ModelAlias.GEMINI_2_5_PRO]: {
         provider: "google",
         model: "gemini-2.5-pro", // ≤200k input tier shown; >200k is higher
         tokenCostInPerMillion: 1.25,
         tokenCostOutPerMillion: 10.0,
       },
-      "gemini:2.5-flash": {
+      [ModelAlias.GEMINI_2_5_FLASH]: {
         provider: "google",
         model: "gemini-2.5-flash",
         tokenCostInPerMillion: 0.3,
         tokenCostOutPerMillion: 2.5,
       },
-      "gemini:2.5-flash-lite": {
+      [ModelAlias.GEMINI_2_5_FLASH_LITE]: {
         provider: "google",
         model: "gemini-2.5-flash-lite",
         tokenCostInPerMillion: 0.1,
         tokenCostOutPerMillion: 0.4,
       },
-      "gemini:2.5-flash-image": {
+      [ModelAlias.GEMINI_2_5_FLASH_IMAGE]: {
         provider: "google",
         model: "gemini-2.5-flash-image",
         // Inputs follow 2.5 Flash text pricing; outputs are **image tokens** at $30/M (≈$0.039 per 1024² image)
@@ -283,19 +284,19 @@ export const defaultConfig = {
       },
 
       // — Z.ai (formerly Zhipu) —
-      "zai:glm-4.6": {
+      [ModelAlias.ZAI_GLM_4_6]: {
         provider: "zai",
         model: "GLM-4.6",
         tokenCostInPerMillion: 0.6,
         tokenCostOutPerMillion: 2.2,
       },
-      "zai:glm-4.5": {
+      [ModelAlias.ZAI_GLM_4_5]: {
         provider: "zai",
         model: "GLM-4.5",
         tokenCostInPerMillion: 0.6,
         tokenCostOutPerMillion: 2.2,
       },
-      "zai:glm-4.5-air": {
+      [ModelAlias.ZAI_GLM_4_5_AIR]: {
         provider: "zai",
         model: "GLM-4.5-Air",
         tokenCostInPerMillion: 0.2,
@@ -304,19 +305,19 @@ export const defaultConfig = {
 
       // — Anthropic —
       // current (Claude 4.5 / 4.1)
-      "anthropic:sonnet-4-5": {
+      [ModelAlias.ANTHROPIC_SONNET_4_5]: {
         provider: "anthropic",
         model: "claude-sonnet-4-5",
         tokenCostInPerMillion: 3.0,
         tokenCostOutPerMillion: 15.0,
       },
-      "anthropic:haiku-4-5": {
+      [ModelAlias.ANTHROPIC_HAIKU_4_5]: {
         provider: "anthropic",
         model: "claude-haiku-4-5",
         tokenCostInPerMillion: 1.0,
         tokenCostOutPerMillion: 5.0,
       },
-      "anthropic:opus-4-1": {
+      [ModelAlias.ANTHROPIC_OPUS_4_1]: {
         provider: "anthropic",
         model: "claude-opus-4-1",
         tokenCostInPerMillion: 15.0,
@@ -324,25 +325,25 @@ export const defaultConfig = {
       },
 
       // legacy / still available
-      "anthropic:sonnet-4": {
+      [ModelAlias.ANTHROPIC_SONNET_4]: {
         provider: "anthropic",
         model: "claude-sonnet-4-0",
         tokenCostInPerMillion: 3.0,
         tokenCostOutPerMillion: 15.0,
       },
-      "anthropic:sonnet-3-7": {
+      [ModelAlias.ANTHROPIC_SONNET_3_7]: {
         provider: "anthropic",
         model: "claude-3-7-sonnet-20250219",
         tokenCostInPerMillion: 3.0,
         tokenCostOutPerMillion: 15.0,
       },
-      "anthropic:opus-4": {
+      [ModelAlias.ANTHROPIC_OPUS_4]: {
         provider: "anthropic",
         model: "claude-opus-4-0",
         tokenCostInPerMillion: 15.0,
         tokenCostOutPerMillion: 75.0,
       },
-      "anthropic:haiku-3-5": {
+      [ModelAlias.ANTHROPIC_HAIKU_3_5]: {
         provider: "anthropic",
         model: "claude-3-5-haiku-20241022",
         tokenCostInPerMillion: 0.8,
