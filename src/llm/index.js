@@ -2,6 +2,7 @@ import { openaiChat } from "../providers/openai.js";
 import { deepseekChat } from "../providers/deepseek.js";
 import { anthropicChat } from "../providers/anthropic.js";
 import { geminiChat } from "../providers/gemini.js";
+import { zhipuChat } from "../providers/zhipu.js";
 import { EventEmitter } from "node:events";
 import { getConfig } from "../core/config.js";
 import fs from "node:fs";
@@ -47,6 +48,7 @@ export function getAvailableProviders() {
     deepseek: !!process.env.DEEPSEEK_API_KEY,
     anthropic: !!process.env.ANTHROPIC_API_KEY,
     gemini: !!process.env.GEMINI_API_KEY,
+    zhipu: !!process.env.ZHIPU_API_KEY,
     mock: !!mockProviderInstance,
   };
 }
@@ -83,6 +85,13 @@ export function calculateCost(provider, model, usage) {
       "gemini-2.5-flash": { prompt: 0.075, completion: 0.3 },
       "gemini-2.5-flash-lite": { prompt: 0.025, completion: 0.1 },
       "gemini-2.5-flash-image": { prompt: 0.075, completion: 30.0 },
+    },
+    zhipu: {
+      "glm-4-plus": { prompt: 0.01, completion: 0.02 },
+      "glm-4": { prompt: 0.007, completion: 0.014 },
+      "glm-4-0520": { prompt: 0.007, completion: 0.014 },
+      "glm-4-air": { prompt: 0.001, completion: 0.002 },
+      "glm-4-airx": { prompt: 0.001, completion: 0.002 },
     },
   };
 
@@ -318,6 +327,44 @@ export async function chat(options) {
       };
 
       // Use actual usage from gemini API if available; otherwise estimate
+      if (result?.usage) {
+        const { prompt_tokens, completion_tokens, total_tokens } = result.usage;
+        usage = {
+          promptTokens: prompt_tokens,
+          completionTokens: completion_tokens,
+          totalTokens: total_tokens,
+        };
+      } else {
+        const promptTokens = estimateTokens(systemMsg + userMsg);
+        const completionTokens = estimateTokens(
+          typeof result === "string" ? result : JSON.stringify(result)
+        );
+        usage = {
+          promptTokens,
+          completionTokens,
+          totalTokens: promptTokens + completionTokens,
+        };
+      }
+    } else if (provider === "zhipu") {
+      const zhipuArgs = {
+        messages,
+        model: model || "glm-4-plus",
+        temperature,
+        maxTokens,
+        ...rest,
+      };
+      if (topP !== undefined) zhipuArgs.topP = topP;
+      if (stop !== undefined) zhipuArgs.stop = stop;
+      zhipuArgs.responseFormat = finalResponseFormat;
+
+      const result = await zhipuChat(zhipuArgs);
+
+      response = {
+        content: result.content,
+        raw: result.raw,
+      };
+
+      // Use actual usage from zhipu API if available; otherwise estimate
       if (result?.usage) {
         const { prompt_tokens, completion_tokens, total_tokens } = result.usage;
         usage = {
