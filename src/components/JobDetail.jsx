@@ -116,22 +116,17 @@ export default function JobDetail({ job, pipeline }) {
     const newItems = stableDagItems.map((item, index) => {
       const prevItem = prevItems[index];
 
-      // Reuse previous object if key properties are unchanged
+      // Reuse previous object if all relevant properties are unchanged
       if (
         prevItem &&
         prevItem.id === item.id &&
         prevItem.status === item.status &&
-        prevItem.stage === item.stage
+        prevItem.stage === item.stage &&
+        prevItem.title === item.title &&
+        prevItem.subtitle === item.subtitle &&
+        prevItem.body === item.body
       ) {
-        return {
-          ...prevItem,
-          // Update only properties that might change
-          ...(prevItem.title !== item.title && { title: item.title }),
-          ...(prevItem.subtitle !== item.subtitle && {
-            subtitle: item.subtitle,
-          }),
-          ...(prevItem.body !== item.body && { body: item.body }),
-        };
+        return prevItem;
       }
 
       return item;
