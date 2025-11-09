@@ -1,11 +1,13 @@
 import React from "react";
 import { data, useParams } from "react-router-dom";
 import { Box, Flex, Text } from "@radix-ui/themes";
+import * as Tooltip from "@radix-ui/react-tooltip";
 import JobDetail from "../components/JobDetail.jsx";
 import { useJobDetailWithUpdates } from "../ui/client/hooks/useJobDetailWithUpdates.js";
 import Layout from "../components/Layout.jsx";
 import PageSubheader from "../components/PageSubheader.jsx";
 import { statusBadge } from "../utils/ui.jsx";
+import { formatCurrency4, formatTokensCompact } from "../utils/formatters.js";
 
 export default function PipelineDetail() {
   const { jobId } = useParams();
@@ -132,12 +134,63 @@ export default function PipelineDetail() {
     ...(job.name ? [{ label: job.name }] : []),
   ];
 
-  // Right side content for PageSubheader: job ID and status badge
+  // Derive cost data from job object with safe fallbacks
+  const totalCost = job?.totalCost || job?.costs?.summary?.totalCost || 0;
+  const totalTokens = job?.totalTokens || job?.costs?.summary?.totalTokens || 0;
+  const totalInputTokens = job?.costs?.summary?.totalInputTokens || 0;
+  const totalOutputTokens = job?.costs?.summary?.totalOutputTokens || 0;
+
+  // Create cost indicator with tooltip when token data is available
+  const costIndicator = (
+    <Text size="2" color="gray">
+      Cost: {totalCost > 0 ? formatCurrency4(totalCost) : "—"}
+    </Text>
+  );
+
+  const costIndicatorWithTooltip =
+    totalCost > 0 && totalTokens > 0 ? (
+      <Tooltip.Provider delayDuration={100}>
+        <Tooltip.Root>
+          <Tooltip.Trigger asChild>
+            <Box
+              className="cursor-help border-b border-dotted border-gray-400 hover:border-gray-600 transition-colors"
+              aria-label={`Total cost: ${formatCurrency4(totalCost)}, ${formatTokensCompact(totalTokens)}`}
+            >
+              {costIndicator}
+            </Box>
+          </Tooltip.Trigger>
+          <Tooltip.Portal>
+            <Tooltip.Content
+              className="bg-gray-900 text-white px-2 py-1 rounded text-xs max-w-xs"
+              sideOffset={5}
+            >
+              <div className="space-y-1">
+                <div className="font-semibold">
+                  {formatTokensCompact(totalTokens)}
+                </div>
+                {totalInputTokens > 0 && totalOutputTokens > 0 && (
+                  <div className="text-gray-300">
+                    Input: {formatTokensCompact(totalInputTokens)} • Output:{" "}
+                    {formatTokensCompact(totalOutputTokens)}
+                  </div>
+                )}
+              </div>
+              <Tooltip.Arrow className="fill-gray-900" />
+            </Tooltip.Content>
+          </Tooltip.Portal>
+        </Tooltip.Root>
+      </Tooltip.Provider>
+    ) : (
+      costIndicator
+    );
+
+  // Right side content for PageSubheader: job ID, cost indicator, and status badge
   const subheaderRightContent = (
-    <Flex align="center" gap="3" className="shrink-0">
+    <Flex align="center" gap="3" className="shrink-0 flex-wrap">
       <Text size="2" color="gray">
         ID: {job.id || jobId}
       </Text>
+      {costIndicatorWithTooltip}
       {statusBadge(job.status)}
     </Flex>
   );

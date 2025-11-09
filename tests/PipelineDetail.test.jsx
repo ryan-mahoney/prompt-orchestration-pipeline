@@ -65,7 +65,7 @@ vi.mock("@radix-ui/themes", () => ({
   },
 }));
 
-// Mock @radix-ui/react-tooltip components used in Layout
+// Mock @radix-ui/react-tooltip components used in Layout and PipelineDetail
 vi.mock("@radix-ui/react-tooltip", async (importOriginal) => {
   const actual = await importOriginal();
   const React = require("react");
@@ -78,6 +78,8 @@ vi.mock("@radix-ui/react-tooltip", async (importOriginal) => {
       React.createElement("div", { ref, ...props }, children)
     ),
     Content: ({ children }) => React.createElement("div", null, children),
+    Portal: ({ children }) => React.createElement("div", null, children),
+    Arrow: ({ children }) => React.createElement("div", null, children),
     defaultProps: {},
     $$typeof: Symbol.for("react.element"),
   };
@@ -384,6 +386,7 @@ describe("PipelineDetail", () => {
       id: "job1",
       name: "Test Job",
       status: "pending",
+      pipelineLabel: "content-generation",
       pipeline: { name: "content-generation", tasks: ["research"] },
       tasks: [{ name: "research", status: "pending" }],
     };
@@ -409,7 +412,7 @@ describe("PipelineDetail", () => {
       </MemoryRouter>
     );
 
-    // Assert pipeline name from snapshot is present in breadcrumbs
+    // Assert pipeline name from pipelineLabel is present in breadcrumbs
     expect(screen.getByText("content-generation")).toBeDefined();
 
     // Assert "Pipeline Details" is not present in breadcrumbs
@@ -421,6 +424,7 @@ describe("PipelineDetail", () => {
       id: "job2",
       name: "Job With Slug Only",
       status: "pending",
+      pipelineLabel: "content-generation",
       pipeline: "content-generation",
       tasks: [{ name: "t1", status: "pending" }],
     };
@@ -446,7 +450,7 @@ describe("PipelineDetail", () => {
       </MemoryRouter>
     );
 
-    // Assert pipeline name from slug is present in breadcrumbs
+    // Assert pipeline name from pipelineLabel is present in breadcrumbs
     expect(screen.getByText("content-generation")).toBeDefined();
 
     // Assert "Pipeline Details" is not present in breadcrumbs
@@ -458,6 +462,7 @@ describe("PipelineDetail", () => {
       id: "WCb6WJhZI0Ti",
       name: "Market Analysis about Renewable Energy Storage",
       status: "pending",
+      pipelineLabel: "content-generation",
       pipeline: "content-generation",
     };
 
@@ -482,10 +487,177 @@ describe("PipelineDetail", () => {
       </MemoryRouter>
     );
 
-    // Assert pipeline name from slug is present in breadcrumbs
+    // Assert pipeline name from pipelineLabel is present in breadcrumbs
     expect(screen.getByText("content-generation")).toBeDefined();
 
     // Assert "Pipeline Details" is not present in breadcrumbs
     expect(screen.queryByText("Pipeline Details")).toBeNull();
+  });
+
+  it("displays cost indicator when cost data is present", () => {
+    const mockJob = {
+      id: "job-with-cost",
+      name: "Job With Cost",
+      status: "done",
+      totalCost: 0.1234,
+      totalTokens: 5000,
+      costs: {
+        summary: {
+          totalCost: 0.1234,
+          totalTokens: 5000,
+          totalInputTokens: 3000,
+          totalOutputTokens: 2000,
+        },
+      },
+    };
+
+    // Mock the fetch call for /api/jobs
+    mockFetch.mockResolvedValue({
+      ok: true,
+      data: [],
+    });
+
+    // Mock the hook to return data with cost
+    vi.mocked(useJobDetailWithUpdates).mockReturnValue({
+      data: mockJob,
+      loading: false,
+      error: null,
+    });
+
+    __setParams({ jobId: "job-with-cost" });
+
+    render(
+      <MemoryRouter>
+        <PipelineDetail />
+      </MemoryRouter>
+    );
+
+    // Check for cost indicator in header
+    expect(screen.getByText(/Cost: \$0.1234/i)).toBeDefined();
+  });
+
+  it("displays fallback cost indicator when cost data is missing", () => {
+    const mockJob = {
+      id: "job-no-cost",
+      name: "Job No Cost",
+      status: "pending",
+      tasks: [{ name: "research", status: "pending" }],
+    };
+
+    // Mock the fetch call for /api/jobs
+    mockFetch.mockResolvedValue({
+      ok: true,
+      data: [],
+    });
+
+    // Mock the hook to return data without cost
+    vi.mocked(useJobDetailWithUpdates).mockReturnValue({
+      data: mockJob,
+      loading: false,
+      error: null,
+    });
+
+    __setParams({ jobId: "job-no-cost" });
+
+    render(
+      <MemoryRouter>
+        <PipelineDetail />
+      </MemoryRouter>
+    );
+
+    // Check for fallback cost indicator
+    expect(screen.getByText(/Cost: —/i)).toBeDefined();
+  });
+
+  it("displays cost indicator with tooltip when both cost and token data are present", () => {
+    const mockJob = {
+      id: "job-with-tooltip",
+      name: "Job With Tooltip",
+      status: "done",
+      totalCost: 0.5678,
+      totalTokens: 15000,
+      costs: {
+        summary: {
+          totalCost: 0.5678,
+          totalTokens: 15000,
+          totalInputTokens: 9000,
+          totalOutputTokens: 6000,
+        },
+      },
+    };
+
+    // Mock the fetch call for /api/jobs
+    mockFetch.mockResolvedValue({
+      ok: true,
+      data: [],
+    });
+
+    // Mock the hook to return data with cost and tokens
+    vi.mocked(useJobDetailWithUpdates).mockReturnValue({
+      data: mockJob,
+      loading: false,
+      error: null,
+    });
+
+    __setParams({ jobId: "job-with-tooltip" });
+
+    render(
+      <MemoryRouter>
+        <PipelineDetail />
+      </MemoryRouter>
+    );
+
+    // Check for cost indicator
+    expect(screen.getByText(/Cost: \$0.5678/i)).toBeDefined();
+
+    // Check for tooltip trigger (dotted underline)
+    const costElement = screen
+      .getByText(/Cost: \$0.5678/i)
+      .closest("[aria-label]");
+    expect(costElement).toBeDefined();
+    expect(costElement?.getAttribute("aria-label")).toContain(
+      "Total cost: $0.5678"
+    );
+    expect(costElement?.getAttribute("aria-label")).toContain("15k tokens");
+  });
+
+  it("handles cost data from costs.summary when totalCost is missing", () => {
+    const mockJob = {
+      id: "job-with-summary-cost",
+      name: "Job With Summary Cost",
+      status: "done",
+      costs: {
+        summary: {
+          totalCost: 0.9876,
+          totalTokens: 25000,
+          totalInputTokens: 15000,
+          totalOutputTokens: 10000,
+        },
+      },
+    };
+
+    // Mock the fetch call for /api/jobs
+    mockFetch.mockResolvedValue({
+      ok: true,
+      data: [],
+    });
+
+    // Mock the hook to return data with cost only in summary
+    vi.mocked(useJobDetailWithUpdates).mockReturnValue({
+      data: mockJob,
+      loading: false,
+      error: null,
+    });
+
+    __setParams({ jobId: "job-with-summary-cost" });
+
+    render(
+      <MemoryRouter>
+        <PipelineDetail />
+      </MemoryRouter>
+    );
+
+    // Check for cost indicator derived from summary
+    expect(screen.getByText(/Cost: \$0.9876/i)).toBeDefined();
   });
 });
