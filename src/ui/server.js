@@ -1697,6 +1697,25 @@ function createServer() {
       return;
     }
 
+    // Route: GET /favicon.svg
+    if (pathname === "/favicon.svg" && req.method === "GET") {
+      const faviconPath = path.join(__dirname, "..", "..", "favicon.svg");
+
+      try {
+        const content = await fs.promises.readFile(faviconPath, "utf8");
+        res.writeHead(200, {
+          "Content-Type": "image/svg+xml",
+          "Cache-Control": "public, max-age=3600", // Cache for 1 hour
+        });
+        res.end(content);
+      } catch (error) {
+        console.error("Error serving favicon:", error);
+        res.writeHead(404);
+        res.end("Favicon not found");
+      }
+      return;
+    }
+
     // Unknown API endpoint fallback (keep API responses in JSON)
     if (pathname.startsWith("/api/")) {
       res.writeHead(200, { "Content-Type": "application/json" });

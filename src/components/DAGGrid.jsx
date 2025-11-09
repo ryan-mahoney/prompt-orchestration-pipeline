@@ -131,7 +131,7 @@ const TaskCard = memo(function TaskCard({
               </div>
               {item.stage && (
                 <span
-                  className="text-[11px] font-medium opacity-80 truncate"
+                  className="text-[11px] font-medium opacity-80 truncate uppercase tracking-wide"
                   title={item.stage}
                 >
                   {formatStageLabel(item.stage)}
@@ -153,7 +153,7 @@ const TaskCard = memo(function TaskCard({
                 {status}
                 {status === TaskState.FAILED && item.stage && (
                   <span
-                    className="text-[11px] font-medium opacity-80 truncate ml-2"
+                    className="text-[11px] font-medium opacity-80 truncate ml-2 uppercase tracking-wide"
                     title={item.stage}
                   >
                     ({formatStageLabel(item.stage)})
@@ -188,7 +188,7 @@ const TaskCard = memo(function TaskCard({
               size="sm"
               onClick={(e) => handleRestartClick(e, item.id)}
               disabled={!canRestart || isSubmitting}
-              className="text-xs cursor-pointer"
+              className="text-xs cursor-pointer disabled:cursor-not-allowed"
               title={
                 !canRestart
                   ? getRestartDisabledReason()
