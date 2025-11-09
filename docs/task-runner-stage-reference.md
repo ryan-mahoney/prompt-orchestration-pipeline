@@ -247,7 +247,7 @@ The pipeline uses flags to maintain state across phases:
 ```javascript
 flags = {
   // Validation states
-  validationFailed: boolean,
+  needsRefinement: boolean,
   qualityIssues: string[],
 
   // Process tracking
