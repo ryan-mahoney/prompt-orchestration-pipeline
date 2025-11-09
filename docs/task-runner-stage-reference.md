@@ -1,430 +1,289 @@
-# Task Runner Stage Reference
+# LLM Pipeline Phases Documentation
 
 ## Overview
 
-This document provides comprehensive reference information for the 11-stage task execution pipeline and real-time stage tracking system. The task runner executes each task through a predefined sequence of stages, with atomic status updates that enable real-time UI monitoring.
+This document describes the standard phases in an LLM task pipeline. Each phase serves a specific purpose in the progression from input data to validated, high-quality output. All phases execute sequentially, using flags to communicate state between stages rather than conditionally skipping stages.
 
-**⚠️ Important**: This stage tracking system is **non-backward-compatible**. The `tasks-status.json` file is the single source of truth for current stage information and does not support legacy formats.
+## Architecture Principles
 
-## 11-Stage Pipeline Architecture
+- **Sequential Execution**: All stages run in order, regardless of success/failure states
+- **Flag-Based Communication**: Stages communicate through flags rather than exceptions
+- **Separation of Concerns**: Structural validation is programmatic, quality validation is LLM-based
+- **Self-Improving**: The pipeline can detect and correct its own quality issues through critique and refinement
 
-Each task in the pipeline executes through the following stages in order:
+## Phase Descriptions
 
-| Stage ID            | Stage Name | Required                                                    | Description                                                                                                     | Error Behavior |
-| ------------------- | ---------- | ----------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- | -------------- |
-| `validation`        | Required   | Validates task configuration and input data                 | Errors stop task immediately                                                                                    |
-| `file-setup`        | Required   | Sets up file system and prepares working directories        | Errors stop task immediately                                                                                    |
-| `preprocessing`     | Optional   | Preprocesses input data and prepares context                | Errors stop task immediately                                                                                    |
-| `prompt-templating` | Required   | Generates prompts from templates and context data           | Errors stop task immediately                                                                                    |
-| `inference`         | Optional   | Calls LLM with prompts from `context.data.promptTemplating` | Must have `promptTemplating` in data. `flags.validationFailed` triggers retry/critique loops; errors stop task. |
-| `postprocessing`    | Required   | Processes LLM output and formats results                    | Errors stop task immediately                                                                                    |
-| `validation-2`      | Optional   | Secondary validation of processed results                   | Errors stop task immediately                                                                                    |
-| `file-cleanup`      | Required   | Cleans up temporary files and organizes output              | Errors stop task immediately                                                                                    |
-| `serialization`     | Required   | Serializes final results for storage                        | Errors stop task immediately                                                                                    |
-| `status-update`     | Required   | Updates task and pipeline status                            | Errors stop task immediately                                                                                    |
-| `completion`        | Required   | Finalizes task execution and triggers next task             | Errors stop task immediately                                                                                    |
+### 1. **Ingestion**
 
-## Real-Time Stage Tracking
+**Purpose**: Load and extract raw input data from the seed  
+**Responsibility**:
 
-### Status Document Structure
+- Read input parameters from the seed data
+- Extract required fields (e.g., topic, focus areas, requirements)
+- Pass data forward in a consistent format
 
-The `tasks-status.json` file provides atomic, synchronous updates at stage boundaries:
-
-```json
-{
-  "id": "unique-pipeline-id",
-  "name": "job-name",
-  "current": "current-task-name-or-null",
-  "currentStage": "current-stage-id-or-null",
-  "state": "pending|running|done|failed",
-  "createdAt": "ISO-timestamp",
-  "lastUpdated": "ISO-timestamp",
-  "files": {
-    /* file tracking */
-  },
-  "tasks": {
-    "task-name": {
-      "state": "pending|running|done|failed",
-      "currentStage": "current-stage-id-or-null",
-      "failedStage": "stage-id-if-failed-or-null",
-      "startedAt": "ISO-timestamp",
-      "attempts": 1,
-      "endedAt": "ISO-timestamp",
-      "files": {
-        /* per-task file tracking */
-      },
-      "artifacts": ["output.json", "letter.json", "execution-logs.json"],
-      "executionTime": 12345.67,
-      "refinementAttempts": 0
-    }
-  }
-}
-```
-
-### Stage Lifecycle States
-
-#### While Task is Running in Stage
-
-```json
-{
-  "current": "research",
-  "currentStage": "inference",
-  "state": "running",
-  "tasks": {
-    "research": {
-      "state": "running",
-      "currentStage": "inference",
-      "failedStage": null
-    }
-  },
-  "lastUpdated": "2025-10-02T06:37:45.123Z"
-}
-```
-
-#### On Successful Stage Completion
-
-```json
-{
-  "current": "research",
-  "currentStage": "postprocessing",
-  "state": "running",
-  "tasks": {
-    "research": {
-      "state": "running",
-      "currentStage": "postprocessing",
-      "failedStage": null
-    }
-  },
-  "lastUpdated": "2025-10-02T06:37:50.456Z"
-}
-```
-
-#### On Task Success
-
-```json
-{
-  "current": "analysis",
-  "currentStage": "validation",
-  "state": "running",
-  "tasks": {
-    "research": {
-      "state": "done",
-      "currentStage": null,
-      "failedStage": null,
-      "endedAt": "2025-10-02T06:37:55.789Z"
-    },
-    "analysis": {
-      "state": "running",
-      "currentStage": "validation",
-      "failedStage": null
-    }
-  },
-  "lastUpdated": "2025-10-02T06:37:55.789Z"
-}
-```
-
-#### On Task Failure at Stage
-
-```json
-{
-  "current": "research",
-  "currentStage": "inference",
-  "state": "failed",
-  "tasks": {
-    "research": {
-      "state": "failed",
-      "currentStage": "inference",
-      "failedStage": "inference"
-    }
-  },
-  "lastUpdated": "2025-10-02T06:37:52.345Z"
-}
-```
-
-## Atomic Status Updates
-
-### Write Process
-
-All status updates are performed atomically to prevent race conditions:
-
-1. **Read Current State**: Load existing `tasks-status.json`
-2. **Apply Update**: Modify fields via `updateFn(snapshot)`
-3. **Atomic Write**: Write to temporary file, then rename to `tasks-status.json`
-4. **SSE Event**: Emit `state:change` event immediately
-5. **Return Updated State**: Provide new snapshot to caller
-
-```javascript
-// Example atomic update
-const updatedStatus = await writeJobStatus(jobDir, (snapshot) => {
-  snapshot.current = taskId;
-  snapshot.currentStage = stageId;
-  snapshot.tasks[taskId].currentStage = stageId;
-  snapshot.tasks[taskId].state = "running";
-  snapshot.lastUpdated = new Date().toISOString();
-  return snapshot;
-});
-```
-
-### SSE Event Emission
-
-Every atomic write triggers an Server-Sent Event:
+**Example Output**:
 
 ```javascript
 {
-  type: "state:change",
-  payload: {
-    path: "/pipeline-data/current/{jobId}/tasks-status.json"
-  }
+  topic: "climate change",
+  focusAreas: ["causes", "effects", "solutions"],
+  requirements: "Include recent data"
 }
 ```
 
-UI components listen for these events to update in real-time without polling.
+---
 
-## Stage-Specific Contracts
+### 2. **PreProcessing**
 
-### validation Stage
+**Purpose**: Normalize and prepare input data for prompt creation  
+**Responsibility**:
 
-- **Purpose**: Validate task configuration and input data
-- **Input**: Task configuration from pipeline definition
-- **Output**: Validated context or error
-- **Error Handling**: Immediate task failure on validation errors
-- **Status Impact**: Sets `tasks[taskId].currentStage = "validation"`
+- Clean and standardize input formats
+- Enrich data with defaults if needed
+- Handle edge cases in input data
+- Transform data into prompt-ready format
 
-### file-setup Stage
+**Typical Operations**:
 
-- **Purpose**: Initialize file system structure and working directories
-- **Input**: Job directory path and task configuration
-- **Output**: Prepared file structure and context
-- **Error Handling**: Immediate task failure on filesystem errors
-- **Status Impact**: Sets `tasks[taskId].currentStage = "file-setup"`
+- Text normalization (trim, lowercase where appropriate)
+- Array deduplication
+- Setting default values for optional parameters
+- Input validation and sanitization
 
-### preprocessing Stage (Optional)
+---
 
-- **Purpose**: Transform and prepare input data for processing
-- **Input**: Raw input data from seed file
-- **Output**: Processed data in `context.data`
-- **Error Handling**: Immediate task failure on preprocessing errors
-- **Status Impact**: Sets `tasks[taskId].currentStage = "preprocessing"`
+### 3. **PromptTemplating**
 
-### prompt-templating Stage
+**Purpose**: Build structured prompts for the LLM  
+**Responsibility**:
 
-- **Purpose**: Generate prompts from templates using context data
-- **Input**: Template files and context data
-- **Output**: Formatted prompts in `context.data.promptTemplating`
-- **Error Handling**: Immediate task failure on templating errors
-- **Status Impact**: Sets `tasks[taskId].currentStage = "prompt-templating"`
+- Create system prompts that define the LLM's role
+- Build user prompts with clear instructions
+- Include output format specifications
+- Incorporate any domain-specific requirements
 
-### inference Stage (Optional)
-
-- **Purpose**: Execute LLM inference with generated prompts
-- **Input**: Prompts from `context.data.promptTemplating`
-- **Output**: LLM response in `context.data.inference`
-- **Error Handling**:
-  - `flags.validationFailed`: Triggers retry/critique loops
-  - Other errors: Immediate task failure
-- **Status Impact**: Sets `tasks[taskId].currentStage = "inference"`
-
-### postprocessing Stage
-
-- **Purpose**: Process and format LLM outputs for final use
-- **Input**: Raw LLM responses from inference stage
-- **Output**: Formatted results in `context.data`
-- **Error Handling**: Immediate task failure on postprocessing errors
-- **Status Impact**: Sets `tasks[taskId].currentStage = "postprocessing"`
-
-### validation-2 Stage (Optional)
-
-- **Purpose**: Secondary validation of processed results
-- **Input**: Processed results from postprocessing
-- **Output**: Validation confirmation or error
-- **Error Handling**: Immediate task failure on validation errors
-- **Status Impact**: Sets `tasks[taskId].currentStage = "validation-2"`
-
-### file-cleanup Stage
-
-- **Purpose**: Clean up temporary files and organize final outputs
-- **Input**: Working directory and temporary files
-- **Output**: Clean file structure with organized artifacts
-- **Error Handling**: Immediate task failure on cleanup errors
-- **Status Impact**: Sets `tasks[taskId].currentStage = "file-cleanup"`
-
-### serialization Stage
-
-- **Purpose**: Serialize final results for storage and transmission
-- **Input**: Processed and formatted results
-- **Output**: Serialized artifacts in files system
-- **Error Handling**: Immediate task failure on serialization errors
-- **Status Impact**: Sets `tasks[taskId].currentStage = "serialization"`
-
-### status-update Stage
-
-- **Purpose**: Update task status and prepare for completion
-- **Input**: Current execution state and results
-- **Output**: Updated status document
-- **Error Handling**: Immediate task failure on status update errors
-- **Status Impact**: Sets `tasks[taskId].currentStage = "status-update"`
-
-### completion Stage
-
-- **Purpose**: Finalize task execution and trigger next task or pipeline completion
-- **Input**: Task execution results and status
-- **Output**: Finalized task state and next task trigger
-- **Error Handling**: Immediate task failure on completion errors
-- **Status Impact**:
-  - Success: `tasks[taskId].state = "done"`, advance to next task
-  - Failure: `tasks[taskId].state = "failed"`, `root.state = "failed"`
-
-## Error Handling and Recovery
-
-### Stage-Level Errors
-
-When a stage fails:
-
-1. **Immediate Status Update**:
-
-   ```json
-   {
-     "state": "failed",
-     "current": "taskId",
-     "currentStage": "failedStageId",
-     "tasks": {
-       "taskId": {
-         "state": "failed",
-         "currentStage": "failedStageId",
-         "failedStage": "failedStageId"
-       }
-     }
-   }
-   ```
-
-2. **SSE Event**: Emit `state:change` with failure status
-3. **Pipeline Halt**: Stop further task execution
-4. **UI Update**: Show failure state with failed stage information
-
-### Recovery Mechanisms
-
-- **Retry Logic**: Configurable retry attempts per stage
-- **Critique Loops**: For inference validation failures
-- **Manual Recovery**: UI can trigger retry of failed tasks
-- **Rollback**: Failed tasks leave partial state for debugging
-
-## UI Integration
-
-### Stage Computation
-
-UI components use the `computeTaskStage(job, taskId)` utility with preference order:
-
-1. `tasks[taskId].currentStage` (per-task stage - highest priority)
-2. `job.currentStage` (root stage - fallback when task matches current)
-3. `tasks[taskId].failedStage` (for failed tasks)
-4. `error.debug.stage` (legacy error information - lowest priority)
-
-### Real-Time Updates
-
-UI components receive updates through SSE events:
+**Output Structure**:
 
 ```javascript
-// SSE event handling
-eventSource.addEventListener("state:change", (event) => {
-  const { path } = JSON.parse(event.data);
-  if (path.endsWith("/tasks-status.json")) {
-    // Refetch job status and update UI
-    refetchJobStatus();
-  }
-});
+{
+  system: "You are a research assistant...",
+  prompt: "Research the following topic...\n[SPECIFIC INSTRUCTIONS]"
+}
 ```
 
-## Non-Backward-Compatibility
+---
 
-### Breaking Changes
+### 4. **Inference**
 
-- **No Legacy Format Support**: Old status document shapes are not supported
-- **Required Fields**: `currentStage`, `tasks[taskId].currentStage`, `lastUpdated` are required
-- **Stage Dependency**: UI no longer infers stage from execution-logs.json
-- **Atomic Updates**: All status changes must go through atomic write mechanism
+**Purpose**: Execute the LLM call with the prepared prompts  
+**Responsibility**:
 
-### Migration Requirements
+- Call the LLM API with the formatted prompts
+- Handle the raw response from the model
+- Write initial output to artifacts
+- Perform basic response normalization
 
-- **Existing Jobs**: Must be restarted to use new status format
-- **UI Components**: Must use `computeTaskStage` utility for stage detection
-- **Status Writers**: Must use `writeJobStatus` for all status updates
-- **Error Handling**: Must update both root and per-task status fields
+**Key Actions**:
 
-## Performance Considerations
+- Make the API call to the LLM
+- Parse string responses to JSON if needed
+- Save output to artifact files for downstream stages
+- Handle API errors gracefully
 
-### Atomic Write Overhead
+---
 
-- **File I/O**: Each stage update involves file read + temp write + rename
-- **SSE Broadcasting**: Each write triggers network event
-- **Lock Contention**: Minimal due to single-writer per job
+### 5. **Parsing**
 
-### Optimization Strategies
+**Purpose**: Transform LLM raw output into typed/structured format  
+**Responsibility**:
 
-- **Batch Updates**: Multiple field changes in single atomic operation
-- **Event Debouncing**: UI can debounce rapid successive SSE events
-- **Status Caching**: UI can cache status between SSE events
-- **Selective Updates**: Only update fields that actually changed
+- Convert model output to consistent object structure
+- Handle various response formats (string vs object)
+- Extract nested data structures
+- Prepare data for validation
 
-## Security Considerations
+**Note**: Often a pass-through if inference already handles parsing
 
-### Status Document Access
+---
 
-- **Read Access**: UI components need read access to `tasks-status.json`
-- **Write Access**: Only task runner should write status updates
-- **SSE Events**: Authenticated clients receive appropriate job events
-- **File Permissions**: Proper filesystem permissions on status files
+### 6. **ValidateStructure**
 
-### Data Sensitivity
+**Purpose**: Validate response structure against JSON schema  
+**Responsibility**:
 
-- **Task Names**: May contain sensitive information about business processes
-- **Stage Information**: May reveal internal system details
-- **Error Messages**: Should not expose sensitive system internals
-- **File Paths**: Should not reveal absolute filesystem structure
+- Check JSON validity
+- Validate against predefined schema
+- Ensure all required fields are present
+- Verify data types match expectations
 
-## Testing and Debugging
+**Sets Flags**:
 
-### Unit Testing
+- `needsRefinement: true` if structure is invalid
+- Logs specific validation errors for debugging
 
-- **Stage Handlers**: Test each stage independently
-- **Status Updates**: Test atomic write mechanism
-- **Error Scenarios**: Test failure handling at each stage
-- **UI Integration**: Test stage computation and SSE handling
+---
 
-### Integration Testing
+### 7. **ValidateQuality**
 
-- **End-to-End Pipelines**: Test complete pipeline execution
-- **Failure Recovery**: Test error handling and recovery mechanisms
-- **Real-Time Updates**: Test SSE event propagation
-- **Concurrent Access**: Test multiple jobs running simultaneously
+**Purpose**: Perform LLM-based content quality assessment  
+**Responsibility**:
 
-### Debugging Tools
+- Evaluate factual consistency
+- Check completeness of coverage
+- Assess depth and specificity
+- Verify requirements are met
+- Identify logical gaps or contradictions
 
-- **Status Inspection**: Direct inspection of `tasks-status.json`
-- **SSE Monitoring**: Monitor real-time status change events
-- **Stage Logging**: Detailed logging for each stage execution
-- **Error Tracing**: Complete error context in status document
+**Implementation**: Uses an LLM call to evaluate quality aspects that cannot be checked programmatically
 
-## Best Practices
+**Example Quality Checks**:
 
-### Stage Implementation
+```javascript
+-"Are all focus areas adequately addressed?" -
+  "Is there internal consistency in the facts presented?" -
+  "Does the response meet minimum depth requirements?" -
+  "Are sources credible and properly cited?";
+```
 
-- **Idempotent Operations**: Stages should be safe to retry
-- **Minimal Side Effects**: Limit external system interactions
-- **Clear Error Messages**: Provide actionable error information
-- **Consistent Data Structures**: Use standard context data formats
+**Sets Flags**:
 
-### Status Management
+- `validationFailed: true` if quality issues found
+- `qualityIssues: [...]` with specific problems identified
 
-- **Atomic Updates**: Always use `writeJobStatus` for status changes
-- **Complete State**: Update all relevant fields in single operation
-- **Immediate SSE**: Emit events immediately after successful writes
-- **Error Consistency**: Ensure root and per-task status agree on failures
+---
 
-### UI Integration
+### 8. **Critique**
 
-- **Stage Preference**: Use `computeTaskStage` utility for stage detection
-- **Event Handling**: Properly handle SSE events with debouncing
-- **Error Display**: Show failed stage information clearly
-- **Loading States**: Show appropriate loading states during stage transitions
+**Purpose**: Generate specific improvement instructions when quality issues exist  
+**Responsibility**:
 
-This reference provides the complete specification for task runner stage execution and real-time status tracking. Implementations should follow these contracts precisely to ensure reliable operation and real-time UI updates.
+- Analyze what went wrong with the response
+- Create actionable feedback for improvement
+- Prioritize issues to address
+- Provide concrete guidance for refinement
+
+**Behavior**:
+
+- Always runs but produces different outputs based on validation state
+- If validation passed: Sets `critiqueComplete: true` with no actions
+- If validation failed: Generates detailed improvement instructions
+
+**Output Example**:
+
+```
+"Add specific statistics for the causes section,
+expand the solutions with implementation timelines,
+fix the contradiction between paragraphs 2 and 5"
+```
+
+---
+
+### 9. **Refine**
+
+**Purpose**: Re-run the core task with critique-based enhancements  
+**Responsibility**:
+
+- Incorporate critique guidance into enhanced prompts
+- Call LLM again with improvements
+- Update output artifacts with refined response
+- Maintain original requirements while addressing issues
+
+**Behavior**:
+
+- Only performs refinement if `validationFailed: true`
+- Augments original prompt with critique guidance
+- Overwrites the output artifact with improved version
+
+**Sets Flags**:
+
+- `refined: true` if refinement was performed
+- `skipRefinement: true` if no refinement was needed
+
+---
+
+### 10. **FinalValidation**
+
+**Purpose**: Ensure refined output still meets structural requirements  
+**Responsibility**:
+
+- Re-validate JSON schema compliance after refinement
+- Catch any structural breaks introduced during refinement
+- Provide final gate before integration
+- Ensure output is still machine-parseable
+
+**Why This Matters**: LLMs can sometimes break JSON structure when following complex refinement instructions
+
+**Sets Flags**:
+
+- `finalValidationPassed: true` if structure is valid
+- `structureBrokenByRefinement: true` if refinement broke the schema
+
+---
+
+### 11. **Integration**
+
+**Purpose**: Persist and organize final results for downstream consumption  
+**Responsibility**:
+
+- Write final artifacts to appropriate locations
+- Prepare output for next pipeline stage
+- Log completion status
+- Handle any cleanup operations
+
+**Typical Actions**:
+
+- Save to database
+- Write to file system
+- Trigger downstream workflows
+- Send notifications
+
+---
+
+## Flag Communication Pattern
+
+The pipeline uses flags to maintain state across phases:
+
+```javascript
+flags = {
+  // Validation states
+  needsRefinement: boolean,
+  qualityIssues: string[],
+
+  // Process tracking
+  critiqueComplete: boolean,
+  refined: boolean,
+  skipRefinement: boolean,
+
+  // Final states
+  finalValidationPassed: boolean,
+  structureBrokenByRefinement: boolean
+}
+```
+
+## Benefits of This Architecture
+
+1. **Predictable Execution**: Same stages always run in the same order
+2. **Better Observability**: Can log/monitor each stage even when it's a no-op
+3. **Simpler Orchestration**: No complex conditional branching logic
+4. **Easier Testing**: Each stage can be tested independently
+5. **Self-Correcting**: Automatic quality improvement through critique/refine cycle
+6. **Robust**: Structural validation bookends prevent malformed outputs
+
+## Example Flow
+
+Given a research task about "renewable energy":
+
+1. **Ingestion** → Extract topic and focus areas
+2. **PreProcessing** → Normalize input text
+3. **PromptTemplating** → Create research prompt
+4. **Inference** → LLM generates research JSON
+5. **Parsing** → Ensure JSON format
+6. **ValidateStructure** → ✅ Valid JSON schema
+7. **ValidateQuality** → ❌ "Lacks specific statistics"
+8. **Critique** → "Add quantitative data for solar and wind sections"
+9. **Refine** → Re-run with enhanced prompt
+10. **FinalValidation** → ✅ Still valid JSON
+11. **Integration** → Save to `research-output.json`
+
+This creates a self-improving pipeline that can recover from initial failures while maintaining structural integrity throughout the process.
