@@ -57,25 +57,30 @@ describe("Configuration Module", () => {
       expect(defaultConfig.logging.level).toBe("info");
     });
 
-    it("should have llm.models registry with sample aliases", () => {
+    it("should have llm.models registry that references centralized MODEL_CONFIG", () => {
       expect(defaultConfig.llm.models).toBeDefined();
-      expect(defaultConfig.llm.models).toHaveProperty("openai:gpt-4");
-      expect(defaultConfig.llm.models).toHaveProperty("openai:gpt-4-turbo");
-      expect(defaultConfig.llm.models).toHaveProperty("openai:gpt-5");
-      expect(defaultConfig.llm.models).toHaveProperty("deepseek:reasoner");
-      expect(defaultConfig.llm.models).toHaveProperty("deepseek:chat");
-      expect(defaultConfig.llm.models).toHaveProperty("anthropic:opus");
-      expect(defaultConfig.llm.models).toHaveProperty("anthropic:sonnet");
+      // The models registry should reference the centralized MODEL_CONFIG
+      expect(typeof defaultConfig.llm.models).toBe("object");
+      expect(Object.keys(defaultConfig.llm.models)).toContain("openai:gpt-4o");
+      expect(Object.keys(defaultConfig.llm.models)).toContain(
+        "openai:gpt-5-chat-latest"
+      );
+      expect(Object.keys(defaultConfig.llm.models)).toContain(
+        "deepseek:reasoner"
+      );
+      expect(Object.keys(defaultConfig.llm.models)).toContain("deepseek:chat");
+      expect(Object.keys(defaultConfig.llm.models)).toContain(
+        "anthropic:sonnet-4-5"
+      );
+      expect(Object.keys(defaultConfig.llm.models)).toContain(
+        "anthropic:opus-4-5"
+      );
 
-      // Verify structure of model entries
-      expect(defaultConfig.llm.models["openai:gpt-4"]).toEqual({
-        provider: "openai",
-        model: "gpt-4",
-      });
-      expect(defaultConfig.llm.models["deepseek:reasoner"]).toEqual({
-        provider: "deepseek",
-        model: "deepseek-reasoner",
-      });
+      // Verify structure of model entries (they should have provider and model properties)
+      const sampleModel = defaultConfig.llm.models["openai:gpt-4o"];
+      expect(sampleModel).toHaveProperty("provider");
+      expect(sampleModel).toHaveProperty("model");
+      expect(sampleModel.provider).toBe("openai");
     });
   });
 

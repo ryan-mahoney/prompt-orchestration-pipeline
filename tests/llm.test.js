@@ -67,6 +67,8 @@ describe("LLM Module", () => {
         openai: true,
         deepseek: true,
         anthropic: true,
+        gemini: false,
+        zhipu: false,
         mock: false,
       });
     });
@@ -162,7 +164,7 @@ describe("LLM Module", () => {
       const usage = { promptTokens: 1000, completionTokens: 500 };
 
       // Act
-      const result = calculateCost("anthropic", "claude-3-sonnet", usage);
+      const result = calculateCost("anthropic", "claude-sonnet-4-5", usage);
 
       // Assert
       expect(result).toBeCloseTo(0.0105); // (1000/1000 * 0.003) + (500/1000 * 0.015)
@@ -851,6 +853,8 @@ describe("LLM Module", () => {
         openai: true,
         deepseek: true,
         anthropic: true,
+        gemini: false,
+        zhipu: false,
         mock: true, // Mock provider is auto-registered in test mode
       });
     });

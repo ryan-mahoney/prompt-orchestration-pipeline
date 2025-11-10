@@ -121,13 +121,13 @@ Now produce ONLY the JSON object in the specified structure.
 
 export const inference = async ({
   io,
-  llm: { deepseek },
+  llm: { openai },
   data: {
     promptTemplating: { system, prompt },
   },
   flags,
 }) => {
-  const response = await deepseek.chat({
+  const response = await openai.gpt5Mini({
     messages: [
       { role: "system", content: system },
       { role: "user", content: prompt },

@@ -1,7 +1,15 @@
 import { openaiChat } from "../providers/openai.js";
 import { deepseekChat } from "../providers/deepseek.js";
+import { anthropicChat } from "../providers/anthropic.js";
+import { geminiChat } from "../providers/gemini.js";
+import { zhipuChat } from "../providers/zhipu.js";
 import { EventEmitter } from "node:events";
 import { getConfig } from "../core/config.js";
+import {
+  MODEL_CONFIG,
+  DEFAULT_MODEL_BY_PROVIDER,
+  aliasToFunctionName,
+} from "../config/models.js";
 import fs from "node:fs";
 
 // Global mock provider instance (for demo/testing)
@@ -44,6 +52,8 @@ export function getAvailableProviders() {
     openai: !!process.env.OPENAI_API_KEY,
     deepseek: !!process.env.DEEPSEEK_API_KEY,
     anthropic: !!process.env.ANTHROPIC_API_KEY,
+    gemini: !!process.env.GEMINI_API_KEY,
+    zhipu: !!process.env.ZHIPU_API_KEY,
     mock: !!mockProviderInstance,
   };
 }
@@ -53,36 +63,28 @@ export function estimateTokens(text) {
   return Math.ceil((text || "").length / 4);
 }
 
-// Calculate cost based on provider and model
+// Calculate cost based on provider and model, derived from config
 export function calculateCost(provider, model, usage) {
-  const pricing = {
-    mock: {
-      "gpt-3.5-turbo": { prompt: 0.0005, completion: 0.0015 },
-      "gpt-4": { prompt: 0.03, completion: 0.06 },
-      "gpt-4-turbo": { prompt: 0.01, completion: 0.03 },
-    },
-    openai: {
-      "gpt-5-chat-latest": { prompt: 0.015, completion: 0.06 },
-      "gpt-4": { prompt: 0.03, completion: 0.06 },
-      "gpt-4-turbo": { prompt: 0.01, completion: 0.03 },
-      "gpt-3.5-turbo": { prompt: 0.0005, completion: 0.0015 },
-    },
-    deepseek: {
-      "deepseek-reasoner": { prompt: 0.001, completion: 0.002 },
-      "deepseek-chat": { prompt: 0.0005, completion: 0.001 },
-    },
-    anthropic: {
-      "claude-3-opus": { prompt: 0.015, completion: 0.075 },
-      "claude-3-sonnet": { prompt: 0.003, completion: 0.015 },
-    },
-  };
+  if (!usage) {
+    // Fallback for missing usage
+    return 0;
+  }
 
-  const modelPricing = pricing[provider]?.[model];
-  if (!modelPricing || !usage) return 0;
+  const modelConfig = Object.values(MODEL_CONFIG).find(
+    (cfg) => cfg.provider === provider && cfg.model === model
+  );
 
-  const promptCost = ((usage.promptTokens || 0) / 1000) * modelPricing.prompt;
+  if (!modelConfig) {
+    return 0;
+  }
+
+  // Convert per-million pricing to per-1k for calculation
+  const promptCostPer1k = modelConfig.tokenCostInPerMillion / 1000;
+  const completionCostPer1k = modelConfig.tokenCostOutPerMillion / 1000;
+
+  const promptCost = ((usage.promptTokens || 0) / 1000) * promptCostPer1k;
   const completionCost =
-    ((usage.completionTokens || 0) / 1000) * modelPricing.completion;
+    ((usage.completionTokens || 0) / 1000) * completionCostPer1k;
 
   return promptCost + completionCost;
 }
@@ -116,12 +118,15 @@ export async function chat(options) {
   const startTime = Date.now();
   const requestId = `req_${Date.now()}_${Math.random().toString(36).substring(7)}`;
 
+  // Default to JSON mode if not specified
+  const finalResponseFormat = responseFormat ?? "json";
+
   // Extract system and user messages
   const systemMsg = messages.find((m) => m.role === "system")?.content || "";
   const userMessages = messages.filter((m) => m.role === "user");
   const userMsg = userMessages.map((m) => m.content).join("\n");
 
-  // DEBUG write the messages to /tmp/messages.log for debugging
+  // DEBUG write_to_file messages to /tmp/messages.log for debugging
   fs.writeFileSync(
     "/tmp/messages.log",
     JSON.stringify({ messages, systemMsg, userMsg, provider, model }, null, 2)
@@ -173,8 +178,7 @@ export async function chat(options) {
         maxTokens,
         ...rest,
       };
-      if (responseFormat !== undefined)
-        openaiArgs.responseFormat = responseFormat;
+      openaiArgs.responseFormat = finalResponseFormat;
       if (topP !== undefined) openaiArgs.topP = topP;
       if (frequencyPenalty !== undefined)
         openaiArgs.frequencyPenalty = frequencyPenalty;
@@ -222,8 +226,7 @@ export async function chat(options) {
       if (presencePenalty !== undefined)
         deepseekArgs.presencePenalty = presencePenalty;
       if (stop !== undefined) deepseekArgs.stop = stop;
-      if (responseFormat !== undefined)
-        deepseekArgs.responseFormat = responseFormat;
+      deepseekArgs.responseFormat = finalResponseFormat;
 
       const result = await deepseekChat(deepseekArgs);
 
@@ -232,6 +235,128 @@ export async function chat(options) {
       };
 
       // Use actual usage from deepseek API if available; otherwise estimate
+      if (result?.usage) {
+        const { prompt_tokens, completion_tokens, total_tokens } = result.usage;
+        usage = {
+          promptTokens: prompt_tokens,
+          completionTokens: completion_tokens,
+          totalTokens: total_tokens,
+        };
+      } else {
+        const promptTokens = estimateTokens(systemMsg + userMsg);
+        const completionTokens = estimateTokens(
+          typeof result === "string" ? result : JSON.stringify(result)
+        );
+        usage = {
+          promptTokens,
+          completionTokens,
+          totalTokens: promptTokens + completionTokens,
+        };
+      }
+    } else if (provider === "anthropic") {
+      const defaultAlias = DEFAULT_MODEL_BY_PROVIDER.anthropic;
+      const defaultModelConfig = MODEL_CONFIG[defaultAlias];
+      const defaultModel = defaultModelConfig?.model;
+
+      const anthropicArgs = {
+        messages,
+        model: model || defaultModel,
+        temperature,
+        maxTokens,
+        ...rest,
+      };
+      if (topP !== undefined) anthropicArgs.topP = topP;
+      if (stop !== undefined) anthropicArgs.stop = stop;
+      anthropicArgs.responseFormat = finalResponseFormat;
+
+      const result = await anthropicChat(anthropicArgs);
+
+      response = {
+        content: result.content,
+        raw: result.raw,
+      };
+
+      // Use actual usage from anthropic API if available; otherwise estimate
+      if (result?.usage) {
+        const { prompt_tokens, completion_tokens, total_tokens } = result.usage;
+        usage = {
+          promptTokens: prompt_tokens,
+          completionTokens: completion_tokens,
+          totalTokens: total_tokens,
+        };
+      } else {
+        const promptTokens = estimateTokens(systemMsg + userMsg);
+        const completionTokens = estimateTokens(
+          typeof result === "string" ? result : JSON.stringify(result)
+        );
+        usage = {
+          promptTokens,
+          completionTokens,
+          totalTokens: promptTokens + completionTokens,
+        };
+      }
+    } else if (provider === "gemini") {
+      const geminiArgs = {
+        messages,
+        model: model || "gemini-2.5-flash",
+        temperature,
+        maxTokens,
+        ...rest,
+      };
+      if (topP !== undefined) geminiArgs.topP = topP;
+      if (stop !== undefined) geminiArgs.stop = stop;
+      geminiArgs.responseFormat = finalResponseFormat;
+
+      const result = await geminiChat(geminiArgs);
+
+      response = {
+        content: result.content,
+        raw: result.raw,
+      };
+
+      // Use actual usage from gemini API if available; otherwise estimate
+      if (result?.usage) {
+        const { prompt_tokens, completion_tokens, total_tokens } = result.usage;
+        usage = {
+          promptTokens: prompt_tokens,
+          completionTokens: completion_tokens,
+          totalTokens: total_tokens,
+        };
+      } else {
+        const promptTokens = estimateTokens(systemMsg + userMsg);
+        const completionTokens = estimateTokens(
+          typeof result === "string" ? result : JSON.stringify(result)
+        );
+        usage = {
+          promptTokens,
+          completionTokens,
+          totalTokens: promptTokens + completionTokens,
+        };
+      }
+    } else if (provider === "zhipu") {
+      const defaultAlias = DEFAULT_MODEL_BY_PROVIDER.zhipu;
+      const defaultModelConfig = MODEL_CONFIG[defaultAlias];
+      const defaultModel = defaultModelConfig?.model;
+
+      const zhipuArgs = {
+        messages,
+        model: model || defaultModel,
+        temperature,
+        maxTokens,
+        ...rest,
+      };
+      if (topP !== undefined) zhipuArgs.topP = topP;
+      if (stop !== undefined) zhipuArgs.stop = stop;
+      zhipuArgs.responseFormat = finalResponseFormat;
+
+      const result = await zhipuChat(zhipuArgs);
+
+      response = {
+        content: result.content,
+        raw: result.raw,
+      };
+
+      // Use actual usage from zhipu API if available; otherwise estimate
       if (result?.usage) {
         const { prompt_tokens, completion_tokens, total_tokens } = result.usage;
         usage = {
@@ -292,19 +417,6 @@ export async function chat(options) {
   }
 }
 
-// Helper to convert model alias to camelCase function name
-function toCamelCase(alias) {
-  const [provider, ...modelParts] = alias.split(":");
-  const model = modelParts.join("-");
-
-  // Convert to camelCase (handle both letters and numbers after hyphens)
-  const camelModel = model.replace(/-([a-z0-9])/g, (match, char) =>
-    char.toUpperCase()
-  );
-
-  return camelModel;
-}
-
 // Build provider-grouped functions from registry
 function buildProviderFunctions(models) {
   const functions = {};
@@ -324,7 +436,7 @@ function buildProviderFunctions(models) {
     functions[provider] = {};
 
     for (const [alias, modelConfig] of Object.entries(providerModels)) {
-      const functionName = toCamelCase(alias);
+      const functionName = aliasToFunctionName(alias);
 
       functions[provider][functionName] = (options = {}) => {
         // Respect provider overrides in options (last-write-wins)
@@ -460,12 +572,15 @@ export async function parallel(workerFn, items, concurrency = 5) {
 
 // Create a bound LLM interface - for named-models tests, only return provider functions
 export function createLLM() {
-  const config = getConfig();
-
-  // Build functions from registry
-  const providerFunctions = buildProviderFunctions(config.llm.models);
+  // Build functions from centralized registry
+  const providerFunctions = buildProviderFunctions(MODEL_CONFIG);
 
   return providerFunctions;
+}
+
+// Create named models API (explicit function for clarity)
+export function createNamedModelsAPI() {
+  return buildProviderFunctions(MODEL_CONFIG);
 }
 
 // Separate function for high-level LLM interface (used by llm.test.js)
@@ -473,12 +588,12 @@ export function createHighLevelLLM(options = {}) {
   // Skip config check in tests to avoid PO_ROOT requirement
   const isTest =
     process.env.NODE_ENV === "test" || process.env.VITEST === "true";
-  const config = isTest ? { llm: { models: {} } } : getConfig();
+  const config = isTest ? { llm: { defaultProvider: "openai" } } : getConfig();
   const defaultProvider =
     options.defaultProvider || (isTest ? "openai" : config.llm.defaultProvider);
 
-  // Build functions from registry
-  const providerFunctions = buildProviderFunctions(config.llm.models);
+  // Build functions from centralized registry
+  const providerFunctions = buildProviderFunctions(MODEL_CONFIG);
 
   return {
     // High-level interface methods

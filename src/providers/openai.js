@@ -4,6 +4,8 @@ import {
   isRetryableError,
   sleep,
   tryParseJSON,
+  ensureJsonResponseFormat,
+  ProviderJsonParseError,
 } from "./base.js";
 
 let client = null;
@@ -31,9 +33,7 @@ export async function openaiChat({
   temperature,
   maxTokens,
   max_tokens, // Explicitly destructure to prevent it from being in ...rest
-  responseFormat = "json", // Default to JSON for legacy compatibility
-  tools,
-  toolChoice,
+  responseFormat,
   seed,
   stop,
   topP,
@@ -45,6 +45,9 @@ export async function openaiChat({
   console.log("\n[OpenAI] Starting openaiChat call");
   console.log("[OpenAI] Model:", model);
   console.log("[OpenAI] Response format:", responseFormat);
+
+  // Enforce JSON mode - reject calls without proper JSON responseFormat
+  ensureJsonResponseFormat(responseFormat, "OpenAI");
 
   const openai = getClient();
   if (!openai) throw new Error("OpenAI API key not configured");
@@ -106,22 +109,19 @@ export async function openaiChat({
           total_tokens: promptTokens + completionTokens,
         };
 
-        // Parse JSON if requested
-        let parsed = null;
-        if (
-          responseFormat?.json_schema ||
-          responseFormat?.type === "json_object" ||
-          responseFormat === "json"
-        ) {
-          parsed = tryParseJSON(text);
-          if (!parsed && attempt < maxRetries) {
-            lastError = new Error("Failed to parse JSON response");
-            continue;
-          }
+        // Parse JSON - this is now required for all calls
+        const parsed = tryParseJSON(text);
+        if (!parsed) {
+          throw new ProviderJsonParseError(
+            "OpenAI",
+            model,
+            text.substring(0, 200),
+            "Failed to parse JSON response from Responses API"
+          );
         }
 
         console.log("[OpenAI] Returning response from Responses API");
-        return { content: parsed ?? text, text, usage, raw: resp };
+        return { content: parsed, text, usage, raw: resp };
       }
 
       // ---------- CLASSIC CHAT COMPLETIONS path (non-GPT-5) ----------
@@ -136,8 +136,6 @@ export async function openaiChat({
         presence_penalty: presencePenalty,
         seed,
         stop,
-        tools,
-        tool_choice: toolChoice,
         stream: false,
       };
 
@@ -158,31 +156,19 @@ export async function openaiChat({
         classicText.length
       );
 
-      // If tool calls present, return them (test expects this)
-      if (classicRes?.choices?.[0]?.message?.tool_calls) {
-        return {
-          content: classicText,
-          usage: classicRes?.usage,
-          toolCalls: classicRes.choices[0].message.tool_calls,
-          raw: classicRes,
-        };
-      }
-
-      let classicParsed = null;
-      if (
-        responseFormat?.json_schema ||
-        responseFormat?.type === "json_object" ||
-        responseFormat === "json"
-      ) {
-        classicParsed = tryParseJSON(classicText);
-        if (!classicParsed && attempt < maxRetries) {
-          lastError = new Error("Failed to parse JSON response");
-          continue;
-        }
+      // Parse JSON - this is now required for all calls
+      const classicParsed = tryParseJSON(classicText);
+      if (!classicParsed) {
+        throw new ProviderJsonParseError(
+          "OpenAI",
+          model,
+          classicText.substring(0, 200),
+          "Failed to parse JSON response from Classic API"
+        );
       }
 
       return {
-        content: classicParsed ?? classicText,
+        content: classicParsed,
         text: classicText,
         usage: classicRes?.usage,
         raw: classicRes,
@@ -211,8 +197,6 @@ export async function openaiChat({
           presence_penalty: presencePenalty,
           seed,
           stop,
-          tools,
-          tool_choice: toolChoice,
           stream: false,
         };
 
@@ -227,17 +211,19 @@ export async function openaiChat({
         const classicRes = await openai.chat.completions.create(classicReq);
         const text = classicRes?.choices?.[0]?.message?.content ?? "";
 
-        let parsed = null;
-        if (
-          responseFormat?.json_schema ||
-          responseFormat?.type === "json_object" ||
-          responseFormat === "json"
-        ) {
-          parsed = tryParseJSON(text);
+        // Parse JSON - this is now required for all calls
+        const parsed = tryParseJSON(text);
+        if (!parsed) {
+          throw new ProviderJsonParseError(
+            "OpenAI",
+            model,
+            text.substring(0, 200),
+            "Failed to parse JSON response from fallback Classic API"
+          );
         }
 
         return {
-          content: parsed ?? text,
+          content: parsed,
           text,
           usage: classicRes?.usage,
           raw: classicRes,
@@ -255,60 +241,4 @@ export async function openaiChat({
   }
 
   throw lastError || new Error(`Failed after ${maxRetries + 1} attempts`);
-}
-
-/**
- * Convenience helper used widely in the codebase.
- * For tests, this hits the Responses API directly (even for non-GPT-5).
- * Always attempts to coerce JSON on return (falls back to string).
- */
-export async function queryChatGPT(system, prompt, options = {}) {
-  console.log("\n[OpenAI] Starting queryChatGPT call");
-  console.log("[OpenAI] Model:", options.model || "gpt-5-chat-latest");
-
-  const openai = getClient();
-  if (!openai) throw new Error("OpenAI API key not configured");
-
-  const { systemMsg, userMsg } = extractMessages([
-    { role: "system", content: system },
-    { role: "user", content: prompt },
-  ]);
-  console.log("[OpenAI] System message length:", systemMsg.length);
-  console.log("[OpenAI] User message length:", userMsg.length);
-
-  const req = {
-    model: options.model || "gpt-5-chat-latest",
-    instructions: systemMsg,
-    input: userMsg,
-    max_output_tokens: options.maxTokens ?? 25000,
-  };
-
-  // Note: Responses API does not support temperature, top_p, frequency_penalty,
-  // presence_penalty, seed, or stop parameters. These are only for Chat Completions API.
-
-  // Response format / schema mapping for Responses API
-  if (options.schema) {
-    req.text = {
-      format: {
-        type: "json_schema",
-        name: options.schemaName || "Response",
-        schema: options.schema,
-      },
-    };
-  } else if (
-    options.response_format?.type === "json_object" ||
-    options.response_format === "json"
-  ) {
-    req.text = { format: { type: "json_object" } };
-  }
-
-  console.log("[OpenAI] Calling responses.create...");
-  const resp = await openai.responses.create(req);
-  const text = resp.output_text ?? "";
-  console.log("[OpenAI] Response received, text length:", text.length);
-
-  // Always try to parse JSON; fall back to string
-  const parsed = tryParseJSON(text);
-  console.log("[OpenAI] Parsed result:", parsed ? "JSON" : "text");
-  return parsed ?? text;
 }

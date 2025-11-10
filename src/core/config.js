@@ -187,168 +187,6 @@ export const defaultConfig = {
     maxConcurrency: 5,
     retryMaxAttempts: 3,
     retryBackoffMs: 1000,
-    models: {
-      // DeepSeek (2025)
-      "deepseek:chat": {
-        provider: "deepseek",
-        model: "deepseek-chat", // V3.2 Exp (non-thinking) under the hood
-        tokenCostInPerMillion: 0.27,
-        tokenCostOutPerMillion: 1.1,
-      },
-      "deepseek:reasoner": {
-        provider: "deepseek",
-        model: "deepseek-reasoner", // R1 family
-        tokenCostInPerMillion: 0.55,
-        tokenCostOutPerMillion: 2.19,
-      },
-
-      // — OpenAI (2024 legacy still callable) —
-      "openai:gpt-4": {
-        provider: "openai",
-        model: "gpt-4",
-        tokenCostInPerMillion: 30.0,
-        tokenCostOutPerMillion: 60.0,
-      },
-      "openai:gpt-4-turbo": {
-        provider: "openai",
-        model: "gpt-4-turbo",
-        tokenCostInPerMillion: 10.0,
-        tokenCostOutPerMillion: 30.0,
-      },
-
-      // — OpenAI (2025) —
-      "openai:gpt-5": {
-        provider: "openai",
-        model: "gpt-5-chat-latest", // alias tracks GPT-5 pricing
-        tokenCostInPerMillion: 1.25,
-        tokenCostOutPerMillion: 10.0,
-      },
-
-      "openai:gpt-5-core": {
-        provider: "openai",
-        model: "gpt-5", // flagship
-        tokenCostInPerMillion: 1.25,
-        tokenCostOutPerMillion: 10.0,
-      },
-      "openai:gpt-5-chat": {
-        provider: "openai",
-        model: "gpt-5-chat-latest", // Chat variant
-        tokenCostInPerMillion: 1.25,
-        tokenCostOutPerMillion: 10.0,
-      },
-      "openai:gpt-5-pro": {
-        provider: "openai",
-        model: "gpt-5-pro", // higher-compute tier
-        tokenCostInPerMillion: 15.0,
-        tokenCostOutPerMillion: 120.0,
-      },
-      "openai:gpt-5-mini": {
-        provider: "openai",
-        model: "gpt-5-mini",
-        tokenCostInPerMillion: 0.25,
-        tokenCostOutPerMillion: 2.0,
-      },
-      "openai:gpt-5-nano": {
-        provider: "openai",
-        model: "gpt-5-nano",
-        tokenCostInPerMillion: 0.05,
-        tokenCostOutPerMillion: 0.4,
-      },
-
-      // — Google Gemini (2025) —
-      "gemini:2.5-pro": {
-        provider: "google",
-        model: "gemini-2.5-pro", // ≤200k input tier shown; >200k is higher
-        tokenCostInPerMillion: 1.25,
-        tokenCostOutPerMillion: 10.0,
-      },
-      "gemini:2.5-flash": {
-        provider: "google",
-        model: "gemini-2.5-flash",
-        tokenCostInPerMillion: 0.3,
-        tokenCostOutPerMillion: 2.5,
-      },
-      "gemini:2.5-flash-lite": {
-        provider: "google",
-        model: "gemini-2.5-flash-lite",
-        tokenCostInPerMillion: 0.1,
-        tokenCostOutPerMillion: 0.4,
-      },
-      "gemini:2.5-flash-image": {
-        provider: "google",
-        model: "gemini-2.5-flash-image",
-        // Inputs follow 2.5 Flash text pricing; outputs are **image tokens** at $30/M (≈$0.039 per 1024² image)
-        tokenCostInPerMillion: 0.3,
-        tokenCostOutPerMillion: 30.0,
-      },
-
-      // — Z.ai (formerly Zhipu) —
-      "zai:glm-4.6": {
-        provider: "zai",
-        model: "GLM-4.6",
-        tokenCostInPerMillion: 0.6,
-        tokenCostOutPerMillion: 2.2,
-      },
-      "zai:glm-4.5": {
-        provider: "zai",
-        model: "GLM-4.5",
-        tokenCostInPerMillion: 0.6,
-        tokenCostOutPerMillion: 2.2,
-      },
-      "zai:glm-4.5-air": {
-        provider: "zai",
-        model: "GLM-4.5-Air",
-        tokenCostInPerMillion: 0.2,
-        tokenCostOutPerMillion: 1.1,
-      },
-
-      // — Anthropic —
-      // current (Claude 4.5 / 4.1)
-      "anthropic:sonnet-4-5": {
-        provider: "anthropic",
-        model: "claude-sonnet-4-5",
-        tokenCostInPerMillion: 3.0,
-        tokenCostOutPerMillion: 15.0,
-      },
-      "anthropic:haiku-4-5": {
-        provider: "anthropic",
-        model: "claude-haiku-4-5",
-        tokenCostInPerMillion: 1.0,
-        tokenCostOutPerMillion: 5.0,
-      },
-      "anthropic:opus-4-1": {
-        provider: "anthropic",
-        model: "claude-opus-4-1",
-        tokenCostInPerMillion: 15.0,
-        tokenCostOutPerMillion: 75.0,
-      },
-
-      // legacy / still available
-      "anthropic:sonnet-4": {
-        provider: "anthropic",
-        model: "claude-sonnet-4-0",
-        tokenCostInPerMillion: 3.0,
-        tokenCostOutPerMillion: 15.0,
-      },
-      "anthropic:sonnet-3-7": {
-        provider: "anthropic",
-        model: "claude-3-7-sonnet-20250219",
-        tokenCostInPerMillion: 3.0,
-        tokenCostOutPerMillion: 15.0,
-      },
-      "anthropic:opus-4": {
-        provider: "anthropic",
-        model: "claude-opus-4-0",
-        tokenCostInPerMillion: 15.0,
-        tokenCostOutPerMillion: 75.0,
-      },
-      "anthropic:haiku-3-5": {
-        provider: "anthropic",
-        model: "claude-3-5-haiku-20241022",
-        tokenCostInPerMillion: 0.8,
-        tokenCostOutPerMillion: 4.0,
-      },
-    },
   },
   ui: {
     port: 3000,
@@ -645,14 +483,14 @@ export async function loadConfig(options = {}) {
     await validateConfig(config);
   }
 
-  // Cache the loaded config
+  // Cache
   currentConfig = config;
 
   return config;
 }
 
 /**
- * Get the current configuration
+ * Get current configuration
  * Loads default config if not already loaded
  *
  * @returns {Object} Current configuration
