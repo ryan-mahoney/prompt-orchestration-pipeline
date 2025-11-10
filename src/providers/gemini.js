@@ -32,8 +32,7 @@ export async function geminiChat(options) {
     frequencyPenalty,
     presencePenalty,
     stop,
-    maxRetries = 3,
-    ...rest
+    maxRetries = 3
   } = options;
 
   // Validate response format (Gemini only supports JSON mode)
