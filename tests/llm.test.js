@@ -68,7 +68,6 @@ describe("LLM Module", () => {
         deepseek: true,
         anthropic: true,
         gemini: false,
-        zai: false,
         zhipu: false,
         mock: false,
       });
@@ -855,7 +854,6 @@ describe("LLM Module", () => {
         deepseek: true,
         anthropic: true,
         gemini: false,
-        zai: false,
         zhipu: false,
         mock: true, // Mock provider is auto-registered in test mode
       });
