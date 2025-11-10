@@ -11,7 +11,7 @@ export async function anthropicChat({
   messages,
   model = "claude-3-sonnet",
   temperature = 0.7,
-  maxTokens,
+  maxTokens = 8192,
   responseFormat = "json",
   topP,
   stop,

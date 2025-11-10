@@ -225,23 +225,3 @@ export async function geminiChat(options) {
 
   throw lastError;
 }
-
-/**
- * Legacy function for backward compatibility
- * @param {string} prompt - Input prompt
- * @param {Object} options - Additional options
- * @returns {Promise<string>} Generated text
- */
-export async function queryGemini(prompt, options = {}) {
-  const messages = [
-    { role: "system", content: "You are a helpful assistant." },
-    { role: "user", content: prompt },
-  ];
-
-  const result = await geminiChat({
-    messages,
-    ...options,
-  });
-
-  return result.text;
-}

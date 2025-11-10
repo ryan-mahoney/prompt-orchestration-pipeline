@@ -21,7 +21,7 @@ export const researchJsonSchema = {
       minItems: 1,
       items: {
         type: "object",
-        additionalProperties: false,
+        additionalProperties: true,
         required: ["area", "findings"],
         properties: {
           area: {
@@ -233,7 +233,7 @@ export const validateQuality = ({ io, llm, data, meta, flags, output }) => {
 // Contract: runs when not explicitly skipped; should set critiqueComplete when implemented
 export const critique = async ({
   io,
-  llm: { deepseek },
+  llm: { anthropic },
   data: {
     validateQuality: { feedback },
     promptTemplating: { prompt },
@@ -263,7 +263,7 @@ OUTPUT FORMAT:
 }`,
   };
 
-  const response = await deepseek.chat({
+  const response = await anthropic.sonnet45({
     messages: [
       { role: "system", content: template.system },
       { role: "user", content: JSON.stringify(template) },

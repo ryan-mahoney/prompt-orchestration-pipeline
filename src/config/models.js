@@ -22,10 +22,10 @@ export const ModelAlias = Object.freeze({
   OPENAI_GPT_4_TURBO: "openai:gpt-4-turbo",
 
   // Google Gemini
-  GEMINI_2_5_PRO: "gemini:2.5-pro",
-  GEMINI_2_5_FLASH: "gemini:2.5-flash",
-  GEMINI_2_5_FLASH_LITE: "gemini:2.5-flash-lite",
-  GEMINI_2_5_FLASH_IMAGE: "gemini:2.5-flash-image",
+  GEMINI_2_5_PRO: "gemini:pro-2.5",
+  GEMINI_2_5_FLASH: "gemini:flash-2.5",
+  GEMINI_2_5_FLASH_LITE: "gemini:flash-2.5-lite",
+  GEMINI_2_5_FLASH_IMAGE: "gemini:flash-2.5-image",
 
   // Z.ai (formerly Zhipu) - standardized to "zhipu" provider
   ZAI_GLM_4_6: "zhipu:glm-4.6",
@@ -130,19 +130,19 @@ export const MODEL_CONFIG = Object.freeze({
   // — Z.ai (formerly Zhipu) —
   [ModelAlias.ZAI_GLM_4_6]: {
     provider: "zhipu",
-    model: "GLM-4.6",
+    model: "glm-4.6",
     tokenCostInPerMillion: 0.6,
     tokenCostOutPerMillion: 2.2,
   },
   [ModelAlias.ZAI_GLM_4_5]: {
     provider: "zhipu",
-    model: "GLM-4.5",
+    model: "glm-4.5",
     tokenCostInPerMillion: 0.6,
     tokenCostOutPerMillion: 2.2,
   },
   [ModelAlias.ZAI_GLM_4_5_AIR]: {
     provider: "zhipu",
-    model: "GLM-4.5-Air",
+    model: "glm-4.5-air",
     tokenCostInPerMillion: 0.2,
     tokenCostOutPerMillion: 1.1,
   },
@@ -151,19 +151,19 @@ export const MODEL_CONFIG = Object.freeze({
   // current (Claude 4.5 / 4.1)
   [ModelAlias.ANTHROPIC_SONNET_4_5]: {
     provider: "anthropic",
-    model: "claude-sonnet-4-5",
+    model: "claude-sonnet-4-5-20250929", // Use actual model ID
     tokenCostInPerMillion: 3.0,
     tokenCostOutPerMillion: 15.0,
   },
   [ModelAlias.ANTHROPIC_HAIKU_4_5]: {
     provider: "anthropic",
-    model: "claude-haiku-4-5",
-    tokenCostInPerMillion: 1.0,
-    tokenCostOutPerMillion: 5.0,
+    model: "claude-haiku-4-5-20250929", // Use actual model ID
+    tokenCostInPerMillion: 0.25, // Correct pricing
+    tokenCostOutPerMillion: 1.25, // Correct pricing
   },
   [ModelAlias.ANTHROPIC_OPUS_4_1]: {
     provider: "anthropic",
-    model: "claude-opus-4-1",
+    model: "claude-opus-4-1-20240229", // Use actual model ID
     tokenCostInPerMillion: 15.0,
     tokenCostOutPerMillion: 75.0,
   },

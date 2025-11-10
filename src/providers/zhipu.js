@@ -11,14 +11,11 @@ export async function zhipuChat({
   messages,
   model = "glm-4-plus",
   temperature = 0.7,
-  maxTokens,
-  responseFormat,
+  maxTokens = 8192,
+  responseFormat = "json",
   topP,
-  frequencyPenalty,
-  presencePenalty,
   stop,
   maxRetries = 3,
-  ...rest
 }) {
   console.log("\n[Zhipu] Starting zhipuChat call");
   console.log("[Zhipu] Model:", model);
@@ -68,18 +65,14 @@ export async function zhipuChat({
       };
 
       console.log("[Zhipu] Calling Zhipu API...");
-      const response = await fetch(
-        process.env.ZHIPU_BASE_URL ||
-          "https://open.bigmodel.cn/api/paas/v4/chat/completions",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${process.env.ZHIPU_API_KEY}`,
-          },
-          body: JSON.stringify(requestBody),
-        }
-      );
+      const response = await fetch("https://api.z.ai/api/coding/paas/v4", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${process.env.ZHIPU_API_KEY}`,
+        },
+        body: JSON.stringify(requestBody),
+      });
 
       if (!response.ok) {
         const error = await response

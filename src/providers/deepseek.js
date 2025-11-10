@@ -107,21 +107,3 @@ export async function deepseekChat({
 
   throw lastError || new Error(`Failed after ${maxRetries + 1} attempts`);
 }
-
-// Keep backward compatibility
-export async function queryDeepSeek(
-  system,
-  prompt,
-  model = "deepseek-reasoner"
-) {
-  const response = await deepseekChat({
-    messages: [
-      { role: "system", content: system },
-      { role: "user", content: prompt },
-    ],
-    model,
-    responseFormat: "json",
-  });
-
-  return response.content;
-}
