@@ -5,7 +5,11 @@ import { geminiChat } from "../providers/gemini.js";
 import { zhipuChat } from "../providers/zhipu.js";
 import { EventEmitter } from "node:events";
 import { getConfig, defaultConfig } from "../core/config.js";
-import { DEFAULT_MODEL_BY_PROVIDER } from "../config/models.js";
+import {
+  MODEL_CONFIG,
+  DEFAULT_MODEL_BY_PROVIDER,
+  aliasToFunctionName,
+} from "../config/models.js";
 import fs from "node:fs";
 
 // Global mock provider instance (for demo/testing)
@@ -49,8 +53,7 @@ export function getAvailableProviders() {
     deepseek: !!process.env.DEEPSEEK_API_KEY,
     anthropic: !!process.env.ANTHROPIC_API_KEY,
     gemini: !!process.env.GEMINI_API_KEY,
-    zai: !!process.env.ZHIPU_API_KEY, // zai is the canonical provider id
-    zhipu: !!process.env.ZHIPU_API_KEY, // zhipu alias for backward compatibility
+    zhipu: !!process.env.ZHIPU_API_KEY,
     mock: !!mockProviderInstance,
   };
 }
@@ -67,18 +70,7 @@ export function calculateCost(provider, model, usage) {
     return 0;
   }
 
-  // In tests, use default config to avoid PO_ROOT requirement
-  const isTest =
-    process.env.NODE_ENV === "test" || process.env.VITEST === "true";
-
-  let config;
-  if (isTest) {
-    config = { llm: { models: defaultConfig.llm.models } };
-  } else {
-    config = getConfig();
-  }
-
-  const modelConfig = Object.values(config.llm.models).find(
+  const modelConfig = Object.values(MODEL_CONFIG).find(
     (cfg) => cfg.provider === provider && cfg.model === model
   );
 
@@ -134,7 +126,7 @@ export async function chat(options) {
   const userMessages = messages.filter((m) => m.role === "user");
   const userMsg = userMessages.map((m) => m.content).join("\n");
 
-  // DEBUG write the messages to /tmp/messages.log for debugging
+  // DEBUG write_to_file messages to /tmp/messages.log for debugging
   fs.writeFileSync(
     "/tmp/messages.log",
     JSON.stringify({ messages, systemMsg, userMsg, provider, model }, null, 2)
@@ -263,8 +255,7 @@ export async function chat(options) {
       }
     } else if (provider === "anthropic") {
       const defaultAlias = DEFAULT_MODEL_BY_PROVIDER.anthropic;
-      const config = getConfig();
-      const defaultModelConfig = config.llm.models[defaultAlias];
+      const defaultModelConfig = MODEL_CONFIG[defaultAlias];
       const defaultModel = defaultModelConfig?.model;
 
       const anthropicArgs = {
@@ -342,10 +333,9 @@ export async function chat(options) {
           totalTokens: promptTokens + completionTokens,
         };
       }
-    } else if (provider === "zhipu" || provider === "zai") {
-      const defaultAlias = DEFAULT_MODEL_BY_PROVIDER.zai;
-      const config = getConfig();
-      const defaultModelConfig = config.llm.models[defaultAlias];
+    } else if (provider === "zhipu") {
+      const defaultAlias = DEFAULT_MODEL_BY_PROVIDER.zhipu;
+      const defaultModelConfig = MODEL_CONFIG[defaultAlias];
       const defaultModel = defaultModelConfig?.model;
 
       const zhipuArgs = {
@@ -427,19 +417,6 @@ export async function chat(options) {
   }
 }
 
-// Helper to convert model alias to camelCase function name
-function toCamelCase(alias) {
-  const [provider, ...modelParts] = alias.split(":");
-  const model = modelParts.join(":");
-
-  // Convert to camelCase (handle both letters and numbers after hyphens and dots)
-  const camelModel = model.replace(/[-.]([a-z0-9])/g, (match, char) =>
-    char.toUpperCase()
-  );
-
-  return camelModel;
-}
-
 // Build provider-grouped functions from registry
 function buildProviderFunctions(models) {
   const functions = {};
@@ -459,7 +436,7 @@ function buildProviderFunctions(models) {
     functions[provider] = {};
 
     for (const [alias, modelConfig] of Object.entries(providerModels)) {
-      const functionName = toCamelCase(alias);
+      const functionName = aliasToFunctionName(alias);
 
       functions[provider][functionName] = (options = {}) => {
         // Respect provider overrides in options (last-write-wins)
@@ -595,22 +572,15 @@ export async function parallel(workerFn, items, concurrency = 5) {
 
 // Create a bound LLM interface - for named-models tests, only return provider functions
 export function createLLM() {
-  // Skip config check in tests to avoid PO_ROOT requirement
-  const isTest =
-    process.env.NODE_ENV === "test" || process.env.VITEST === "true";
-
-  let config;
-  if (isTest) {
-    // In test mode, use default config models for testing
-    config = { llm: { models: defaultConfig.llm.models } };
-  } else {
-    config = getConfig();
-  }
-
-  // Build functions from registry
-  const providerFunctions = buildProviderFunctions(config.llm.models);
+  // Build functions from centralized registry
+  const providerFunctions = buildProviderFunctions(MODEL_CONFIG);
 
   return providerFunctions;
+}
+
+// Create named models API (explicit function for clarity)
+export function createNamedModelsAPI() {
+  return buildProviderFunctions(MODEL_CONFIG);
 }
 
 // Separate function for high-level LLM interface (used by llm.test.js)
@@ -618,12 +588,12 @@ export function createHighLevelLLM(options = {}) {
   // Skip config check in tests to avoid PO_ROOT requirement
   const isTest =
     process.env.NODE_ENV === "test" || process.env.VITEST === "true";
-  const config = isTest ? { llm: { models: {} } } : getConfig();
+  const config = isTest ? { llm: { defaultProvider: "openai" } } : getConfig();
   const defaultProvider =
     options.defaultProvider || (isTest ? "openai" : config.llm.defaultProvider);
 
-  // Build functions from registry
-  const providerFunctions = buildProviderFunctions(config.llm.models);
+  // Build functions from centralized registry
+  const providerFunctions = buildProviderFunctions(MODEL_CONFIG);
 
   return {
     // High-level interface methods
