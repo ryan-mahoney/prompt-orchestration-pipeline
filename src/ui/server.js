@@ -1430,41 +1430,9 @@ function createServer() {
     // Route: GET /api/llm/functions
     if (pathname === "/api/llm/functions" && req.method === "GET") {
       try {
-        const { getConfig } = await import("../core/config.js");
-        const config = getConfig();
+        const { PROVIDER_FUNCTIONS } = await import("../config/models.js");
 
-        // Helper to convert model alias to camelCase function name
-        const toCamelCase = (alias) => {
-          const [provider, ...modelParts] = alias.split(":");
-          const model = modelParts.join("-");
-          const camelModel = model.replace(/-([a-z0-9])/g, (match, char) =>
-            char.toUpperCase()
-          );
-          return camelModel;
-        };
-
-        // Filter for deepseek, openai only (no gemini provider exists)
-        const targetProviders = ["deepseek", "openai"];
-        const functions = {};
-
-        for (const [alias, modelConfig] of Object.entries(config.llm.models)) {
-          const { provider } = modelConfig;
-          if (!targetProviders.includes(provider)) continue;
-
-          if (!functions[provider]) {
-            functions[provider] = [];
-          }
-
-          const functionName = toCamelCase(alias);
-          functions[provider].push({
-            alias,
-            functionName,
-            fullPath: `llm.${provider}.${functionName}`,
-            model: modelConfig.model,
-          });
-        }
-
-        sendJson(res, 200, functions);
+        sendJson(res, 200, PROVIDER_FUNCTIONS);
       } catch (error) {
         console.error("Error handling /api/llm/functions:", error);
         sendJson(res, 500, {
@@ -1699,7 +1667,7 @@ function createServer() {
 
     // Route: GET /favicon.svg
     if (pathname === "/favicon.svg" && req.method === "GET") {
-      const faviconPath = path.join(__dirname, "..", "..", "favicon.svg");
+      const faviconPath = path.join(__dirname, "public", "favicon.svg");
 
       try {
         const content = await fs.promises.readFile(faviconPath, "utf8");
