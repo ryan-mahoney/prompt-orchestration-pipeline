@@ -155,7 +155,7 @@ tests/                      # Test suite
 **Key Commands**:
 
 - `init` - Initialize pipeline configuration
-- `start` - Start the orchestrator (with optional UI)
+- `start` - Start orchestrator (with optional UI)
 - `submit <seed-file>` - Submit a new job
 - `status [job-name]` - Get job status
 
@@ -341,6 +341,7 @@ context = {
 - Cost calculation
 - Retry logic
 - Parallel execution support
+- **JSON enforcement by default**
 
 **Provider-Grouped Functions (Primary API)**:
 
@@ -360,7 +361,7 @@ await llm.anthropic.sonnet({ messages: [...] });
 
 **Model Registry**:
 
-The provider-grouped functions are generated from the configuration registry:
+The provider-grouped functions are generated from a configuration registry:
 
 ```json
 {
@@ -386,6 +387,13 @@ Events:
 - llm:request:error    // Request failed
 ```
 
+**JSON Enforcement**:
+
+- **Default JSON Mode**: All LLM calls default to `responseFormat: { type: "json_object" }` when not specified
+- **Automatic Retry**: Failed JSON parsing triggers retry with exponential backoff
+- **Structured Output**: Providers enforce JSON responses for structured data tasks
+- **Error Handling**: `ProviderJsonParseError` distinguishes JSON parsing failures
+
 **Legacy API Functions (Deprecated)**:
 
 - `chat(options)` - Main chat interface
@@ -399,9 +407,11 @@ Events:
 
 - **Removed**: Flatmap approach (`llm.models["provider:model"]`)
 - **Removed**: Legacy helper functions (`getAvailableProviders`, `calculateCost`, etc.)
+- **Removed**: Tool-call plumbing from LLM interface
 - **Added**: Provider-grouped functions only
 - **Added**: Model registry configuration support
 - **Added**: Automatic alias metadata in events
+- **Added**: JSON enforcement by default across all providers
 
 ### 8. Provider Implementations
 
@@ -413,12 +423,24 @@ Events:
 - `isRetryableError(err)` - Determine if error is retryable
 - `sleep(ms)` - Async sleep
 - `tryParseJSON(text)` - Robust JSON parsing with fallbacks
+- `ensureJsonResponseFormat(responseFormat, parsedContent, text, provider, model)` - Enforce JSON mode with retry
+- `ProviderJsonParseError` - Custom error type for JSON parsing failures
+
+**JSON Enforcement**:
+
+All providers now enforce JSON mode by default:
+
+1. **Automatic JSON Format**: When `responseFormat` is `undefined`, providers default to JSON mode
+2. **Strict Validation**: Responses are validated and retry on JSON parse failures
+3. **Error Classification**: `ProviderJsonParseError` distinguishes JSON parsing from other errors
+4. **Retry Logic**: Automatic retry with exponential backoff for JSON parsing failures
 
 **JSON Parsing Strategy**:
 
 1. Try direct JSON.parse
 2. Strip markdown code blocks
 3. Extract first complete JSON object/array
+4. **Retry on Failure**: If JSON parsing fails, retry the request (up to maxRetries)
 
 #### OpenAI Provider (`src/providers/openai.js`)
 
@@ -432,13 +454,19 @@ Events:
 - Automatic API selection based on model
 - Fallback from Responses to Chat Completions
 - JSON schema support
-- Tool calling support
+- **JSON enforcement by default**
 - Retry with exponential backoff
+- **Removed**: Tool call options from interface
 
 **Functions**:
 
 - `openaiChat(options)` - Main unified interface
-- `queryChatGPT(system, prompt, options)` - Legacy helper
+
+**JSON Enforcement Details**:
+
+- GPT-5 models use Responses API with `text.format: { type: "json_object" }`
+- GPT-4 and earlier use Chat Completions API with `response_format: { type: "json_object" }`
+- Automatic retry on JSON parse failures with `ProviderJsonParseError`
 
 #### DeepSeek Provider (`src/providers/deepseek.js`)
 
@@ -447,8 +475,14 @@ Events:
 **Features**:
 
 - JSON response format support
+- **JSON enforcement by default**
 - Retry logic
 - Usage tracking
+
+**JSON Enforcement Details**:
+
+- Default `responseFormat: { type: "json_object" }` when not specified
+- Automatic retry on JSON parse failures with `ProviderJsonParseError`
 
 #### Provider Architecture
 
@@ -458,8 +492,8 @@ Events:
 
 - `src/llm/index.js` - Canonical LLM abstraction layer
 - `src/providers/` - Individual provider implementations
-  - `base.js` - Shared utilities
-  - `openai.js` - OpenAI implementation
+  - `base.js` - Shared utilities and JSON enforcement
+  - `openai.js` - OpenAI implementation with dual API support
   - `deepseek.js` - DeepSeek implementation
   - `anthropic.js` - Anthropic implementation
 
@@ -476,7 +510,7 @@ Events:
 **Endpoints**:
 
 - `GET /` - Serve UI HTML
-- `GET /api/state` - Get a single JSON **snapshot** of the minimal UI state required for initial client bootstrap (job list, metadata). Clients should fetch this snapshot at startup to hydrate their global state.
+- `GET /api/state` - Get a single JSON **snapshot** of minimal UI state required for initial client bootstrap (job list, metadata). Clients should fetch this snapshot at startup to hydrate their global state.
 - `GET /api/events` - Server-Sent Events (SSE) stream that emits only incremental, typed events (e.g. `job_created`, `job_updated`, `job_removed`, `status_changed`) to update the hydrated client state. SSE should not be used to send full-state dumps.
 - `GET /api/health` (optional) - Lightweight health/ping endpoint that can be used by clients or monitoring to verify server responsiveness (useful for connection health checks beyond EventSource.readyState).
 
@@ -558,7 +592,7 @@ Events:
    - ingestion
    - preProcessing
    - promptTemplating
-   - inference (LLM call)
+   - inference (LLM call with JSON enforcement)
    - parsing
    - validateStructure
    ↓
@@ -588,24 +622,26 @@ Events:
    - DeepSeek → deepseekChat()
    - Anthropic → anthropicChat()
    ↓
-4. Provider makes API call with retry logic
+4. Provider enforces JSON mode by default if not specified
    ↓
-5. Parse response (JSON if requested)
+5. Provider makes API call with retry logic
    ↓
-6. Calculate tokens and cost
+6. Parse response (JSON if requested or enforced)
    ↓
-7. LLM layer emits "llm:request:complete"
+7. Calculate tokens and cost
    ↓
-8. Task runner records metrics
+8. LLM layer emits "llm:request:complete"
    ↓
-9. Return response to task
+9. Task runner records metrics
+   ↓
+10. Return response to task
 ```
 
 ## Configuration Management System (`src/core/config.js`)
 
 **Purpose**: Centralized configuration management with layered override system
 
-**Important Note**: The global `PATHS.pipeline` field has been removed. Pipeline metadata must now be obtained from job-scoped artifacts (via `getJobPipelinePath()`) or the pipeline registry APIs. This change supports multi-pipeline architectures where each job has its own pipeline configuration.
+**Important Note**: The global `PATHS.pipeline` field has been removed. Pipeline metadata must now be obtained from job-scoped artifacts (via `getJobPipelinePath()`) or pipeline registry APIs. This change supports multi-pipeline architectures where each job has its own pipeline configuration.
 
 ### Pipeline Slug Resolution
 
@@ -615,7 +651,7 @@ Events:
 
 Pipeline slug resolution occurs through two primary mechanisms:
 
-1. **Job Metadata Propagation**: When a job is submitted, the `pipeline` slug from the seed is stored in job metadata (`job.json` and `tasks-status.json`) and propagated through the execution chain.
+1. **Job Metadata Propagation**: When a job is submitted, the `pipeline` slug from seed is stored in job metadata (`job.json` and `tasks-status.json`) and propagated through the execution chain.
 
 2. **Runtime Resolution**: The pipeline runner resolves pipeline assets at runtime using the `getPipelineConfig(slug)` function from the configuration registry.
 
@@ -1011,14 +1047,14 @@ npm run demo:all
 
 The repository no longer provides an in-memory runtime demo data module at `src/data/demoData.js`. Sample pipeline definitions and job seeds are stored under the top-level `demo/` directory as filesystem-backed examples. The demo directory is a seed environment that the server can read when explicitly configured — it is not used as a UI-side fallback.
 
-How to run the demo seeds (examples)
+How to run demo seeds (examples)
 
-- Run the server pointing at the demo folder:
+- Run server pointing at demo folder:
   - POSIX/macOS:
     PO_ROOT=demo node src/ui/server.js
   - With npm script (if available in your environment):
     PO_ROOT=demo npm run start
-- In development you can also point the test/dev server at the demo path:
+- In development you can also point to test/dev server at demo path:
   PO_ROOT=demo npm run dev
 
 Behavior expectations
@@ -1119,7 +1155,7 @@ export async function ingestion(context) {
 }
 
 export async function inference(context) {
-  // Call LLM
+  // Call LLM (JSON enforced by default)
   const response = await context.llm.deepseek.chat({...});
   return { output: response.content };
 }
@@ -1140,9 +1176,7 @@ export async function refine(context) {
   // Apply refinements
   return { refined: true };
 }
-- Hard-coded values throughout (timeouts, limits, paths)
-- No schema validation for pipeline definitions
-- **Recommendation**: Centralize configuration with validation
+```
 
 ## Strengths
 
@@ -1153,15 +1187,19 @@ export async function refine(context) {
 5. **Real-Time Monitoring**: SSE-based UI updates
 6. **Process Isolation**: Each pipeline runs in separate process
 7. **Comprehensive Testing**: Good test coverage across components
+8. **JSON Enforcement**: Consistent structured output across all LLM providers
+9. **Reliable Error Handling**: Proper error classification and retry logic
 
 ## Recommendations
 
 ### Immediate (High Priority)
 
 1. ✅ ~~Remove duplicate `src/providers/index.js`~~ (Completed)
-2. Add input validation for seed files
-3. Implement proper error recovery in orchestrator
-4. Add authentication to UI server
+2. ✅ ~~Implement JSON enforcement across all providers~~ (Completed)
+3. ✅ ~~Remove tool-call plumbing from LLM interface~~ (Completed)
+4. Add input validation for seed files
+5. Implement proper error recovery in orchestrator
+6. Add authentication to UI server
 
 ### Short Term
 
@@ -1180,5 +1218,4 @@ export async function refine(context) {
 
 ## Conclusion
 
-The Prompt Orchestration Pipeline is a well-architected system with strong foundations in functional programming and process isolation. The 11-stage pipeline with automatic refinement is particularly innovative. However, there are critical issues around code duplication, error handling, and scalability that should be addressed. The system would benefit from more robust error recovery, better observability, and preparation for distributed execution.
-```
+The Prompt Orchestration Pipeline is a well-architected system with strong foundations in functional programming and process isolation. The 11-stage pipeline with automatic refinement is particularly innovative. Recent improvements have strengthened JSON enforcement, removed legacy complexity around tool calling, and improved error handling. However, there are critical issues around code duplication, error handling, and scalability that should be addressed. The system would benefit from more robust error recovery, better observability, and preparation for distributed execution.

@@ -7,9 +7,9 @@ import {
   ProviderJsonParseError,
 } from "./base.js";
 
-export async function anthropicChat({
+export async function zhipuChat({
   messages,
-  model = "claude-3-sonnet",
+  model = "glm-4-plus",
   temperature = 0.7,
   maxTokens = 8192,
   responseFormat = "json",
@@ -17,22 +17,30 @@ export async function anthropicChat({
   stop,
   maxRetries = 3,
 }) {
-  console.log("\n[Anthropic] Starting anthropicChat call");
-  console.log("[Anthropic] Model:", model);
-  console.log("[Anthropic] Response format:", responseFormat);
+  console.log("\n[Zhipu] Starting zhipuChat call");
+  console.log("[Zhipu] Model:", model);
+  console.log("[Zhipu] Response format:", responseFormat);
 
   // Enforce JSON mode - reject calls without proper JSON responseFormat
-  ensureJsonResponseFormat(responseFormat, "Anthropic");
+  ensureJsonResponseFormat(responseFormat, "Zhipu");
+
+  if (!process.env.ZHIPU_API_KEY) {
+    throw new Error("Zhipu API key not configured");
+  }
 
   const { systemMsg, userMsg } = extractMessages(messages);
-  console.log("[Anthropic] System message length:", systemMsg.length);
-  console.log("[Anthropic] User message length:", userMsg.length);
+  console.log("[Zhipu] System message length:", systemMsg.length);
+  console.log("[Zhipu] User message length:", userMsg.length);
 
   // Build system guard for JSON enforcement
   let system = systemMsg;
 
   if (responseFormat === "json" || responseFormat?.type === "json_object") {
     system = `${systemMsg}\n\nYou must output strict JSON only with no extra text.`;
+  }
+
+  if (responseFormat?.json_schema) {
+    system = `${systemMsg}\n\nYou must output strict JSON only matching this schema (no extra text):\n${JSON.stringify(responseFormat.json_schema)}`;
   }
 
   let lastError;
@@ -42,25 +50,26 @@ export async function anthropicChat({
     }
 
     try {
-      console.log(`[Anthropic] Attempt ${attempt + 1}/${maxRetries + 1}`);
+      console.log(`[Zhipu] Attempt ${attempt + 1}/${maxRetries + 1}`);
 
       const requestBody = {
         model,
-        system,
-        messages: [{ role: "user", content: userMsg }],
+        messages: [
+          ...(system ? [{ role: "system", content: system }] : []),
+          { role: "user", content: userMsg },
+        ],
         temperature,
         max_tokens: maxTokens,
         ...(topP !== undefined ? { top_p: topP } : {}),
-        ...(stop !== undefined ? { stop_sequences: stop } : {}),
+        ...(stop !== undefined ? { stop: stop } : {}),
       };
 
-      console.log("[Anthropic] Calling Anthropic API...");
-      const response = await fetch("https://api.anthropic.com/v1/messages", {
+      console.log("[Zhipu] Calling Zhipu API...");
+      const response = await fetch("https://api.z.ai/api/coding/paas/v4", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "x-api-key": process.env.ANTHROPIC_API_KEY,
-          "anthropic-version": "2023-06-01",
+          Authorization: `Bearer ${process.env.ZHIPU_API_KEY}`,
         },
         body: JSON.stringify(requestBody),
       });
@@ -73,37 +82,33 @@ export async function anthropicChat({
       }
 
       const data = await response.json();
-      console.log("[Anthropic] Response received from Anthropic API");
+      console.log("[Zhipu] Response received from Zhipu API");
 
-      // Extract text from response.content blocks
-      const blocks = Array.isArray(data?.content) ? data.content : [];
-      const text = blocks
-        .filter((b) => b?.type === "text" && typeof b.text === "string")
-        .map((b) => b.text)
-        .join("");
-      console.log("[Anthropic] Response text length:", text.length);
+      // Extract text from response
+      const text = data?.choices?.[0]?.message?.content || "";
+      console.log("[Zhipu] Response text length:", text.length);
 
       // Parse JSON - this is required for all calls
       const parsed = tryParseJSON(text);
       if (!parsed) {
         throw new ProviderJsonParseError(
-          "Anthropic",
+          "Zhipu",
           model,
           text.substring(0, 200),
-          "Failed to parse JSON response from Anthropic API"
+          "Failed to parse JSON response from Zhipu API"
         );
       }
 
       // Normalize usage (if provided)
-      const prompt_tokens = data?.usage?.input_tokens;
-      const completion_tokens = data?.usage?.output_tokens;
+      const prompt_tokens = data?.usage?.prompt_tokens;
+      const completion_tokens = data?.usage?.completion_tokens;
       const total_tokens = (prompt_tokens ?? 0) + (completion_tokens ?? 0);
       const usage =
         prompt_tokens != null && completion_tokens != null
           ? { prompt_tokens, completion_tokens, total_tokens }
           : undefined;
 
-      console.log("[Anthropic] Returning response from Anthropic API");
+      console.log("[Zhipu] Returning response from Zhipu API");
       return {
         content: parsed,
         text,
@@ -113,13 +118,13 @@ export async function anthropicChat({
     } catch (error) {
       lastError = error;
       const msg = error?.error?.message || error?.message || "";
-      console.error("[Anthropic] Error occurred:", msg);
-      console.error("[Anthropic] Error status:", error?.status);
+      console.error("[Zhipu] Error occurred:", msg);
+      console.error("[Zhipu] Error status:", error?.status);
 
       if (error.status === 401) throw error;
 
       if (isRetryableError(error) && attempt < maxRetries) {
-        console.log("[Anthropic] Retrying due to retryable error");
+        console.log("[Zhipu] Retrying due to retryable error");
         continue;
       }
 

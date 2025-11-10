@@ -72,8 +72,8 @@ describe("Named Models API", () => {
       expect(llm.deepseek).toHaveProperty("chat");
 
       // Anthropic functions
-      expect(llm.anthropic).toHaveProperty("opus");
-      expect(llm.anthropic).toHaveProperty("sonnet");
+      expect(llm.anthropic).toHaveProperty("opus41");
+      expect(llm.anthropic).toHaveProperty("sonnet45");
     });
 
     it("should route provider/model correctly", async () => {
@@ -163,11 +163,11 @@ describe("Named Models API", () => {
           messages: [{ role: "user", content: "test" }],
           provider: "mock",
         }),
-        llm.anthropic.opus({
+        llm.anthropic.opus41({
           messages: [{ role: "user", content: "test" }],
           provider: "mock",
         }),
-        llm.anthropic.sonnet({
+        llm.anthropic.sonnet45({
           messages: [{ role: "user", content: "test" }],
           provider: "mock",
         }),

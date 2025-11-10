@@ -67,7 +67,7 @@ describe("Token Usage Persistence", () => {
 
     it("should initialize tokenUsage array if it doesn't exist", async () => {
       const taskName = "new-task";
-      const tuple = ["deepseek:deepseek-chat", 75, 25];
+      const tuple = ["deepseek:chat", 75, 25];
 
       await writeJobStatus(tempDir, (snapshot) => {
         if (!snapshot.tasks[taskName]) {

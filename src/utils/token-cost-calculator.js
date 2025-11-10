@@ -5,7 +5,7 @@
  * by cross-referencing with LLM model pricing configuration.
  */
 
-import { getConfig } from "../core/config.js";
+import { MODEL_CONFIG } from "../config/models.js";
 
 /**
  * Calculate cost for a single token usage entry
@@ -29,7 +29,7 @@ export function calculateSingleTokenCost(tokenUsageEntry, modelsConfig = null) {
   const [modelKey, inputTokens, outputTokens] = tokenUsageEntry;
 
   // Get models config if not provided
-  const config = modelsConfig || getConfig()?.llm?.models || {};
+  const config = modelsConfig || MODEL_CONFIG;
   const modelConfig = config[modelKey];
 
   if (!modelConfig) {
@@ -259,8 +259,7 @@ export function formatCostDataForAPI(costData) {
  * @returns {Object|null} Model pricing information
  */
 export function getModelPricing(modelKey) {
-  const config = getConfig()?.llm?.models || {};
-  const modelConfig = config[modelKey];
+  const modelConfig = MODEL_CONFIG[modelKey];
 
   if (!modelConfig) {
     return null;
@@ -280,10 +279,8 @@ export function getModelPricing(modelKey) {
  * @returns {Object} All model pricing information
  */
 export function getAllModelPricing() {
-  const config = getConfig()?.llm?.models || {};
-
   const pricing = {};
-  for (const [modelKey, modelConfig] of Object.entries(config)) {
+  for (const [modelKey, modelConfig] of Object.entries(MODEL_CONFIG)) {
     pricing[modelKey] = {
       modelKey,
       provider: modelConfig.provider,

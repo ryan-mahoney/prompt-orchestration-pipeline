@@ -203,8 +203,6 @@ export default function CodePage() {
   topP?: number,
   frequencyPenalty?: number,
   presencePenalty?: number,
-  tools?: Array<{type: "function", function: object}>,
-  toolChoice?: "auto" | "required" | { type: "function", function: { name: string } },
   seed?: number,
   provider?: string,
   model?: string,
@@ -340,7 +338,7 @@ export default function CodePage() {
                 </Table.Row>
                 <Table.Row>
                   <Table.RowHeaderCell>
-                    <Code size="3">Z_API_KEY=</Code>
+                    <Code size="3">ZHIPU_API_KEY=</Code>
                   </Table.RowHeaderCell>
                 </Table.Row>
               </Table.Body>

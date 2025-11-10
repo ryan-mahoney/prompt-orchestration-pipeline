@@ -171,7 +171,7 @@ export default { inference, parsing, validateStructure };
       model: "deepseek-chat",
       promptTokens: 20,
       completionTokens: 10,
-      metadata: { alias: "deepseek:deepseek-chat" },
+      metadata: { alias: "deepseek:chat" },
     };
 
     let emissionCount = 0;
@@ -228,9 +228,9 @@ export default { inference, parsing, validateStructure };
     // Verify all tokenUsage entries are present
     expect(finalStatus.tasks[taskName].tokenUsage).toHaveLength(3);
     expect(finalStatus.tasks[taskName].tokenUsage).toEqual([
-      ["deepseek:deepseek-chat", 20, 10],
-      ["deepseek:deepseek-chat", 25, 12],
-      ["deepseek:deepseek-chat", 30, 14],
+      ["deepseek:chat", 20, 10],
+      ["deepseek:chat", 25, 12],
+      ["deepseek:chat", 30, 14],
     ]);
 
     // Verify final state is preserved
