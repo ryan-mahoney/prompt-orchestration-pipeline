@@ -1,28 +1,27 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { VALID_MODEL_ALIASES } from "../src/config/models.js";
-import { defaultConfig } from "../src/core/config.js";
+import {
+  VALID_MODEL_ALIASES,
+  MODEL_CONFIG,
+  PROVIDER_FUNCTIONS,
+  FUNCTION_NAME_BY_ALIAS,
+} from "../src/config/models.js";
 import { createLLM } from "../src/llm/index.js";
-import { resetConfig } from "../src/core/config.js";
 
 describe("Model Aliases Synchronization", () => {
-  beforeEach(() => {
-    resetConfig();
-  });
-
   afterEach(() => {
     vi.restoreAllMocks();
   });
 
-  it("should have all model aliases in VALID_MODEL_ALIASES match config models keys", () => {
-    const configKeys = new Set(Object.keys(defaultConfig.llm.models));
+  it("should have all model aliases in VALID_MODEL_ALIASES match MODEL_CONFIG keys", () => {
+    const configKeys = new Set(Object.keys(MODEL_CONFIG));
     const validAliases = new Set(VALID_MODEL_ALIASES);
 
-    // Every alias in VALID_MODEL_ALIASES should exist in config
+    // Every alias in VALID_MODEL_ALIASES should exist in MODEL_CONFIG
     for (const alias of VALID_MODEL_ALIASES) {
       expect(configKeys).toContain(alias);
     }
 
-    // Every key in config models should be a valid alias
+    // Every key in MODEL_CONFIG should be a valid alias
     for (const configKey of configKeys) {
       expect(validAliases).toContain(configKey);
     }
@@ -31,38 +30,107 @@ describe("Model Aliases Synchronization", () => {
     expect(configKeys).toEqual(validAliases);
   });
 
-  it("should expose provider groups for all providers in config", () => {
+  it("should expose provider groups for all providers in MODEL_CONFIG", () => {
     // Set test environment to bypass PO_ROOT requirement
     const originalEnv = process.env.NODE_ENV;
     process.env.NODE_ENV = "test";
 
     const llm = createLLM();
     const configProviders = new Set(
-      Object.values(defaultConfig.llm.models).map((cfg) => cfg.provider)
+      Object.values(MODEL_CONFIG).map((cfg) => cfg.provider)
     );
 
-    // In test mode, createLLM returns empty object since models are empty
     // Test that it doesn't crash and returns an object with provider groups
     expect(typeof llm).toBe("object");
     expect(Object.keys(llm)).toContain("openai");
     expect(Object.keys(llm)).toContain("deepseek");
     expect(Object.keys(llm)).toContain("anthropic");
+    expect(Object.keys(llm)).toContain("zhipu");
 
     // Restore environment
     process.env.NODE_ENV = originalEnv;
   });
 
-  it("should include zai provider group in createLLM", () => {
+  it("should include zhipu provider group in createLLM", () => {
     // Set test environment to bypass PO_ROOT requirement
     const originalEnv = process.env.NODE_ENV;
     process.env.NODE_ENV = "test";
 
     const llm = createLLM();
-    // In test mode, createLLM returns provider groups from default config
+    // createLLM returns provider groups from MODEL_CONFIG
     expect(typeof llm).toBe("object");
-    expect(Object.keys(llm)).toContain("zai");
+    expect(Object.keys(llm)).toContain("zhipu");
 
     // Restore environment
     process.env.NODE_ENV = originalEnv;
+  });
+});
+
+describe("Provider Functions Path Normalization", () => {
+  it("should generate proper capitalized fullPath for Anthropic Sonnet 4.5", () => {
+    const anthropicFunctions = PROVIDER_FUNCTIONS.anthropic;
+    const sonnet45 = anthropicFunctions.find(
+      (fn) => fn.alias === "anthropic:sonnet-4-5"
+    );
+
+    expect(sonnet45).toBeDefined();
+    expect(sonnet45.fullPath).toBe("llm.anthropicSonnet45");
+    expect(sonnet45.functionName).toBe("sonnet45");
+  });
+
+  it("should generate proper capitalized fullPath for OpenAI GPT-5", () => {
+    const openaiFunctions = PROVIDER_FUNCTIONS.openai;
+    const gpt5 = openaiFunctions.find((fn) => fn.alias === "openai:gpt-5");
+
+    expect(gpt5).toBeDefined();
+    expect(gpt5.fullPath).toBe("llm.openaiGpt5");
+    expect(gpt5.functionName).toBe("gpt5");
+  });
+
+  it("should generate proper capitalized fullPath for DeepSeek Chat", () => {
+    const deepseekFunctions = PROVIDER_FUNCTIONS.deepseek;
+    const chat = deepseekFunctions.find((fn) => fn.alias === "deepseek:chat");
+
+    expect(chat).toBeDefined();
+    expect(chat.fullPath).toBe("llm.deepseekChat");
+    expect(chat.functionName).toBe("chat");
+  });
+
+  it("should generate proper capitalized fullPath for Gemini 2.5 Pro", () => {
+    const geminiFunctions = PROVIDER_FUNCTIONS.gemini;
+    const gemini25Pro = geminiFunctions.find(
+      (fn) => fn.alias === "gemini:2.5-pro"
+    );
+
+    expect(gemini25Pro).toBeDefined();
+    expect(gemini25Pro.fullPath).toBe("llm.gemini25Pro");
+    expect(gemini25Pro.functionName).toBe("25Pro");
+  });
+
+  it("should maintain FUNCTION_NAME_BY_ALIAS unchanged", () => {
+    // Verify that function names are unchanged
+    expect(FUNCTION_NAME_BY_ALIAS["anthropic:sonnet-4-5"]).toBe("sonnet45");
+    expect(FUNCTION_NAME_BY_ALIAS["openai:gpt-5"]).toBe("gpt5");
+    expect(FUNCTION_NAME_BY_ALIAS["deepseek:chat"]).toBe("chat");
+    expect(FUNCTION_NAME_BY_ALIAS["gemini:2.5-pro"]).toBe("25Pro");
+  });
+
+  it("should have no dotted style paths in PROVIDER_FUNCTIONS", () => {
+    // Ensure no dotted paths exist after the initial llm. prefix
+    for (const provider of Object.keys(PROVIDER_FUNCTIONS)) {
+      for (const fn of PROVIDER_FUNCTIONS[provider]) {
+        expect(fn.fullPath).not.toMatch(/^llm\.[^.]*\./); // No additional dots after llm.
+        expect(fn.fullPath).toMatch(/^llm\.[a-zA-Z]+[A-Za-z0-9]*$/); // Concatenated style
+      }
+    }
+  });
+
+  it("should contain all expected providers in PROVIDER_FUNCTIONS", () => {
+    const providers = Object.keys(PROVIDER_FUNCTIONS);
+    expect(providers).toContain("anthropic");
+    expect(providers).toContain("openai");
+    expect(providers).toContain("deepseek");
+    expect(providers).toContain("gemini");
+    expect(providers).toContain("zhipu");
   });
 });
