@@ -4,7 +4,7 @@ import { anthropicChat } from "../providers/anthropic.js";
 import { geminiChat } from "../providers/gemini.js";
 import { zhipuChat } from "../providers/zhipu.js";
 import { EventEmitter } from "node:events";
-import { getConfig, defaultConfig } from "../core/config.js";
+import { getConfig } from "../core/config.js";
 import {
   MODEL_CONFIG,
   DEFAULT_MODEL_BY_PROVIDER,
