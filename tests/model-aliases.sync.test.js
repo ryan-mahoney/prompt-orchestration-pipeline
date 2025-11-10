@@ -67,43 +67,43 @@ describe("Model Aliases Synchronization", () => {
 });
 
 describe("Provider Functions Path Normalization", () => {
-  it("should generate proper capitalized fullPath for Anthropic Sonnet 4.5", () => {
+  it("should generate proper dotted fullPath for Anthropic Sonnet 4.5", () => {
     const anthropicFunctions = PROVIDER_FUNCTIONS.anthropic;
     const sonnet45 = anthropicFunctions.find(
       (fn) => fn.alias === "anthropic:sonnet-4-5"
     );
 
     expect(sonnet45).toBeDefined();
-    expect(sonnet45.fullPath).toBe("llm.anthropicSonnet45");
+    expect(sonnet45.fullPath).toBe("llm.anthropic.sonnet45");
     expect(sonnet45.functionName).toBe("sonnet45");
   });
 
-  it("should generate proper capitalized fullPath for OpenAI GPT-5", () => {
+  it("should generate proper dotted fullPath for OpenAI GPT-5", () => {
     const openaiFunctions = PROVIDER_FUNCTIONS.openai;
     const gpt5 = openaiFunctions.find((fn) => fn.alias === "openai:gpt-5");
 
     expect(gpt5).toBeDefined();
-    expect(gpt5.fullPath).toBe("llm.openaiGpt5");
+    expect(gpt5.fullPath).toBe("llm.openai.gpt5");
     expect(gpt5.functionName).toBe("gpt5");
   });
 
-  it("should generate proper capitalized fullPath for DeepSeek Chat", () => {
+  it("should generate proper dotted fullPath for DeepSeek Chat", () => {
     const deepseekFunctions = PROVIDER_FUNCTIONS.deepseek;
     const chat = deepseekFunctions.find((fn) => fn.alias === "deepseek:chat");
 
     expect(chat).toBeDefined();
-    expect(chat.fullPath).toBe("llm.deepseekChat");
+    expect(chat.fullPath).toBe("llm.deepseek.chat");
     expect(chat.functionName).toBe("chat");
   });
 
-  it("should generate proper capitalized fullPath for Gemini 2.5 Pro", () => {
+  it("should generate proper dotted fullPath for Gemini 2.5 Pro", () => {
     const geminiFunctions = PROVIDER_FUNCTIONS.gemini;
     const gemini25Pro = geminiFunctions.find(
       (fn) => fn.alias === "gemini:2.5-pro"
     );
 
     expect(gemini25Pro).toBeDefined();
-    expect(gemini25Pro.fullPath).toBe("llm.gemini25Pro");
+    expect(gemini25Pro.fullPath).toBe("llm.gemini.25Pro");
     expect(gemini25Pro.functionName).toBe("25Pro");
   });
 
@@ -115,12 +115,12 @@ describe("Provider Functions Path Normalization", () => {
     expect(FUNCTION_NAME_BY_ALIAS["gemini:2.5-pro"]).toBe("25Pro");
   });
 
-  it("should have no dotted style paths in PROVIDER_FUNCTIONS", () => {
-    // Ensure no dotted paths exist after the initial llm. prefix
+  it("should have dotted style paths in PROVIDER_FUNCTIONS", () => {
+    // Ensure dotted paths exist after initial llm. prefix
     for (const provider of Object.keys(PROVIDER_FUNCTIONS)) {
       for (const fn of PROVIDER_FUNCTIONS[provider]) {
-        expect(fn.fullPath).not.toMatch(/^llm\.[^.]*\./); // No additional dots after llm.
-        expect(fn.fullPath).toMatch(/^llm\.[a-zA-Z]+[A-Za-z0-9]*$/); // Concatenated style
+        expect(fn.fullPath).toMatch(/^llm\.[^.]*\./); // Has dots after llm.
+        expect(fn.fullPath).toMatch(/^llm\.[a-zA-Z]+\.[A-Za-z0-9]*$/); // Dotted style
       }
     }
   });

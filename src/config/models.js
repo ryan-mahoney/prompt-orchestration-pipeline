@@ -211,7 +211,7 @@ export const FUNCTION_NAME_BY_ALIAS = Object.freeze(
 );
 
 /**
- * Build provider functions index with concatenated path style.
+ * Build provider functions index with dotted path style.
  * @returns {Object} Frozen provider functions index
  */
 export function buildProviderFunctionsIndex() {
@@ -225,15 +225,7 @@ export function buildProviderFunctionsIndex() {
       result[provider] = [];
     }
 
-    // Capitalize first character of functionName for proper concatenation
-    // Only capitalize if the first character is lowercase and the function name has more than one character
-    const cased =
-      functionName.length > 1 &&
-      functionName[0] >= "a" &&
-      functionName[0] <= "z"
-        ? functionName[0].toUpperCase() + functionName.slice(1)
-        : functionName;
-    const fullPath = `llm.${provider}${cased}`;
+    const fullPath = `llm.${provider}.${functionName}`;
 
     result[provider].push({
       alias,
@@ -253,7 +245,7 @@ export function buildProviderFunctionsIndex() {
 
 /**
  * Pre-built provider functions index for convenience.
- * Uses concatenated style: llm.anthropicSonnet45, llm.openaiGpt5, etc.
+ * Uses dotted style: llm.anthropic.sonnet45, llm.openai.gpt5, etc.
  */
 export const PROVIDER_FUNCTIONS = buildProviderFunctionsIndex();
 
