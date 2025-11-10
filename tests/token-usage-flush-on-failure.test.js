@@ -114,7 +114,7 @@ describe("token usage flush on failure", () => {
       model: "deepseek-chat",
       promptTokens: 30,
       completionTokens: 20,
-      metadata: { alias: "deepseek:deepseek-chat" },
+      metadata: { alias: "deepseek:chat" },
     };
 
     // Create a task that emits LLM event then fails validation
@@ -161,8 +161,8 @@ describe("token usage flush on failure", () => {
 
     // Verify both tokenUsage entries were flushed despite failure
     expect(finalStatus.tasks[taskName].tokenUsage).toEqual([
-      ["deepseek:deepseek-chat", 30, 20],
-      ["deepseek:deepseek-chat", 10, 5],
+      ["deepseek:chat", 30, 20],
+      ["deepseek:chat", 10, 5],
     ]);
 
     // Verify failure state is recorded

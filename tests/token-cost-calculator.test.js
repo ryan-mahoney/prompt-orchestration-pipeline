@@ -12,36 +12,10 @@ import {
   getAllModelPricing,
 } from "../src/utils/token-cost-calculator.js";
 
-// Mock config module
-const mockConfig = {
-  llm: {
-    models: {
-      "openai:gpt-5-mini": {
-        provider: "openai",
-        model: "gpt-5-mini",
-        tokenCostInPerMillion: 0.25,
-        tokenCostOutPerMillion: 2.0,
-      },
-      "deepseek:chat": {
-        provider: "deepseek",
-        model: "deepseek-chat",
-        tokenCostInPerMillion: 0.27,
-        tokenCostOutPerMillion: 1.1,
-      },
-    },
-  },
-  paths: {
-    root: "/mock/root",
-  },
-};
-
 describe("Token Cost Calculator", () => {
   beforeEach(() => {
     // Set PO_ROOT to avoid config errors
     process.env.PO_ROOT = "/mock/root";
-    vi.doMock("../src/core/config.js", () => ({
-      getConfig: () => mockConfig,
-    }));
   });
 
   afterEach(() => {
