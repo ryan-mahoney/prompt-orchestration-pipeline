@@ -338,7 +338,7 @@ export default function CodePage() {
                 </Table.Row>
                 <Table.Row>
                   <Table.RowHeaderCell>
-                    <Code size="3">Z_API_KEY=</Code>
+                    <Code size="3">ZHIPU_API_KEY=</Code>
                   </Table.RowHeaderCell>
                 </Table.Row>
               </Table.Body>
