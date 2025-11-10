@@ -20,6 +20,10 @@ export async function zhipuChat({
   maxRetries = 3,
   ...rest
 }) {
+  console.log("\n[Zhipu] Starting zhipuChat call");
+  console.log("[Zhipu] Model:", model);
+  console.log("[Zhipu] Response format:", responseFormat);
+
   // Enforce JSON mode - reject calls without proper JSON responseFormat
   ensureJsonResponseFormat(responseFormat, "Zhipu");
 
@@ -28,6 +32,8 @@ export async function zhipuChat({
   }
 
   const { systemMsg, userMsg } = extractMessages(messages);
+  console.log("[Zhipu] System message length:", systemMsg.length);
+  console.log("[Zhipu] User message length:", userMsg.length);
 
   // Build system guard for JSON enforcement
   let system = systemMsg;
@@ -47,6 +53,8 @@ export async function zhipuChat({
     }
 
     try {
+      console.log(`[Zhipu] Attempt ${attempt + 1}/${maxRetries + 1}`);
+
       const requestBody = {
         model,
         messages: [
@@ -59,6 +67,7 @@ export async function zhipuChat({
         ...(stop !== undefined ? { stop: stop } : {}),
       };
 
+      console.log("[Zhipu] Calling Zhipu API...");
       const response = await fetch(
         process.env.ZHIPU_BASE_URL ||
           "https://open.bigmodel.cn/api/paas/v4/chat/completions",
@@ -80,9 +89,11 @@ export async function zhipuChat({
       }
 
       const data = await response.json();
+      console.log("[Zhipu] Response received from Zhipu API");
 
       // Extract text from response
       const text = data?.choices?.[0]?.message?.content || "";
+      console.log("[Zhipu] Response text length:", text.length);
 
       // Parse JSON - this is required for all calls
       const parsed = tryParseJSON(text);
@@ -104,6 +115,7 @@ export async function zhipuChat({
           ? { prompt_tokens, completion_tokens, total_tokens }
           : undefined;
 
+      console.log("[Zhipu] Returning response from Zhipu API");
       return {
         content: parsed,
         text,
@@ -112,10 +124,14 @@ export async function zhipuChat({
       };
     } catch (error) {
       lastError = error;
+      const msg = error?.error?.message || error?.message || "";
+      console.error("[Zhipu] Error occurred:", msg);
+      console.error("[Zhipu] Error status:", error?.status);
 
       if (error.status === 401) throw error;
 
       if (isRetryableError(error) && attempt < maxRetries) {
+        console.log("[Zhipu] Retrying due to retryable error");
         continue;
       }
 
@@ -124,18 +140,4 @@ export async function zhipuChat({
   }
 
   throw lastError || new Error(`Failed after ${maxRetries + 1} attempts`);
-}
-
-// Keep backward compatibility
-export async function queryZhipu(system, prompt, model = "glm-4-plus") {
-  const response = await zhipuChat({
-    messages: [
-      { role: "system", content: system },
-      { role: "user", content: prompt },
-    ],
-    model,
-    responseFormat: "json",
-  });
-
-  return response.content;
 }
