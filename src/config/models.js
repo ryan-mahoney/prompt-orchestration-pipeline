@@ -211,12 +211,10 @@ export const FUNCTION_NAME_BY_ALIAS = Object.freeze(
 );
 
 /**
- * Build provider functions index with specified path style.
- * @param {Object} options - Options object
- * @param {"dotted"|"concat"} options.fullPathStyle - Path style for fullPath property
+ * Build provider functions index with concatenated path style.
  * @returns {Object} Frozen provider functions index
  */
-export function buildProviderFunctionsIndex({ fullPathStyle }) {
+export function buildProviderFunctionsIndex() {
   const result = {};
 
   for (const [alias, config] of Object.entries(MODEL_CONFIG)) {
@@ -227,14 +225,15 @@ export function buildProviderFunctionsIndex({ fullPathStyle }) {
       result[provider] = [];
     }
 
-    let fullPath;
-    if (fullPathStyle === "dotted") {
-      fullPath = `llm.${provider}.${functionName}`;
-    } else if (fullPathStyle === "concat") {
-      fullPath = `llm.${provider}${functionName}`;
-    } else {
-      throw new Error(`Invalid fullPathStyle: ${fullPathStyle}`);
-    }
+    // Capitalize first character of functionName for proper concatenation
+    // Only capitalize if the first character is lowercase and the function name has more than one character
+    const cased =
+      functionName.length > 1 &&
+      functionName[0] >= "a" &&
+      functionName[0] <= "z"
+        ? functionName[0].toUpperCase() + functionName.slice(1)
+        : functionName;
+    const fullPath = `llm.${provider}${cased}`;
 
     result[provider].push({
       alias,
@@ -253,17 +252,10 @@ export function buildProviderFunctionsIndex({ fullPathStyle }) {
 }
 
 /**
- * Pre-built provider functions indices for convenience.
- * DOTTED: Runtime object property shape (llm.gemini.25Pro)
- * CONCAT: Display style ensuring llm.gemini25Pro
+ * Pre-built provider functions index for convenience.
+ * Uses concatenated style: llm.anthropicSonnet45, llm.openaiGpt5, etc.
  */
-export const PROVIDER_FUNCTIONS_DOTTED = buildProviderFunctionsIndex({
-  fullPathStyle: "dotted",
-});
-
-export const PROVIDER_FUNCTIONS_CONCAT = buildProviderFunctionsIndex({
-  fullPathStyle: "concat",
-});
+export const PROVIDER_FUNCTIONS = buildProviderFunctionsIndex();
 
 /**
  * Extract provider name from model alias.
