@@ -36,9 +36,6 @@ describe("Model Aliases Synchronization", () => {
     process.env.NODE_ENV = "test";
 
     const llm = createLLM();
-    const configProviders = new Set(
-      Object.values(MODEL_CONFIG).map((cfg) => cfg.provider)
-    );
 
     // Test that it doesn't crash and returns an object with provider groups
     expect(typeof llm).toBe("object");
