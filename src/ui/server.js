@@ -1872,11 +1872,6 @@ async function startServer({ dataDir, port: customPort }) {
     const { initPATHS } = await import("./config-bridge.node.js");
     initPATHS(dataDir);
 
-    // Set the data directory environment variable
-    if (dataDir) {
-      process.env.PO_ROOT = dataDir;
-    }
-
     // Require PO_ROOT for non-test runs
     if (!process.env.PO_ROOT) {
       if (process.env.NODE_ENV !== "test") {

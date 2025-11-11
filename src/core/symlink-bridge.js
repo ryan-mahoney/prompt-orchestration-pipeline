@@ -4,9 +4,8 @@ import { ensureSymlink } from "./symlink-utils.js";
 /**
  * Creates a taskDir symlink bridge to ensure deterministic module resolution.
  *
- * This function creates three symlinks in the task directory:
- * - taskDir/node_modules -> {poRoot}/node_modules (for bare package specifiers)
- * - taskDir/project -> {poRoot} (optional convenience for absolute project paths)
+ * This function creates two symlinks in the task directory:
+ * - taskDir/node_modules -> adjacent to PO_ROOT/node_modules (for bare package specifiers)
  * - taskDir/_task_root -> dirname(taskModulePath) (for relative imports)
  *
  * @param {Object} options - Configuration options
@@ -31,14 +30,13 @@ export async function ensureTaskSymlinkBridge({
     fs.mkdir(normalizedTaskDir, { recursive: true })
   );
 
-  // Create symlink for node_modules -> {poRoot}/node_modules
+  // Create symlink for node_modules -> adjacent to PO_ROOT
   const nodeModulesLink = path.join(normalizedTaskDir, "node_modules");
-  const nodeModulesTarget = path.join(normalizedPoRoot, "node_modules");
+  const nodeModulesTarget = path.join(
+    path.resolve(normalizedPoRoot, ".."),
+    "node_modules"
+  );
   await ensureSymlink(nodeModulesLink, nodeModulesTarget, "dir");
-
-  // Create symlink for project -> {poRoot}
-  const projectLink = path.join(normalizedTaskDir, "project");
-  await ensureSymlink(projectLink, normalizedPoRoot, "dir");
 
   // Create symlink for _task_root -> dirname(taskModulePath)
   const taskRootLink = path.join(normalizedTaskDir, "_task_root");

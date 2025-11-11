@@ -257,12 +257,6 @@ async function appendLine(file, line) {
   await fs.appendFile(file, line);
 }
 
-async function atomicWrite(file, data) {
-  const tmp = file + ".tmp";
-  await fs.writeFile(tmp, data);
-  await fs.rename(tmp, file);
-}
-
 function normalizeError(e) {
   // If it's already a structured error object with a message string, pass it through
   if (e && typeof e === "object" && typeof e.message === "string") {
