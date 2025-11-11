@@ -37,7 +37,11 @@ export function start(paths, onChange, options = {}) {
 
   // Initialize chokidar watcher
   const watcher = chokidar.watch(paths, {
-    ignored: /(^|[\/\\])(\.git|node_modules|dist)([\/\\]|$)/,
+    ignored: [
+      /(^|[\/\\])(\.git|node_modules|dist)([\/\\]|$)/,
+      /pipeline-data\/[^/]+\/[^/]+\/tasks\/[^/]+\/_task_root([\/\\]|$)/,
+    ],
+    followSymlinks: false,
     persistent: true,
     ignoreInitial: true,
   });
