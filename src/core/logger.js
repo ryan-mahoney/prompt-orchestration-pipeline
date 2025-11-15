@@ -155,8 +155,17 @@ export function createLogger(componentName, context = {}) {
     /**
      * Console group management
      * @param {string} label - Group label
+     * @param {*} data - Optional data to log
      */
-    group: (label) => console.group(`${prefix} ${label}`),
+    group: (label, data = null) => {
+      console.group(`${prefix} ${label}`);
+      if (data !== null && data !== undefined) {
+        const formattedData = formatData(data);
+        if (formattedData !== null) {
+          console.log(formattedData);
+        }
+      }
+    },
 
     /**
      * End console group
