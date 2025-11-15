@@ -206,8 +206,6 @@ export function createTaskFileIO({ workDir, taskName, getStage, statusPath }) {
      */
     async writeArtifact(name, content, options = {}) {
       // Validate artifact filename doesn't follow log naming convention (to avoid confusion)
-      if (validateLogName(name)) {
-        throw new Error(
           `Artifact filename "${name}" should not follow log naming convention. Use a different name.`
         );
       }
@@ -231,8 +229,6 @@ export function createTaskFileIO({ workDir, taskName, getStage, statusPath }) {
      */
     async writeLog(name, content, options = {}) {
       // Validate log filename follows standardized naming convention
-      if (!validateLogName(name)) {
-        throw new Error(
           `Invalid log filename "${name}". Must follow format {taskName}-{stage}-{event}.{ext}`
         );
       }
@@ -256,8 +252,6 @@ export function createTaskFileIO({ workDir, taskName, getStage, statusPath }) {
      */
     async writeTmp(name, content, options = {}) {
       // Validate temporary filename doesn't follow log naming convention (to avoid confusion)
-      if (validateLogName(name)) {
-        throw new Error(
           `Temporary filename "${name}" should not follow log naming convention. Use a different name.`
         );
       }
@@ -315,8 +309,6 @@ export function createTaskFileIO({ workDir, taskName, getStage, statusPath }) {
      * @param {string} options.mode - "replace" (default) or "append"
      */
     writeLogSync(name, content, options = {}) {
-      if (!validateLogName(name)) {
-        throw new Error(
           `Invalid log filename "${name}". Must follow format {taskName}-{stage}-{event}.{ext}`
         );
       }
