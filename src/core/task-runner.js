@@ -855,8 +855,41 @@ function toAbsFileURL(p) {
 }
 
 function normalizeError(err) {
-  if (err instanceof Error)
+  if (err instanceof Error) {
     return { name: err.name, message: err.message, stack: err.stack };
+  }
+
+  // Handle plain object errors (like those from HTTP responses)
+  if (typeof err === "object" && err !== null) {
+    let message = "Unknown error";
+    if (typeof err?.message === "string") {
+      message = err.message;
+    } else if (typeof err?.error?.message === "string") {
+      message = err.error.message;
+    } else if (typeof err?.error === "string") {
+      message = err.error;
+    }
+    const result = { message };
+
+    // Include additional context if available
+    if (err.status) result.status = err.status;
+    if (err.code) result.code = err.code;
+    if (err.error) {
+      if (typeof err.error === "string") {
+        result.error = err.error;
+      } else if (typeof err.error === "object" && err.error !== null) {
+        // Try to extract a message property, else serialize the object
+        result.error = err.error.message
+          ? err.error.message
+          : JSON.stringify(err.error);
+      } else {
+        result.error = String(err.error);
+      }
+    }
+
+    return result;
+  }
+
   return { message: String(err) };
 }
 
