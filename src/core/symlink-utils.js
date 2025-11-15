@@ -1,5 +1,8 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { createLogger } from "./logger.js";
+
+const logger = createLogger("SymlinkUtils");
 
 /**
  * Creates an idempotent symlink, safely handling existing files/symlinks.
@@ -87,8 +90,9 @@ export async function cleanupTaskSymlinks(completedJobDir) {
     }
   } catch (error) {
     // Log but don't fail - cleanup is optional
-    console.warn(
-      `Warning: Failed to cleanup task symlinks in ${completedJobDir}: ${error.message}`
-    );
+    logger.warn("Failed to cleanup task symlinks", {
+      directory: completedJobDir,
+      error: error.message,
+    });
   }
 }
