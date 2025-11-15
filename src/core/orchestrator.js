@@ -161,6 +161,7 @@ export async function startOrchestrator(opts) {
       taskName: jobId,
       getStage: () => "orchestrator",
       statusPath,
+      trackTaskFiles: false,
     });
 
     // Write job start log
