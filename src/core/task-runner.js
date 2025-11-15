@@ -4,12 +4,13 @@ import fs from "fs";
 import { createLLM, getLLMEvents } from "../llm/index.js";
 import { loadFreshModule } from "./module-loader.js";
 import { loadEnvironment } from "./environment.js";
-import { createTaskFileIO } from "./file-io.js";
+import { createTaskFileIO, generateLogName } from "./file-io.js";
 import { writeJobStatus } from "./status-writer.js";
 import { computeDeterministicProgress } from "./progress.js";
 import { TaskState } from "../config/statuses.js";
 import { validateWithSchema } from "../api/validators/json.js";
 import { createJobLogger } from "./logger.js";
+import { LogEvent, LogFileExtension } from "../config/log-events.js";
 
 /**
  * Derives model key and token counts from LLM metric event.
@@ -67,13 +68,13 @@ function assertStageResult(stageName, result) {
     );
   }
 
-  if (!result.hasOwnProperty("output")) {
+  if (!Object.prototype.hasOwnProperty.call(result, "output")) {
     throw new Error(
       `Stage "${stageName}" result missing required property: output`
     );
   }
 
-  if (!result.hasOwnProperty("flags")) {
+  if (!Object.prototype.hasOwnProperty.call(result, "flags")) {
     throw new Error(
       `Stage "${stageName}" result missing required property: flags`
     );
@@ -507,7 +508,11 @@ export async function runPipeline(modulePath, initialContext = {}) {
     }
 
     // Add console output capture before stage execution using IO
-    const logName = `stage-${stageName}.log`;
+    const logName = generateLogName(
+      context.meta.taskName,
+      stageName,
+      LogEvent.START
+    );
     const logPath = path.join(context.meta.workDir, "files", "logs", logName);
     console.debug("[task-runner] stage log path resolution via IO", {
       stage: stageName,
@@ -593,7 +598,12 @@ export async function runPipeline(modulePath, initialContext = {}) {
       },
     };
     await context.io.writeLog(
-      `stage-${stageName}-context.json`,
+      generateLogName(
+        context.meta.taskName,
+        stageName,
+        LogEvent.CONTEXT,
+        LogFileExtension.JSON
+      ),
       JSON.stringify(snapshot, null, 2),
       { mode: "replace" }
     );
@@ -696,6 +706,18 @@ export async function runPipeline(modulePath, initialContext = {}) {
         }
       }
 
+      // Add explicit completion log after stage completion
+      const completeLogName = generateLogName(
+        context.meta.taskName,
+        stageName,
+        LogEvent.COMPLETE
+      );
+      await context.io.writeLog(
+        completeLogName,
+        `Stage ${stageName} completed at ${new Date().toISOString()}\n`,
+        { mode: "replace" }
+      );
+
       const ms = +(performance.now() - start).toFixed(2);
       logger.log("Stage completed successfully", {
         stage: stageName,
@@ -729,9 +751,17 @@ export async function runPipeline(modulePath, initialContext = {}) {
           context.meta.workDir,
           "files",
           "logs",
-          `stage-${stageName}.log`
+          generateLogName(context.meta.taskName, stageName, LogEvent.START)
         ),
-        snapshotPath: path.join(logsDir, `stage-${stageName}-context.json`),
+        snapshotPath: path.join(
+          logsDir,
+          generateLogName(
+            context.meta.taskName,
+            stageName,
+            LogEvent.CONTEXT,
+            LogFileExtension.JSON
+          )
+        ),
         dataHasSeed: !!context.data?.seed,
         seedHasData: context.data?.seed?.data !== undefined,
         flagsKeys: Object.keys(context.flags || {}),
