@@ -6,7 +6,7 @@ import { spawn as defaultSpawn } from "node:child_process";
 import { getConfig, getPipelineConfig } from "./config.js";
 import { createLogger } from "./logger.js";
 import { createTaskFileIO, generateLogName } from "./file-io.js";
-import { LogEvent, LogFileExtension } from "../config/log-events.js";
+import { LogEvent } from "../config/log-events.js";
 
 /**
  * Resolve canonical pipeline directories for the given data root.
