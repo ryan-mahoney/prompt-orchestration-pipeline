@@ -255,6 +255,12 @@ export async function startOrchestrator(opts) {
 }
 
 /**
+ * @typedef {Object} TaskFileIO
+ * @property {(name: string, content: string, options?: { mode?: 'append'|'replace' }) => Promise<string>} writeLog
+ * @property {(name: string, content: string, options?: { mode?: 'append'|'replace' }) => string} writeLogSync
+ */
+
+/**
  * Spawn a pipeline runner. In testMode we still call spawn() so tests can assert,
  * but we resolve immediately and let tests drive the lifecycle (emit 'exit', etc.).
  *
@@ -265,6 +271,7 @@ export async function startOrchestrator(opts) {
  * @param {typeof defaultSpawn} spawn
  * @param {boolean} testMode
  * @param {Object} seed - Seed data containing pipeline information
+ * @param {TaskFileIO} fileIO - Task-scoped file I/O interface for writing logs
  */
 function spawnRunner(
   logger,
