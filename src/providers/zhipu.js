@@ -65,20 +65,39 @@ export async function zhipuChat({
       };
 
       console.log("[Zhipu] Calling Zhipu API...");
-      const response = await fetch("https://api.z.ai/api/coding/paas/v4", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${process.env.ZHIPU_API_KEY}`,
-        },
-        body: JSON.stringify(requestBody),
-      });
+      const response = await fetch(
+        "https://api.z.ai/api/paas/v4/chat/completions",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${process.env.ZHIPU_API_KEY}`,
+          },
+          body: JSON.stringify(requestBody),
+        }
+      );
 
       if (!response.ok) {
-        const error = await response
-          .json()
-          .catch(() => ({ error: response.statusText }));
-        throw { status: response.status, ...error };
+        let errorMessage;
+        try {
+          const errorData = await response.json();
+          errorMessage =
+            errorData?.error?.message ||
+            errorData?.message ||
+            response.statusText ||
+            "Unknown error";
+        } catch {
+          // If JSON parsing fails, try to get text response
+          try {
+            errorMessage = await response.text();
+          } catch {
+            errorMessage = response.statusText || "Unknown error";
+          }
+        }
+
+        const error = new Error(errorMessage);
+        error.status = response.status;
+        throw error;
       }
 
       const data = await response.json();
@@ -117,7 +136,7 @@ export async function zhipuChat({
       };
     } catch (error) {
       lastError = error;
-      const msg = error?.error?.message || error?.message || "";
+      const msg = error?.message || error?.toString() || "Unknown error";
       console.error("[Zhipu] Error occurred:", msg);
       console.error("[Zhipu] Error status:", error?.status);
 
