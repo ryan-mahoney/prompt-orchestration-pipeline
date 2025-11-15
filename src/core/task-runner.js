@@ -868,7 +868,18 @@ function normalizeError(err) {
     // Include additional context if available
     if (err.status) result.status = err.status;
     if (err.code) result.code = err.code;
-    if (err.error) result.error = err.error;
+    if (err.error) {
+      if (typeof err.error === "string") {
+        result.error = err.error;
+      } else if (typeof err.error === "object" && err.error !== null) {
+        // Try to extract a message property, else serialize the object
+        result.error = err.error.message
+          ? err.error.message
+          : JSON.stringify(err.error);
+      } else {
+        result.error = String(err.error);
+      }
+    }
 
     return result;
   }
