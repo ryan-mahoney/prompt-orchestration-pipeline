@@ -84,7 +84,8 @@ export async function zhipuChat({
           errorMessage =
             errorData?.error?.message ||
             errorData?.message ||
-            response.statusText;
+            response.statusText ||
+            "Unknown error";
         } catch {
           // If JSON parsing fails, try to get text response
           try {
