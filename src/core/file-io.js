@@ -57,7 +57,7 @@ export function createTaskFileIO({ workDir, taskName, getStage, statusPath }) {
           snapshot.logMetadata ||= {};
           snapshot.tasks[taskName].logMetadata ||= {};
 
-          const metadataKey = `${parsed.task}-${parsed.stage}-${parsed.event}`;
+          const metadataKey = `${parsed.taskName}-${parsed.stage}-${parsed.event}`;
           const metadata = {
             fileName,
             taskName: parsed.taskName,
