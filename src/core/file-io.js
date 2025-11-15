@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { writeJobStatus } from "./status-writer.js";
-import { LogEvent, LogFileExtension } from "../config/log-events.js";
+import { LogFileExtension } from "../config/log-events.js";
 
 /**
  * Creates a task-scoped file I/O interface that manages file operations
