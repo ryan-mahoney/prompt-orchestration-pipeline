@@ -8,8 +8,9 @@ import { writeJobStatus } from "./status-writer.js";
 import { TaskState } from "../config/statuses.js";
 import { ensureTaskSymlinkBridge } from "./symlink-bridge.js";
 import { cleanupTaskSymlinks } from "./symlink-utils.js";
-import { createTaskFileIO } from "./file-io.js";
+import { createTaskFileIO, generateLogName } from "./file-io.js";
 import { createJobLogger } from "./logger.js";
+import { LogEvent, LogFileExtension } from "../config/log-events.js";
 
 const ROOT = process.env.PO_ROOT || process.cwd();
 const DATA_DIR = path.join(ROOT, process.env.PO_DATA_DIR || "pipeline-data");
@@ -162,7 +163,12 @@ for (const taskName of pipeline.tasks) {
       // Persist execution-logs.json and failure-details.json on task failure via IO
       if (result.logs) {
         await fileIO.writeLog(
-          "execution-logs.json",
+          generateLogName(
+            taskName,
+            "pipeline",
+            LogEvent.EXECUTION_LOGS,
+            LogFileExtension.JSON
+          ),
           JSON.stringify(result.logs, null, 2),
           { mode: "replace" }
         );
@@ -175,7 +181,12 @@ for (const taskName of pipeline.tasks) {
         refinementAttempts: result.refinementAttempts || 0,
       };
       await fileIO.writeLog(
-        "failure-details.json",
+        generateLogName(
+          taskName,
+          "pipeline",
+          LogEvent.FAILURE_DETAILS,
+          LogFileExtension.JSON
+        ),
         JSON.stringify(failureDetails, null, 2),
         { mode: "replace" }
       );
@@ -218,7 +229,12 @@ for (const taskName of pipeline.tasks) {
 
     if (result.logs) {
       await fileIO.writeLog(
-        "execution-logs.json",
+        generateLogName(
+          taskName,
+          "pipeline",
+          LogEvent.EXECUTION_LOGS,
+          LogFileExtension.JSON
+        ),
         JSON.stringify(result.logs, null, 2),
         { mode: "replace" }
       );
