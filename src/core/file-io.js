@@ -29,7 +29,13 @@ function ensureDirSync(dir) {
   fsSync.mkdir(dir, { recursive: true });
 }
 
-export function createTaskFileIO({ workDir, taskName, getStage, statusPath }) {
+export function createTaskFileIO({
+  workDir,
+  taskName,
+  getStage,
+  statusPath,
+  trackTaskFiles = true,
+}) {
   const taskDir = path.join(workDir, "tasks", taskName);
 
   // New directory structure: {workDir}/files/{type}
@@ -45,41 +51,20 @@ export function createTaskFileIO({ workDir, taskName, getStage, statusPath }) {
     const jobDir = path.dirname(statusPath);
     await writeJobStatus(jobDir, (snapshot) => {
       snapshot.files ||= { artifacts: [], logs: [], tmp: [] };
-      snapshot.tasks ||= {};
-      snapshot.tasks[taskName] ||= {};
-      snapshot.tasks[taskName].files ||= { artifacts: [], logs: [], tmp: [] };
 
       const jobArray = snapshot.files[fileType];
       if (!jobArray.includes(fileName)) {
         jobArray.push(fileName);
       }
 
-      const taskArray = snapshot.tasks[taskName].files[fileType];
-      if (!taskArray.includes(fileName)) {
-        taskArray.push(fileName);
-      }
+      if (trackTaskFiles) {
+        snapshot.tasks ||= {};
+        snapshot.tasks[taskName] ||= {};
+        snapshot.tasks[taskName].files ||= { artifacts: [], logs: [], tmp: [] };
 
-      // Extract metadata from log filenames for enhanced tracking
-      if (fileType === "logs") {
-        const parsed = parseLogName(fileName);
-        if (parsed) {
-          // Ensure log metadata exists
-          snapshot.logMetadata ||= {};
-          snapshot.tasks[taskName].logMetadata ||= {};
-
-          const metadataKey = `${parsed.taskName}-${parsed.stage}-${parsed.event}`;
-          const metadata = {
-            fileName,
-            taskName: parsed.taskName,
-            stage: parsed.stage,
-            event: parsed.event,
-            extension: parsed.ext,
-            parsedAt: new Date().toISOString(),
-          };
-
-          // Store metadata at both job and task level
-          snapshot.logMetadata[metadataKey] = metadata;
-          snapshot.tasks[taskName].logMetadata[metadataKey] = metadata;
+        const taskArray = snapshot.tasks[taskName].files[fileType];
+        if (!taskArray.includes(fileName)) {
+          taskArray.push(fileName);
         }
       }
 
@@ -156,38 +141,20 @@ export function createTaskFileIO({ workDir, taskName, getStage, statusPath }) {
     const jobDir = path.dirname(statusPath);
     writeJobStatusSync(jobDir, (snapshot) => {
       snapshot.files ||= { artifacts: [], logs: [], tmp: [] };
-      snapshot.tasks ||= {};
-      snapshot.tasks[taskName] ||= {};
-      snapshot.tasks[taskName].files ||= { artifacts: [], logs: [], tmp: [] };
 
       const jobArray = snapshot.files[fileType];
       if (!jobArray.includes(fileName)) {
         jobArray.push(fileName);
       }
 
-      const taskArray = snapshot.tasks[taskName].files[fileType];
-      if (!taskArray.includes(fileName)) {
-        taskArray.push(fileName);
-      }
+      if (trackTaskFiles) {
+        snapshot.tasks ||= {};
+        snapshot.tasks[taskName] ||= {};
+        snapshot.tasks[taskName].files ||= { artifacts: [], logs: [], tmp: [] };
 
-      if (fileType === "logs") {
-        const parsed = parseLogName(fileName);
-        if (parsed) {
-          snapshot.logMetadata ||= {};
-          snapshot.tasks[taskName].logMetadata ||= {};
-
-          const metadataKey = `${parsed.taskName}-${parsed.stage}-${parsed.event}`;
-          const metadata = {
-            fileName,
-            taskName: parsed.taskName,
-            stage: parsed.stage,
-            event: parsed.event,
-            extension: parsed.ext,
-            parsedAt: new Date().toISOString(),
-          };
-
-          snapshot.logMetadata[metadataKey] = metadata;
-          snapshot.tasks[taskName].logMetadata[metadataKey] = metadata;
+        const taskArray = snapshot.tasks[taskName].files[fileType];
+        if (!taskArray.includes(fileName)) {
+          taskArray.push(fileName);
         }
       }
 
