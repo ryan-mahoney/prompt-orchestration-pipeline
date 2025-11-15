@@ -9,6 +9,7 @@ import { writeJobStatus } from "./status-writer.js";
 import { computeDeterministicProgress } from "./progress.js";
 import { TaskState } from "../config/statuses.js";
 import { validateWithSchema } from "../api/validators/json.js";
+import { createJobLogger } from "./logger.js";
 
 /**
  * Derives model key and token counts from LLM metric event.
@@ -341,6 +342,11 @@ const PIPELINE_STAGES = [
  * Runs a pipeline by loading a module that exports functions keyed by stage name.
  */
 export async function runPipeline(modulePath, initialContext = {}) {
+  const logger = createJobLogger(
+    "TaskRunner",
+    initialContext.jobId || "unknown"
+  );
+
   if (!initialContext.envLoaded) {
     await loadEnvironment();
     initialContext.envLoaded = true;
@@ -477,6 +483,10 @@ export async function runPipeline(modulePath, initialContext = {}) {
 
     // Skip stages when skipIf predicate returns true
     if (stageConfig.skipIf && stageConfig.skipIf(context.flags)) {
+      logger.log("Skipping stage", {
+        stage: stageName,
+        reason: "skipIf predicate returned true",
+      });
       context.logs.push({
         stage: stageName,
         action: "skipped",
@@ -488,6 +498,7 @@ export async function runPipeline(modulePath, initialContext = {}) {
 
     // Skip if handler is not available (not implemented)
     if (typeof stageHandler !== "function") {
+      logger.log("Stage not available, skipping", { stage: stageName });
       logs.push({
         stage: stageName,
         skipped: true,
@@ -510,6 +521,11 @@ export async function runPipeline(modulePath, initialContext = {}) {
     // Set current stage before execution
     context.currentStage = stageName;
 
+    logger.log("Starting stage execution", {
+      stage: stageName,
+      taskName: context.meta.taskName,
+    });
+
     // Write stage start status using writeJobStatus
     if (context.meta.workDir && context.meta.taskName) {
       try {
@@ -527,7 +543,10 @@ export async function runPipeline(modulePath, initialContext = {}) {
         });
       } catch (error) {
         // Don't fail the pipeline if status write fails
-        console.warn(`Failed to write stage start status: ${error.message}`);
+        logger.error("Failed to write stage start status", {
+          stage: stageName,
+          error: error.message,
+        });
       }
     }
 
@@ -678,6 +697,12 @@ export async function runPipeline(modulePath, initialContext = {}) {
       }
 
       const ms = +(performance.now() - start).toFixed(2);
+      logger.log("Stage completed successfully", {
+        stage: stageName,
+        executionTimeMs: ms,
+        outputType: typeof stageResult.output,
+        flagKeys: Object.keys(stageResult.flags),
+      });
       logs.push({
         stage: stageName,
         ok: true,
@@ -687,6 +712,14 @@ export async function runPipeline(modulePath, initialContext = {}) {
       console.error(`Stage ${stageName} failed:`, error);
       const ms = +(performance.now() - start).toFixed(2);
       const errInfo = normalizeError(error);
+
+      logger.error("Stage execution failed", {
+        stage: stageName,
+        taskName: context.meta.taskName,
+        executionTimeMs: ms,
+        error: errInfo,
+        previousStage: lastExecutedStageName,
+      });
 
       // Attach debug metadata to the error envelope for richer diagnostics
       errInfo.debug = {
@@ -756,6 +789,13 @@ export async function runPipeline(modulePath, initialContext = {}) {
 
   llmEvents.off("llm:request:complete", onLLMComplete);
 
+  logger.log("Pipeline completed successfully", {
+    taskName: context.meta.taskName,
+    totalStages: PIPELINE_STAGES.length,
+    executedStages: logs.filter((l) => l.ok).length,
+    llmMetricsCount: llmMetrics.length,
+  });
+
   // Write final status with currentStage: null to indicate completion
   if (context.meta.workDir && context.meta.taskName) {
     try {
@@ -775,7 +815,10 @@ export async function runPipeline(modulePath, initialContext = {}) {
       });
     } catch (error) {
       // Don't fail the pipeline if final status write fails
-      console.warn(`Failed to write final status: ${error.message}`);
+      logger.error("Failed to write final status", {
+        taskName: context.meta.taskName,
+        error: error.message,
+      });
     }
   }
 

@@ -9,6 +9,7 @@ import { TaskState } from "../config/statuses.js";
 import { ensureTaskSymlinkBridge } from "./symlink-bridge.js";
 import { cleanupTaskSymlinks } from "./symlink-utils.js";
 import { createTaskFileIO } from "./file-io.js";
+import { createJobLogger } from "./logger.js";
 
 const ROOT = process.env.PO_ROOT || process.cwd();
 const DATA_DIR = path.join(ROOT, process.env.PO_DATA_DIR || "pipeline-data");
@@ -19,6 +20,8 @@ const COMPLETE_DIR =
 
 const jobId = process.argv[2];
 if (!jobId) throw new Error("runner requires jobId as argument");
+
+const logger = createJobLogger("PipelineRunner", jobId);
 
 const workDir = path.join(CURRENT_DIR, jobId);
 
@@ -66,12 +69,23 @@ const seed = JSON.parse(
 
 let pipelineArtifacts = {};
 
+logger.group("Pipeline execution", {
+  jobId,
+  pipelineSlug,
+  totalTasks: pipeline.tasks.length,
+  startFromTask: startFromTask || null,
+});
+
 for (const taskName of pipeline.tasks) {
   // Skip tasks before startFromTask when targeting a specific restart point
   if (
     startFromTask &&
     pipeline.tasks.indexOf(taskName) < pipeline.tasks.indexOf(startFromTask)
   ) {
+    logger.log("Skipping task before restart point", {
+      taskName,
+      startFromTask,
+    });
     continue;
   }
 
@@ -80,10 +94,14 @@ for (const taskName of pipeline.tasks) {
       const outputPath = path.join(workDir, "tasks", taskName, "output.json");
       const output = JSON.parse(await fs.readFile(outputPath, "utf8"));
       pipelineArtifacts[taskName] = output;
-    } catch {}
+      logger.log("Task already completed", { taskName });
+    } catch {
+      logger.warn("Failed to read completed task output", { taskName });
+    }
     continue;
   }
 
+  logger.log("Starting task", { taskName });
   await updateStatus(taskName, {
     state: TaskState.RUNNING,
     startedAt: now(),
@@ -130,9 +148,17 @@ for (const taskName of pipeline.tasks) {
       statusPath: tasksStatusPath,
     });
 
+    logger.log("Running task", { taskName, modulePath: absoluteModulePath });
     const result = await runPipeline(relocatedEntry, ctx);
 
     if (!result.ok) {
+      logger.error("Task failed", {
+        taskName,
+        failedStage: result.failedStage,
+        error: result.error,
+        refinementAttempts: result.refinementAttempts || 0,
+      });
+
       // Persist execution-logs.json and failure-details.json on task failure via IO
       if (result.logs) {
         await fileIO.writeLog(
@@ -180,6 +206,13 @@ for (const taskName of pipeline.tasks) {
       process.exit(1);
     }
 
+    logger.log("Task completed successfully", {
+      taskName,
+      executionTimeMs:
+        result.logs?.reduce((total, log) => total + (log.ms || 0), 0) || 0,
+      refinementAttempts: result.refinementAttempts || 0,
+    });
+
     // The file I/O system automatically handles writing outputs and updating tasks-status.json
     // No need to manually write output.json or enumerate artifacts
 
@@ -211,6 +244,20 @@ for (const taskName of pipeline.tasks) {
 
 await fs.mkdir(COMPLETE_DIR, { recursive: true });
 const dest = path.join(COMPLETE_DIR, jobId);
+
+logger.log("Pipeline completed", {
+  jobId,
+  totalExecutionTime: Object.values(status.tasks).reduce(
+    (total, t) => total + (t.executionTimeMs || 0),
+    0
+  ),
+  totalRefinementAttempts: Object.values(status.tasks).reduce(
+    (total, t) => total + (t.refinementAttempts || 0),
+    0
+  ),
+  finalArtifacts: Object.keys(pipelineArtifacts),
+});
+
 await fs.rename(workDir, dest);
 await appendLine(
   path.join(COMPLETE_DIR, "runs.jsonl"),
@@ -232,6 +279,8 @@ await appendLine(
 
 // Clean up task symlinks to avoid dangling links in archives
 await cleanupTaskSymlinks(dest);
+
+logger.groupEnd();
 
 function now() {
   return new Date().toISOString();

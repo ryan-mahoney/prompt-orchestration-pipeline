@@ -30,6 +30,7 @@ export async function readJob(jobId) {
 
   // Locations in precedence order
   const locations = ["current", "complete"];
+  const attemptedLocations = [];
 
   for (const location of locations) {
     console.log(`readJob: checking location ${location} for ${jobId}`);
@@ -70,11 +71,8 @@ export async function readJob(jobId) {
     const result = await readFileWithRetry(tasksPath);
 
     if (!result.ok) {
-      // Log a warning for failed reads of tasks-status.json in this location
-      console.warn(
-        `Failed to read tasks-status.json for job ${jobId} in ${location}`,
-        result
-      );
+      // Track attempted location for final warning if needed
+      attemptedLocations.push(location);
 
       // If not found, continue to next location
       if (result.code === configBridge.Constants.ERROR_CODES.NOT_FOUND) {
@@ -101,6 +99,9 @@ export async function readJob(jobId) {
   }
 
   // If we reach here, job not found in any location
+  console.warn(
+    `Job ${jobId} not found in any location. Searched: ${attemptedLocations.join(", ")}`
+  );
   return configBridge.createErrorResponse(
     configBridge.Constants.ERROR_CODES.JOB_NOT_FOUND,
     "Job not found",

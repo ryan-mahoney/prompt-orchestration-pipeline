@@ -1,49 +1,10 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { TaskState } from "../config/statuses.js";
-
-// Lazy import SSE registry to avoid circular dependencies
-let sseRegistry = null;
-async function getSSERegistry() {
-  if (!sseRegistry) {
-    try {
-      const module = await import("../ui/sse.js");
-      sseRegistry = module.sseRegistry;
-    } catch (error) {
-      // SSE not available in all environments
-      return null;
-    }
-  }
-  return sseRegistry;
-}
+import { createJobLogger } from "./logger.js";
 
 // Per-job write queues to serialize writes to tasks-status.json
 const writeQueues = new Map(); // Map<string jobDir, Promise<any>>
-
-// Instrumentation helper for status writer
-const createStatusWriterLogger = (jobId) => {
-  const prefix = `[StatusWriter:${jobId || "unknown"}]`;
-  return {
-    log: (message, data = null) => {
-      console.log(`${prefix} ${message}`, data ? data : "");
-    },
-    warn: (message, data = null) => {
-      console.warn(`${prefix} ${message}`, data ? data : "");
-    },
-    error: (message, data = null) => {
-      console.error(`${prefix} ${message}`, data ? data : "");
-    },
-    group: (label) => console.group(`${prefix} ${label}`),
-    groupEnd: () => console.groupEnd(),
-    sse: (eventType, eventData) => {
-      console.log(
-        `%c${prefix} SSE Broadcast: ${eventType}`,
-        "color: #cc6600; font-weight: bold;",
-        eventData
-      );
-    },
-  };
-};
 
 /**
  * Atomic status writer utility for tasks-status.json
@@ -195,7 +156,7 @@ export async function writeJobStatus(jobDir, updateFn) {
 
   const statusPath = path.join(jobDir, "tasks-status.json");
   const jobId = path.basename(jobDir);
-  const logger = createStatusWriterLogger(jobId);
+  const logger = createJobLogger("StatusWriter", jobId);
 
   // Get or create the write queue for this job directory
   const prev = writeQueues.get(jobDir) || Promise.resolve();
@@ -219,7 +180,7 @@ export async function writeJobStatus(jobDir, updateFn) {
       try {
         maybeUpdated = updateFn(validated);
       } catch (error) {
-        console.error(`[${jobId}] Error executing update function:`, error);
+        logger.error("Error executing update function:", error);
         throw new Error(`Update function failed: ${error.message}`);
       }
       const snapshot = validateStatusSnapshot(
@@ -233,28 +194,18 @@ export async function writeJobStatus(jobDir, updateFn) {
       await atomicWrite(statusPath, snapshot);
       logger.log("Status file written successfully");
 
-      // Emit SSE event for tasks-status.json change
-      const registry = (await getSSERegistry().catch(() => null)) || null;
-      if (registry) {
-        try {
-          const eventData = {
-            type: "state:change",
-            data: {
-              path: path.join(jobDir, "tasks-status.json"),
-              id: jobId,
-              jobId,
-            },
-          };
-          registry.broadcast(eventData);
-          logger.sse("state:change", eventData.data);
-          logger.log("SSE event broadcasted successfully");
-        } catch (error) {
-          // Don't fail the write if SSE emission fails
-          logger.error("Failed to emit SSE event:", error);
-          console.warn(`Failed to emit SSE event: ${error.message}`);
-        }
-      } else {
-        logger.warn("SSE registry not available - no event broadcasted");
+      // Emit SSE event for tasks-status.json change using logger
+      try {
+        const eventData = {
+          path: path.join(jobDir, "tasks-status.json"),
+          id: jobId,
+          jobId,
+        };
+        await logger.sse("state:change", eventData);
+        logger.log("SSE event broadcasted successfully");
+      } catch (error) {
+        // Don't fail the write if SSE emission fails
+        logger.error("Failed to emit SSE event:", error);
       }
 
       logger.groupEnd();
