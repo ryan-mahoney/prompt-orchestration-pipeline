@@ -78,7 +78,7 @@ export async function zhipuChat({
       );
 
       if (!response.ok) {
-        let errorMessage = response.statusText;
+        let errorMessage;
         try {
           const errorData = await response.json();
           errorMessage =
