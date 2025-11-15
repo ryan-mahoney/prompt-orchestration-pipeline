@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { writeJobStatus } from "./status-writer.js";
+import { LogEvent, LogFileExtension } from "../config/log-events.js";
 
 /**
  * Creates a task-scoped file I/O interface that manages file operations
@@ -184,4 +185,74 @@ export function createTaskFileIO({ workDir, taskName, getStage, statusPath }) {
       return getStage();
     },
   };
+}
+
+/**
+ * Generates a standardized log filename following the convention {taskName}-{stage}-{event}.{ext}
+ * @param {string} taskName - Name of the task
+ * @param {string} stage - Stage name or identifier
+ * @param {string} event - Event type from LogEvent constants
+ * @param {string} ext - File extension from LogFileExtension constants
+ * @returns {string} Formatted log filename
+ */
+export function generateLogName(
+  taskName,
+  stage,
+  event,
+  ext = LogFileExtension.TEXT
+) {
+  if (!taskName || !stage || !event || !ext) {
+    throw new Error(
+      "All parameters (taskName, stage, event, ext) are required for generateLogName"
+    );
+  }
+  return `${taskName}-${stage}-${event}.${ext}`;
+}
+
+/**
+ * Parses a log filename to extract taskName, stage, event, and extension
+ * @param {string} fileName - Log filename to parse
+ * @returns {Object|null} Parsed components or null if invalid format
+ */
+export function parseLogName(fileName) {
+  if (typeof fileName !== "string") {
+    return null;
+  }
+
+  // Match pattern: taskName-stage-event.ext
+  const match = fileName.match(
+    /^(?<taskName>[^-]+)-(?<stage>[^-]+)-(?<event>[^.]+)\.(?<ext>.+)$/
+  );
+  if (!match) {
+    return null;
+  }
+
+  const { taskName, stage, event, ext } = match.groups;
+  return { taskName, stage, event, ext };
+}
+
+/**
+ * Generates a glob pattern for matching log files with specific components
+ * @param {string} taskName - Task name (optional, use "*" for wildcard)
+ * @param {string} stage - Stage name (optional, use "*" for wildcard)
+ * @param {string} event - Event type (optional, use "*" for wildcard)
+ * @param {string} ext - File extension (optional, use "*" for wildcard)
+ * @returns {string} Glob pattern for file matching
+ */
+export function getLogPattern(
+  taskName = "*",
+  stage = "*",
+  event = "*",
+  ext = "*"
+) {
+  return `${taskName}-${stage}-${event}.${ext}`;
+}
+
+/**
+ * Validates that a log filename follows the standardized naming convention
+ * @param {string} fileName - Log filename to validate
+ * @returns {boolean} True if valid, false otherwise
+ */
+export function validateLogName(fileName) {
+  return parseLogName(fileName) !== null;
 }

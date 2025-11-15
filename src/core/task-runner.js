@@ -4,12 +4,13 @@ import fs from "fs";
 import { createLLM, getLLMEvents } from "../llm/index.js";
 import { loadFreshModule } from "./module-loader.js";
 import { loadEnvironment } from "./environment.js";
-import { createTaskFileIO } from "./file-io.js";
+import { createTaskFileIO, generateLogName } from "./file-io.js";
 import { writeJobStatus } from "./status-writer.js";
 import { computeDeterministicProgress } from "./progress.js";
 import { TaskState } from "../config/statuses.js";
 import { validateWithSchema } from "../api/validators/json.js";
 import { createJobLogger } from "./logger.js";
+import { LogEvent, LogFileExtension } from "../config/log-events.js";
 
 /**
  * Derives model key and token counts from LLM metric event.
@@ -507,7 +508,11 @@ export async function runPipeline(modulePath, initialContext = {}) {
     }
 
     // Add console output capture before stage execution using IO
-    const logName = `stage-${stageName}.log`;
+    const logName = generateLogName(
+      context.meta.taskName,
+      stageName,
+      LogEvent.START
+    );
     const logPath = path.join(context.meta.workDir, "files", "logs", logName);
     console.debug("[task-runner] stage log path resolution via IO", {
       stage: stageName,
@@ -593,7 +598,12 @@ export async function runPipeline(modulePath, initialContext = {}) {
       },
     };
     await context.io.writeLog(
-      `stage-${stageName}-context.json`,
+      generateLogName(
+        context.meta.taskName,
+        stageName,
+        LogEvent.CONTEXT,
+        LogFileExtension.JSON
+      ),
       JSON.stringify(snapshot, null, 2),
       { mode: "replace" }
     );
@@ -696,6 +706,20 @@ export async function runPipeline(modulePath, initialContext = {}) {
         }
       }
 
+      // Add second log file creation after stage completion
+      const completeLogName = generateLogName(
+        context.meta.taskName,
+        stageName,
+        LogEvent.COMPLETE
+      );
+      const completeLogPath = path.join(
+        context.meta.workDir,
+        "files",
+        "logs",
+        completeLogName
+      );
+      captureConsoleOutput(completeLogPath)();
+
       const ms = +(performance.now() - start).toFixed(2);
       logger.log("Stage completed successfully", {
         stage: stageName,
@@ -729,9 +753,17 @@ export async function runPipeline(modulePath, initialContext = {}) {
           context.meta.workDir,
           "files",
           "logs",
-          `stage-${stageName}.log`
+          generateLogName(context.meta.taskName, stageName, LogEvent.START)
         ),
-        snapshotPath: path.join(logsDir, `stage-${stageName}-context.json`),
+        snapshotPath: path.join(
+          logsDir,
+          generateLogName(
+            context.meta.taskName,
+            stageName,
+            LogEvent.CONTEXT,
+            LogFileExtension.JSON
+          )
+        ),
         dataHasSeed: !!context.data?.seed,
         seedHasData: context.data?.seed?.data !== undefined,
         flagsKeys: Object.keys(context.flags || {}),
