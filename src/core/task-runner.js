@@ -855,8 +855,24 @@ function toAbsFileURL(p) {
 }
 
 function normalizeError(err) {
-  if (err instanceof Error)
+  if (err instanceof Error) {
     return { name: err.name, message: err.message, stack: err.stack };
+  }
+
+  // Handle plain object errors (like those from HTTP responses)
+  if (typeof err === "object" && err !== null) {
+    const message =
+      err?.message || err?.error?.message || err?.error || "Unknown error";
+    const result = { message };
+
+    // Include additional context if available
+    if (err.status) result.status = err.status;
+    if (err.code) result.code = err.code;
+    if (err.error) result.error = err.error;
+
+    return result;
+  }
+
   return { message: String(err) };
 }
 
