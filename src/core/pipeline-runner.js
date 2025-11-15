@@ -182,7 +182,7 @@ for (const taskName of pipeline.tasks) {
         process.exit(1);
       }
 
-      logger.info("Task symlinks repaired successfully", {
+      logger.log("Task symlinks repaired successfully", {
         taskName,
         taskDir,
         repairDuration: repairResult.duration,
