@@ -7,7 +7,11 @@ import { getPipelineConfig } from "./config.js";
 import { writeJobStatus } from "./status-writer.js";
 import { TaskState } from "../config/statuses.js";
 import { ensureTaskSymlinkBridge } from "./symlink-bridge.js";
-import { cleanupTaskSymlinks } from "./symlink-utils.js";
+import {
+  cleanupTaskSymlinks,
+  validateTaskSymlinks,
+  repairTaskSymlinks,
+} from "./symlink-utils.js";
 import { createTaskFileIO, generateLogName } from "./file-io.js";
 import { createJobLogger } from "./logger.js";
 import { LogEvent, LogFileExtension } from "../config/log-events.js";
@@ -133,8 +137,66 @@ for (const taskName of pipeline.tasks) {
       ? modulePath
       : path.resolve(path.dirname(TASK_REGISTRY), modulePath);
 
-    // Create symlink bridge for deterministic module resolution
+    // Validate symlinks before task execution to ensure restart reliability
     const poRoot = process.env.PO_ROOT || process.cwd();
+    const expectedTargets = {
+      nodeModules: path.join(path.resolve(poRoot, ".."), "node_modules"),
+      taskRoot: path.dirname(absoluteModulePath),
+    };
+
+    const validationResult = await validateTaskSymlinks(
+      taskDir,
+      expectedTargets
+    );
+
+    if (!validationResult.isValid) {
+      logger.warn("Task symlinks validation failed, attempting repair", {
+        taskName,
+        taskDir,
+        errors: validationResult.errors,
+        validationDuration: validationResult.duration,
+      });
+
+      const repairResult = await repairTaskSymlinks(
+        taskDir,
+        poRoot,
+        absoluteModulePath
+      );
+
+      if (!repairResult.success) {
+        const errorMessage = `Failed to repair task symlinks for ${taskName}: ${repairResult.errors.join(", ")}`;
+        logger.error("Task symlink repair failed, aborting execution", {
+          taskName,
+          taskDir,
+          errors: repairResult.errors,
+          repairDuration: repairResult.duration,
+        });
+
+        await updateStatus(taskName, {
+          state: TaskState.FAILED,
+          endedAt: now(),
+          error: { message: errorMessage, type: "SymlinkRepairFailed" },
+        });
+
+        process.exitCode = 1;
+        process.exit(1);
+      }
+
+      logger.info("Task symlinks repaired successfully", {
+        taskName,
+        taskDir,
+        repairDuration: repairResult.duration,
+        relocatedEntry: repairResult.relocatedEntry,
+      });
+    } else {
+      logger.debug("Task symlinks validation passed", {
+        taskName,
+        taskDir,
+        validationDuration: validationResult.duration,
+      });
+    }
+
+    // Create symlink bridge for deterministic module resolution
     const relocatedEntry = await ensureTaskSymlinkBridge({
       taskDir,
       poRoot,

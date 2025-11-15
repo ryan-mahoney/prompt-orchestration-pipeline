@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { createLogger } from "./logger.js";
+import { ensureTaskSymlinkBridge } from "./symlink-bridge.js";
 
 const logger = createLogger("SymlinkUtils");
 
@@ -46,6 +47,201 @@ export async function ensureSymlink(linkPath, targetPath, type) {
     throw new Error(
       `Failed to create symlink from ${linkPath} -> ${targetPath}: ${error.message}`
     );
+  }
+}
+
+/**
+ * Validates that required task symlinks exist and point to accessible targets.
+ *
+ * @param {string} taskDir - The task directory containing symlinks
+ * @param {Object} expectedTargets - Expected symlink targets
+ * @param {string} expectedTargets.nodeModules - Expected target for node_modules symlink
+ * @param {string} expectedTargets.taskRoot - Expected target for _task_root symlink
+ * @returns {Object} Validation result with isValid flag and details
+ */
+export async function validateTaskSymlinks(taskDir, expectedTargets) {
+  const startTime = Date.now();
+  const validationErrors = [];
+  const validationDetails = {};
+
+  const symlinksToValidate = [
+    { name: "node_modules", expectedTarget: expectedTargets.nodeModules },
+    { name: "_task_root", expectedTarget: expectedTargets.taskRoot },
+  ];
+
+  for (const { name, expectedTarget } of symlinksToValidate) {
+    const linkPath = path.join(taskDir, name);
+
+    try {
+      // Check if symlink exists
+      const stats = await fs.lstat(linkPath);
+
+      if (!stats.isSymbolicLink()) {
+        validationErrors.push(
+          `${name} exists but is not a symlink (type: ${stats.isFile() ? "file" : "directory"})`
+        );
+        validationDetails[name] = {
+          exists: true,
+          isSymlink: false,
+          targetAccessible: false,
+        };
+        continue;
+      }
+
+      // Read the symlink target
+      const actualTarget = await fs.readlink(linkPath);
+
+      // Check if target matches expected (normalize paths for comparison)
+      const normalizedActual = path.resolve(taskDir, actualTarget);
+      const normalizedExpected = path.resolve(expectedTarget);
+
+      if (normalizedActual !== normalizedExpected) {
+        validationErrors.push(
+          `${name} points to wrong target: expected ${expectedTarget}, got ${actualTarget}`
+        );
+        validationDetails[name] = {
+          exists: true,
+          isSymlink: true,
+          targetAccessible: false,
+          actualTarget,
+          expectedTarget,
+        };
+        continue;
+      }
+
+      // Check if target is accessible
+      const targetStats = await fs.stat(normalizedActual).catch(() => null);
+      if (!targetStats) {
+        validationErrors.push(
+          `${name} target is not accessible: ${actualTarget}`
+        );
+        validationDetails[name] = {
+          exists: true,
+          isSymlink: true,
+          targetAccessible: false,
+          actualTarget,
+        };
+        continue;
+      }
+
+      if (!targetStats.isDirectory()) {
+        validationErrors.push(
+          `${name} target is not a directory: ${actualTarget}`
+        );
+        validationDetails[name] = {
+          exists: true,
+          isSymlink: true,
+          targetAccessible: false,
+          actualTarget,
+          targetType: "file",
+        };
+        continue;
+      }
+
+      // Symlink is valid
+      validationDetails[name] = {
+        exists: true,
+        isSymlink: true,
+        targetAccessible: true,
+        actualTarget,
+      };
+    } catch (error) {
+      if (error.code === "ENOENT") {
+        validationErrors.push(`${name} symlink does not exist`);
+        validationDetails[name] = {
+          exists: false,
+          isSymlink: false,
+          targetAccessible: false,
+        };
+      } else {
+        validationErrors.push(`${name} validation failed: ${error.message}`);
+        validationDetails[name] = {
+          exists: false,
+          isSymlink: false,
+          targetAccessible: false,
+          error: error.message,
+        };
+      }
+    }
+  }
+
+  const isValid = validationErrors.length === 0;
+  const duration = Date.now() - startTime;
+
+  logger.debug("Symlink validation completed", {
+    taskDir,
+    isValid,
+    errorsCount: validationErrors.length,
+    duration,
+    details: validationDetails,
+  });
+
+  return {
+    isValid,
+    errors: validationErrors,
+    details: validationDetails,
+    duration,
+  };
+}
+
+/**
+ * Repairs task symlinks by recreating them using the existing symlink bridge.
+ *
+ * @param {string} taskDir - The task directory where symlinks should be created
+ * @param {string} poRoot - The repository root directory
+ * @param {string} taskModulePath - Absolute path to the original task module
+ * @returns {Object} Repair result with success flag and details
+ */
+export async function repairTaskSymlinks(taskDir, poRoot, taskModulePath) {
+  const startTime = Date.now();
+
+  try {
+    logger.log("Repairing task symlinks", {
+      taskDir,
+      poRoot,
+      taskModulePath,
+    });
+
+    // Use existing ensureTaskSymlinkBridge for repairs
+    const relocatedEntry = await ensureTaskSymlinkBridge({
+      taskDir,
+      poRoot,
+      taskModulePath,
+    });
+
+    const duration = Date.now() - startTime;
+
+    logger.log("Task symlinks repaired successfully", {
+      taskDir,
+      duration,
+      relocatedEntry,
+    });
+
+    return {
+      success: true,
+      relocatedEntry,
+      duration,
+      errors: [],
+    };
+  } catch (error) {
+    const duration = Date.now() - startTime;
+    const errorMessage = `Failed to repair task symlinks: ${error.message}`;
+
+    logger.error("Task symlink repair failed", {
+      taskDir,
+      poRoot,
+      taskModulePath,
+      duration,
+      error: error.message,
+      stack: error.stack,
+    });
+
+    return {
+      success: false,
+      relocatedEntry: null,
+      duration,
+      errors: [errorMessage],
+    };
   }
 }
 
