@@ -861,8 +861,14 @@ function normalizeError(err) {
 
   // Handle plain object errors (like those from HTTP responses)
   if (typeof err === "object" && err !== null) {
-    const message =
-      err?.message || err?.error?.message || err?.error || "Unknown error";
+    let message = "Unknown error";
+    if (typeof err?.message === "string") {
+      message = err.message;
+    } else if (typeof err?.error?.message === "string") {
+      message = err.error.message;
+    } else if (typeof err?.error === "string") {
+      message = err.error;
+    }
     const result = { message };
 
     // Include additional context if available
