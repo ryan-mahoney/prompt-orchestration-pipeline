@@ -49,6 +49,30 @@ export function createTaskFileIO({ workDir, taskName, getStage, statusPath }) {
         taskArray.push(fileName);
       }
 
+      // Extract metadata from log filenames for enhanced tracking
+      if (fileType === "logs") {
+        const parsed = parseLogName(fileName);
+        if (parsed) {
+          // Ensure log metadata exists
+          snapshot.logMetadata ||= {};
+          snapshot.tasks[taskName].logMetadata ||= {};
+
+          const metadataKey = `${parsed.task}-${parsed.stage}-${parsed.event}`;
+          const metadata = {
+            fileName,
+            taskName: parsed.taskName,
+            stage: parsed.stage,
+            event: parsed.event,
+            extension: parsed.ext,
+            parsedAt: new Date().toISOString(),
+          };
+
+          // Store metadata at both job and task level
+          snapshot.logMetadata[metadataKey] = metadata;
+          snapshot.tasks[taskName].logMetadata[metadataKey] = metadata;
+        }
+      }
+
       return snapshot;
     });
   }
@@ -96,6 +120,13 @@ export function createTaskFileIO({ workDir, taskName, getStage, statusPath }) {
      * @param {string} options.mode - "replace" (default) or "append"
      */
     async writeArtifact(name, content, options = {}) {
+      // Validate artifact filename doesn't follow log naming convention (to avoid confusion)
+      if (validateLogName(name)) {
+        throw new Error(
+          `Artifact filename "${name}" should not follow log naming convention. Use a different name.`
+        );
+      }
+
       const filePath = await writeFile(
         artifactsDir,
         name,
@@ -114,6 +145,13 @@ export function createTaskFileIO({ workDir, taskName, getStage, statusPath }) {
      * @param {string} options.mode - "append" (default) or "replace"
      */
     async writeLog(name, content, options = {}) {
+      // Validate log filename follows standardized naming convention
+      if (!validateLogName(name)) {
+        throw new Error(
+          `Invalid log filename "${name}". Must follow format {taskName}-{stage}-{event}.{ext}`
+        );
+      }
+
       const filePath = await writeFile(
         logsDir,
         name,
@@ -132,6 +170,13 @@ export function createTaskFileIO({ workDir, taskName, getStage, statusPath }) {
      * @param {string} options.mode - "replace" (default) or "append"
      */
     async writeTmp(name, content, options = {}) {
+      // Validate temporary filename doesn't follow log naming convention (to avoid confusion)
+      if (validateLogName(name)) {
+        throw new Error(
+          `Temporary filename "${name}" should not follow log naming convention. Use a different name.`
+        );
+      }
+
       const filePath = await writeFile(
         tmpDir,
         name,
@@ -220,6 +265,7 @@ export function parseLogName(fileName) {
   }
 
   // Match pattern: taskName-stage-event.ext
+  // Split on first two hyphens: taskName-stage-event.ext
   const match = fileName.match(
     /^(?<taskName>[^-]+)-(?<stage>[^-]+)-(?<event>[^.]+)\.(?<ext>.+)$/
   );

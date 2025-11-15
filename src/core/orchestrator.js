@@ -5,6 +5,8 @@ import chokidar from "chokidar";
 import { spawn as defaultSpawn } from "node:child_process";
 import { getConfig, getPipelineConfig } from "./config.js";
 import { createLogger } from "./logger.js";
+import { createTaskFileIO, generateLogName } from "./file-io.js";
+import { LogEvent, LogFileExtension } from "../config/log-events.js";
 
 /**
  * Resolve canonical pipeline directories for the given data root.
@@ -153,6 +155,34 @@ export async function startOrchestrator(opts) {
       };
       await fs.writeFile(statusPath, JSON.stringify(status, null, 2));
     }
+    // Create fileIO for orchestrator-level logging
+    const fileIO = createTaskFileIO({
+      workDir,
+      taskName: jobId,
+      getStage: () => "orchestrator",
+      statusPath,
+    });
+
+    // Write job start log
+    await fileIO.writeLog(
+      generateLogName(jobId, "orchestrator", LogEvent.START),
+      JSON.stringify(
+        {
+          jobId,
+          pipeline: seed?.pipeline,
+          timestamp: new Date().toISOString(),
+          seedSummary: {
+            name: seed?.name,
+            pipeline: seed?.pipeline,
+            keys: Object.keys(seed || {}),
+          },
+        },
+        null,
+        2
+      ),
+      { mode: "replace" }
+    );
+
     // Spawn runner for this job
     const child = spawnRunner(
       logger,
@@ -161,7 +191,8 @@ export async function startOrchestrator(opts) {
       running,
       spawn,
       testMode,
-      seed
+      seed,
+      fileIO
     );
     // child registered inside spawnRunner
     return child;
@@ -235,7 +266,16 @@ export async function startOrchestrator(opts) {
  * @param {boolean} testMode
  * @param {Object} seed - Seed data containing pipeline information
  */
-function spawnRunner(logger, jobId, dirs, running, spawn, testMode, seed) {
+function spawnRunner(
+  logger,
+  jobId,
+  dirs,
+  running,
+  spawn,
+  testMode,
+  seed,
+  fileIO
+) {
   // Use path relative to this file to avoid process.cwd() issues
   const orchestratorDir = path.dirname(new URL(import.meta.url).pathname);
   const runnerPath = path.join(orchestratorDir, "pipeline-runner.js");
@@ -316,11 +356,67 @@ function spawnRunner(logger, jobId, dirs, running, spawn, testMode, seed) {
 
     running.set(jobId, child);
 
-    child.on("exit", () => {
+    child.on("exit", async (code, signal) => {
       running.delete(jobId);
+
+      // Write job completion log
+      if (fileIO) {
+        try {
+          await fileIO.writeLog(
+            generateLogName(jobId, "orchestrator", LogEvent.COMPLETE),
+            JSON.stringify(
+              {
+                jobId,
+                exitCode: code,
+                signal: signal,
+                timestamp: new Date().toISOString(),
+                completionType: code === 0 ? "success" : "failure",
+              },
+              null,
+              2
+            ),
+            { mode: "replace" }
+          );
+        } catch (error) {
+          logger.error("Failed to write job completion log", {
+            jobId,
+            error: error.message,
+          });
+        }
+      }
     });
-    child.on("error", () => {
+
+    child.on("error", async (error) => {
       running.delete(jobId);
+
+      // Write job error log
+      if (fileIO) {
+        try {
+          await fileIO.writeLog(
+            generateLogName(jobId, "orchestrator", LogEvent.ERROR),
+            JSON.stringify(
+              {
+                jobId,
+                error: {
+                  message: error.message,
+                  name: error.name,
+                  code: error.code,
+                },
+                timestamp: new Date().toISOString(),
+                completionType: "error",
+              },
+              null,
+              2
+            ),
+            { mode: "replace" }
+          );
+        } catch (logError) {
+          logger.error("Failed to write job error log", {
+            jobId,
+            error: logError.message,
+          });
+        }
+      }
     });
 
     // In test mode: return immediately; in real mode you might await readiness
