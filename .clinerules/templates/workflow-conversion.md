@@ -26,21 +26,6 @@ Turn this spec into a Cline workflow ([https://docs.cline.bot/features/slash-com
 - **Pre-commit sanity:** Fail on unresolved merges/conflicts; repo must be consistent.
 - **Deterministic output:** Same inputs → same commit; do not rely on user config, locale, or local hooks.
 
-# zsh Git Automation (required)
-
-At the end of **each** section, the workflow **must** write and run a **temporary zsh script** that performs the commit. Do not paste the code in the workflow; **describe** the script and its execution:
-
-**Script name & lifecycle**
-
-- Create with `mktemp` (e.g., `/tmp/commit-XXXXXX.zsh`), write contents, `chmod +x`, execute with `zsh -f <script>`, then delete it.
-
-**Interpreter & shell options (zsh-specific)**
-
-- Shebang: `#!/bin/zsh -f` (no user rc files).
-- Set strict mode: `set -euo pipefail` (use `set -o pipefail` in zsh).
-- Disable history expansion so `!` is inert: `unsetopt BANG_HIST`.
-- Set stable env: `GIT_TERMINAL_PROMPT=0`, `GIT_EDITOR=:`, `LC_ALL=C.UTF-8`.
-
 **Inputs**
 
 - Subject line (string; ≤72 chars; `type(scope)!: subject`).
