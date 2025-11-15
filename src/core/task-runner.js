@@ -68,13 +68,13 @@ function assertStageResult(stageName, result) {
     );
   }
 
-  if (!result.hasOwnProperty("output")) {
+  if (!Object.prototype.hasOwnProperty.call(result, "output")) {
     throw new Error(
       `Stage "${stageName}" result missing required property: output`
     );
   }
 
-  if (!result.hasOwnProperty("flags")) {
+  if (!Object.prototype.hasOwnProperty.call(result, "flags")) {
     throw new Error(
       `Stage "${stageName}" result missing required property: flags`
     );
@@ -706,19 +706,17 @@ export async function runPipeline(modulePath, initialContext = {}) {
         }
       }
 
-      // Add second log file creation after stage completion
+      // Add explicit completion log after stage completion
       const completeLogName = generateLogName(
         context.meta.taskName,
         stageName,
         LogEvent.COMPLETE
       );
-      const completeLogPath = path.join(
-        context.meta.workDir,
-        "files",
-        "logs",
-        completeLogName
+      await context.io.writeLog(
+        completeLogName,
+        `Stage ${stageName} completed at ${new Date().toISOString()}\n`,
+        { mode: "replace" }
       );
-      captureConsoleOutput(completeLogPath)();
 
       const ms = +(performance.now() - start).toFixed(2);
       logger.log("Stage completed successfully", {
