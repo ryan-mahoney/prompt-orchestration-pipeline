@@ -1,7 +1,13 @@
 import fs from "node:fs/promises";
+import fsSync from "node:fs";
 import path from "node:path";
 import { writeJobStatus } from "./status-writer.js";
-import { LogFileExtension } from "../config/log-events.js";
+import {
+  LogEvent,
+  LogFileExtension,
+  isValidLogEvent,
+  isValidLogFileExtension,
+} from "../config/log-events.js";
 
 /**
  * Creates a task-scoped file I/O interface that manages file operations
@@ -17,6 +23,10 @@ import { LogFileExtension } from "../config/log-events.js";
 
 async function ensureDir(dir) {
   await fs.mkdir(dir, { recursive: true });
+}
+
+function ensureDirSync(dir) {
+  fsSync.mkdir(dir, { recursive: true });
 }
 
 export function createTaskFileIO({ workDir, taskName, getStage, statusPath }) {
@@ -87,6 +97,15 @@ export function createTaskFileIO({ workDir, taskName, getStage, statusPath }) {
   }
 
   /**
+   * Synchronous atomic write helper
+   */
+  function atomicWriteSync(filePath, data) {
+    const tmpPath = filePath + ".tmp";
+    fsSync.writeFileSync(tmpPath, data);
+    fsSync.renameSync(tmpPath, filePath);
+  }
+
+  /**
    * Generic write function that handles different modes
    */
   async function writeFile(dirPath, fileName, content, mode = "replace") {
@@ -108,6 +127,72 @@ export function createTaskFileIO({ workDir, taskName, getStage, statusPath }) {
   async function readFile(dirPath, fileName) {
     const filePath = path.join(dirPath, fileName);
     return await fs.readFile(filePath, "utf8");
+  }
+
+  /**
+   * Synchronous status writer for critical paths
+   * @param {string} jobDir - Directory containing tasks-status.json
+   * @param {Function} updater - Function that mutates and returns the snapshot
+   */
+  function writeJobStatusSync(jobDir, updater) {
+    const statusPath = path.join(jobDir, "tasks-status.json");
+    let snapshot;
+    try {
+      const raw = fsSync.readFileSync(statusPath, "utf8");
+      snapshot = JSON.parse(raw);
+    } catch {
+      snapshot = { files: { artifacts: [], logs: [], tmp: [] }, tasks: {} };
+    }
+    const updated = updater(snapshot);
+    fsSync.writeFileSync(statusPath, JSON.stringify(updated, null, 2));
+  }
+
+  /**
+   * Synchronous status update with file tracking and metadata
+   * @param {string} fileType - "logs", "artifacts", or "tmp"
+   * @param {string} fileName - Name of the file
+   */
+  function updateStatusWithFilesSync(fileType, fileName) {
+    const jobDir = path.dirname(statusPath);
+    writeJobStatusSync(jobDir, (snapshot) => {
+      snapshot.files ||= { artifacts: [], logs: [], tmp: [] };
+      snapshot.tasks ||= {};
+      snapshot.tasks[taskName] ||= {};
+      snapshot.tasks[taskName].files ||= { artifacts: [], logs: [], tmp: [] };
+
+      const jobArray = snapshot.files[fileType];
+      if (!jobArray.includes(fileName)) {
+        jobArray.push(fileName);
+      }
+
+      const taskArray = snapshot.tasks[taskName].files[fileType];
+      if (!taskArray.includes(fileName)) {
+        taskArray.push(fileName);
+      }
+
+      if (fileType === "logs") {
+        const parsed = parseLogName(fileName);
+        if (parsed) {
+          snapshot.logMetadata ||= {};
+          snapshot.tasks[taskName].logMetadata ||= {};
+
+          const metadataKey = `${parsed.taskName}-${parsed.stage}-${parsed.event}`;
+          const metadata = {
+            fileName,
+            taskName: parsed.taskName,
+            stage: parsed.stage,
+            event: parsed.event,
+            extension: parsed.ext,
+            parsedAt: new Date().toISOString(),
+          };
+
+          snapshot.logMetadata[metadataKey] = metadata;
+          snapshot.tasks[taskName].logMetadata[metadataKey] = metadata;
+        }
+      }
+
+      return snapshot;
+    });
   }
 
   // Return curried functions for each file type
@@ -223,6 +308,33 @@ export function createTaskFileIO({ workDir, taskName, getStage, statusPath }) {
     },
 
     /**
+     * Write a log file synchronously (critical path only)
+     * @param {string} name - File name
+     * @param {string} content - Log content
+     * @param {Object} options - Options object
+     * @param {string} options.mode - "replace" (default) or "append"
+     */
+    writeLogSync(name, content, options = {}) {
+      if (!validateLogName(name)) {
+        throw new Error(
+          `Invalid log filename "${name}". Must follow format {taskName}-{stage}-{event}.{ext}`
+        );
+      }
+
+      ensureDirSync(logsDir);
+      const filePath = path.join(logsDir, name);
+
+      if (options.mode === "append") {
+        fsSync.appendFileSync(filePath, content);
+      } else {
+        atomicWriteSync(filePath, content);
+      }
+
+      updateStatusWithFilesSync("logs", name);
+      return filePath;
+    },
+
+    /**
      * Get the current stage name
      * @returns {string} Current stage name
      */
@@ -249,6 +361,20 @@ export function generateLogName(
   if (!taskName || !stage || !event || !ext) {
     throw new Error(
       "All parameters (taskName, stage, event, ext) are required for generateLogName"
+    );
+  }
+  if (!isValidLogEvent(event)) {
+    throw new Error(
+      `Invalid log event "${event}". Use a value from LogEvent: ${Object.values(
+        LogEvent
+      ).join(", ")}`
+    );
+  }
+  if (!isValidLogFileExtension(ext)) {
+    throw new Error(
+      `Invalid log file extension "${ext}". Use a value from LogFileExtension: ${Object.values(
+        LogFileExtension
+      ).join(", ")}`
     );
   }
   return `${taskName}-${stage}-${event}.${ext}`;

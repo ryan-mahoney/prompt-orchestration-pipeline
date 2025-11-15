@@ -356,13 +356,13 @@ function spawnRunner(
 
     running.set(jobId, child);
 
-    child.on("exit", async (code, signal) => {
+    child.on("exit", (code, signal) => {
       running.delete(jobId);
 
-      // Write job completion log
+      // Write job completion log synchronously
       if (fileIO) {
         try {
-          await fileIO.writeLog(
+          fileIO.writeLogSync(
             generateLogName(jobId, "orchestrator", LogEvent.COMPLETE),
             JSON.stringify(
               {
@@ -386,13 +386,13 @@ function spawnRunner(
       }
     });
 
-    child.on("error", async (error) => {
+    child.on("error", (error) => {
       running.delete(jobId);
 
-      // Write job error log
+      // Write job error log synchronously
       if (fileIO) {
         try {
-          await fileIO.writeLog(
+          fileIO.writeLogSync(
             generateLogName(jobId, "orchestrator", LogEvent.ERROR),
             JSON.stringify(
               {
