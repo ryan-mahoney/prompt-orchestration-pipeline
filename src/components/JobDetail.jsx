@@ -156,6 +156,7 @@ export default function JobDetail({ job, pipeline }) {
         activeIndex={activeIndex}
         jobId={job.id}
         filesByTypeForItem={filesByTypeForItem}
+        taskById={taskById}
       />
     </div>
   );
