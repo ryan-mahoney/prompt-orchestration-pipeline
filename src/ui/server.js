@@ -104,7 +104,6 @@ function hasValidPayload(seed) {
 
 /**
  * Handle seed upload directly without starting orchestrator (for test environment)
-  +++++++ REPLACE
  * @param {Object} seedObject - Seed object to upload
  * @param {string} dataDir - Base data directory
  * @param {Array} uploadArtifacts - Array of {filename, content} objects
