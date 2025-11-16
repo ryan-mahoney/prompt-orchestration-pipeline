@@ -12,6 +12,7 @@ import {
   getJobPipelinePath,
 } from "../config/paths.js";
 import { generateJobId } from "../utils/id-generator.js";
+import { initializeJobArtifacts } from "../core/status-writer.js";
 
 // Pure functional utilities
 const createPaths = (config) => {
@@ -100,17 +101,28 @@ export const submitJob = async (state, seed) => {
  * @param {Object} options - Options object
  * @param {string} options.dataDir - Base data directory
  * @param {Object} options.seedObject - Seed object to submit
+ * @param {Array} [options.uploadArtifacts] - Array of {filename, content} objects
  * @returns {Promise<Object>} Result object with success status
  */
-export const submitJobWithValidation = async ({ dataDir, seedObject }) => {
+export const submitJobWithValidation = async ({
+  dataDir,
+  seedObject,
+  uploadArtifacts = [],
+}) => {
   let partialFiles = [];
 
   try {
     // Validate the seed object
+    console.log("[DEBUG] submitJobWithValidation: validating seed", {
+      seedName: seedObject.name,
+      seedPipeline: seedObject.pipeline,
+      hasData: !!seedObject.data,
+    });
     const validatedSeed = await validateSeed(
       JSON.stringify(seedObject),
       dataDir
     );
+    console.log("[DEBUG] submitJobWithValidation: seed validation passed");
 
     // Generate a random job ID
     const jobId = generateJobId();
@@ -175,6 +187,24 @@ export const submitJobWithValidation = async ({ dataDir, seedObject }) => {
       JSON.stringify(pipelineSnapshot, null, 2)
     );
 
+    // Initialize job artifacts if any provided
+    if (uploadArtifacts.length > 0) {
+      console.log("[DEBUG] submitJobWithValidation: initializing artifacts", {
+        artifactCount: uploadArtifacts.length,
+        artifactNames: uploadArtifacts.map((a) => a.filename),
+        currentJobDir,
+      });
+      try {
+        await initializeJobArtifacts(currentJobDir, uploadArtifacts);
+        console.log(
+          "[DEBUG] submitJobWithValidation: artifacts initialized successfully"
+        );
+      } catch (artifactError) {
+        // Don't fail the upload if artifact initialization fails, just log the error
+        console.error("Failed to initialize job artifacts:", artifactError);
+      }
+    }
+
     return {
       success: true,
       jobId,
@@ -198,6 +228,13 @@ export const submitJobWithValidation = async ({ dataDir, seedObject }) => {
     } else if (error.message.includes("required")) {
       errorMessage = "Required fields missing";
     }
+
+    console.error("[DEBUG] submitJobWithValidation: validation failed", {
+      errorMessage,
+      originalError: error.message,
+      seedName: seedObject.name,
+      seedPipeline: seedObject.pipeline,
+    });
 
     return {
       success: false,
