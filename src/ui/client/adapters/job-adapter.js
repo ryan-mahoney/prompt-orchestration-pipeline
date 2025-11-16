@@ -75,6 +75,8 @@ function normalizeTasks(rawTasks) {
           : undefined,
         // Preserve tokenUsage if present
         ...(t && t.tokenUsage ? { tokenUsage: t.tokenUsage } : {}),
+        // Preserve error object if present
+        ...(t && t.error ? { error: t.error } : {}),
       };
       tasks[name] = taskObj;
     });
@@ -106,11 +108,28 @@ function normalizeTasks(rawTasks) {
         ...(typeof t?.failedStage === "string" && t.failedStage.length > 0
           ? { failedStage: t.failedStage }
           : {}),
+        // Prefer new files.* schema, fallback to legacy artifacts
+        files:
+          t && t.files
+            ? {
+                artifacts: Array.isArray(t.files.artifacts)
+                  ? t.files.artifacts.slice()
+                  : [],
+                logs: Array.isArray(t.files.logs) ? t.files.logs.slice() : [],
+                tmp: Array.isArray(t.files.tmp) ? t.files.tmp.slice() : [],
+              }
+            : {
+                artifacts: [],
+                logs: [],
+                tmp: [],
+              },
         artifacts: Array.isArray(t && t.artifacts)
           ? t.artifacts.slice()
           : undefined,
         // Preserve tokenUsage if present
         ...(t && t.tokenUsage ? { tokenUsage: t.tokenUsage } : {}),
+        // Preserve error object if present
+        ...(t && t.error ? { error: t.error } : {}),
       };
     });
     return { tasks, warnings };
@@ -152,7 +171,7 @@ export function adaptJobSummary(apiJob) {
   // Demo-only: read canonical fields strictly
   const id = apiJob.jobId;
   const name = apiJob.title || "";
-  const rawTasks = apiJob.tasks;
+  const rawTasks = apiJob.tasks || apiJob.tasksStatus; // Handle both formats for backward compatibility
   const location = apiJob.location;
 
   // Job-level stage metadata
@@ -221,7 +240,7 @@ export function adaptJobDetail(apiDetail) {
   // Demo-only: read canonical fields strictly
   const id = apiDetail.jobId;
   const name = apiDetail.title || "";
-  const rawTasks = apiDetail.tasks;
+  const rawTasks = apiDetail.tasks || apiDetail.tasksStatus; // Handle both formats for backward compatibility
   const location = apiDetail.location;
 
   // Job-level stage metadata

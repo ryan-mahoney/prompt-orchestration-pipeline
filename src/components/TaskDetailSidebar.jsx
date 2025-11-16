@@ -23,6 +23,7 @@ export function TaskDetailSidebar({
   jobId,
   taskId,
   taskBody,
+  taskError,
   filesByTypeForItem = () => ({ artifacts: [], logs: [], tmp: [] }),
   task,
   onClose,
@@ -32,6 +33,7 @@ export function TaskDetailSidebar({
   const [filePaneType, setFilePaneType] = useState("artifacts");
   const [filePaneOpen, setFilePaneOpen] = useState(false);
   const [filePaneFilename, setFilePaneFilename] = useState(null);
+  const [showStack, setShowStack] = useState(false);
   const closeButtonRef = useRef(null);
 
   // Get CSS classes for card header based on status (mirrored from DAGGrid)
@@ -120,14 +122,36 @@ export function TaskDetailSidebar({
       </div>
 
       <div className="p-6 space-y-8 overflow-y-auto h-full">
-        {/* Error Callout - shown when task has error status and body */}
-        {status === TaskState.FAILED && taskBody && (
+        {/* Error Callout - shown when task has error status */}
+        {status === TaskState.FAILED && (taskError?.message || taskBody) && (
           <section aria-label="Error">
             <Callout.Root role="alert" aria-live="assertive">
               <Callout.Text className="whitespace-pre-wrap break-words">
-                {taskBody}
+                {taskError?.message || taskBody}
               </Callout.Text>
             </Callout.Root>
+
+            {/* Stack trace toggle */}
+            {taskError?.stack && (
+              <div className="mt-3">
+                <button
+                  onClick={() => setShowStack(!showStack)}
+                  className="text-sm text-blue-600 hover:text-blue-800 underline"
+                  aria-expanded={showStack}
+                  aria-controls="error-stack"
+                >
+                  {showStack ? "Hide stack" : "Show stack"}
+                </button>
+                {showStack && (
+                  <pre
+                    id="error-stack"
+                    className="mt-2 p-2 bg-gray-50 border rounded text-xs font-mono max-h-64 overflow-auto whitespace-pre-wrap"
+                  >
+                    {taskError.stack}
+                  </pre>
+                )}
+              </div>
+            )}
           </section>
         )}
 
