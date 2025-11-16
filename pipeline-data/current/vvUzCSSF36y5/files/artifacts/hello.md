@@ -1,3 +1,0 @@
-# Zip Upload Test
-
-Hello!
