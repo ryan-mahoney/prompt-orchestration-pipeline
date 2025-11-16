@@ -87,6 +87,22 @@ const canShowRestart = (status) => {
   return status === TaskState.FAILED || status === TaskState.DONE;
 };
 
+// Custom comparison function for TaskCard memoization
+const areEqualTaskCardProps = (prevProps, nextProps) => {
+  return (
+    prevProps.item === nextProps.item &&
+    prevProps.idx === nextProps.idx &&
+    prevProps.status === nextProps.status &&
+    prevProps.isActive === nextProps.isActive &&
+    prevProps.canRestart === nextProps.canRestart &&
+    prevProps.isSubmitting === nextProps.isSubmitting &&
+    prevProps.disabledReason === nextProps.disabledReason &&
+    prevProps.onClick === nextProps.onClick &&
+    prevProps.onKeyDown === nextProps.onKeyDown &&
+    prevProps.handleRestartClick === nextProps.handleRestartClick
+  );
+};
+
 // Memoized card component to prevent unnecessary re-renders
 const TaskCard = memo(function TaskCard({
   item,
@@ -96,7 +112,7 @@ const TaskCard = memo(function TaskCard({
   isActive,
   canRestart,
   isSubmitting,
-  getRestartDisabledReason,
+  disabledReason,
   onClick,
   onKeyDown,
   handleRestartClick,
@@ -190,9 +206,7 @@ const TaskCard = memo(function TaskCard({
               disabled={!canRestart || isSubmitting}
               className="text-xs cursor-pointer disabled:cursor-not-allowed"
               title={
-                !canRestart
-                  ? getRestartDisabledReason()
-                  : `Restart job from ${item.id}`
+                !canRestart ? disabledReason : `Restart job from ${item.id}`
               }
             >
               Restart
@@ -202,7 +216,7 @@ const TaskCard = memo(function TaskCard({
       </div>
     </div>
   );
-});
+}, areEqualTaskCardProps);
 
 /**
  * DAGGrid component for visualizing pipeline tasks with connectors and slide-over details
@@ -442,7 +456,7 @@ function DAGGrid({
         cancelAnimationFrame(rafRef.current);
       }
     };
-  }, [items, effectiveCols, visualOrder]);
+  }, [items.length, effectiveCols, visualOrder]);
 
   // Get status for a given item index with fallback to activeIndex
   const getStatus = (index) => {
@@ -680,6 +694,7 @@ function DAGGrid({
           const status = getStatus(idx);
           const isActive = idx === activeIndex;
           const canRestart = isRestartEnabled();
+          const restartDisabledReason = getRestartDisabledReason();
 
           return (
             <TaskCard
@@ -690,7 +705,7 @@ function DAGGrid({
               isActive={isActive}
               canRestart={canRestart}
               isSubmitting={isSubmitting}
-              getRestartDisabledReason={getRestartDisabledReason}
+              disabledReason={restartDisabledReason}
               onClick={() => {
                 setOpenIdx(idx);
               }}
