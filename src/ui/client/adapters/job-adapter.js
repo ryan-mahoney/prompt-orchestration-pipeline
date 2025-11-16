@@ -75,6 +75,8 @@ function normalizeTasks(rawTasks) {
           : undefined,
         // Preserve tokenUsage if present
         ...(t && t.tokenUsage ? { tokenUsage: t.tokenUsage } : {}),
+        // Preserve error object if present
+        ...(t && t.error ? { error: t.error } : {}),
       };
       tasks[name] = taskObj;
     });
@@ -111,6 +113,8 @@ function normalizeTasks(rawTasks) {
           : undefined,
         // Preserve tokenUsage if present
         ...(t && t.tokenUsage ? { tokenUsage: t.tokenUsage } : {}),
+        // Preserve error object if present
+        ...(t && t.error ? { error: t.error } : {}),
       };
     });
     return { tasks, warnings };
