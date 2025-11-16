@@ -347,6 +347,7 @@ export function useJobDetailWithUpdates(jobId) {
               newEs.addEventListener("job:removed", onJobRemoved);
               newEs.addEventListener("status:changed", onStatusChanged);
               newEs.addEventListener("state:change", onStateChange);
+              newEs.addEventListener("task:updated", onTaskUpdated);
               newEs.addEventListener("error", onError);
 
               esRef.current = newEs;
@@ -371,6 +372,87 @@ export function useJobDetailWithUpdates(jobId) {
             // Queue events until hydration completes
             eventQueue.current = (eventQueue.current || []).concat(eventObj);
             return;
+          }
+
+          // Handle task:updated events with task-level merge logic
+          if (type === "task:updated") {
+            const p = payload || {};
+            const { jobId: eventJobId, taskId, task } = p;
+
+            // Filter by jobId
+            if (eventJobId && eventJobId !== jobId) {
+              return;
+            }
+
+            // Validate required fields
+            if (!taskId || !task) {
+              return;
+            }
+
+            startTransition(() => {
+              setData((prev) => {
+                // If no previous data or tasks, return unchanged
+                if (!prev || !prev.tasks) {
+                  return prev;
+                }
+
+                const prevTask = prev.tasks[taskId];
+
+                // Compare observable fields to determine if update is needed
+                const fieldsToCompare = [
+                  "state",
+                  "currentStage",
+                  "failedStage",
+                  "startedAt",
+                  "endedAt",
+                  "attempts",
+                  "executionTimeMs",
+                  "error",
+                ];
+
+                let hasChanged = false;
+                for (const field of fieldsToCompare) {
+                  if (prevTask?.[field] !== task[field]) {
+                    hasChanged = true;
+                    break;
+                  }
+                }
+
+                // Also compare tokenUsage and files arrays by reference
+                if (
+                  prevTask?.tokenUsage !== task.tokenUsage ||
+                  prevTask?.files !== task.files
+                ) {
+                  hasChanged = true;
+                }
+
+                if (!hasChanged) {
+                  return prev; // No change, preserve identity
+                }
+
+                // Create new tasks map with updated task
+                const nextTasks = { ...prev.tasks, [taskId]: task };
+
+                // Recompute job-level summary fields
+                const taskCount = Object.keys(nextTasks).length;
+                const doneCount = Object.values(nextTasks).filter(
+                  (t) => t.state === "done"
+                ).length;
+                const progress =
+                  taskCount > 0 ? (doneCount / taskCount) * 100 : 0;
+
+                // Return new job object with updated tasks and summary
+                return {
+                  ...prev,
+                  tasks: nextTasks,
+                  doneCount,
+                  taskCount,
+                  progress,
+                  lastUpdated: new Date().toISOString(),
+                };
+              });
+            });
+            return; // Skip generic handling for task:updated
           }
 
           // Path-matching state:change → schedule debounced refetch
@@ -415,6 +497,7 @@ export function useJobDetailWithUpdates(jobId) {
       const onStatusChanged = (evt) =>
         handleIncomingEvent("status:changed", evt);
       const onStateChange = (evt) => handleIncomingEvent("state:change", evt);
+      const onTaskUpdated = (evt) => handleIncomingEvent("task:updated", evt);
 
       es.addEventListener("open", onOpen);
       es.addEventListener("job:updated", onJobUpdated);
@@ -422,6 +505,7 @@ export function useJobDetailWithUpdates(jobId) {
       es.addEventListener("job:removed", onJobRemoved);
       es.addEventListener("status:changed", onStatusChanged);
       es.addEventListener("state:change", onStateChange);
+      es.addEventListener("task:updated", onTaskUpdated);
       es.addEventListener("error", onError);
 
       // Set connection status from readyState when possible
@@ -439,6 +523,7 @@ export function useJobDetailWithUpdates(jobId) {
           es.removeEventListener("job:removed", onJobRemoved);
           es.removeEventListener("status:changed", onStatusChanged);
           es.removeEventListener("state:change", onStateChange);
+          es.removeEventListener("task:updated", onTaskUpdated);
           es.removeEventListener("error", onError);
           es.close();
         } catch (err) {
