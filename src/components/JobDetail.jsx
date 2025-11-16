@@ -129,6 +129,16 @@ export default function JobDetail({ job, pipeline }) {
       return item;
     });
 
+    // Check if all entries were reused and lengths match
+    const allReused = newItems.every(
+      (item, index) => item === prevItems[index]
+    );
+
+    if (allReused && prevItems.length === newItems.length) {
+      // All items reused, preserve array reference
+      return prevItems;
+    }
+
     prevDagItemsRef.current = newItems;
     return newItems;
   }, [stableDagItems]);

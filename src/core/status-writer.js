@@ -281,22 +281,71 @@ export async function updateTaskStatus(jobDir, taskId, taskUpdateFn) {
     throw new Error("taskUpdateFn must be a function");
   }
 
-  return writeJobStatus(jobDir, (snapshot) => {
-    // Ensure task exists
-    if (!snapshot.tasks[taskId]) {
-      snapshot.tasks[taskId] = {};
-    }
+  const jobId = path.basename(jobDir);
+  const logger = createJobLogger("StatusWriter", jobId);
 
-    const task = snapshot.tasks[taskId];
+  // Get or create the write queue for this job directory
+  const prev = writeQueues.get(jobDir) || Promise.resolve();
+  let resultSnapshot;
 
-    // Apply task updates
-    const result = taskUpdateFn(task);
-    if (result !== undefined) {
-      snapshot.tasks[taskId] = result;
-    }
+  const next = prev
+    .then(async () => {
+      logger.group("Task Status Update Operation");
+      logger.log(`Updating task ${taskId} for job: ${jobId}`);
 
-    return snapshot;
-  });
+      const statusPath = path.join(jobDir, "tasks-status.json");
+
+      // Read existing status or create default
+      const current = await readStatusFile(statusPath, jobId);
+      const validated = validateStatusSnapshot(current);
+
+      // Ensure task exists
+      if (!validated.tasks[taskId]) {
+        validated.tasks[taskId] = {};
+      }
+
+      const task = validated.tasks[taskId];
+
+      // Apply task updates
+      const result = taskUpdateFn(task);
+      if (result !== undefined) {
+        validated.tasks[taskId] = result;
+      }
+
+      validated.lastUpdated = new Date().toISOString();
+
+      // Atomic write
+      await atomicWrite(statusPath, validated);
+      logger.log("Task status file written successfully");
+
+      // Emit task:updated SSE event after successful write
+      try {
+        const eventData = {
+          jobId,
+          taskId,
+          task: validated.tasks[taskId],
+        };
+        await logger.sse("task:updated", eventData);
+        logger.log("task:updated SSE event broadcasted successfully");
+      } catch (error) {
+        // Don't fail the write if SSE emission fails
+        logger.error("Failed to emit task:updated SSE event:", error);
+      }
+
+      logger.groupEnd();
+      resultSnapshot = validated;
+    })
+    .catch((e) => {
+      throw e;
+    });
+
+  // Store the promise chain and set up cleanup
+  writeQueues.set(
+    jobDir,
+    next.finally(() => {})
+  );
+
+  return next.then(() => resultSnapshot);
 }
 
 /**
