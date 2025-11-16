@@ -543,7 +543,6 @@ function parseMultipartFormData(req) {
             }
 
             // Calculate the actual byte positions in the buffer for this part
-            const partStartInData = partIndexInData;
             const headerEndInData = partIndexInData + headerEndInPart + 4;
 
             // Use binary buffer to find the next boundary
