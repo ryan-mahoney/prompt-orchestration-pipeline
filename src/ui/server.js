@@ -351,16 +351,31 @@ async function normalizeSeedUpload({ req, contentTypeHeader }) {
     formData.filename?.toLowerCase().endsWith(".zip");
 
   if (isZipFile) {
+    console.log("[UPLOAD] Detected zip upload", {
+      filename: formData.filename,
+      contentType: formData.contentType,
+      bufferSize: formData.contentBuffer.length,
+    });
+
     // Handle zip upload
     try {
       const { seedObject, artifacts } = await extractSeedZip(
         formData.contentBuffer
       );
+      console.log("[UPLOAD] Zip extraction completed", {
+        artifactCount: artifacts.length,
+        artifactNames: artifacts.map((a) => a.filename),
+        seedKeys: Object.keys(seedObject),
+      });
       return {
         seedObject,
         uploadArtifacts: artifacts,
       };
     } catch (error) {
+      console.log("[UPLOAD] Zip extraction failed", {
+        error: error.message,
+        filename: formData.filename,
+      });
       // Re-throw zip-specific errors with clear messages
       throw new Error(error.message);
     }
@@ -554,6 +569,14 @@ function parseMultipartFormData(req) {
  * @param {http.ServerResponse} res - HTTP response
  */
 async function handleSeedUpload(req, res) {
+  // Add logging at the very start of the upload handler
+  console.log("[UPLOAD] Incoming seed upload", {
+    method: req.method,
+    url: req.url,
+    contentType: req.headers["content-type"],
+    userAgent: req.headers["user-agent"],
+  });
+
   try {
     const ct = req.headers["content-type"] || "";
 
@@ -565,6 +588,10 @@ async function handleSeedUpload(req, res) {
         contentTypeHeader: ct,
       });
     } catch (error) {
+      console.log("[UPLOAD] Normalization failed", {
+        error: error.message,
+        contentType: ct,
+      });
       res.writeHead(400, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ success: false, message: error.message }));
       return;

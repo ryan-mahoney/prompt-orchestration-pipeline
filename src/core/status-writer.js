@@ -4,6 +4,7 @@ import { TaskState } from "../config/statuses.js";
 import { createJobLogger } from "./logger.js";
 
 // Per-job write queues to serialize writes to tasks-status.json
+
 const writeQueues = new Map(); // Map<string jobDir, Promise<any>>
 
 /**
@@ -483,4 +484,41 @@ export async function resetJobToCleanSlate(
 
     return snapshot;
   });
+}
+
+/**
+ * Initialize job-level artifact index and copy artifacts to job directory
+ * @param {string} jobDir - Job directory path
+ * @param {Array} uploadArtifacts - Array of {filename, content} objects
+ * @returns {Promise<void>}
+ */
+export async function initializeJobArtifacts(jobDir, uploadArtifacts = []) {
+  if (!jobDir || typeof jobDir !== "string") {
+    throw new Error("jobDir must be a non-empty string");
+  }
+
+  if (!Array.isArray(uploadArtifacts)) {
+    throw new Error("uploadArtifacts must be an array");
+  }
+
+  if (uploadArtifacts.length === 0) {
+    return;
+  }
+
+  const jobFilesDir = path.join(jobDir, "files");
+  const jobArtifactsDir = path.join(jobFilesDir, "artifacts");
+
+  await fs.mkdir(jobFilesDir, { recursive: true });
+  await fs.mkdir(jobArtifactsDir, { recursive: true });
+
+  for (const artifact of uploadArtifacts) {
+    const { filename, content } = artifact || {};
+
+    if (!filename || typeof filename !== "string") {
+      continue; // Skip invalid entries rather than throwing
+    }
+
+    const artifactPath = path.join(jobArtifactsDir, filename);
+    await fs.writeFile(artifactPath, content);
+  }
 }

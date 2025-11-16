@@ -152,14 +152,14 @@ export default function UploadSeed({ onUploadSuccess }) {
             <span className="font-medium text-gray-900">Click to upload</span>{" "}
             or drag and drop
           </div>
-          <p className="text-xs text-gray-500">JSON files only</p>
+          <p className="text-xs text-gray-500">JSON or zip files only</p>
         </div>
       </div>
 
       <input
         ref={fileInputRef}
         type="file"
-        accept=".json"
+        accept=".json,.zip"
         className="hidden"
         onChange={handleFileChange}
         data-testid="file-input"
