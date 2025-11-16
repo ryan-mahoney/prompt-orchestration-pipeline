@@ -12,7 +12,10 @@ import * as state from "./state.js";
 // Import orchestrator-related functions only in non-test mode
 let submitJobWithValidation;
 import { sseRegistry } from "./sse.js";
-import { resetJobToCleanSlate } from "../core/status-writer.js";
+import {
+  resetJobToCleanSlate,
+  initializeJobArtifacts,
+} from "../core/status-writer.js";
 import { spawn } from "node:child_process";
 import {
   getPendingSeedPath,
@@ -23,6 +26,7 @@ import {
 } from "../config/paths.js";
 import { handleJobList, handleJobDetail } from "./endpoints/job-endpoints.js";
 import { generateJobId } from "../utils/id-generator.js";
+import { extractSeedZip } from "./zip-utils.js";
 
 // Get __dirname equivalent in ES modules
 const __filename = fileURLToPath(import.meta.url);
@@ -100,11 +104,17 @@ function hasValidPayload(seed) {
 
 /**
  * Handle seed upload directly without starting orchestrator (for test environment)
+  +++++++ REPLACE
  * @param {Object} seedObject - Seed object to upload
  * @param {string} dataDir - Base data directory
+ * @param {Array} uploadArtifacts - Array of {filename, content} objects
  * @returns {Promise<Object>} Result object
  */
-async function handleSeedUploadDirect(seedObject, dataDir) {
+async function handleSeedUploadDirect(
+  seedObject,
+  dataDir,
+  uploadArtifacts = []
+) {
   let partialFiles = [];
 
   try {
@@ -196,6 +206,16 @@ async function handleSeedUploadDirect(seedObject, dataDir) {
       jobPipelinePath,
       JSON.stringify(pipelineSnapshot, null, 2)
     );
+
+    // Initialize job artifacts if any provided
+    if (uploadArtifacts.length > 0) {
+      try {
+        await initializeJobArtifacts(currentJobDir, uploadArtifacts);
+      } catch (artifactError) {
+        // Don't fail the upload if artifact initialization fails, just log the error
+        console.error("Failed to initialize job artifacts:", artifactError);
+      }
+    }
 
     return {
       success: true,
@@ -298,6 +318,67 @@ function prioritizeJobStatusChange(changes = []) {
   return statusChange || normalized[0] || null;
 }
 
+/**
+ * Normalize seed upload from various input formats
+ * @param {http.IncomingMessage} req - HTTP request
+ * @param {string} contentTypeHeader - Content-Type header
+ * @returns {Promise<{seedObject: Object, uploadArtifacts: Array<{filename: string, content: Buffer}>}>}
+ */
+async function normalizeSeedUpload({ req, contentTypeHeader }) {
+  // Handle application/json uploads
+  if (contentTypeHeader.includes("application/json")) {
+    const buffer = await readRawBody(req);
+    try {
+      const seedObject = JSON.parse(buffer.toString("utf8") || "{}");
+      return {
+        seedObject,
+        uploadArtifacts: [{ filename: "seed.json", content: buffer }],
+      };
+    } catch (error) {
+      throw new Error("Invalid JSON");
+    }
+  }
+
+  // Handle multipart form data uploads
+  const formData = await parseMultipartFormData(req);
+  if (!formData.contentBuffer) {
+    throw new Error("No file content found");
+  }
+
+  // Check if this is a zip file
+  const isZipFile =
+    formData.contentType === "application/zip" ||
+    formData.filename?.toLowerCase().endsWith(".zip");
+
+  if (isZipFile) {
+    // Handle zip upload
+    try {
+      const { seedObject, artifacts } = await extractSeedZip(
+        formData.contentBuffer
+      );
+      return {
+        seedObject,
+        uploadArtifacts: artifacts,
+      };
+    } catch (error) {
+      // Re-throw zip-specific errors with clear messages
+      throw new Error(error.message);
+    }
+  } else {
+    // Handle regular JSON file upload
+    try {
+      const seedObject = JSON.parse(formData.contentBuffer.toString("utf8"));
+      const filename = formData.filename || "seed.json";
+      return {
+        seedObject,
+        uploadArtifacts: [{ filename, content: formData.contentBuffer }],
+      };
+    } catch (error) {
+      throw new Error("Invalid JSON");
+    }
+  }
+}
+
 function broadcastStateUpdate(currentState) {
   try {
     const recentChanges = (currentState && currentState.recentChanges) || [];
@@ -365,7 +446,7 @@ function startHeartbeat() {
 /**
  * Parse multipart form data
  * @param {http.IncomingMessage} req - HTTP request
- * @returns {Promise<Object>} Parsed form data with file content
+ * @returns {Promise<Object>} Parsed form data with file content as Buffer
  */
 function parseMultipartFormData(req) {
   return new Promise((resolve, reject) => {
@@ -394,47 +475,55 @@ function parseMultipartFormData(req) {
     req.on("end", () => {
       try {
         const buffer = Buffer.concat(chunks);
-        const data = buffer.toString("utf8");
-        console.log("Raw multipart data length:", data.length);
-        console.log("Boundary:", JSON.stringify(boundary));
 
-        // Simple multipart parsing - look for file field
+        // Find file part in the buffer using string operations for headers
+        const data = buffer.toString(
+          "utf8",
+          0,
+          Math.min(buffer.length, 1024 * 1024)
+        ); // First MB for header search
         const parts = data.split(boundary);
-        console.log("Number of parts:", parts.length);
 
         for (let i = 0; i < parts.length; i++) {
           const part = parts[i];
-          console.log(`Part ${i} length:`, part.length);
-          console.log(
-            `Part ${i} starts with:`,
-            JSON.stringify(part.substring(0, 50))
-          );
 
           if (part.includes('name="file"') && part.includes("filename")) {
-            console.log("Found file part at index", i);
             // Extract filename
             const filenameMatch = part.match(/filename="([^"]+)"/);
-            console.log("Filename match:", filenameMatch);
             if (!filenameMatch) continue;
 
             // Extract content type
             const contentTypeMatch = part.match(/Content-Type:\s*([^\r\n]+)/);
-            console.log("Content-Type match:", contentTypeMatch);
 
-            // Extract file content (everything after the headers)
-            const contentStart = part.indexOf("\r\n\r\n") + 4;
-            const contentEnd = part.lastIndexOf("\r\n");
-            console.log(
-              "Content start:",
-              contentStart,
-              "Content end:",
-              contentEnd
+            // Find this specific part's start in the data string
+            const partIndexInData = data.indexOf(part);
+            const headerEndInPart = part.indexOf("\r\n\r\n");
+            if (headerEndInPart === -1) {
+              reject(
+                new Error("Could not find end of headers in multipart part")
+              );
+              return;
+            }
+
+            // Calculate the actual byte positions in the buffer for this part
+            const partStartInData = partIndexInData;
+            const headerEndInData = partIndexInData + headerEndInPart + 4;
+
+            // Use binary buffer to find the next boundary
+            const boundaryBuf = Buffer.from(boundary, "ascii");
+            const nextBoundaryIndex = buffer.indexOf(
+              boundaryBuf,
+              headerEndInData
             );
-            const fileContent = part.substring(contentStart, contentEnd);
-            console.log("File content length:", fileContent.length);
-            console.log(
-              "File content:",
-              JSON.stringify(fileContent.substring(0, 100))
+            const contentEndInData =
+              nextBoundaryIndex !== -1
+                ? nextBoundaryIndex - 2 // Subtract 2 for \r\n before boundary
+                : buffer.length;
+
+            // Extract the file content as Buffer
+            const contentBuffer = buffer.slice(
+              headerEndInData,
+              contentEndInData
             );
 
             resolve({
@@ -442,13 +531,12 @@ function parseMultipartFormData(req) {
               contentType: contentTypeMatch
                 ? contentTypeMatch[1]
                 : "application/octet-stream",
-              content: fileContent,
+              contentBuffer: contentBuffer,
             });
             return;
           }
         }
 
-        console.log("No file field found in form data");
         reject(new Error("No file field found in form data"));
       } catch (error) {
         console.error("Error parsing multipart:", error);
@@ -468,55 +556,41 @@ function parseMultipartFormData(req) {
 async function handleSeedUpload(req, res) {
   try {
     const ct = req.headers["content-type"] || "";
-    let seedObject;
-    if (ct.includes("application/json")) {
-      const raw = await readRawBody(req);
-      try {
-        seedObject = JSON.parse(raw.toString("utf8") || "{}");
-      } catch {
-        res.writeHead(400, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ success: false, message: "Invalid JSON" }));
-        return;
-      }
-    } else {
-      // Parse multipart form data (existing behavior)
-      const formData = await parseMultipartFormData(req);
-      if (!formData.content) {
-        res.writeHead(400, { "Content-Type": "application/json" });
-        res.end(
-          JSON.stringify({ success: false, message: "No file content found" })
-        );
-        return;
-      }
-      try {
-        seedObject = JSON.parse(formData.content);
-      } catch {
-        res.writeHead(400, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ success: false, message: "Invalid JSON" }));
-        return;
-      }
+
+    // Use the new normalization function to handle all upload formats
+    let normalizedUpload;
+    try {
+      normalizedUpload = await normalizeSeedUpload({
+        req,
+        contentTypeHeader: ct,
+      });
+    } catch (error) {
+      res.writeHead(400, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ success: false, message: error.message }));
+      return;
     }
+
+    const { seedObject, uploadArtifacts } = normalizedUpload;
 
     // Use current PO_ROOT or fallback to DATA_DIR
     const currentDataDir = process.env.PO_ROOT || DATA_DIR;
 
     // For test environment, use simplified validation without starting orchestrator
-    console.log("NODE_ENV:", process.env.NODE_ENV);
     if (process.env.NODE_ENV === "test") {
-      console.log("Using test mode for seed upload");
       // Simplified validation for tests - just write to pending directory
-      const result = await handleSeedUploadDirect(seedObject, currentDataDir);
-      console.log("handleSeedUploadDirect result:", result);
+      const result = await handleSeedUploadDirect(
+        seedObject,
+        currentDataDir,
+        uploadArtifacts
+      );
 
       // Return appropriate status code based on success
       if (result.success) {
-        console.log("Sending 200 response");
         res.writeHead(200, {
           "Content-Type": "application/json",
           Connection: "close",
         });
         res.end(JSON.stringify(result));
-        console.log("Response sent successfully");
 
         // Broadcast SSE event for successful upload
         sseRegistry.broadcast({
@@ -524,17 +598,13 @@ async function handleSeedUpload(req, res) {
           data: { name: result.jobName },
         });
       } else {
-        console.log("Sending 400 response");
         res.writeHead(400, {
           "Content-Type": "application/json",
           Connection: "close",
         });
         res.end(JSON.stringify(result));
-        console.log("Response sent successfully");
       }
       return;
-    } else {
-      console.log("Using production mode for seed upload");
     }
 
     // Submit job with validation (for production)
@@ -546,6 +616,7 @@ async function handleSeedUpload(req, res) {
       const result = await submitJobWithValidation({
         dataDir: currentDataDir,
         seedObject,
+        uploadArtifacts,
       });
 
       // Send appropriate response
@@ -1082,18 +1153,12 @@ function serveStatic(res, filePath) {
  * Create and start the HTTP server
  */
 function createServer() {
-  console.log("Creating HTTP server...");
   const server = http.createServer(async (req, res) => {
     // Use WHATWG URL API instead of deprecated url.parse
     const { pathname, searchParams } = new URL(
       req.url,
       `http://${req.headers.host}`
     );
-
-    // DEBUG: Log all API requests
-    if (pathname.startsWith("/api/")) {
-      console.log(`DEBUG: API Request: ${req.method} ${pathname}`);
-    }
 
     // CORS headers for API endpoints
     if (pathname.startsWith("/api/")) {
@@ -1593,10 +1658,6 @@ function createServer() {
             mode: "clean-slate",
             spawned: true,
           });
-
-          console.log(
-            `Job ${jobId} restarted successfully, detached runner PID: ${child.pid}`
-          );
         } finally {
           // Always end restart guard
           endRestart(jobId);
@@ -1860,13 +1921,6 @@ function start(customPort) {
  */
 async function startServer({ dataDir, port: customPort }) {
   try {
-    console.log(
-      "DEBUG: startServer called with dataDir:",
-      dataDir,
-      "customPort:",
-      customPort
-    );
-
     // Initialize config-bridge paths early to ensure consistent path resolution
     // This prevents path caching issues when dataDir changes between tests
     const { initPATHS } = await import("./config-bridge.node.js");
@@ -1897,8 +1951,6 @@ async function startServer({ dataDir, port: customPort }) {
           ? parseInt(process.env.PORT)
           : 0;
 
-    console.log("DEBUG: About to create server...");
-
     // In development, start Vite in middlewareMode so the Node server can serve
     // the client with HMR in a single process. We dynamically import Vite here
     // to avoid including it in production bundles.
@@ -1916,22 +1968,15 @@ async function startServer({ dataDir, port: customPort }) {
           server: { middlewareMode: true },
           appType: "custom",
         });
-        console.log("DEBUG: Vite dev server started (middleware mode)");
       } catch (err) {
         console.error("Failed to start Vite dev server:", err);
         viteServer = null;
       }
-    } else if (process.env.NODE_ENV === "test") {
-      console.log("DEBUG: Vite disabled in test mode (API-only mode)");
-    } else if (process.env.DISABLE_VITE === "1") {
-      console.log("DEBUG: Vite disabled via DISABLE_VITE=1 (API-only mode)");
     }
 
     const server = createServer();
-    console.log("DEBUG: Server created successfully");
 
     // Robust promise with proper error handling and race condition prevention
-    console.log(`Attempting to start server on port ${port}...`);
     await new Promise((resolve, reject) => {
       let settled = false;
 
@@ -1955,7 +2000,6 @@ async function startServer({ dataDir, port: customPort }) {
         if (!settled) {
           settled = true;
           server.removeListener("error", errorHandler);
-          console.log(`Server successfully started on port ${port}`);
           resolve();
         }
       };
@@ -1981,18 +2025,10 @@ async function startServer({ dataDir, port: customPort }) {
     const address = server.address();
     const baseUrl = `http://localhost:${address.port}`;
 
-    console.log(`Server running at ${baseUrl}`);
-    if (dataDir) {
-      console.log(`Data directory: ${dataDir}`);
-    }
-
     // Only initialize watcher and heartbeat in non-test environments
     if (process.env.NODE_ENV !== "test") {
-      console.log(`Watching paths: ${WATCHED_PATHS.join(", ")}`);
       initializeWatcher();
       startHeartbeat();
-    } else {
-      console.log("Server started in test mode - skipping watcher/heartbeat");
     }
 
     return {
@@ -2016,7 +2052,6 @@ async function startServer({ dataDir, port: customPort }) {
           try {
             await viteServer.close();
             viteServer = null;
-            console.log("DEBUG: Vite dev server closed");
           } catch (err) {
             console.error("Error closing Vite dev server:", err);
           }
