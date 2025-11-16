@@ -487,6 +487,48 @@ export async function resetJobToCleanSlate(
 }
 
 /**
+ * Consolidated path jail security validation with generic error messages
+ * @param {string} filename - Filename to validate
+ * @returns {Object|null} Validation result or null if valid
+ */
+function validateFilePath(filename) {
+  // Check for path traversal patterns
+  if (filename.includes("..")) {
+    console.error("Path security: path traversal detected", { filename });
+    return {
+      allowed: false,
+      message: "Path validation failed",
+    };
+  }
+
+  // Check for absolute paths (POSIX, Windows, backslashes, ~)
+  if (
+    path.isAbsolute(filename) ||
+    /^[a-zA-Z]:/.test(filename) ||
+    filename.includes("\\") ||
+    filename.startsWith("~")
+  ) {
+    console.error("Path security: absolute path detected", { filename });
+    return {
+      allowed: false,
+      message: "Path validation failed",
+    };
+  }
+
+  // Check for empty filename
+  if (!filename || filename.trim() === "") {
+    console.error("Path security: empty filename detected");
+    return {
+      allowed: false,
+      message: "Path validation failed",
+    };
+  }
+
+  // Path is valid
+  return null;
+}
+
+/**
  * Initialize job-level artifact index and copy artifacts to job directory
  * @param {string} jobDir - Job directory path
  * @param {Array} uploadArtifacts - Array of {filename, content} objects
@@ -516,6 +558,16 @@ export async function initializeJobArtifacts(jobDir, uploadArtifacts = []) {
 
     if (!filename || typeof filename !== "string") {
       continue; // Skip invalid entries rather than throwing
+    }
+
+    // Validate filename using the consolidated function
+    const validation = validateFilePath(filename);
+    if (validation) {
+      console.error("Path security: skipping invalid artifact", {
+        filename,
+        reason: validation.message,
+      });
+      continue; // Skip invalid filenames rather than throwing
     }
 
     const artifactPath = path.join(jobArtifactsDir, filename);

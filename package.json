@@ -43,6 +43,7 @@
     "chokidar": "^3.5.3",
     "commander": "^14.0.2",
     "dotenv": "^17.2.3",
+    "fflate": "^0.8.2",
     "lucide-react": "^0.544.0",
     "openai": "^5.23.1",
     "react": "^19.2.0",

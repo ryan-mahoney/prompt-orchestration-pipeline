@@ -1,0 +1,7 @@
+{
+  "name": "test-zip-job",
+  "pipeline": "content-generation",
+  "data": {
+    "message": "Test from zip upload"
+  }
+}

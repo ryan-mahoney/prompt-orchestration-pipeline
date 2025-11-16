@@ -134,15 +134,38 @@ async function handleSeedUploadDirect(
       return { success: false, message: "Required fields missing" };
     }
 
-    // Validate name format
-    const nameRegex = /^[a-zA-Z0-9_-]+$/;
-    if (!nameRegex.test(seedObject.name)) {
+    // Validate name format using the same logic as seed validator
+    if (
+      !seedObject.name ||
+      typeof seedObject.name !== "string" ||
+      seedObject.name.trim() === ""
+    ) {
       return {
         success: false,
-        message:
-          "name must contain only alphanumeric characters, hyphens, and underscores",
+        message: "name field is required",
       };
     }
+
+    const trimmedName = seedObject.name.trim();
+    if (trimmedName.length > 120) {
+      return {
+        success: false,
+        message: "name must be 120 characters or less",
+      };
+    }
+
+    // Allow spaces and common punctuation for better UX
+    // Still disallow control characters and path traversal patterns
+    const dangerousPattern = /[\x00-\x1f\x7f-\x9f]/;
+    if (dangerousPattern.test(trimmedName)) {
+      return {
+        success: false,
+        message: "name must contain only printable characters",
+      };
+    }
+
+    // Update seedObject with validated trimmed name
+    seedObject.name = trimmedName;
 
     // Generate a random job ID
     const jobId = generateJobId();
@@ -592,8 +615,17 @@ async function handleSeedUpload(req, res) {
         error: error.message,
         contentType: ct,
       });
+
+      // Handle specific zip-related errors with appropriate messages
+      let errorMessage = error.message;
+      if (error.message === "Invalid JSON") {
+        errorMessage = "Invalid JSON";
+      } else if (error.message === "seed.json not found in zip") {
+        errorMessage = "seed.json not found in zip";
+      }
+
       res.writeHead(400, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ success: false, message: error.message }));
+      res.end(JSON.stringify({ success: false, message: errorMessage }));
       return;
     }
 

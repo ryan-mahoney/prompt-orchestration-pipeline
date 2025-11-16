@@ -84,7 +84,7 @@ describe("Upload API - Zip Files", () => {
 
     expect(result).toMatchObject({
       success: true,
-      jobName: "test-zip-job",
+      jobName: "Market Analysis about Renewable Energy Storage",
       message: "Seed file uploaded successfully",
     });
     expect(result.jobId).toMatch(/^[A-Za-z0-9]{12}$/);

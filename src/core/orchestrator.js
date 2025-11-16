@@ -154,6 +154,38 @@ export async function startOrchestrator(opts) {
         tasks: {}, // Initialize empty tasks object for pipeline runner
       };
       await fs.writeFile(statusPath, JSON.stringify(status, null, 2));
+
+      // Initialize status from artifacts if any exist
+      try {
+        const { initializeStatusFromArtifacts } = await import(
+          "./status-initializer.js"
+        );
+        const pipelineConfig = getPipelineConfig(seed?.pipeline || "default");
+        const pipelineSnapshot = JSON.parse(
+          await fs.readFile(pipelineConfig.pipelineJsonPath, "utf8")
+        );
+
+        const applyArtifacts = await initializeStatusFromArtifacts({
+          jobDir: workDir,
+          pipeline: pipelineSnapshot,
+        });
+
+        // Apply artifact initialization to the status
+        const updatedStatus = applyArtifacts(status);
+        await fs.writeFile(statusPath, JSON.stringify(updatedStatus, null, 2));
+
+        logger.log("Initialized status from upload artifacts", {
+          jobId,
+          pipeline: seed?.pipeline,
+          artifactsCount: updatedStatus.files?.artifacts?.length || 0,
+        });
+      } catch (artifactError) {
+        // Don't fail job startup if artifact initialization fails, just log
+        logger.warn("Failed to initialize status from artifacts", {
+          jobId,
+          error: artifactError.message,
+        });
+      }
     }
     // Create fileIO for orchestrator-level logging
     const fileIO = createTaskFileIO({
