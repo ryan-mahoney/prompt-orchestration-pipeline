@@ -411,19 +411,26 @@ export function useJobDetailWithUpdates(jobId) {
                 ];
 
                 let hasChanged = false;
-                for (const field of fieldsToCompare) {
-                  if (prevTask?.[field] !== task[field]) {
-                    hasChanged = true;
-                    break;
-                  }
-                }
 
-                // Also compare tokenUsage and files arrays by reference
-                if (
-                  prevTask?.tokenUsage !== task.tokenUsage ||
-                  prevTask?.files !== task.files
-                ) {
+                // If task doesn't exist yet, always treat as changed
+                if (!prevTask) {
                   hasChanged = true;
+                } else {
+                  // Compare observable fields to determine if update is needed
+                  for (const field of fieldsToCompare) {
+                    if (prevTask[field] !== task[field]) {
+                      hasChanged = true;
+                      break;
+                    }
+                  }
+
+                  // Also compare tokenUsage and files arrays by reference
+                  if (
+                    prevTask.tokenUsage !== task.tokenUsage ||
+                    prevTask.files !== task.files
+                  ) {
+                    hasChanged = true;
+                  }
                 }
 
                 if (!hasChanged) {
