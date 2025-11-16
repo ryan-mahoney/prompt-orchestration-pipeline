@@ -4,7 +4,6 @@ import { TaskState } from "../config/statuses.js";
 import { createJobLogger } from "./logger.js";
 
 // Per-job write queues to serialize writes to tasks-status.json
-
 const writeQueues = new Map(); // Map<string jobDir, Promise<any>>
 
 /**
