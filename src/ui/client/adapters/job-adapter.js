@@ -156,7 +156,7 @@ export function adaptJobSummary(apiJob) {
   // Demo-only: read canonical fields strictly
   const id = apiJob.jobId;
   const name = apiJob.title || "";
-  const rawTasks = apiJob.tasks;
+  const rawTasks = apiJob.tasks || apiJob.tasksStatus; // Handle both formats for backward compatibility
   const location = apiJob.location;
 
   // Job-level stage metadata
@@ -225,7 +225,7 @@ export function adaptJobDetail(apiDetail) {
   // Demo-only: read canonical fields strictly
   const id = apiDetail.jobId;
   const name = apiDetail.title || "";
-  const rawTasks = apiDetail.tasks;
+  const rawTasks = apiDetail.tasks || apiDetail.tasksStatus; // Handle both formats for backward compatibility
   const location = apiDetail.location;
 
   // Job-level stage metadata
