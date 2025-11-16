@@ -222,6 +222,7 @@ function DAGGrid({
   activeIndex = 0,
   jobId,
   filesByTypeForItem = () => createEmptyTaskFiles(),
+  taskById = {},
 }) {
   const overlayRef = useRef(null);
   const gridRef = useRef(null);
@@ -715,6 +716,7 @@ function DAGGrid({
           jobId={jobId}
           taskId={items[openIdx]?.id || `task-${openIdx}`}
           taskBody={items[openIdx]?.body || null}
+          taskError={taskById[items[openIdx]?.id]?.error || null}
           filesByTypeForItem={filesByTypeForItem}
           task={items[openIdx]}
           taskIndex={openIdx}
