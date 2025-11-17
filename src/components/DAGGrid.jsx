@@ -443,15 +443,11 @@ function DAGGrid({
     }
 
     const handleResize = () => compute();
-    const handleScroll = () => compute();
-
     window.addEventListener("resize", handleResize);
-    window.addEventListener("scroll", handleScroll, true);
 
     return () => {
       if (ro) ro.disconnect();
       window.removeEventListener("resize", handleResize);
-      window.removeEventListener("scroll", handleScroll, true);
       if (rafRef.current) {
         cancelAnimationFrame(rafRef.current);
       }
