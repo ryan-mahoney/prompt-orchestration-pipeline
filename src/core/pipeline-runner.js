@@ -31,6 +31,7 @@ const logger = createJobLogger("PipelineRunner", jobId);
 const workDir = path.join(CURRENT_DIR, jobId);
 
 const startFromTask = process.env.PO_START_FROM_TASK;
+const runSingleTask = process.env.PO_RUN_SINGLE_TASK === "true";
 
 // Get pipeline slug from environment or fallback to seed.json
 let pipelineSlug = process.env.PO_PIPELINE_SLUG;
@@ -79,6 +80,7 @@ logger.group("Pipeline execution", {
   pipelineSlug,
   totalTasks: pipeline.tasks.length,
   startFromTask: startFromTask || null,
+  runSingleTask,
 });
 
 for (const taskName of pipeline.tasks) {
@@ -309,6 +311,12 @@ for (const taskName of pipeline.tasks) {
         result.logs?.reduce((total, log) => total + (log.ms || 0), 0) || 0,
       refinementAttempts: result.refinementAttempts || 0,
     });
+
+    // Check if this is a single task run and we've completed the target task
+    if (runSingleTask && taskName === startFromTask) {
+      logger.log("Stopping after single task execution", { taskName });
+      break;
+    }
   } catch (err) {
     await updateStatus(taskName, {
       state: TaskState.FAILED,
@@ -320,29 +328,13 @@ for (const taskName of pipeline.tasks) {
   }
 }
 
-await fs.mkdir(COMPLETE_DIR, { recursive: true });
-const dest = path.join(COMPLETE_DIR, jobId);
+// Only move to complete if this wasn't a single task run
+if (!runSingleTask) {
+  await fs.mkdir(COMPLETE_DIR, { recursive: true });
+  const dest = path.join(COMPLETE_DIR, jobId);
 
-logger.log("Pipeline completed", {
-  jobId,
-  totalExecutionTime: Object.values(status.tasks).reduce(
-    (total, t) => total + (t.executionTimeMs || 0),
-    0
-  ),
-  totalRefinementAttempts: Object.values(status.tasks).reduce(
-    (total, t) => total + (t.refinementAttempts || 0),
-    0
-  ),
-  finalArtifacts: Object.keys(pipelineArtifacts),
-});
-
-await fs.rename(workDir, dest);
-await appendLine(
-  path.join(COMPLETE_DIR, "runs.jsonl"),
-  JSON.stringify({
-    id: status.id,
-    finishedAt: now(),
-    tasks: Object.keys(status.tasks),
+  logger.log("Pipeline completed", {
+    jobId,
     totalExecutionTime: Object.values(status.tasks).reduce(
       (total, t) => total + (t.executionTimeMs || 0),
       0
@@ -352,11 +344,32 @@ await appendLine(
       0
     ),
     finalArtifacts: Object.keys(pipelineArtifacts),
-  }) + "\n"
-);
+  });
 
-// Clean up task symlinks to avoid dangling links in archives
-await cleanupTaskSymlinks(dest);
+  await fs.rename(workDir, dest);
+  await appendLine(
+    path.join(COMPLETE_DIR, "runs.jsonl"),
+    JSON.stringify({
+      id: status.id,
+      finishedAt: now(),
+      tasks: Object.keys(status.tasks),
+      totalExecutionTime: Object.values(status.tasks).reduce(
+        (total, t) => total + (t.executionTimeMs || 0),
+        0
+      ),
+      totalRefinementAttempts: Object.values(status.tasks).reduce(
+        (total, t) => total + (t.refinementAttempts || 0),
+        0
+      ),
+      finalArtifacts: Object.keys(pipelineArtifacts),
+    }) + "\n"
+  );
+
+  // Clean up task symlinks to avoid dangling links in archives
+  await cleanupTaskSymlinks(dest);
+} else {
+  logger.log("Single task run completed, job remains in current", { jobId });
+}
 
 logger.groupEnd();
 
