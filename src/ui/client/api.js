@@ -19,8 +19,16 @@ export async function restartJob(jobId, opts = {}) {
   };
 
   const requestBody = opts.fromTask
-    ? { fromTask: opts.fromTask, options }
-    : { mode: "clean-slate", options };
+    ? {
+        fromTask: opts.fromTask,
+        options,
+        ...(opts.singleTask !== undefined && { singleTask: opts.singleTask }),
+      }
+    : {
+        mode: "clean-slate",
+        options,
+        ...(opts.singleTask !== undefined && { singleTask: opts.singleTask }),
+      };
 
   try {
     const response = await fetch(

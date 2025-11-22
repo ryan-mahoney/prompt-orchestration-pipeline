@@ -490,7 +490,7 @@ function DAGGrid({
     setRestartModalOpen(true);
   };
 
-  const handleRestartConfirm = async () => {
+  const handleRestartConfirm = async (options) => {
     if (!jobId || isSubmitting) return;
 
     setIsSubmitting(true);
@@ -501,12 +501,17 @@ function DAGGrid({
       if (restartTaskId) {
         restartOptions.fromTask = restartTaskId;
       }
+      if (options?.singleTask) {
+        restartOptions.singleTask = options.singleTask;
+      }
 
       await restartJob(jobId, restartOptions);
 
-      const successMessage = restartTaskId
-        ? `Restart requested from ${restartTaskId}. The job will start from that task in the background.`
-        : "Restart requested. The job will reset to pending and start in the background.";
+      const successMessage = options?.singleTask
+        ? `Re-running task ${restartTaskId} in isolation. The job will remain in current after completion.`
+        : restartTaskId
+          ? `Restart requested from ${restartTaskId}. The job will start from that task in the background.`
+          : "Restart requested. The job will reset to pending and start in the background.";
       setAlertMessage(successMessage);
       setAlertType("success");
       setRestartModalOpen(false);
