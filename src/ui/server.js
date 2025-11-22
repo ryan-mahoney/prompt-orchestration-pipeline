@@ -1695,47 +1695,70 @@ function createServer() {
           return;
         }
 
-        // Identify new tasks
+        // Helper function to extract task name from string or object
+        const getTaskName = (t) => (typeof t === "string" ? t : t.name);
+
+        // Calculate added and removed tasks
         const existingTaskNames = new Set(
-          (jobPipeline.tasks || []).map((t) => t.name)
+          (jobPipeline.tasks || []).map(getTaskName)
         );
-        const newTasks = (sourcePipeline.tasks || []).filter(
-          (t) => !existingTaskNames.has(t.name)
+        const sourceTaskNames = new Set(
+          (sourcePipeline.tasks || []).map(getTaskName)
         );
 
-        if (newTasks.length === 0) {
+        const added = (sourcePipeline.tasks || []).filter(
+          (t) => !existingTaskNames.has(getTaskName(t))
+        );
+        const removed = (jobPipeline.tasks || []).filter(
+          (t) => !sourceTaskNames.has(getTaskName(t))
+        );
+
+        if (added.length === 0 && removed.length === 0) {
           sendJson(res, 200, {
             ok: true,
             added: [],
+            removed: [],
           });
           return;
         }
 
-        // Update job's pipeline.json
-        jobPipeline.tasks = [...(jobPipeline.tasks || []), ...newTasks];
+        // Update job's pipeline.json with full synchronization
+        jobPipeline.tasks = JSON.parse(
+          JSON.stringify(sourcePipeline.tasks || [])
+        );
         await fs.promises.writeFile(
           jobPipelinePath,
           JSON.stringify(jobPipeline, null, 2)
         );
 
-        // Create directories for new tasks
+        // Create directories for all tasks in synchronized pipeline
         const addedTaskNames = [];
-        for (const task of newTasks) {
-          const taskDir = path.join(jobDir, "tasks", task.name);
+        for (const task of jobPipeline.tasks || []) {
+          const taskName = getTaskName(task);
+          const taskDir = path.join(jobDir, "tasks", taskName);
           await fs.promises.mkdir(taskDir, { recursive: true });
-          addedTaskNames.push(task.name);
+
+          // Track which tasks were newly added for the response
+          if (added.some((t) => getTaskName(t) === taskName)) {
+            addedTaskNames.push(taskName);
+          }
         }
 
-        // Update tasks-status.json
+        // Update tasks-status.json with reconstruction logic
         await writeJobStatus(jobDir, (snapshot) => {
-          if (!snapshot.tasks) {
-            snapshot.tasks = {};
-          }
+          const oldTasks = snapshot.tasks || {};
+          const newTasksStatus = {};
 
-          for (const task of newTasks) {
-            // Only initialize if not already present (safety check)
-            if (!snapshot.tasks[task.name]) {
-              snapshot.tasks[task.name] = {
+          // Iterate through source pipeline tasks in order
+          for (const task of sourcePipeline.tasks || []) {
+            const taskName = getTaskName(task);
+
+            if (oldTasks[taskName]) {
+              // Preserve existing state for tasks that remain
+              newTasksStatus[taskName] = oldTasks[taskName];
+            } else {
+              // Initialize new state for added tasks
+              newTasksStatus[taskName] = {
                 state: "pending",
                 currentStage: null,
                 attempts: 0,
@@ -1748,12 +1771,15 @@ function createServer() {
               };
             }
           }
+
+          snapshot.tasks = newTasksStatus;
           return snapshot;
         });
 
         sendJson(res, 200, {
           ok: true,
           added: addedTaskNames,
+          removed: removed.map(getTaskName),
         });
       } catch (error) {
         console.error(`Error handling POST /api/jobs/${jobId}/rescan:`, error);
@@ -2210,7 +2236,7 @@ async function startServer({ dataDir, port: customPort }) {
           : 0;
 
     // In development, start Vite in middlewareMode so the Node server can serve
-    // the client with HMR in a single process. We dynamically import Vite here
+    // client with HMR in a single process. We dynamically import Vite here
     // to avoid including it in production bundles.
     // Skip Vite entirely for API-only tests when DISABLE_VITE=1 is set.
     // Do not start Vite in tests to avoid dep-scan errors during teardown.
