@@ -58,6 +58,24 @@ describe("Job Restart Endpoint", () => {
   });
 
   it("should return 409 for job not in current lifecycle", async () => {
+    const response = await fetch(
+      `${baseUrl}/api/jobs/complete-job-123/restart`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      }
+    );
+
+    expect(response.status).toBe(409);
+    const body = await response.json();
+    expect(body).toEqual({
+      ok: false,
+      code: "unsupported_lifecycle",
+      message: "Job restart is only supported for jobs in 'current' lifecycle",
+    });
+  });
+
+  it("should return 409 for job not in current lifecycle", async () => {
     // Create a job in complete lifecycle
     const jobId = "complete-job-123";
     const jobDir = getJobDirectoryPath(dataDir, jobId, "complete");
