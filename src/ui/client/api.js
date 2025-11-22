@@ -68,6 +68,59 @@ export async function restartJob(jobId, opts = {}) {
 }
 
 /**
+ * Rescan a job to synchronize tasks with the pipeline definition, detecting both added and removed tasks.
+ *
+ * @param {string} jobId - The ID of the job to rescan
+ * @returns {Promise<Object>} Parsed JSON response from the server
+ * @throws {Object} Structured error object with { code, message } for non-2xx responses
+ */
+export async function rescanJob(jobId) {
+  try {
+    const response = await fetch(
+      `/api/jobs/${encodeURIComponent(jobId)}/rescan`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    if (!response.ok) {
+      // Try to parse error response, fall back to status text if parsing fails
+      let errorData;
+      try {
+        errorData = await response.json();
+      } catch {
+        errorData = { message: response.statusText };
+      }
+
+      // Throw structured error with code and message
+      throw {
+        code: errorData.code || getErrorCodeFromStatus(response.status),
+        message:
+          errorData.message || getErrorMessageFromStatus(response.status),
+        status: response.status,
+      };
+    }
+
+    // Return parsed JSON for successful responses
+    return await response.json();
+  } catch (error) {
+    // Re-throw structured errors as-is
+    if (error.code && error.message) {
+      throw error;
+    }
+
+    // Handle network errors or other unexpected errors
+    throw {
+      code: "network_error",
+      message: error.message || "Failed to connect to server",
+    };
+  }
+}
+
+/**
  * Map HTTP status codes to error codes for structured error handling
  */
 function getErrorCodeFromStatus(status) {

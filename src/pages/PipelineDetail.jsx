@@ -1,6 +1,6 @@
-import React from "react";
+import React, { useState } from "react";
 import { data, useParams } from "react-router-dom";
-import { Box, Flex, Text } from "@radix-ui/themes";
+import { Box, Flex, Text, Button } from "@radix-ui/themes";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import JobDetail from "../components/JobDetail.jsx";
 import { useJobDetailWithUpdates } from "../ui/client/hooks/useJobDetailWithUpdates.js";
@@ -8,9 +8,11 @@ import Layout from "../components/Layout.jsx";
 import PageSubheader from "../components/PageSubheader.jsx";
 import { statusBadge } from "../utils/ui.jsx";
 import { formatCurrency4, formatTokensCompact } from "../utils/formatters.js";
+import { rescanJob } from "../ui/client/api.js";
 
 export default function PipelineDetail() {
   const { jobId } = useParams();
+  const [isRescanning, setIsRescanning] = useState(false);
 
   // Handle missing job ID (undefined/null)
   if (jobId === undefined || jobId === null) {
@@ -193,6 +195,33 @@ export default function PipelineDetail() {
       costIndicator
     );
 
+  const handleRescan = async () => {
+    setIsRescanning(true);
+    try {
+      const result = await rescanJob(jobId);
+      if (result.ok) {
+        const addedCount = result.added ? result.added.length : 0;
+        const removedCount = result.removed ? result.removed.length : 0;
+        let message = "Rescan complete.";
+        if (addedCount > 0 && removedCount > 0) {
+          message += ` Added ${addedCount} task${addedCount > 1 ? "s" : ""}: ${JSON.stringify(result.added)}. Removed ${removedCount} task${removedCount > 1 ? "s" : ""}: ${JSON.stringify(result.removed)}.`;
+        } else if (addedCount > 0) {
+          message += ` Added ${addedCount} task${addedCount > 1 ? "s" : ""}: ${JSON.stringify(result.added)}.`;
+        } else if (removedCount > 0) {
+          message += ` Removed ${removedCount} task${removedCount > 1 ? "s" : ""}: ${JSON.stringify(result.removed)}.`;
+        } else {
+          message += " No changes found.";
+        }
+        console.log(message);
+      }
+    } catch (err) {
+      console.error("Rescan failed:", err);
+      alert("Rescan failed: " + err.message);
+    } finally {
+      setIsRescanning(false);
+    }
+  };
+
   // Right side content for PageSubheader: job ID, cost indicator, and status badge
   const subheaderRightContent = (
     <Flex align="center" gap="3" className="shrink-0 flex-wrap">
@@ -200,6 +229,14 @@ export default function PipelineDetail() {
         ID: {job.id || jobId}
       </Text>
       {costIndicatorWithTooltip}
+      <Button
+        size="1"
+        variant="soft"
+        disabled={isRescanning}
+        onClick={handleRescan}
+      >
+        {isRescanning ? "Rescanning..." : "Rescan"}
+      </Button>
       {statusBadge(job.status)}
     </Flex>
   );

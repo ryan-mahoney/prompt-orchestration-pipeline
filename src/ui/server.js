@@ -15,7 +15,9 @@ import { sseRegistry } from "./sse.js";
 import {
   resetJobToCleanSlate,
   initializeJobArtifacts,
+  writeJobStatus,
 } from "../core/status-writer.js";
+import { getPipelineConfig } from "../core/config.js";
 import { spawn } from "node:child_process";
 import {
   getPendingSeedPath,
@@ -1563,6 +1565,231 @@ function createServer() {
           message: "Failed to get LLM functions",
         });
       }
+      return;
+    }
+
+    // Route: POST /api/jobs/:jobId/rescan
+    if (
+      pathname.startsWith("/api/jobs/") &&
+      pathname.endsWith("/rescan") &&
+      req.method === "POST"
+    ) {
+      const pathMatch = pathname.match(/^\/api\/jobs\/([^\/]+)\/rescan$/);
+      if (!pathMatch) {
+        sendJson(res, 400, {
+          ok: false,
+          error: "bad_request",
+          message: "Invalid path format",
+        });
+        return;
+      }
+
+      const [, jobId] = pathMatch;
+      const dataDir = process.env.PO_ROOT || DATA_DIR;
+
+      try {
+        // Validate jobId
+        if (!jobId || typeof jobId !== "string" || jobId.trim() === "") {
+          sendJson(res, 400, {
+            ok: false,
+            error: "bad_request",
+            message: "jobId is required",
+          });
+          return;
+        }
+
+        // Resolve job lifecycle
+        const lifecycle = await resolveJobLifecycle(dataDir, jobId);
+        if (!lifecycle) {
+          sendJson(res, 404, {
+            ok: false,
+            code: "job_not_found",
+            message: "Job not found",
+          });
+          return;
+        }
+
+        // Determine job directory
+        const jobDir = getJobDirectoryPath(dataDir, jobId, lifecycle);
+
+        // Read job metadata to get pipeline slug
+        const jobMetaPath = path.join(jobDir, "job.json");
+        let jobMeta;
+        try {
+          const content = await fs.promises.readFile(jobMetaPath, "utf8");
+          jobMeta = JSON.parse(content);
+        } catch (error) {
+          console.error(`Error reading job metadata for ${jobId}:`, error);
+          sendJson(res, 500, {
+            ok: false,
+            code: "internal_error",
+            message: "Failed to read job metadata",
+          });
+          return;
+        }
+
+        const pipelineSlug = jobMeta.pipeline;
+        if (!pipelineSlug) {
+          sendJson(res, 500, {
+            ok: false,
+            code: "invalid_job_metadata",
+            message: "Job metadata missing pipeline slug",
+          });
+          return;
+        }
+
+        // Get authoritative source pipeline config
+        let sourcePipelinePath;
+        try {
+          const config = await getPipelineConfig(pipelineSlug);
+          sourcePipelinePath = config.pipelineJsonPath;
+        } catch (error) {
+          console.error(
+            `Error getting pipeline config for ${pipelineSlug}:`,
+            error
+          );
+          sendJson(res, 404, {
+            ok: false,
+            code: "pipeline_not_found",
+            message: `Pipeline configuration not found for slug: ${pipelineSlug}`,
+          });
+          return;
+        }
+
+        let sourcePipeline;
+        try {
+          const content = await fs.promises.readFile(
+            sourcePipelinePath,
+            "utf8"
+          );
+          sourcePipeline = JSON.parse(content);
+        } catch (error) {
+          console.error(
+            `Error reading source pipeline config for ${pipelineSlug}:`,
+            error
+          );
+          sendJson(res, 404, {
+            ok: false,
+            code: "pipeline_config_not_found",
+            message: `Pipeline configuration not found for slug: ${pipelineSlug}`,
+          });
+          return;
+        }
+
+        // Read job's local pipeline config
+        const jobPipelinePath = path.join(jobDir, "pipeline.json");
+        let jobPipeline;
+        try {
+          const content = await fs.promises.readFile(jobPipelinePath, "utf8");
+          jobPipeline = JSON.parse(content);
+        } catch (error) {
+          console.error(
+            `Error reading job pipeline config for ${jobId}:`,
+            error
+          );
+          sendJson(res, 500, {
+            ok: false,
+            code: "internal_error",
+            message: "Failed to read job pipeline configuration",
+          });
+          return;
+        }
+
+        // Helper function to extract task name from string or object
+        const getTaskName = (t) => (typeof t === "string" ? t : t.name);
+
+        // Calculate added and removed tasks
+        const existingTaskNames = new Set(
+          (jobPipeline.tasks || []).map(getTaskName)
+        );
+        const sourceTaskNames = new Set(
+          (sourcePipeline.tasks || []).map(getTaskName)
+        );
+
+        const added = (sourcePipeline.tasks || []).filter(
+          (t) => !existingTaskNames.has(getTaskName(t))
+        );
+        const removed = (jobPipeline.tasks || []).filter(
+          (t) => !sourceTaskNames.has(getTaskName(t))
+        );
+
+        if (added.length === 0 && removed.length === 0) {
+          sendJson(res, 200, {
+            ok: true,
+            added: [],
+            removed: [],
+          });
+          return;
+        }
+
+        // Update job's pipeline.json with full synchronization
+        jobPipeline.tasks = JSON.parse(
+          JSON.stringify(sourcePipeline.tasks || [])
+        );
+        await fs.promises.writeFile(
+          jobPipelinePath,
+          JSON.stringify(jobPipeline, null, 2)
+        );
+
+        // Create directories for all tasks in synchronized pipeline
+        const addedTaskNames = [];
+        for (const task of jobPipeline.tasks || []) {
+          const taskName = getTaskName(task);
+          const taskDir = path.join(jobDir, "tasks", taskName);
+          await fs.promises.mkdir(taskDir, { recursive: true });
+
+          // Track which tasks were newly added for the response
+          if (added.some((t) => getTaskName(t) === taskName)) {
+            addedTaskNames.push(taskName);
+          }
+        }
+
+        // Update tasks-status.json with reconstruction logic
+        await writeJobStatus(jobDir, (snapshot) => {
+          const oldTasks = snapshot.tasks || {};
+          const newTasksStatus = {};
+
+          // Iterate through source pipeline tasks in order
+          for (const task of sourcePipeline.tasks || []) {
+            const taskName = getTaskName(task);
+
+            if (oldTasks[taskName]) {
+              // Preserve existing state for tasks that remain
+              newTasksStatus[taskName] = oldTasks[taskName];
+            } else {
+              // Initialize new state for added tasks
+              newTasksStatus[taskName] = {
+                state: "pending",
+                currentStage: null,
+                attempts: 0,
+                refinementAttempts: 0,
+                files: {
+                  artifacts: [],
+                  logs: [],
+                  tmp: [],
+                },
+              };
+            }
+          }
+
+          snapshot.tasks = newTasksStatus;
+          return snapshot;
+        });
+
+        sendJson(res, 200, {
+          ok: true,
+          added: addedTaskNames,
+          removed: removed.map(getTaskName),
+        });
+      } catch (error) {
+        console.error(`Error handling POST /api/jobs/${jobId}/rescan:`, error);
+        sendJson(res, 500, {
+          ok: false,
+          code: "internal_error",
+          message: "Internal server error",
+        });
+      }
+
       return;
     }
 
