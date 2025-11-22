@@ -2236,7 +2236,7 @@ async function startServer({ dataDir, port: customPort }) {
           : 0;
 
     // In development, start Vite in middlewareMode so the Node server can serve
-    // client with HMR in a single process. We dynamically import Vite here
+    // the client with HMR in a single process. We dynamically import Vite here
     // to avoid including it in production bundles.
     // Skip Vite entirely for API-only tests when DISABLE_VITE=1 is set.
     // Do not start Vite in tests to avoid dep-scan errors during teardown.
