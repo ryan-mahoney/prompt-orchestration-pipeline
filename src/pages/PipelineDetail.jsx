@@ -200,11 +200,19 @@ export default function PipelineDetail() {
     try {
       const result = await rescanJob(jobId);
       if (result.ok) {
-        if (result.added && result.added.length > 0) {
-          console.log("Rescan complete. Added tasks:", result.added);
+        const addedCount = result.added ? result.added.length : 0;
+        const removedCount = result.removed ? result.removed.length : 0;
+        let message = "Rescan complete.";
+        if (addedCount > 0 && removedCount > 0) {
+          message += ` Added ${addedCount} task${addedCount > 1 ? "s" : ""}: ${JSON.stringify(result.added)}. Removed ${removedCount} task${removedCount > 1 ? "s" : ""}: ${JSON.stringify(result.removed)}.`;
+        } else if (addedCount > 0) {
+          message += ` Added ${addedCount} task${addedCount > 1 ? "s" : ""}: ${JSON.stringify(result.added)}.`;
+        } else if (removedCount > 0) {
+          message += ` Removed ${removedCount} task${removedCount > 1 ? "s" : ""}: ${JSON.stringify(result.removed)}.`;
         } else {
-          console.log("Rescan complete. No new tasks found.");
+          message += " No changes found.";
         }
+        console.log(message);
       }
     } catch (err) {
       console.error("Rescan failed:", err);
