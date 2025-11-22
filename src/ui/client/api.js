@@ -68,7 +68,7 @@ export async function restartJob(jobId, opts = {}) {
 }
 
 /**
- * Rescan a job to detect and add new tasks from the pipeline definition.
+ * Rescan a job to synchronize tasks with the pipeline definition, detecting both added and removed tasks.
  *
  * @param {string} jobId - The ID of the job to rescan
  * @returns {Promise<Object>} Parsed JSON response from the server
