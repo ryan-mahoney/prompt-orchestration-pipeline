@@ -1227,8 +1227,9 @@ function serveStatic(res, filePath) {
 
 /**
  * Create and start the HTTP server
+ * @param {string} serverDataDir - Base data directory for pipeline data
  */
-function createServer() {
+function createServer(serverDataDir = DATA_DIR) {
   const server = http.createServer(async (req, res) => {
     // Use WHATWG URL API instead of deprecated url.parse
     const { pathname, searchParams } = new URL(
@@ -1265,7 +1266,7 @@ function createServer() {
         return;
       }
 
-      // Prefer returning the in-memory state when available (tests and runtime rely on state.getState()).
+      // Prefer returning in in-memory state when available (tests and runtime rely on state.getState()).
       // If in-memory state is available, return it directly; otherwise fall back to
       // building a filesystem-backed snapshot for client bootstrap.
       try {
@@ -1602,7 +1603,9 @@ function createServer() {
       }
 
       const [, jobId] = pathMatch;
-      const dataDir = process.env.PO_ROOT || DATA_DIR;
+      // Use dataDir that was passed to startServer, not environment variable
+      // This ensures tests use their temporary directories correctly
+      const dataDir = DATA_DIR;
 
       try {
         // Validate jobId
@@ -1827,7 +1830,9 @@ function createServer() {
       }
 
       const [, jobId] = pathMatch;
-      const dataDir = process.env.PO_ROOT || DATA_DIR;
+      // Use dataDir that was passed to startServer, not environment variable
+      // This ensures tests use their temporary directories correctly
+      const dataDir = DATA_DIR;
 
       try {
         // Validate jobId
@@ -1851,19 +1856,19 @@ function createServer() {
           return;
         }
 
-        // Only support current lifecycle for MVP
+        // Move job to current directory if it's not already there
+        let jobDir = getJobDirectoryPath(dataDir, jobId, lifecycle);
+
         if (lifecycle !== "current") {
-          sendJson(res, 409, {
-            ok: false,
-            code: "unsupported_lifecycle",
-            message:
-              "Job restart is only supported for jobs in 'current' lifecycle",
-          });
-          return;
+          const sourcePath = getJobDirectoryPath(dataDir, jobId, lifecycle);
+          const targetPath = getJobDirectoryPath(dataDir, jobId, "current");
+
+          // Atomically move the job to current directory
+          await fs.promises.rename(sourcePath, targetPath);
+          jobDir = targetPath;
         }
 
         // Check if job is already running
-        const jobDir = getJobDirectoryPath(dataDir, jobId, "current");
         const statusPath = path.join(jobDir, "tasks-status.json");
 
         let snapshot;
@@ -1949,7 +1954,7 @@ function createServer() {
             detached: true,
           });
 
-          // Unref the child process so it runs in the background
+          // Unref() child process so it runs in the background
           child.unref();
 
           // Send success response
@@ -2064,7 +2069,7 @@ function createServer() {
     if (viteServer && viteServer.middlewares) {
       try {
         // Let Vite handle all non-API requests (including assets). If Vite calls next,
-        // fall back to the static handlers below.
+        // fall back to static handlers below.
         return viteServer.middlewares(req, res, () => {
           if (pathname === "/" || pathname === "/index.html") {
             serveStatic(res, path.join(__dirname, "dist", "index.html"));
@@ -2252,8 +2257,8 @@ async function startServer({ dataDir, port: customPort }) {
           ? parseInt(process.env.PORT)
           : 0;
 
-    // In development, start Vite in middlewareMode so the Node server can serve
-    // the client with HMR in a single process. We dynamically import Vite here
+    // In development, start Vite in middlewareMode so that Node server can serve
+    // client with HMR in a single process. We dynamically import Vite here
     // to avoid including it in production bundles.
     // Skip Vite entirely for API-only tests when DISABLE_VITE=1 is set.
     // Do not start Vite in tests to avoid dep-scan errors during teardown.
@@ -2358,7 +2363,7 @@ async function startServer({ dataDir, port: customPort }) {
           }
         }
 
-        // Close the HTTP server
+        // Close HTTP server
         return new Promise((resolve) => server.close(resolve));
       },
     };

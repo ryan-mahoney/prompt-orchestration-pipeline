@@ -12,7 +12,7 @@
  * @returns {Promise<Object>} Parsed JSON response from the server
  * @throws {Object} Structured error object with { code, message } for non-2xx responses
  */
-export async function restartJob(jobId, opts = {}) {
+export async function restartJob(jobId, serverDataDir, opts = {}) {
   const options = {
     clearTokenUsage: true,
     ...opts.options,
@@ -168,9 +168,6 @@ function getRestartErrorMessage(errorData, status) {
   if (status === 409) {
     if (errorData.code === "job_running") {
       return "Job is currently running; restart is unavailable.";
-    }
-    if (errorData.code === "unsupported_lifecycle") {
-      return "Job must be in current to restart.";
     }
     if (errorData.message?.includes("job_running")) {
       return "Job is currently running; restart is unavailable.";

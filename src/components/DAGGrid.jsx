@@ -525,10 +525,6 @@ function DAGGrid({
           message = "Job is currently running; restart is unavailable.";
           type = "warning";
           break;
-        case "unsupported_lifecycle":
-          message = "Job must be in current lifecycle to restart.";
-          type = "warning";
-          break;
         case "job_not_found":
           message = "Job not found.";
           type = "error";
@@ -564,7 +560,7 @@ function DAGGrid({
     }
   }, [alertMessage]);
 
-  // Check if restart should be enabled (job lifecycle = current and not running)
+  // Check if restart should be enabled (not running, regardless of lifecycle)
   const isRestartEnabled = React.useCallback(() => {
     // Check if any item indicates that job is running (job-level state)
     const isJobRunning = items.some(
@@ -576,9 +572,7 @@ function DAGGrid({
       (item) => item?.status === TaskState.RUNNING
     );
 
-    const jobLifecycle = items[0]?.lifecycle || "current";
-
-    return jobLifecycle === "current" && !isJobRunning && !hasRunningTask;
+    return !isJobRunning && !hasRunningTask;
   }, [items]);
 
   // Get disabled reason for tooltip
@@ -593,10 +587,7 @@ function DAGGrid({
       (item) => item?.status === TaskState.RUNNING
     );
 
-    const jobLifecycle = items[0]?.lifecycle || "current";
-
     if (isJobRunning || hasRunningTask) return "Job is currently running";
-    if (jobLifecycle !== "current") return "Job must be in current lifecycle";
     return "";
   }, [items]);
 

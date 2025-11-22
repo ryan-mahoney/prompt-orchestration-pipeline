@@ -57,32 +57,16 @@ describe("Job Restart Endpoint", () => {
     });
   });
 
-  it("should return 409 for job not in current lifecycle", async () => {
-    const response = await fetch(
-      `${baseUrl}/api/jobs/complete-job-123/restart`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-      }
-    );
-
-    expect(response.status).toBe(409);
-    const body = await response.json();
-    expect(body).toEqual({
-      ok: false,
-      code: "unsupported_lifecycle",
-      message: "Job restart is only supported for jobs in 'current' lifecycle",
-    });
-  });
-
-  it("should return 409 for job not in current lifecycle", async () => {
+  it("should restart a completed job by moving it to current", async () => {
     // Create a job in complete lifecycle
     const jobId = "complete-job-123";
-    const jobDir = getJobDirectoryPath(dataDir, jobId, "complete");
-    await fs.mkdir(jobDir, { recursive: true });
+    const sourceJobDir = getJobDirectoryPath(dataDir, jobId, "complete");
+    const targetJobDir = getJobDirectoryPath(dataDir, jobId, "current");
 
-    // Create tasks-status.json
-    const statusPath = path.join(jobDir, "tasks-status.json");
+    await fs.mkdir(sourceJobDir, { recursive: true });
+
+    // Create tasks-status.json in complete directory
+    const statusPath = path.join(sourceJobDir, "tasks-status.json");
     await fs.writeFile(
       statusPath,
       JSON.stringify({
@@ -91,7 +75,14 @@ describe("Job Restart Endpoint", () => {
         current: null,
         currentStage: null,
         lastUpdated: new Date().toISOString(),
-        tasks: {},
+        tasks: {
+          "task-1": {
+            state: "done",
+            attempts: 1,
+            refinementAttempts: 0,
+            tokenUsage: [{ model: "test", tokens: 100 }],
+          },
+        },
         files: { artifacts: [], logs: [], tmp: [] },
       })
     );
@@ -101,13 +92,32 @@ describe("Job Restart Endpoint", () => {
       headers: { "Content-Type": "application/json" },
     });
 
-    expect(response.status).toBe(409);
+    expect(response.status).toBe(202);
     const body = await response.json();
     expect(body).toEqual({
-      ok: false,
-      code: "unsupported_lifecycle",
-      message: "Job restart is only supported for jobs in 'current' lifecycle",
+      ok: true,
+      jobId,
+      mode: "clean-slate",
+      spawned: true,
     });
+
+    // Verify the job directory no longer exists in complete
+    expect(await fs.access(sourceJobDir).catch(() => false)).toBe(false);
+
+    // Verify the job directory now exists in current
+    expect(await fs.access(targetJobDir).catch(() => false)).toBe(true);
+
+    // Verify status was reset in the new location
+    const updatedStatusPath = path.join(targetJobDir, "tasks-status.json");
+    const updatedStatus = JSON.parse(
+      await fs.readFile(updatedStatusPath, "utf8")
+    );
+    expect(updatedStatus.state).toBe("pending");
+    expect(updatedStatus.current).toBe(null);
+    expect(updatedStatus.currentStage).toBe(null);
+    expect(updatedStatus.tasks["task-1"].state).toBe("pending");
+    expect(updatedStatus.tasks["task-1"].attempts).toBe(0);
+    expect(updatedStatus.tasks["task-1"].tokenUsage).toEqual([]);
   });
 
   it("should return 409 for running job", async () => {
