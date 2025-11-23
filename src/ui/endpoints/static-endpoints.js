@@ -48,23 +48,42 @@ function handleStaticRequest(req, res, viteServer, pathname) {
   // Prefer Vite middleware in development for non-API routes (HMR & asset serving)
   if (viteServer && viteServer.middlewares) {
     try {
+      // Track whether the response has been handled
+      let responseHandled = false;
+      const originalWriteHead = res.writeHead;
+      const originalEnd = res.end;
+
+      // Override methods to detect if Vite handled the response
+      res.writeHead = function (...args) {
+        responseHandled = true;
+        return originalWriteHead.apply(this, args);
+      };
+
+      res.end = function (...args) {
+        responseHandled = true;
+        return originalEnd.apply(this, args);
+      };
+
       // Let Vite handle all non-API requests (including assets). If Vite calls next,
       // fall back to static handlers below.
-      return viteServer.middlewares(req, res, () => {
-        if (pathname === "/" || pathname === "/index.html") {
-          serveStatic(res, path.join(__dirname, "dist", "index.html"));
-        } else if (pathname.startsWith("/assets/")) {
-          const assetPath = pathname.substring(1); // Remove leading slash
-          serveStatic(res, path.join(__dirname, "dist", assetPath));
-        } else if (pathname.startsWith("/public/")) {
-          const publicPath = pathname.substring(1); // Remove leading slash
-          serveStatic(
-            res,
-            path.join(__dirname, "public", publicPath.replace("public/", ""))
-          );
-        } else {
-          // Fallback to index.html for client-side routing
-          serveStatic(res, path.join(__dirname, "dist", "index.html"));
+      viteServer.middlewares(req, res, () => {
+        // Only fall back if Vite didn't handle the response
+        if (!responseHandled && !res.headersSent) {
+          if (pathname === "/" || pathname === "/index.html") {
+            serveStatic(res, path.join(__dirname, "dist", "index.html"));
+          } else if (pathname.startsWith("/assets/")) {
+            const assetPath = pathname.substring(1); // Remove leading slash
+            serveStatic(res, path.join(__dirname, "dist", assetPath));
+          } else if (pathname.startsWith("/public/")) {
+            const publicPath = pathname.substring(1); // Remove leading slash
+            serveStatic(
+              res,
+              path.join(__dirname, "public", publicPath.replace("public/", ""))
+            );
+          } else {
+            // Fallback to index.html for client-side routing
+            serveStatic(res, path.join(__dirname, "dist", "index.html"));
+          }
         }
       });
     } catch (err) {
@@ -88,7 +107,7 @@ function handleStaticRequest(req, res, viteServer, pathname) {
         path.join(__dirname, "public", publicPath.replace("public/", ""))
       );
     } else {
-      // For any other route, serve the React app's index.html
+      // For any other route, serve React app's index.html
       // This allows client-side routing to work
       serveStatic(res, path.join(__dirname, "dist", "index.html"));
     }

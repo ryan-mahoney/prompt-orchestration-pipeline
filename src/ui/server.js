@@ -4,27 +4,12 @@
  */
 
 import http from "http";
-import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import { start as startWatcher, stop as stopWatcher } from "./watcher.js";
 import * as state from "./state.js";
 import { sseRegistry } from "./sse.js";
-import {
-  resetJobToCleanSlate,
-  initializeJobArtifacts,
-  writeJobStatus,
-} from "../core/status-writer.js";
-import { getPipelineConfig } from "../core/config.js";
-import { spawn } from "node:child_process";
-import {
-  getPendingSeedPath,
-  resolvePipelinePaths,
-  getJobDirectoryPath,
-  getJobMetadataPath,
-  getJobPipelinePath,
-} from "../config/paths.js";
-import { generateJobId } from "../utils/id-generator.js";
+import { resolvePipelinePaths } from "../config/paths.js";
 import { routeRequest, broadcastStateUpdate } from "./router.js";
 
 // Get __dirname equivalent in ES modules
@@ -48,25 +33,6 @@ const HEARTBEAT_INTERVAL = 30000; // 30 seconds
 const DATA_DIR = process.env.PO_ROOT || process.cwd();
 
 let heartbeatTimer = null;
-
-const exists = async (p) =>
-  fs.promises
-    .access(p)
-    .then(() => true)
-    .catch(() => false);
-
-function extractJsonFromMultipart(raw, contentType) {
-  const m = /boundary=([^;]+)/i.exec(contentType || "");
-  if (!m) throw new Error("Missing multipart boundary");
-  const boundary = `--${m[1]}`;
-  const parts = raw.toString("utf8").split(boundary);
-  const filePart = parts.find((p) => /name="file"/i.test(p));
-  if (!filePart) throw new Error("Missing file part");
-  const [, , body] = filePart.split(/\r\n\r\n/);
-  if (!body) throw new Error("Empty file part");
-  // strip trailing CRLF + terminating dashes
-  return body.replace(/\r\n--\s*$/, "").trim();
-}
 
 /**
  * Start heartbeat to keep connections alive
@@ -322,6 +288,28 @@ export {
   sseRegistry,
   initializeWatcher,
   state,
+};
+
+// Backward compatibility export for tests expecting 'start' function
+// Returns raw server object immediately, starts listening and initializes watcher (like original)
+export const start = (port = 0, dataDir = DATA_DIR) => {
+  const server = createServer(dataDir);
+
+  // Start listening asynchronously but return server immediately
+  server.listen(port);
+
+  // Initialize watcher for backward compatibility with tests that expect it
+  // Tests mock the watcher to capture callbacks, so we need to initialize it
+  // Handle watcher errors gracefully - don't let them crash server startup
+  try {
+    initializeWatcher();
+  } catch (err) {
+    // In production, this would be logged, but for test compatibility we just ignore it
+    // The watcher error shouldn't prevent the server from starting
+    console.error("Failed to initialize watcher:", err);
+  }
+
+  return server;
 };
 
 // Start server if run directly
