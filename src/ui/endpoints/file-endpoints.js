@@ -25,36 +25,23 @@ async function resolveJobLifecycle(dataDir, jobId) {
   const completeJobDir = getJobDirectoryPath(dataDir, jobId, "complete");
   const rejectedJobDir = getJobDirectoryPath(dataDir, jobId, "rejected");
 
-  console.log(`[LIFECYCLE] Checking job ${jobId}:`);
-  console.log(`[LIFECYCLE] currentJobDir: ${currentJobDir}`);
-  console.log(`[LIFECYCLE] completeJobDir: ${completeJobDir}`);
-  console.log(`[LIFECYCLE] rejectedJobDir: ${rejectedJobDir}`);
-
   // Check in order of preference: current > complete > rejected
   const currentExists = await exists(currentJobDir);
   const completeExists = await exists(completeJobDir);
   const rejectedExists = await exists(rejectedJobDir);
 
-  console.log(
-    `[LIFECYCLE] Directory existence: current=${currentExists}, complete=${completeExists}, rejected=${rejectedExists}`
-  );
-
   if (currentExists) {
-    console.log(`[LIFECYCLE] Returning: current`);
     return "current";
   }
 
   if (completeExists) {
-    console.log(`[LIFECYCLE] Returning: complete`);
     return "complete";
   }
 
   if (rejectedExists) {
-    console.log(`[LIFECYCLE] Returning: rejected`);
     return "rejected";
   }
 
-  console.log(`[LIFECYCLE] Job not found in any lifecycle`);
   // Job not found in any lifecycle
   return null;
 }
@@ -116,8 +103,10 @@ export async function handleTaskFileListRequest(
   res,
   { jobId, taskId, type, dataDir }
 ) {
+  console.log(`[handleTaskFileListRequest] START for ${jobId}/${taskId}`);
   // Resolve job lifecycle deterministically
   const lifecycle = await resolveJobLifecycle(dataDir, jobId);
+  console.log(`[handleTaskFileListRequest] Resolved lifecycle: ${lifecycle}`);
   if (!lifecycle) {
     // Job not found, return empty list
     sendJson(res, 200, {

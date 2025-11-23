@@ -11,6 +11,7 @@ import * as state from "./state.js";
 import { sseRegistry } from "./sse.js";
 import { resolvePipelinePaths } from "../config/paths.js";
 import { broadcastStateUpdate } from "./sse-broadcast.js";
+import { buildExpressApp } from "./express-app.js";
 
 // Get __dirname equivalent in ES modules
 const __filename = fileURLToPath(import.meta.url);
@@ -53,17 +54,8 @@ function startHeartbeat() {
  * @param {string} serverDataDir - Base data directory for pipeline data
  */
 function createServer(serverDataDir = DATA_DIR) {
-  const server = http.createServer(async (req, res) => {
-    try {
-      // Delegate all request routing to router
-      await routeRequest(req, res, viteServer, serverDataDir);
-    } catch (err) {
-      console.error("Error in request handler:", err);
-      res.writeHead(500, { "Content-Type": "text/plain" });
-      res.end("Internal Server Error");
-    }
-  });
-
+  const app = buildExpressApp({ dataDir: serverDataDir, viteServer });
+  const server = http.createServer(app);
   return server;
 }
 
