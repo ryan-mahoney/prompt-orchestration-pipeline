@@ -295,28 +295,6 @@ export {
   state,
 };
 
-// Backward compatibility export for tests expecting 'start' function
-// Returns raw server object immediately, starts listening and initializes watcher (like original)
-export const start = (port = 0, dataDir = DATA_DIR) => {
-  const server = createServer(dataDir);
-
-  // Start listening asynchronously but return server immediately
-  server.listen(port);
-
-  // Initialize watcher for backward compatibility with tests that expect it
-  // Tests mock the watcher to capture callbacks, so we need to initialize it
-  // Handle watcher errors gracefully - don't let them crash server startup
-  try {
-    initializeWatcher();
-  } catch (err) {
-    // In production, this would be logged, but for test compatibility we just ignore it
-    // The watcher error shouldn't prevent the server from starting
-    console.error("Failed to initialize watcher:", err);
-  }
-
-  return server;
-};
-
 // Start server if run directly
 if (import.meta.url === `file://${process.argv[1]}`) {
   startServer({ dataDir: DATA_DIR }).catch((err) => {

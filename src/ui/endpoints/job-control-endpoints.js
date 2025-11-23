@@ -369,7 +369,7 @@ export async function handleJobRestart(req, res, jobId, dataDir, sendJson) {
       return;
     }
 
-    const { fromTask } = body;
+    const { fromTask, singleTask } = body;
 
     // Begin restart guard
     beginRestart(jobId);
@@ -398,6 +398,7 @@ export async function handleJobRestart(req, res, jobId, dataDir, sendJson) {
       PO_CURRENT_DIR: path.join(base, "pipeline-data", "current"),
       PO_COMPLETE_DIR: path.join(base, "pipeline-data", "complete"),
       ...(fromTask && { PO_START_FROM_TASK: fromTask }),
+      ...(singleTask && { PO_RUN_SINGLE_TASK: "true" }),
     };
 
     const child = spawn(process.execPath, [runnerPath, jobId], {

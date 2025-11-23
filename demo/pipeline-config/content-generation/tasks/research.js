@@ -4,11 +4,12 @@ import { test } from "../libs/test.js";
 export const researchJsonSchema = {
   $schema: "http://json-schema.org/draft-07/schema#",
   type: "object",
-  additionalProperties: false,
+  additionalProperties: true,
   required: [
     "researchSummary",
     "keyFindings",
     "additionalInsights",
+    "criticalPerspectives",
     "researchCompleteness",
   ],
   properties: {
@@ -44,6 +45,10 @@ export const researchJsonSchema = {
     },
     additionalInsights: {
       type: "string",
+    },
+    criticalPerspectives: {
+      type: "string",
+      minLength: 1,
     },
     researchCompleteness: {
       type: "string",
@@ -123,6 +128,7 @@ IMPORTANT: You must respond with a valid JSON object only. Do not include any te
     }
   ],
   "additionalInsights": "any other relevant information",
+  "criticalPerspectives": "critical analysis and potential concerns about the topic",
   "researchCompleteness": "assessment of how thoroughly the topic was covered"
 }
 

@@ -3,16 +3,18 @@
  */
 
 /**
- * Restart a job with clean-slate mode
+ * Restart a job with clean-slate mode or from a specific task
  *
  * @param {string} jobId - The ID of the job to restart
  * @param {Object} opts - Options object
- * @param {Object} opts.options - Additional options for the restart
- * @param {boolean} opts.options.clearTokenUsage - Whether to clear token usage (default: true)
+ * @param {string} [opts.fromTask] - Task ID to restart from (inclusive)
+ * @param {boolean} [opts.singleTask] - Whether to run only the target task and then stop
+ * @param {Object} [opts.options] - Additional options for the restart
+ * @param {boolean} [opts.options.clearTokenUsage=true] - Whether to clear token usage
  * @returns {Promise<Object>} Parsed JSON response from the server
  * @throws {Object} Structured error object with { code, message } for non-2xx responses
  */
-export async function restartJob(jobId, serverDataDir, opts = {}) {
+export async function restartJob(jobId, opts = {}) {
   const options = {
     clearTokenUsage: true,
     ...opts.options,

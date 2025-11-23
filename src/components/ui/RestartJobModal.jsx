@@ -47,7 +47,10 @@ export function RestartJobModal({
   const handleKeyDown = (e) => {
     if (e.key === "Enter" && !isSubmitting && open) {
       e.preventDefault();
-      onConfirm({ singleTask: false });
+      // Do not confirm via Enter when a task is set; let the user click explicitly
+      if (!taskId) {
+        onConfirm({ singleTask: false });
+      }
     }
   };
 
