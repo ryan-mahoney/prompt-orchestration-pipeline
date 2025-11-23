@@ -10,7 +10,7 @@ import { start as startWatcher, stop as stopWatcher } from "./watcher.js";
 import * as state from "./state.js";
 import { sseRegistry } from "./sse.js";
 import { resolvePipelinePaths } from "../config/paths.js";
-import { routeRequest, broadcastStateUpdate } from "./router.js";
+import { broadcastStateUpdate } from "./sse-broadcast.js";
 
 // Get __dirname equivalent in ES modules
 const __filename = fileURLToPath(import.meta.url);
@@ -53,9 +53,15 @@ function startHeartbeat() {
  * @param {string} serverDataDir - Base data directory for pipeline data
  */
 function createServer(serverDataDir = DATA_DIR) {
-  const server = http.createServer((req, res) => {
-    // Delegate all request routing to the router
-    routeRequest(req, res, viteServer, serverDataDir);
+  const server = http.createServer(async (req, res) => {
+    try {
+      // Delegate all request routing to router
+      await routeRequest(req, res, viteServer, serverDataDir);
+    } catch (err) {
+      console.error("Error in request handler:", err);
+      res.writeHead(500, { "Content-Type": "text/plain" });
+      res.end("Internal Server Error");
+    }
   });
 
   return server;
@@ -156,13 +162,13 @@ async function startServer({ dataDir, port: customPort }) {
       );
     }
 
-    // Use customPort if provided, otherwise use PORT env var, otherwise use 0 for ephemeral port
+    // Use customPort if provided, otherwise use PORT env var, otherwise use default PORT constant
     const port =
       customPort !== undefined
         ? customPort
         : process.env.PORT
           ? parseInt(process.env.PORT)
-          : 0;
+          : PORT;
 
     // In development, start Vite in middlewareMode so that Node server can serve
     // client with HMR in a single process. We dynamically import Vite here
@@ -247,6 +253,7 @@ async function startServer({ dataDir, port: customPort }) {
     return {
       url: baseUrl,
       close: async () => {
+        console.log("[Server] Starting server cleanup...");
         // Clean up all resources
         if (heartbeatTimer) {
           clearInterval(heartbeatTimer);
@@ -270,8 +277,14 @@ async function startServer({ dataDir, port: customPort }) {
           }
         }
 
+        console.log("[Server] Closing HTTP server...");
         // Close HTTP server
-        return new Promise((resolve) => server.close(resolve));
+        return new Promise((resolve) => {
+          server.close(() => {
+            console.log("[Server] HTTP server closed");
+            resolve();
+          });
+        });
       },
     };
   } catch (error) {
@@ -314,5 +327,8 @@ export const start = (port = 0, dataDir = DATA_DIR) => {
 
 // Start server if run directly
 if (import.meta.url === `file://${process.argv[1]}`) {
-  startServer({ dataDir: DATA_DIR });
+  startServer({ dataDir: DATA_DIR }).catch((err) => {
+    console.error("Failed to start server:", err);
+    process.exit(1);
+  });
 }
