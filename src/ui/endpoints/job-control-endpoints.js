@@ -570,18 +570,17 @@ export async function handleTaskStart(
       return;
     }
 
-    // Job must be in current to start a task
-    if (lifecycle !== "current") {
-      sendJson(res, 409, {
-        ok: false,
-        code: "unsupported_lifecycle",
-        message: "Job must be in current to start a task",
-      });
-      return;
-    }
+    // Move job to current directory if it's not already there (same logic as restart)
+    let jobDir = getJobDirectoryPath(dataDir, jobId, lifecycle);
 
-    // Compute job directory
-    const jobDir = getJobDirectoryPath(dataDir, jobId, "current");
+    if (lifecycle !== "current") {
+      const sourcePath = getJobDirectoryPath(dataDir, jobId, lifecycle);
+      const targetPath = getJobDirectoryPath(dataDir, jobId, "current");
+
+      // Atomically move job to current directory
+      await fs.promises.rename(sourcePath, targetPath);
+      jobDir = targetPath;
+    }
 
     // Read snapshot from tasks-status.json
     const statusPath = path.join(jobDir, "tasks-status.json");

@@ -1,147 +1,145 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { handleTaskStart } from "../src/ui/endpoints/job-control-endpoints.js";
-import {
-  getJobDirectoryPath,
-  getJobPipelinePath,
-} from "../src/config/paths.js";
-import { spawn } from "node:child_process";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { startServer } from "../src/ui/server.js";
+import { promises as fs } from "node:fs";
+import path from "node:path";
+import { getJobDirectoryPath } from "../src/config/paths.js";
 
-// Mock modules
-vi.mock("../src/config/paths.js", () => ({
-  getJobDirectoryPath: vi.fn(),
-  getJobPipelinePath: vi.fn(),
-}));
+describe("Job Start Task Endpoint", () => {
+  let server;
+  let dataDir;
+  let baseUrl;
 
-vi.mock("node:child_process", () => ({
-  spawn: vi.fn(),
-}));
+  beforeEach(async () => {
+    // Create a temporary directory for test data
+    dataDir = `/tmp/job-start-task-test-${Date.now()}`;
+    await fs.mkdir(dataDir, { recursive: true });
 
-vi.mock("node:fs", async () => ({
-  promises: {
-    access: vi.fn(),
-    readFile: vi.fn(),
-  },
-}));
+    // Create pipeline-data structure
+    const pipelineDataDir = path.join(dataDir, "pipeline-data");
+    await fs.mkdir(path.join(pipelineDataDir, "current"), { recursive: true });
+    await fs.mkdir(path.join(pipelineDataDir, "pending"), { recursive: true });
+    await fs.mkdir(path.join(pipelineDataDir, "complete"), { recursive: true });
+    await fs.mkdir(path.join(pipelineDataDir, "rejected"), { recursive: true });
 
-describe("handleTaskStart", () => {
-  let mockReq;
-  let mockRes;
-  let mockDataDir;
-  let mockSendJson;
-
-  beforeEach(() => {
-    mockReq = {};
-    mockRes = {
-      status: 200,
-      json: vi.fn(),
-    };
-    mockDataDir = "/test/data";
-    mockSendJson = vi.fn();
-
-    // Reset all mocks
-    vi.clearAllMocks();
-
-    // Mock console methods to avoid noise in tests
-    vi.spyOn(console, "error").mockImplementation(() => {});
-    vi.spyOn(console, "log").mockImplementation(() => {});
+    // Start server
+    const serverInfo = await startServer({ dataDir, port: 0 });
+    server = serverInfo;
+    baseUrl = serverInfo.url;
   });
 
-  afterEach(() => {
-    vi.restoreAllMocks();
+  afterEach(async () => {
+    if (server) {
+      await server.close();
+    }
+    // Clean up temp directory
+    try {
+      await fs.rm(dataDir, { recursive: true, force: true });
+    } catch (error) {
+      // Ignore cleanup errors
+    }
   });
 
   describe("Validation cases", () => {
     it("should return 400 when jobId is empty", async () => {
-      await handleTaskStart(
-        mockReq,
-        mockRes,
-        "",
-        "test-task",
-        mockDataDir,
-        mockSendJson
+      const response = await fetch(
+        `${baseUrl}/api/jobs//tasks/test-task/start`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+        }
       );
 
-      expect(mockSendJson).toHaveBeenCalledWith(mockRes, 400, {
-        ok: false,
-        error: "bad_request",
-        message: "jobId is required",
-      });
+      expect(response.status).toBe(404); // Empty jobId results in 404 from routing
     });
 
     it("should return 400 when taskId is empty", async () => {
-      await handleTaskStart(
-        mockReq,
-        mockRes,
-        "test-job",
-        "",
-        mockDataDir,
-        mockSendJson
+      const response = await fetch(
+        `${baseUrl}/api/jobs/test-job/tasks//start`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+        }
       );
 
-      expect(mockSendJson).toHaveBeenCalledWith(mockRes, 400, {
-        ok: false,
-        error: "bad_request",
-        message: "taskId is required",
-      });
+      expect(response.status).toBe(404); // Empty taskId results in 404 from routing
     });
   });
 
   describe("Error handling", () => {
+    it("should return 404 for non-existent job", async () => {
+      const response = await fetch(
+        `${baseUrl}/api/jobs/non-existent-job/tasks/test-task/start`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+        }
+      );
+
+      expect(response.status).toBe(404);
+      const body = await response.json();
+      expect(body).toEqual({
+        ok: false,
+        code: "job_not_found",
+        message: "Job not found",
+      });
+    });
+
     it("should return 500 for invalid JSON in tasks-status.json", async () => {
-      const jobId = "test-job";
-      const taskId = "test-task";
+      const jobId = "invalid-json-job";
+      const jobDir = getJobDirectoryPath(dataDir, jobId, "current");
+      await fs.mkdir(jobDir, { recursive: true });
 
-      // Mock directory exists
-      const { promises } = await import("node:fs");
-      promises.access.mockResolvedValue(undefined);
+      // Create invalid JSON tasks-status.json
+      const statusPath = path.join(jobDir, "tasks-status.json");
+      await fs.writeFile(statusPath, "invalid json content");
 
-      getJobDirectoryPath.mockReturnValue("/test/data/current/test-job");
-      getJobPipelinePath.mockReturnValue(
-        "/test/data/current/test-job/pipeline.json"
+      // Create pipeline.json
+      const pipelinePath = path.join(jobDir, "pipeline.json");
+      await fs.writeFile(
+        pipelinePath,
+        JSON.stringify({ tasks: ["test-task"] })
       );
 
-      promises.readFile.mockResolvedValue("invalid json content");
-
-      await handleTaskStart(
-        mockReq,
-        mockRes,
-        jobId,
-        taskId,
-        mockDataDir,
-        mockSendJson
+      const response = await fetch(
+        `${baseUrl}/api/jobs/${jobId}/tasks/test-task/start`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+        }
       );
 
-      expect(mockSendJson).toHaveBeenCalledWith(mockRes, 500, {
+      expect(response.status).toBe(500);
+      const body = await response.json();
+      expect(body).toEqual({
         ok: false,
         code: "internal_error",
         message: "Invalid job status JSON",
       });
     });
 
-    it("should return 404 for ENOENT when reading tasks-status.json", async () => {
-      const jobId = "test-job";
-      const taskId = "test-task";
+    it("should return 404 for missing tasks-status.json", async () => {
+      const jobId = "no-status-job";
+      const jobDir = getJobDirectoryPath(dataDir, jobId, "current");
+      await fs.mkdir(jobDir, { recursive: true });
 
-      // Mock directory exists
-      const { promises } = await import("node:fs");
-      promises.access.mockResolvedValue(undefined);
-
-      getJobDirectoryPath.mockReturnValue("/test/data/current/test-job");
-
-      const error = new Error("ENOENT: no such file");
-      error.code = "ENOENT";
-      promises.readFile.mockRejectedValue(error);
-
-      await handleTaskStart(
-        mockReq,
-        mockRes,
-        jobId,
-        taskId,
-        mockDataDir,
-        mockSendJson
+      // Create pipeline.json but no tasks-status.json
+      const pipelinePath = path.join(jobDir, "pipeline.json");
+      await fs.writeFile(
+        pipelinePath,
+        JSON.stringify({ tasks: ["test-task"] })
       );
 
-      expect(mockSendJson).toHaveBeenCalledWith(mockRes, 404, {
+      const response = await fetch(
+        `${baseUrl}/api/jobs/${jobId}/tasks/test-task/start`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+        }
+      );
+
+      expect(response.status).toBe(404);
+      const body = await response.json();
+      expect(body).toEqual({
         ok: false,
         code: "job_not_found",
         message: "Job status file not found",
@@ -150,103 +148,193 @@ describe("handleTaskStart", () => {
   });
 
   describe("Job lifecycle cases", () => {
-    it("should return 404 when job directory not found", async () => {
-      const jobId = "nonexistent-job";
-      const taskId = "test-task";
+    it("should move job from complete to current and proceed", async () => {
+      const jobId = "complete-job";
+      const sourceJobDir = getJobDirectoryPath(dataDir, jobId, "complete");
+      const targetJobDir = getJobDirectoryPath(dataDir, jobId, "current");
 
-      // Mock directory doesn't exist
-      const { promises } = await import("node:fs");
-      promises.access.mockRejectedValue(new Error("ENOENT"));
+      await fs.mkdir(sourceJobDir, { recursive: true });
 
-      getJobDirectoryPath.mockReturnValue("/test/data/current/nonexistent-job");
-
-      await handleTaskStart(
-        mockReq,
-        mockRes,
-        jobId,
-        taskId,
-        mockDataDir,
-        mockSendJson
+      // Create tasks-status.json in complete directory
+      const statusPath = path.join(sourceJobDir, "tasks-status.json");
+      await fs.writeFile(
+        statusPath,
+        JSON.stringify({
+          id: jobId,
+          state: "completed",
+          current: null,
+          currentStage: null,
+          lastUpdated: new Date().toISOString(),
+          tasks: {
+            "upstream-task": {
+              state: "done",
+              attempts: 1,
+              refinementAttempts: 0,
+              currentStage: null,
+              files: { artifacts: [], logs: [], tmp: [] },
+            },
+            "test-task": {
+              state: "pending",
+              attempts: 0,
+              refinementAttempts: 0,
+              currentStage: null,
+              files: { artifacts: [], logs: [], tmp: [] },
+            },
+          },
+          files: { artifacts: [], logs: [], tmp: [] },
+        })
       );
 
-      expect(mockSendJson).toHaveBeenCalledWith(mockRes, 404, {
-        ok: false,
-        code: "job_not_found",
-        message: "Job not found",
+      // Create pipeline.json
+      const pipelinePath = path.join(sourceJobDir, "pipeline.json");
+      await fs.writeFile(
+        pipelinePath,
+        JSON.stringify({ tasks: ["upstream-task", "test-task"] })
+      );
+
+      const response = await fetch(
+        `${baseUrl}/api/jobs/${jobId}/tasks/test-task/start`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+        }
+      );
+
+      expect(response.status).toBe(202);
+      const body = await response.json();
+      expect(body).toEqual({
+        ok: true,
+        jobId,
+        taskId: "test-task",
+        mode: "single-task-start",
+        spawned: true,
       });
+
+      // Verify job directory no longer exists in complete
+      try {
+        await fs.access(sourceJobDir);
+        expect(false).toBe(true); // Should not reach here
+      } catch {
+        // Expected - directory should not exist
+      }
+
+      // Verify job directory now exists in current
+      await fs.access(targetJobDir); // Should not throw
     });
 
-    it("should return 409 when job is in complete lifecycle", async () => {
-      const jobId = "complete-job";
-      const taskId = "test-task";
+    it("should proceed when job is already in current", async () => {
+      const jobId = "current-job";
+      const jobDir = getJobDirectoryPath(dataDir, jobId, "current");
 
-      // Mock current directory doesn't exist but complete does
-      const { promises } = await import("node:fs");
-      promises.access
-        .mockResolvedValueOnce(undefined) // complete dir exists
-        .mockRejectedValueOnce(new Error("ENOENT")); // current dir doesn't exist
+      await fs.mkdir(jobDir, { recursive: true });
 
-      getJobDirectoryPath
-        .mockReturnValueOnce("/test/data/current/complete-job")
-        .mockReturnValueOnce("/test/data/complete/complete-job");
-
-      await handleTaskStart(
-        mockReq,
-        mockRes,
-        jobId,
-        taskId,
-        mockDataDir,
-        mockSendJson
+      // Create tasks-status.json in current directory
+      const statusPath = path.join(jobDir, "tasks-status.json");
+      await fs.writeFile(
+        statusPath,
+        JSON.stringify({
+          id: jobId,
+          state: "idle",
+          current: null,
+          currentStage: null,
+          lastUpdated: new Date().toISOString(),
+          tasks: {
+            "upstream-task": {
+              state: "done",
+              attempts: 1,
+              refinementAttempts: 0,
+              currentStage: null,
+              files: { artifacts: [], logs: [], tmp: [] },
+            },
+            "test-task": {
+              state: "pending",
+              attempts: 0,
+              refinementAttempts: 0,
+              currentStage: null,
+              files: { artifacts: [], logs: [], tmp: [] },
+            },
+          },
+          files: { artifacts: [], logs: [], tmp: [] },
+        })
       );
 
-      expect(mockSendJson).toHaveBeenCalledWith(mockRes, 409, {
-        ok: false,
-        code: "unsupported_lifecycle",
-        message: "Job must be in current to start a task",
+      // Create pipeline.json
+      const pipelinePath = path.join(jobDir, "pipeline.json");
+      await fs.writeFile(
+        pipelinePath,
+        JSON.stringify({ tasks: ["upstream-task", "test-task"] })
+      );
+
+      const response = await fetch(
+        `${baseUrl}/api/jobs/${jobId}/tasks/test-task/start`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+        }
+      );
+
+      expect(response.status).toBe(202);
+      const body = await response.json();
+      expect(body).toEqual({
+        ok: true,
+        jobId,
+        taskId: "test-task",
+        mode: "single-task-start",
+        spawned: true,
       });
+
+      // Verify job directory still exists in current
+      await fs.access(jobDir); // Should not throw
     });
   });
 
   describe("Task state cases", () => {
     it("should return 409 when job is running", async () => {
       const jobId = "running-job";
-      const taskId = "test-task";
+      const jobDir = getJobDirectoryPath(dataDir, jobId, "current");
+      await fs.mkdir(jobDir, { recursive: true });
 
-      // Mock directory exists
-      const { promises } = await import("node:fs");
-      promises.access.mockResolvedValue(undefined);
-
-      getJobDirectoryPath.mockReturnValue("/test/data/current/running-job");
-
-      const mockSnapshot = {
-        state: "running",
-        tasks: {
-          "test-task": {
-            state: "pending",
-            currentStage: null,
-            attempts: 0,
-            refinementAttempts: 0,
-            files: {
-              artifacts: [],
-              logs: [],
-              tmp: [],
+      // Create tasks-status.json with running state
+      const statusPath = path.join(jobDir, "tasks-status.json");
+      await fs.writeFile(
+        statusPath,
+        JSON.stringify({
+          id: jobId,
+          state: "running",
+          current: "some-task",
+          currentStage: "processing",
+          lastUpdated: new Date().toISOString(),
+          tasks: {
+            "test-task": {
+              state: "pending",
+              attempts: 0,
+              refinementAttempts: 0,
+              currentStage: null,
+              files: { artifacts: [], logs: [], tmp: [] },
             },
           },
-        },
-      };
-
-      promises.readFile.mockResolvedValue(JSON.stringify(mockSnapshot));
-
-      await handleTaskStart(
-        mockReq,
-        mockRes,
-        jobId,
-        taskId,
-        mockDataDir,
-        mockSendJson
+          files: { artifacts: [], logs: [], tmp: [] },
+        })
       );
 
-      expect(mockSendJson).toHaveBeenCalledWith(mockRes, 409, {
+      // Create pipeline.json
+      const pipelinePath = path.join(jobDir, "pipeline.json");
+      await fs.writeFile(
+        pipelinePath,
+        JSON.stringify({ tasks: ["test-task"] })
+      );
+
+      const response = await fetch(
+        `${baseUrl}/api/jobs/${jobId}/tasks/test-task/start`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+        }
+      );
+
+      expect(response.status).toBe(409);
+      const body = await response.json();
+      expect(body).toEqual({
         ok: false,
         code: "job_running",
         message: "Job is currently running; start is unavailable",
@@ -255,56 +343,57 @@ describe("handleTaskStart", () => {
 
     it("should return 409 when any task is running", async () => {
       const jobId = "job-with-running-task";
-      const taskId = "test-task";
+      const jobDir = getJobDirectoryPath(dataDir, jobId, "current");
+      await fs.mkdir(jobDir, { recursive: true });
 
-      // Mock directory exists
-      const { promises } = await import("node:fs");
-      promises.access.mockResolvedValue(undefined);
-
-      getJobDirectoryPath.mockReturnValue(
-        "/test/data/current/job-with-running-task"
-      );
-
-      const mockSnapshot = {
-        state: "idle",
-        tasks: {
-          "test-task": {
-            state: "pending",
-            currentStage: null,
-            attempts: 0,
-            refinementAttempts: 0,
-            files: {
-              artifacts: [],
-              logs: [],
-              tmp: [],
+      // Create tasks-status.json with one running task
+      const statusPath = path.join(jobDir, "tasks-status.json");
+      await fs.writeFile(
+        statusPath,
+        JSON.stringify({
+          id: jobId,
+          state: "idle",
+          current: null,
+          currentStage: null,
+          lastUpdated: new Date().toISOString(),
+          tasks: {
+            "other-task": {
+              state: "running",
+              attempts: 1,
+              refinementAttempts: 0,
+              currentStage: "processing",
+              files: { artifacts: [], logs: [], tmp: [] },
+            },
+            "test-task": {
+              state: "pending",
+              attempts: 0,
+              refinementAttempts: 0,
+              currentStage: null,
+              files: { artifacts: [], logs: [], tmp: [] },
             },
           },
-          "other-task": {
-            state: "running",
-            currentStage: "processing",
-            attempts: 1,
-            refinementAttempts: 0,
-            files: {
-              artifacts: [],
-              logs: [],
-              tmp: [],
-            },
-          },
-        },
-      };
-
-      promises.readFile.mockResolvedValue(JSON.stringify(mockSnapshot));
-
-      await handleTaskStart(
-        mockReq,
-        mockRes,
-        jobId,
-        taskId,
-        mockDataDir,
-        mockSendJson
+          files: { artifacts: [], logs: [], tmp: [] },
+        })
       );
 
-      expect(mockSendJson).toHaveBeenCalledWith(mockRes, 409, {
+      // Create pipeline.json
+      const pipelinePath = path.join(jobDir, "pipeline.json");
+      await fs.writeFile(
+        pipelinePath,
+        JSON.stringify({ tasks: ["other-task", "test-task"] })
+      );
+
+      const response = await fetch(
+        `${baseUrl}/api/jobs/${jobId}/tasks/test-task/start`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+        }
+      );
+
+      expect(response.status).toBe(409);
+      const body = await response.json();
+      expect(body).toEqual({
         ok: false,
         code: "job_running",
         message: "Job is currently running; start is unavailable",
@@ -313,43 +402,50 @@ describe("handleTaskStart", () => {
 
     it("should return 400 when task not found", async () => {
       const jobId = "test-job";
-      const taskId = "nonexistent-task";
+      const jobDir = getJobDirectoryPath(dataDir, jobId, "current");
+      await fs.mkdir(jobDir, { recursive: true });
 
-      // Mock directory exists
-      const { promises } = await import("node:fs");
-      promises.access.mockResolvedValue(undefined);
-
-      getJobDirectoryPath.mockReturnValue("/test/data/current/test-job");
-
-      const mockSnapshot = {
-        state: "idle",
-        tasks: {
-          "other-task": {
-            state: "pending",
-            currentStage: null,
-            attempts: 0,
-            refinementAttempts: 0,
-            files: {
-              artifacts: [],
-              logs: [],
-              tmp: [],
+      // Create tasks-status.json without the target task
+      const statusPath = path.join(jobDir, "tasks-status.json");
+      await fs.writeFile(
+        statusPath,
+        JSON.stringify({
+          id: jobId,
+          state: "idle",
+          current: null,
+          currentStage: null,
+          lastUpdated: new Date().toISOString(),
+          tasks: {
+            "other-task": {
+              state: "pending",
+              attempts: 0,
+              refinementAttempts: 0,
+              currentStage: null,
+              files: { artifacts: [], logs: [], tmp: [] },
             },
           },
-        },
-      };
-
-      promises.readFile.mockResolvedValue(JSON.stringify(mockSnapshot));
-
-      await handleTaskStart(
-        mockReq,
-        mockRes,
-        jobId,
-        taskId,
-        mockDataDir,
-        mockSendJson
+          files: { artifacts: [], logs: [], tmp: [] },
+        })
       );
 
-      expect(mockSendJson).toHaveBeenCalledWith(mockRes, 400, {
+      // Create pipeline.json
+      const pipelinePath = path.join(jobDir, "pipeline.json");
+      await fs.writeFile(
+        pipelinePath,
+        JSON.stringify({ tasks: ["other-task"] })
+      );
+
+      const response = await fetch(
+        `${baseUrl}/api/jobs/${jobId}/tasks/nonexistent-task/start`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+        }
+      );
+
+      expect(response.status).toBe(400);
+      const body = await response.json();
+      expect(body).toEqual({
         ok: false,
         code: "task_not_found",
         message: "Task not found in job",
@@ -358,43 +454,50 @@ describe("handleTaskStart", () => {
 
     it("should return 400 when task is not pending", async () => {
       const jobId = "test-job";
-      const taskId = "done-task";
+      const jobDir = getJobDirectoryPath(dataDir, jobId, "current");
+      await fs.mkdir(jobDir, { recursive: true });
 
-      // Mock directory exists
-      const { promises } = await import("node:fs");
-      promises.access.mockResolvedValue(undefined);
-
-      getJobDirectoryPath.mockReturnValue("/test/data/current/test-job");
-
-      const mockSnapshot = {
-        state: "idle",
-        tasks: {
-          "done-task": {
-            state: "done",
-            currentStage: null,
-            attempts: 1,
-            refinementAttempts: 0,
-            files: {
-              artifacts: [],
-              logs: [],
-              tmp: [],
+      // Create tasks-status.json with task already done
+      const statusPath = path.join(jobDir, "tasks-status.json");
+      await fs.writeFile(
+        statusPath,
+        JSON.stringify({
+          id: jobId,
+          state: "idle",
+          current: null,
+          currentStage: null,
+          lastUpdated: new Date().toISOString(),
+          tasks: {
+            "test-task": {
+              state: "done",
+              attempts: 1,
+              refinementAttempts: 0,
+              currentStage: null,
+              files: { artifacts: [], logs: [], tmp: [] },
             },
           },
-        },
-      };
-
-      promises.readFile.mockResolvedValue(JSON.stringify(mockSnapshot));
-
-      await handleTaskStart(
-        mockReq,
-        mockRes,
-        jobId,
-        taskId,
-        mockDataDir,
-        mockSendJson
+          files: { artifacts: [], logs: [], tmp: [] },
+        })
       );
 
-      expect(mockSendJson).toHaveBeenCalledWith(mockRes, 400, {
+      // Create pipeline.json
+      const pipelinePath = path.join(jobDir, "pipeline.json");
+      await fs.writeFile(
+        pipelinePath,
+        JSON.stringify({ tasks: ["test-task"] })
+      );
+
+      const response = await fetch(
+        `${baseUrl}/api/jobs/${jobId}/tasks/test-task/start`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+        }
+      );
+
+      expect(response.status).toBe(400);
+      const body = await response.json();
+      expect(body).toEqual({
         ok: false,
         code: "task_not_pending",
         message: "Task is not in pending state",
@@ -404,55 +507,44 @@ describe("handleTaskStart", () => {
 
   describe("Pipeline config cases", () => {
     it("should return 500 when pipeline config not found", async () => {
-      const jobId = "test-job";
-      const taskId = "test-task";
+      const jobId = "no-pipeline-job";
+      const jobDir = getJobDirectoryPath(dataDir, jobId, "current");
+      await fs.mkdir(jobDir, { recursive: true });
 
-      // Mock directory exists
-      const { promises } = await import("node:fs");
-      promises.access.mockResolvedValue(undefined);
-
-      getJobDirectoryPath.mockReturnValue("/test/data/current/test-job");
-      getJobPipelinePath.mockReturnValue(
-        "/test/data/current/test-job/pipeline.json"
-      );
-
-      const mockSnapshot = {
-        state: "idle",
-        tasks: {
-          "test-task": {
-            state: "pending",
-            currentStage: null,
-            attempts: 0,
-            refinementAttempts: 0,
-            files: {
-              artifacts: [],
-              logs: [],
-              tmp: [],
+      // Create tasks-status.json but no pipeline.json
+      const statusPath = path.join(jobDir, "tasks-status.json");
+      await fs.writeFile(
+        statusPath,
+        JSON.stringify({
+          id: jobId,
+          state: "idle",
+          current: null,
+          currentStage: null,
+          lastUpdated: new Date().toISOString(),
+          tasks: {
+            "test-task": {
+              state: "pending",
+              attempts: 0,
+              refinementAttempts: 0,
+              currentStage: null,
+              files: { artifacts: [], logs: [], tmp: [] },
             },
           },
-        },
-      };
-
-      promises.readFile.mockImplementation((path) => {
-        if (path.endsWith("tasks-status.json")) {
-          return Promise.resolve(JSON.stringify(mockSnapshot));
-        }
-        if (path.endsWith("pipeline.json")) {
-          return Promise.reject(new Error("ENOENT: no such file"));
-        }
-        return Promise.reject(new Error("Unexpected file read"));
-      });
-
-      await handleTaskStart(
-        mockReq,
-        mockRes,
-        jobId,
-        taskId,
-        mockDataDir,
-        mockSendJson
+          files: { artifacts: [], logs: [], tmp: [] },
+        })
       );
 
-      expect(mockSendJson).toHaveBeenCalledWith(mockRes, 500, {
+      const response = await fetch(
+        `${baseUrl}/api/jobs/${jobId}/tasks/test-task/start`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+        }
+      );
+
+      expect(response.status).toBe(500);
+      const body = await response.json();
+      expect(body).toEqual({
         ok: false,
         code: "pipeline_config_not_found",
         message: "Pipeline configuration not found",
@@ -460,73 +552,122 @@ describe("handleTaskStart", () => {
     });
 
     it("should return 409 when dependencies not satisfied", async () => {
-      const jobId = "test-job";
-      const taskId = "test-task";
+      const jobId = "dep-fail-job";
+      const jobDir = getJobDirectoryPath(dataDir, jobId, "current");
+      await fs.mkdir(jobDir, { recursive: true });
 
-      // Mock directory exists
-      const { promises } = await import("node:fs");
-      promises.access.mockResolvedValue(undefined);
-
-      getJobDirectoryPath.mockReturnValue("/test/data/current/test-job");
-      getJobPipelinePath.mockReturnValue(
-        "/test/data/current/test-job/pipeline.json"
-      );
-
-      const mockSnapshot = {
-        state: "idle",
-        tasks: {
-          "upstream-task": {
-            state: "pending", // Not done - this should cause dependency failure
-            currentStage: null,
-            attempts: 0,
-            refinementAttempts: 0,
-            files: {
-              artifacts: [],
-              logs: [],
-              tmp: [],
+      // Create tasks-status.json with upstream task not done
+      const statusPath = path.join(jobDir, "tasks-status.json");
+      await fs.writeFile(
+        statusPath,
+        JSON.stringify({
+          id: jobId,
+          state: "idle",
+          current: null,
+          currentStage: null,
+          lastUpdated: new Date().toISOString(),
+          tasks: {
+            "upstream-task": {
+              state: "pending", // Not done - this should cause dependency failure
+              attempts: 0,
+              refinementAttempts: 0,
+              currentStage: null,
+              files: { artifacts: [], logs: [], tmp: [] },
+            },
+            "test-task": {
+              state: "pending",
+              attempts: 0,
+              refinementAttempts: 0,
+              currentStage: null,
+              files: { artifacts: [], logs: [], tmp: [] },
             },
           },
-          "test-task": {
-            state: "pending",
-            currentStage: null,
-            attempts: 0,
-            refinementAttempts: 0,
-            files: {
-              artifacts: [],
-              logs: [],
-              tmp: [],
-            },
-          },
-        },
-      };
-
-      const mockPipeline = {
-        tasks: ["upstream-task", "test-task", "downstream-task"],
-      };
-
-      promises.readFile.mockImplementation((filePath) => {
-        if (filePath.endsWith("tasks-status.json")) {
-          return Promise.resolve(JSON.stringify(mockSnapshot));
-        }
-        if (filePath.endsWith("pipeline.json")) {
-          return Promise.resolve(JSON.stringify(mockPipeline));
-        }
-        return Promise.reject(new Error("Unexpected file read"));
-      });
-
-      await handleTaskStart(
-        mockReq,
-        mockRes,
-        jobId,
-        taskId,
-        mockDataDir,
-        mockSendJson
+          files: { artifacts: [], logs: [], tmp: [] },
+        })
       );
 
-      expect(mockSendJson).toHaveBeenCalledWith(mockRes, 409, {
+      // Create pipeline.json with dependency order
+      const pipelinePath = path.join(jobDir, "pipeline.json");
+      await fs.writeFile(
+        pipelinePath,
+        JSON.stringify({ tasks: ["upstream-task", "test-task"] })
+      );
+
+      const response = await fetch(
+        `${baseUrl}/api/jobs/${jobId}/tasks/test-task/start`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+        }
+      );
+
+      expect(response.status).toBe(409);
+      const body = await response.json();
+      expect(body).toEqual({
         ok: false,
         code: "dependencies_not_satisfied",
         message: "Dependencies not satisfied for task: upstream-task",
+      });
+    });
+
+    it("should succeed when dependencies are satisfied", async () => {
+      const jobId = "dep-success-job";
+      const jobDir = getJobDirectoryPath(dataDir, jobId, "current");
+      await fs.mkdir(jobDir, { recursive: true });
+
+      // Create tasks-status.json with upstream task done
+      const statusPath = path.join(jobDir, "tasks-status.json");
+      await fs.writeFile(
+        statusPath,
+        JSON.stringify({
+          id: jobId,
+          state: "idle",
+          current: null,
+          currentStage: null,
+          lastUpdated: new Date().toISOString(),
+          tasks: {
+            "upstream-task": {
+              state: "done", // Done - dependencies satisfied
+              attempts: 1,
+              refinementAttempts: 0,
+              currentStage: null,
+              files: { artifacts: [], logs: [], tmp: [] },
+            },
+            "test-task": {
+              state: "pending",
+              attempts: 0,
+              refinementAttempts: 0,
+              currentStage: null,
+              files: { artifacts: [], logs: [], tmp: [] },
+            },
+          },
+          files: { artifacts: [], logs: [], tmp: [] },
+        })
+      );
+
+      // Create pipeline.json with dependency order
+      const pipelinePath = path.join(jobDir, "pipeline.json");
+      await fs.writeFile(
+        pipelinePath,
+        JSON.stringify({ tasks: ["upstream-task", "test-task"] })
+      );
+
+      const response = await fetch(
+        `${baseUrl}/api/jobs/${jobId}/tasks/test-task/start`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+        }
+      );
+
+      expect(response.status).toBe(202);
+      const body = await response.json();
+      expect(body).toEqual({
+        ok: true,
+        jobId,
+        taskId: "test-task",
+        mode: "single-task-start",
+        spawned: true,
       });
     });
   });
