@@ -57,26 +57,26 @@ export default function PromptPipelineDashboard({ isConnected }) {
   // Shared ticker for live duration updates - removed useTicker
 
   const errorCount = useMemo(
-    () => jobs.filter((j) => j.status === TaskState.FAILED).length,
+    () => jobs.filter((j) => j.displayCategory === "errors").length,
     [jobs]
   );
   const currentCount = useMemo(
-    () => jobs.filter((j) => j.status === TaskState.RUNNING).length,
+    () => jobs.filter((j) => j.displayCategory === "current").length,
     [jobs]
   );
   const completedCount = useMemo(
-    () => jobs.filter((j) => j.status === JobStatus.COMPLETE).length,
+    () => jobs.filter((j) => j.displayCategory === "complete").length,
     [jobs]
   );
 
   const filteredJobs = useMemo(() => {
     switch (activeTab) {
       case "current":
-        return jobs.filter((j) => j.status === TaskState.RUNNING);
+        return jobs.filter((j) => j.displayCategory === "current");
       case "errors":
-        return jobs.filter((j) => j.status === TaskState.FAILED);
+        return jobs.filter((j) => j.displayCategory === "errors");
       case "complete":
-        return jobs.filter((j) => j.status === JobStatus.COMPLETE);
+        return jobs.filter((j) => j.displayCategory === "complete");
       default:
         return [];
     }

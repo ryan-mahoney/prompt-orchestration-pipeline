@@ -3,6 +3,7 @@ import {
   normalizeTaskState,
   deriveJobStatusFromTasks,
 } from "../../../config/statuses.js";
+import { classifyJobForDisplay } from "../../../utils/jobs.js";
 
 /**
  * Normalize a raw task state into canonical enum.
@@ -225,6 +226,9 @@ export function adaptJobSummary(apiJob) {
     job.totalTokens = job.costsSummary.totalTokens;
   }
 
+  // Compute and attach display category for UI bucketing
+  job.displayCategory = classifyJobForDisplay(job);
+
   // Include warnings for debugging
   if (warnings.length > 0) job.__warnings = warnings;
 
@@ -283,6 +287,9 @@ export function adaptJobDetail(apiDetail) {
   if (apiDetail.costs) {
     detail.costs = apiDetail.costs;
   }
+
+  // Compute and attach display category for UI bucketing
+  detail.displayCategory = classifyJobForDisplay(detail);
 
   // Include warnings for debugging
   if (warnings.length > 0) detail.__warnings = warnings;
