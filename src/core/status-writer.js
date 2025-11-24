@@ -482,6 +482,70 @@ export async function resetJobToCleanSlate(
     // This ensures generated files are preserved during restart
 
     return snapshot;
+});
+  }
+
+/**
+ * Reset a single task to pending state without affecting other tasks
+ *
+ * @param {string} jobDir - Job directory path containing tasks-status.json
+ * @param {string} taskId - Task identifier to reset
+ * @param {Object} options - Reset options
+ * @param {boolean} [options.clearTokenUsage=true] - Whether to clear token usage arrays
+ * @returns {Promise<Object>} The updated status snapshot
+ */
+export async function resetSingleTask(
+  jobDir,
+  taskId,
+  { clearTokenUsage = true } = {}
+) {
+  if (!jobDir || typeof jobDir !== "string") {
+    throw new Error("jobDir must be a non-empty string");
+  }
+
+  if (!taskId || typeof taskId !== "string") {
+    throw new Error("taskId must be a non-empty string");
+  }
+
+  return writeJobStatus(jobDir, (snapshot) => {
+    // Ensure tasks object exists
+    if (!snapshot.tasks || typeof snapshot.tasks !== "object") {
+      snapshot.tasks = {};
+    }
+
+    // Ensure the target task exists
+    if (!snapshot.tasks[taskId]) {
+      snapshot.tasks[taskId] = {};
+    }
+
+    const task = snapshot.tasks[taskId];
+
+    // Reset only the target task state and metadata
+    task.state = TaskState.PENDING;
+    task.currentStage = null;
+
+    // Remove error-related fields
+    delete task.failedStage;
+    delete task.error;
+
+    // Reset counters
+    task.attempts = 0;
+    task.refinementAttempts = 0;
+
+    // Clear token usage if requested
+    if (clearTokenUsage) {
+      task.tokenUsage = [];
+    }
+
+    // Update lastUpdated timestamp
+    snapshot.lastUpdated = new Date().toISOString();
+
+    // Do not modify:
+    // - Any other tasks within snapshot.tasks
+    // - snapshot.files.artifacts|logs|tmp
+    // - Root-level fields other than lastUpdated
+
+    return snapshot;
   });
 }
 
