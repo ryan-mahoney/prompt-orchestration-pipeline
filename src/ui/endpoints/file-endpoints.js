@@ -103,10 +103,8 @@ export async function handleTaskFileListRequest(
   res,
   { jobId, taskId, type, dataDir }
 ) {
-  console.log(`[handleTaskFileListRequest] START for ${jobId}/${taskId}`);
   // Resolve job lifecycle deterministically
   const lifecycle = await resolveJobLifecycle(dataDir, jobId);
-  console.log(`[handleTaskFileListRequest] Resolved lifecycle: ${lifecycle}`);
   if (!lifecycle) {
     // Job not found, return empty list
     sendJson(res, 200, {
