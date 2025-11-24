@@ -224,6 +224,103 @@ describe("Job Restart Endpoint", () => {
     expect(updatedStatus.tasks.analysis.error).toBeUndefined();
   });
 
+  it("should reset only target task when singleTask true", async () => {
+    // Create a job in current lifecycle with multiple tasks
+    const jobId = "single-task-restart-789";
+    const jobDir = getJobDirectoryPath(dataDir, jobId, "current");
+    await fs.mkdir(jobDir, { recursive: true });
+
+    // Create tasks-status.json with mixed task states
+    const statusPath = path.join(jobDir, "tasks-status.json");
+    const initialStatus = {
+      id: jobId,
+      state: "failed",
+      current: null,
+      currentStage: null,
+      lastUpdated: new Date().toISOString(),
+      tasks: {
+        research: {
+          state: "done",
+          currentStage: null,
+          attempts: 1,
+          refinementAttempts: 0,
+          tokenUsage: [{ model: "gpt-4", tokens: 1000 }],
+        },
+        analysis: {
+          state: "failed",
+          currentStage: "processing",
+          attempts: 2,
+          refinementAttempts: 1,
+          failedStage: "processing",
+          error: "Processing failed",
+          tokenUsage: [{ model: "gpt-4", tokens: 2000 }],
+        },
+        compose: {
+          state: "done",
+          currentStage: null,
+          attempts: 1,
+          refinementAttempts: 0,
+          tokenUsage: [{ model: "gpt-4", tokens: 1500 }],
+        },
+      },
+      files: {
+        artifacts: ["research-output.txt", "analysis-output.txt"],
+        logs: ["research.log", "analysis.log"],
+        tmp: ["temp-file.tmp"],
+      },
+    };
+    await fs.writeFile(statusPath, JSON.stringify(initialStatus, null, 2));
+
+    // POST to restart endpoint with singleTask=true
+    const response = await fetch(`${baseUrl}/api/jobs/${jobId}/restart`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ fromTask: "analysis", singleTask: true }),
+    });
+
+    expect(response.status).toBe(202);
+    const body = await response.json();
+    expect(body).toEqual({
+      ok: true,
+      jobId,
+      mode: "single-task",
+      spawned: true,
+    });
+
+    // Immediately read tasks-status.json to verify reset behavior
+    const updatedStatus = JSON.parse(await fs.readFile(statusPath, "utf8"));
+
+    // Verify only analysis task was reset
+    expect(updatedStatus.tasks.analysis.state).toBe("pending");
+    expect(updatedStatus.tasks.analysis.currentStage).toBeNull();
+    expect(updatedStatus.tasks.analysis.attempts).toBe(0);
+    expect(updatedStatus.tasks.analysis.refinementAttempts).toBe(0);
+    expect(updatedStatus.tasks.analysis.tokenUsage).toEqual([]);
+    expect(updatedStatus.tasks.analysis.failedStage).toBeUndefined();
+    expect(updatedStatus.tasks.analysis.error).toBeUndefined();
+
+    // Verify other tasks remain unchanged
+    expect(updatedStatus.tasks.research.state).toBe("done");
+    expect(updatedStatus.tasks.research.attempts).toBe(1);
+    expect(updatedStatus.tasks.research.tokenUsage).toEqual([
+      { model: "gpt-4", tokens: 1000 },
+    ]);
+
+    expect(updatedStatus.tasks.compose.state).toBe("done");
+    expect(updatedStatus.tasks.compose.attempts).toBe(1);
+    expect(updatedStatus.tasks.compose.tokenUsage).toEqual([
+      { model: "gpt-4", tokens: 1500 },
+    ]);
+
+    // Verify files arrays remain unchanged
+    expect(updatedStatus.files.artifacts).toEqual([
+      "research-output.txt",
+      "analysis-output.txt",
+    ]);
+    expect(updatedStatus.files.logs).toEqual(["research.log", "analysis.log"]);
+    expect(updatedStatus.files.tmp).toEqual(["temp-file.tmp"]);
+  });
+
   it("should successfully restart a completed job", async () => {
     // Create a job in current lifecycle that is completed
     const jobId = "completed-job-789";

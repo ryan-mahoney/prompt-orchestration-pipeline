@@ -13,6 +13,7 @@ export default defineConfig({
   root: "src/ui/client",
   build: {
     outDir: "../../dist", // Output to src/ui/dist
+    sourcemap: true,
   },
   publicDir,
   server: {

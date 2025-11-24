@@ -18,6 +18,7 @@ export default defineConfig({
     assetsDir: "assets",
     cssCodeSplit: false, // Ensure CSS is bundled properly
     minify: false, // Disable minification for better debugging
+    sourcemap: process.env.NODE_ENV === "development" ? true : "hidden", // Generate sourcemaps for debugging
   },
   resolve: {
     alias: {

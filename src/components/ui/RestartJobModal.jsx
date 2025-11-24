@@ -103,9 +103,15 @@ export function RestartJobModal({
               </Text>
 
               {taskId && (
-                <Text as="p" className="text-sm text-gray-600 mb-3">
-                  <strong>Triggered from task:</strong> {taskId}
-                </Text>
+                <>
+                  <Text as="p" className="text-sm text-gray-600 mb-3">
+                    <strong>Triggered from task:</strong> {taskId}
+                  </Text>
+                  <Text as="p" className="text-sm text-blue-600 mb-3">
+                    <strong>Just this task:</strong> Only the selected task will
+                    be reset and re-run. Other tasks remain unchanged.
+                  </Text>
+                </>
               )}
 
               <Text as="p" className="text-sm text-gray-500 italic">

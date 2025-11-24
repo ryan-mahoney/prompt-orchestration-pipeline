@@ -4,6 +4,8 @@ import { spawn } from "node:child_process";
 import { fileURLToPath } from "url";
 import {
   resetJobToCleanSlate,
+  resetJobFromTask,
+  resetSingleTask,
   initializeJobArtifacts,
   writeJobStatus,
 } from "../../core/status-writer.js";
@@ -439,9 +441,10 @@ export async function handleJobRestart(req, res, jobId, dataDir, sendJson) {
     beginRestart(jobId);
 
     try {
-      // Reset job: clean-slate or partial from a specific task
-      const { resetJobFromTask } = await import("../../core/status-writer.js");
-      if (fromTask) {
+      // Reset job: clean-slate, partial from a specific task, or single task
+      if (fromTask && singleTask === true) {
+        await resetSingleTask(jobDir, fromTask, { clearTokenUsage: true });
+      } else if (fromTask) {
         await resetJobFromTask(jobDir, fromTask, { clearTokenUsage: true });
       } else {
         await resetJobToCleanSlate(jobDir, { clearTokenUsage: true });
@@ -475,10 +478,16 @@ export async function handleJobRestart(req, res, jobId, dataDir, sendJson) {
     child.unref();
 
     // Send success response
+    const mode =
+      fromTask && singleTask === true
+        ? "single-task"
+        : fromTask
+          ? "partial"
+          : "clean-slate";
     sendJson(res, 202, {
       ok: true,
       jobId,
-      mode: "clean-slate",
+      mode,
       spawned: true,
     });
   } catch (error) {
