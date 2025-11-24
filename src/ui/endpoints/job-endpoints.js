@@ -265,7 +265,7 @@ async function handleJobDetailById(jobId) {
  * Calls handleJobList() and sends the response using sendJson().
  */
 export async function handleJobListRequest(req, res) {
-  console.log("[JobEndpoints] handleJobListRequest called");
+  console.info("[JobEndpoints] handleJobListRequest called");
 
   try {
     const result = await handleJobList();
