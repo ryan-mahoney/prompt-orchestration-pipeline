@@ -510,6 +510,14 @@ export async function handleJobRestart(req, res, jobId, dataDir, sendJson) {
         code: "spawn_failed",
         message: error.message || "Failed to spawn pipeline runner",
       });
+    } else if (error.httpStatus === 409) {
+      // Handle lifecycle policy errors from pipeline-runner
+      sendJson(res, 409, {
+        ok: false,
+        code: error.error || "unsupported_lifecycle",
+        message: error.message || "Operation not allowed by lifecycle policy",
+        ...(error.reason && { reason: error.reason }),
+      });
     } else {
       sendJson(res, 500, {
         ok: false,
@@ -753,6 +761,14 @@ export async function handleTaskStart(
         ok: false,
         code: "spawn_failed",
         message: error.message || "Failed to spawn pipeline runner",
+      });
+    } else if (error.httpStatus === 409) {
+      // Handle lifecycle policy errors from pipeline-runner
+      sendJson(res, 409, {
+        ok: false,
+        code: error.error || "unsupported_lifecycle",
+        message: error.message || "Operation not allowed by lifecycle policy",
+        ...(error.reason && { reason: error.reason }),
       });
     } else {
       sendJson(res, 500, {

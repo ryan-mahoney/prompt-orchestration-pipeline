@@ -86,7 +86,7 @@ export default function PromptPipelineDashboard({ isConnected }) {
 
   // Aggregate progress for currently running jobs (for a subtle top progress bar)
   const runningJobs = useMemo(
-    () => jobs.filter((j) => j.status === TaskState.RUNNING),
+    () => jobs.filter((j) => j.displayCategory === "current"),
     [jobs]
   );
   const aggregateProgress = useMemo(() => {

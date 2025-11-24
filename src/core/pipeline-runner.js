@@ -15,6 +15,7 @@ import {
 import { createTaskFileIO, generateLogName } from "./file-io.js";
 import { createJobLogger } from "./logger.js";
 import { LogEvent, LogFileExtension } from "../config/log-events.js";
+import { decideTransition } from "./lifecycle-policy.js";
 
 const ROOT = process.env.PO_ROOT || process.cwd();
 const DATA_DIR = path.join(ROOT, process.env.PO_DATA_DIR || "pipeline-data");
@@ -83,6 +84,17 @@ logger.group("Pipeline execution", {
   runSingleTask,
 });
 
+// Helper function to check if all upstream dependencies are completed
+function areDependenciesReady(taskName) {
+  const taskIndex = pipeline.tasks.indexOf(taskName);
+  if (taskIndex === -1) return false;
+
+  const upstreamTasks = pipeline.tasks.slice(0, taskIndex);
+  return upstreamTasks.every(
+    (upstreamTask) => status.tasks[upstreamTask]?.state === TaskState.DONE
+  );
+}
+
 for (const taskName of pipeline.tasks) {
   // Skip tasks before startFromTask when targeting a specific restart point
   if (
@@ -106,6 +118,32 @@ for (const taskName of pipeline.tasks) {
       logger.warn("Failed to read completed task output", { taskName });
     }
     continue;
+  }
+
+  // Check lifecycle policy before starting task
+  const currentTaskState = status.tasks[taskName]?.state || "pending";
+  const dependenciesReady = areDependenciesReady(taskName);
+
+  const lifecycleDecision = decideTransition({
+    op: "start",
+    taskState: currentTaskState,
+    dependenciesReady,
+  });
+
+  if (!lifecycleDecision.ok) {
+    logger.warn("lifecycle_block", {
+      jobId,
+      taskId: taskName,
+      op: "start",
+      reason: lifecycleDecision.reason,
+    });
+
+    // Create typed error for endpoints to handle
+    const lifecycleError = new Error(lifecycleDecision.reason);
+    lifecycleError.httpStatus = 409;
+    lifecycleError.error = "unsupported_lifecycle";
+    lifecycleError.reason = lifecycleDecision.reason;
+    throw lifecycleError;
   }
 
   logger.log("Starting task", { taskName });

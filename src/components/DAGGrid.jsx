@@ -13,6 +13,7 @@ import { Button } from "./ui/button.jsx";
 import { restartJob, startTask } from "../ui/client/api.js";
 import { createEmptyTaskFiles } from "../utils/task-files.js";
 import { TaskState } from "../config/statuses.js";
+import { deriveAllowedActions } from "../ui/client/adapters/job-adapter.js";
 import TimerText from "./TimerText.jsx";
 import { taskToTimerProps } from "../utils/time-utils.js";
 
@@ -263,6 +264,7 @@ function DAGGrid({
   jobId,
   filesByTypeForItem = () => createEmptyTaskFiles(),
   taskById = {},
+  pipelineTasks = [],
 }) {
   const overlayRef = useRef(null);
   const gridRef = useRef(null);
@@ -642,79 +644,64 @@ function DAGGrid({
     }
   }, [alertMessage]);
 
-  // Check if restart should be enabled (not running, regardless of lifecycle)
+  // Use adapter to derive allowed actions based on job and task states
+  const allowedActions = React.useMemo(() => {
+    // Create a normalized job object for the adapter
+    const adaptedJob = {
+      status: items.some((item) => item?.state === TaskState.RUNNING)
+        ? "running"
+        : "pending",
+      tasks: items.reduce((acc, item) => {
+        if (item?.id) {
+          acc[item.id] = {
+            state: item?.status || TaskState.PENDING,
+          };
+        }
+        return acc;
+      }, {}),
+    };
+
+    return deriveAllowedActions(adaptedJob, pipelineTasks);
+  }, [items, pipelineTasks]);
+
+  // Check if restart should be enabled using adapter logic
   const isRestartEnabled = React.useCallback(() => {
-    // Check if any item indicates that job is running (job-level state)
-    const isJobRunning = items.some(
-      (item) => item?.state === TaskState.RUNNING
-    );
+    return allowedActions.restart;
+  }, [allowedActions]);
 
-    // Check if any task has explicit running status (not derived from activeIndex)
-    const hasRunningTask = items.some(
-      (item) => item?.status === TaskState.RUNNING
-    );
-
-    return !isJobRunning && !hasRunningTask;
-  }, [items]);
-
-  // Check if start should be enabled for a specific task
+  // Check if start should be enabled for a specific task using adapter logic
   const canStartTask = React.useCallback(
     (task) => {
       if (!task) return false;
 
-      // Task must be pending
-      if (task.status !== TaskState.PENDING) return false;
-
-      // Job must not be running
-      const isJobRunning = items.some(
-        (item) => item?.state === TaskState.RUNNING
-      );
-      const hasRunningTask = items.some(
-        (item) => item?.status === TaskState.RUNNING
-      );
-
-      return !isJobRunning && !hasRunningTask;
+      // Use adapter logic - start is enabled globally, so check if this specific task can start
+      return allowedActions.start && task.status === TaskState.PENDING;
     },
-    [items]
+    [allowedActions]
   );
 
-  // Get disabled reason for tooltip
+  // Get disabled reason for tooltip using adapter logic
   const getRestartDisabledReason = React.useCallback(() => {
-    // Check if any item indicates that job is running (job-level state)
-    const isJobRunning = items.some(
-      (item) => item?.state === TaskState.RUNNING
-    );
+    if (allowedActions.restart) return "";
+    return "Job is currently running";
+  }, [allowedActions]);
 
-    // Check if any task has explicit running status (not derived from activeIndex)
-    const hasRunningTask = items.some(
-      (item) => item?.status === TaskState.RUNNING
-    );
-
-    if (isJobRunning || hasRunningTask) return "Job is currently running";
-    return "";
-  }, [items]);
-
-  // Get disabled reason for start tooltip
+  // Get disabled reason for start tooltip using adapter logic
   const getStartDisabledReason = React.useCallback(
     (task) => {
       if (!task) return "Task not found";
 
-      // Task must be pending
-      if (task.status !== TaskState.PENDING)
+      if (task.status !== TaskState.PENDING) {
         return "Task is not in pending state";
+      }
 
-      // Job must not be running
-      const isJobRunning = items.some(
-        (item) => item?.state === TaskState.RUNNING
-      );
-      const hasRunningTask = items.some(
-        (item) => item?.status === TaskState.RUNNING
-      );
+      if (!allowedActions.start) {
+        return "Job lifecycle policy does not allow starting";
+      }
 
-      if (isJobRunning || hasRunningTask) return "Job is currently running";
       return "";
     },
-    [items]
+    [allowedActions]
   );
 
   return (

@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
   adaptJobSummary,
   adaptJobDetail,
+  deriveAllowedActions,
 } from "../src/ui/client/adapters/job-adapter.js";
 import * as jobsUtils from "../src/utils/jobs.js";
 
@@ -326,6 +327,161 @@ describe("Job Adapter Display Category Tests", () => {
 
       expect(result.displayCategory).toBe(mockClassification);
       expect(result.costs).toEqual(apiDetail.costs);
+    });
+  });
+});
+
+describe("deriveAllowedActions", () => {
+  describe("when job is running", () => {
+    it("should disable both start and restart", () => {
+      const job = {
+        status: "running",
+        tasks: {
+          task1: { state: "done" },
+          task2: { state: "running" },
+        },
+      };
+
+      const pipelineTasks = ["task1", "task2"];
+
+      const result = deriveAllowedActions(job, pipelineTasks);
+
+      expect(result).toEqual({
+        start: false,
+        restart: false,
+      });
+    });
+
+    it("should disable both start and restart when any task is running", () => {
+      const job = {
+        status: "idle",
+        tasks: {
+          task1: { state: "done" },
+          task2: { state: "running" },
+          task3: { state: "pending" },
+        },
+      };
+
+      const pipelineTasks = ["task1", "task2", "task3"];
+
+      const result = deriveAllowedActions(job, pipelineTasks);
+
+      expect(result).toEqual({
+        start: false,
+        restart: false,
+      });
+    });
+  });
+
+  describe("when job is not running", () => {
+    it("should enable both start and restart", () => {
+      const job = {
+        status: "idle",
+        tasks: {
+          task1: { state: "done" },
+          task2: { state: "failed" },
+          task3: { state: "pending" },
+        },
+      };
+
+      const pipelineTasks = ["task1", "task2", "task3"];
+
+      const result = deriveAllowedActions(job, pipelineTasks);
+
+      expect(result).toEqual({
+        start: true,
+        restart: true,
+      });
+    });
+
+    it("should enable both start and restart for completed job", () => {
+      const job = {
+        status: "completed",
+        tasks: {
+          task1: { state: "done" },
+          task2: { state: "done" },
+        },
+      };
+
+      const pipelineTasks = ["task1", "task2"];
+
+      const result = deriveAllowedActions(job, pipelineTasks);
+
+      expect(result).toEqual({
+        start: true,
+        restart: true,
+      });
+    });
+
+    it("should enable both start and restart for failed job", () => {
+      const job = {
+        status: "failed",
+        tasks: {
+          task1: { state: "done" },
+          task2: { state: "failed" },
+        },
+      };
+
+      const pipelineTasks = ["task1", "task2"];
+
+      const result = deriveAllowedActions(job, pipelineTasks);
+
+      expect(result).toEqual({
+        start: true,
+        restart: true,
+      });
+    });
+  });
+
+  describe("edge cases", () => {
+    it("should handle job with no tasks", () => {
+      const job = {
+        status: "idle",
+        tasks: {},
+      };
+
+      const pipelineTasks = [];
+
+      const result = deriveAllowedActions(job, pipelineTasks);
+
+      expect(result).toEqual({
+        start: true,
+        restart: true,
+      });
+    });
+
+    it("should handle job with undefined tasks", () => {
+      const job = {
+        status: "idle",
+        tasks: undefined,
+      };
+
+      const pipelineTasks = [];
+
+      const result = deriveAllowedActions(job, pipelineTasks);
+
+      expect(result).toEqual({
+        start: true,
+        restart: true,
+      });
+    });
+
+    it("should handle empty pipeline tasks", () => {
+      const job = {
+        status: "idle",
+        tasks: {
+          task1: { state: "done" },
+        },
+      };
+
+      const pipelineTasks = [];
+
+      const result = deriveAllowedActions(job, pipelineTasks);
+
+      expect(result).toEqual({
+        start: true,
+        restart: true,
+      });
     });
   });
 });

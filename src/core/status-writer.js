@@ -208,6 +208,26 @@ export async function writeJobStatus(jobDir, updateFn) {
         logger.error("Failed to emit SSE event:", error);
       }
 
+      // Emit lifecycle_block event if update contains lifecycle block reason
+      if (snapshot.lifecycleBlockReason) {
+        try {
+          const lifecycleEventData = {
+            jobId,
+            taskId: snapshot.lifecycleBlockTaskId,
+            op: snapshot.lifecycleBlockOp,
+            reason: snapshot.lifecycleBlockReason,
+          };
+          await logger.sse("lifecycle_block", lifecycleEventData);
+          logger.log(
+            "lifecycle_block SSE event broadcasted successfully",
+            lifecycleEventData
+          );
+        } catch (error) {
+          // Don't fail the write if SSE emission fails
+          logger.error("Failed to emit lifecycle_block SSE event:", error);
+        }
+      }
+
       logger.groupEnd();
       resultSnapshot = snapshot;
     })
@@ -482,8 +502,8 @@ export async function resetJobToCleanSlate(
     // This ensures generated files are preserved during restart
 
     return snapshot;
-});
-  }
+  });
+}
 
 /**
  * Reset a single task to pending state without affecting other tasks
