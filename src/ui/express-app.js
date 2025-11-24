@@ -11,6 +11,7 @@ import {
 import {
   handleJobRescan,
   handleJobRestart,
+  handleTaskStart,
 } from "./endpoints/job-control-endpoints.js";
 import {
   handleTaskFileListRequest,
@@ -122,6 +123,12 @@ export function buildExpressApp({ dataDir, viteServer }) {
   app.post("/api/jobs/:jobId/restart", async (req, res) => {
     const { jobId } = req.params;
     await handleJobRestart(req, res, jobId, dataDir, sendJson);
+  });
+
+  // POST /api/jobs/:jobId/tasks/:taskId/start
+  app.post("/api/jobs/:jobId/tasks/:taskId/start", async (req, res) => {
+    const { jobId, taskId } = req.params;
+    await handleTaskStart(req, res, jobId, taskId, dataDir, sendJson);
   });
 
   // GET /api/jobs/:jobId/tasks/:taskId/files

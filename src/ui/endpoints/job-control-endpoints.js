@@ -24,6 +24,9 @@ const __dirname = path.dirname(__filename);
 // In-memory restart guard to prevent duplicate concurrent restarts per job
 const restartingJobs = new Set();
 
+// In-memory start guard to prevent duplicate concurrent starts per job
+const startingJobs = new Set();
+
 // Helper functions for restart guard
 function isRestartInProgress(jobId) {
   return restartingJobs.has(jobId);
@@ -35,6 +38,67 @@ function beginRestart(jobId) {
 
 function endRestart(jobId) {
   restartingJobs.delete(jobId);
+}
+
+// Helper functions for start guard
+function isStartInProgress(jobId) {
+  return startingJobs.has(jobId);
+}
+
+function beginStart(jobId) {
+  startingJobs.add(jobId);
+}
+
+function endStart(jobId) {
+  startingJobs.delete(jobId);
+}
+
+/**
+ * Validate that all upstream tasks are DONE
+ * @param {Object} params - Parameters object
+ * @param {Array} params.jobPipelineTasks - Pipeline tasks array from pipeline.json
+ * @param {string} params.targetTaskId - Target task ID to validate
+ * @param {Object} params.snapshotTasks - Tasks from tasks-status.json snapshot
+ * @returns {Object} Validation result { ok: true } or { ok: false, code: "dependencies_not_satisfied", missing: [names] }
+ */
+function validateUpstreamDone({
+  jobPipelineTasks,
+  targetTaskId,
+  snapshotTasks,
+}) {
+  // Helper function to extract task name from string or object
+  const getTaskName = (t) => (typeof t === "string" ? t : t.name);
+
+  // Derive ordered task names from pipeline config
+  const orderedTaskNames = (jobPipelineTasks || []).map(getTaskName);
+
+  // Find target task index
+  const targetIndex = orderedTaskNames.indexOf(targetTaskId);
+  if (targetIndex === -1) {
+    return { ok: false, code: "task_not_found" };
+  }
+
+  // Get upstream tasks (all tasks before target)
+  const upstreamTasks = orderedTaskNames.slice(0, targetIndex);
+
+  // Check if all upstream tasks are DONE
+  const missing = [];
+  for (const taskName of upstreamTasks) {
+    const taskState = snapshotTasks[taskName]?.state;
+    if (taskState !== "done") {
+      missing.push(taskName);
+    }
+  }
+
+  if (missing.length > 0) {
+    return {
+      ok: false,
+      code: "dependencies_not_satisfied",
+      missing,
+    };
+  }
+
+  return { ok: true };
 }
 
 /**
@@ -447,5 +511,252 @@ export async function handleJobRestart(req, res, jobId, dataDir, sendJson) {
   }
 }
 
+/**
+ * Handle POST /api/jobs/:jobId/tasks/:taskId/start
+ */
+export async function handleTaskStart(
+  req,
+  res,
+  jobId,
+  taskId,
+  dataDir,
+  sendJson
+) {
+  try {
+    // Validate jobId and taskId
+    if (!jobId || typeof jobId !== "string" || jobId.trim() === "") {
+      sendJson(res, 400, {
+        ok: false,
+        error: "bad_request",
+        message: "jobId is required",
+      });
+      return;
+    }
+
+    if (!taskId || typeof taskId !== "string" || taskId.trim() === "") {
+      sendJson(res, 400, {
+        ok: false,
+        error: "bad_request",
+        message: "taskId is required",
+      });
+      return;
+    }
+
+    // Resolve job lifecycle
+    const lifecycle = await resolveJobLifecycle(dataDir, jobId);
+    if (!lifecycle) {
+      sendJson(res, 404, {
+        ok: false,
+        code: "job_not_found",
+        message: "Job not found",
+      });
+      return;
+    }
+
+    // Job must be in current to start a task
+    if (lifecycle !== "current") {
+      sendJson(res, 409, {
+        ok: false,
+        code: "unsupported_lifecycle",
+        message: "Job must be in current to start a task",
+      });
+      return;
+    }
+
+    // Compute job directory
+    const jobDir = getJobDirectoryPath(dataDir, jobId, "current");
+
+    // Read snapshot from tasks-status.json
+    const statusPath = path.join(jobDir, "tasks-status.json");
+    let snapshot;
+    try {
+      const content = await fs.promises.readFile(statusPath, "utf8");
+      snapshot = JSON.parse(content);
+    } catch (error) {
+      if (error.code === "ENOENT") {
+        sendJson(res, 404, {
+          ok: false,
+          code: "job_not_found",
+          message: "Job status file not found",
+        });
+        return;
+      }
+      if (error instanceof SyntaxError) {
+        sendJson(res, 500, {
+          ok: false,
+          code: "internal_error",
+          message: "Invalid job status JSON",
+        });
+        return;
+      }
+      throw error;
+    }
+
+    // Guard job not running
+    if (snapshot.state === "running") {
+      sendJson(res, 409, {
+        ok: false,
+        code: "job_running",
+        message: "Job is currently running; start is unavailable",
+      });
+      return;
+    }
+
+    // Check if any task is currently running
+    const hasRunningTask = Object.values(snapshot.tasks || {}).some(
+      (task) => task.state === "running"
+    );
+    if (hasRunningTask) {
+      sendJson(res, 409, {
+        ok: false,
+        code: "job_running",
+        message: "Job is currently running; start is unavailable",
+      });
+      return;
+    }
+
+    // Validate task existence
+    if (!snapshot.tasks || !snapshot.tasks[taskId]) {
+      sendJson(res, 400, {
+        ok: false,
+        code: "task_not_found",
+        message: "Task not found in job",
+      });
+      return;
+    }
+
+    // Validate task state is Pending
+    if (snapshot.tasks[taskId].state !== "pending") {
+      sendJson(res, 400, {
+        ok: false,
+        code: "task_not_pending",
+        message: "Task is not in pending state",
+      });
+      return;
+    }
+
+    // Read job pipeline config
+    const jobPipelinePath = getJobPipelinePath(dataDir, jobId, "current");
+    let jobPipeline;
+    try {
+      const content = await fs.promises.readFile(jobPipelinePath, "utf8");
+      jobPipeline = JSON.parse(content);
+    } catch (error) {
+      sendJson(res, 500, {
+        ok: false,
+        code: "pipeline_config_not_found",
+        message: "Pipeline configuration not found",
+      });
+      return;
+    }
+
+    // Validate dependencies via validateUpstreamDone
+    const depCheck = validateUpstreamDone({
+      jobPipelineTasks: jobPipeline.tasks,
+      targetTaskId: taskId,
+      snapshotTasks: snapshot.tasks,
+    });
+
+    if (!depCheck.ok) {
+      if (depCheck.code === "dependencies_not_satisfied") {
+        sendJson(res, 409, {
+          ok: false,
+          code: "dependencies_not_satisfied",
+          message: `Dependencies not satisfied for task: ${depCheck.missing.join(", ")}`,
+        });
+        return;
+      }
+      // Handle other validation errors
+      sendJson(res, 400, {
+        ok: false,
+        code: depCheck.code,
+        message: "Task validation failed",
+      });
+      return;
+    }
+
+    // Start guard: prevent duplicate starts
+    if (isStartInProgress(jobId)) {
+      sendJson(res, 409, {
+        ok: false,
+        code: "job_running",
+        message: "Task start is already in progress",
+      });
+      return;
+    }
+
+    beginStart(jobId);
+
+    try {
+      // Spawn detached runner (mirror restart code)
+      const runnerPath = path.join(__dirname, "../../core/pipeline-runner.js");
+      const base = process.env.PO_ROOT || dataDir;
+      const env = {
+        ...process.env,
+        PO_ROOT: base,
+        PO_DATA_DIR: path.join(base, "pipeline-data"),
+        PO_PENDING_DIR: path.join(base, "pipeline-data", "pending"),
+        PO_CURRENT_DIR: path.join(base, "pipeline-data", "current"),
+        PO_COMPLETE_DIR: path.join(base, "pipeline-data", "complete"),
+        PO_START_FROM_TASK: taskId,
+        PO_RUN_SINGLE_TASK: "true",
+      };
+
+      const child = spawn(process.execPath, [runnerPath, jobId], {
+        env,
+        stdio: "ignore",
+        detached: true,
+      });
+
+      child.unref();
+    } finally {
+      // Always end start guard
+      endStart(jobId);
+    }
+
+    // Send success response
+    sendJson(res, 202, {
+      ok: true,
+      jobId,
+      taskId,
+      mode: "single-task-start",
+      spawned: true,
+    });
+  } catch (error) {
+    console.error(
+      `Error handling POST /api/jobs/${jobId}/tasks/${taskId}/start:`,
+      error
+    );
+
+    // Clean up start guard on error
+    if (isStartInProgress(jobId)) {
+      endStart(jobId);
+    }
+
+    if (error.code === "ENOENT") {
+      sendJson(res, 404, {
+        ok: false,
+        code: "job_not_found",
+        message: "Job directory not found",
+      });
+    } else if (error.code === "spawn failed") {
+      sendJson(res, 500, {
+        ok: false,
+        code: "spawn_failed",
+        message: error.message || "Failed to spawn pipeline runner",
+      });
+    } else {
+      sendJson(res, 500, {
+        ok: false,
+        code: "internal_error",
+        message: "Internal server error",
+      });
+    }
+  }
+}
+
 // Export restart guard functions for testing
 export { isRestartInProgress, beginRestart, endRestart, resolveJobLifecycle };
+
+// Export start guard functions for testing
+export { isStartInProgress, beginStart, endStart };
