@@ -189,10 +189,7 @@ async function handleSeedUpload(req, res) {
     // Submit job with validation (for production)
     // Dynamically import only in non-test mode
     if (process.env.NODE_ENV !== "test") {
-      let submitJobWithValidation;
-      if (!submitJobWithValidation) {
-        ({ submitJobWithValidation } = await import("../../api/index.js"));
-      }
+      const { submitJobWithValidation } = await import("../../api/index.js");
       const result = await submitJobWithValidation({
         dataDir: currentDataDir,
         seedObject,
