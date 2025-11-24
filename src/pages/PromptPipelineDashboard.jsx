@@ -7,24 +7,28 @@ import { Box, Flex, Text, Tabs } from "@radix-ui/themes";
 import { Progress } from "../components/ui/progress";
 import { useJobListWithUpdates } from "../ui/client/hooks/useJobListWithUpdates";
 import { adaptJobSummary } from "../ui/client/adapters/job-adapter";
-import { TaskState, JobStatus } from "../config/statuses.js";
+import { stopJob } from "../ui/client/api.js";
 
 // Referenced components — leave these alone
 import JobTable from "../components/JobTable";
 import Layout from "../components/Layout.jsx";
+import StopJobModal from "../components/ui/StopJobModal.jsx";
 
-export default function PromptPipelineDashboard({ isConnected }) {
+export default function PromptPipelineDashboard(_isConnected) {
   const navigate = useNavigate();
   const hookResult = useJobListWithUpdates();
+  const [isStopModalOpen, setIsStopModalOpen] = useState(false);
+  const [selectedJobId, setSelectedJobId] = useState(null);
+  const [isStopping, setIsStopping] = useState(false);
 
   if (
+    /* eslint-disable-next-line no-undef */
     process.env.NODE_ENV === "test" &&
     (hookResult === undefined ||
       hookResult === null ||
       typeof hookResult !== "object" ||
       Array.isArray(hookResult))
   ) {
-    // eslint-disable-next-line no-console
     console.error(
       "[PromptPipelineDashboard] useJobListWithUpdates returned unexpected value",
       {
@@ -39,7 +43,7 @@ export default function PromptPipelineDashboard({ isConnected }) {
     );
   }
 
-  const { data: apiJobs, loading, error, connectionStatus } = hookResult;
+  const { data: apiJobs, error } = hookResult;
 
   const jobs = useMemo(() => {
     const src = Array.isArray(apiJobs) ? apiJobs : [];
@@ -106,6 +110,29 @@ export default function PromptPipelineDashboard({ isConnected }) {
     }
   };
 
+  const handleStopJob = async (jobId) => {
+    setIsStopping(true);
+    try {
+      await stopJob(jobId);
+      setIsStopModalOpen(false);
+      setSelectedJobId(null);
+    } catch (error) {
+      console.warn("Failed to stop job:", error);
+    } finally {
+      setIsStopping(false);
+    }
+  };
+
+  const openStopModal = (jobId = null) => {
+    setSelectedJobId(jobId);
+    setIsStopModalOpen(true);
+  };
+
+  const closeStopModal = () => {
+    setIsStopModalOpen(false);
+    setSelectedJobId(null);
+  };
+
   // Header actions for Layout
   const headerActions = runningJobs.length > 0 && (
     <Flex align="center" gap="2" className="text-gray-11">
@@ -116,6 +143,14 @@ export default function PromptPipelineDashboard({ isConnected }) {
       <Text size="1" className="text-gray-9">
         {aggregateProgress}%
       </Text>
+      <button
+        onClick={() =>
+          openStopModal(runningJobs.length === 1 ? runningJobs[0].id : null)
+        }
+        className="px-3 py-1 text-sm bg-red-600 text-white rounded hover:bg-red-700 transition-colors"
+      >
+        {runningJobs.length === 1 ? "Stop" : "Stop…"}
+      </button>
     </Flex>
   );
 
@@ -150,6 +185,15 @@ export default function PromptPipelineDashboard({ isConnected }) {
           <JobTable jobs={filteredJobs} pipeline={null} onOpenJob={openJob} />
         </Tabs.Content>
       </Tabs.Root>
+
+      <StopJobModal
+        isOpen={isStopModalOpen}
+        onClose={closeStopModal}
+        onConfirm={handleStopJob}
+        runningJobs={runningJobs}
+        defaultJobId={selectedJobId}
+        isSubmitting={isStopping}
+      />
     </Layout>
   );
 }
