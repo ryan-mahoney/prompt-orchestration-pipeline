@@ -527,7 +527,7 @@ function DAGGrid({
       setAlertMessage(successMessage);
       setAlertType("success");
     } catch (error) {
-      let message = "Failed to start task. Try again.";
+      let message;
       let type = "error";
 
       switch (error.code) {
