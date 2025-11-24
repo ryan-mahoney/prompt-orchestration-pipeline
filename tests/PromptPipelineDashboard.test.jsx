@@ -362,6 +362,7 @@ describe("PromptPipelineDashboard (integration-ish)", () => {
           progress: 50,
           createdAt: "2024-01-01T00:00:00Z",
           location: "current",
+          displayCategory: "current",
           tasks: [{ name: "task-1", state: "running" }],
         },
         {
@@ -371,6 +372,7 @@ describe("PromptPipelineDashboard (integration-ish)", () => {
           progress: 25,
           createdAt: "2024-01-01T00:00:00Z",
           location: "current",
+          displayCategory: "current",
           tasks: [{ name: "task-2", state: "running" }],
         },
         {
@@ -380,6 +382,7 @@ describe("PromptPipelineDashboard (integration-ish)", () => {
           progress: 0,
           createdAt: "2024-01-01T00:00:00Z",
           location: "rejected",
+          displayCategory: "errors",
           tasks: [{ name: "task-3", state: "failed" }],
         },
         {
@@ -389,6 +392,7 @@ describe("PromptPipelineDashboard (integration-ish)", () => {
           progress: 100,
           createdAt: "2024-01-01T00:00:00Z",
           location: "complete",
+          displayCategory: "complete",
           tasks: [{ name: "task-4", state: "done" }],
         },
       ];
@@ -407,7 +411,7 @@ describe("PromptPipelineDashboard (integration-ish)", () => {
         </MemoryRouter>
       );
 
-      // Assert tab buttons exist with correct counts
+      // Assert tab buttons exist with correct counts based on displayCategory
       expect(screen.getByRole("tab", { name: /Current \(2\)/i })).toBeTruthy();
       expect(screen.getByRole("tab", { name: /Errors \(1\)/i })).toBeTruthy();
       expect(
@@ -424,6 +428,7 @@ describe("PromptPipelineDashboard (integration-ish)", () => {
           progress: 50,
           createdAt: "2024-01-01T00:00:00Z",
           location: "current",
+          displayCategory: "current",
           tasks: [{ name: "task-1", state: "running" }],
         },
         {
@@ -433,6 +438,7 @@ describe("PromptPipelineDashboard (integration-ish)", () => {
           progress: 0,
           createdAt: "2024-01-01T00:00:00Z",
           location: "rejected",
+          displayCategory: "errors",
           tasks: [{ name: "task-2", state: "failed" }],
         },
         {
@@ -442,6 +448,7 @@ describe("PromptPipelineDashboard (integration-ish)", () => {
           progress: 100,
           createdAt: "2024-01-01T00:00:00Z",
           location: "complete",
+          displayCategory: "complete",
           tasks: [{ name: "task-3", state: "done" }],
         },
       ];
@@ -475,6 +482,75 @@ describe("PromptPipelineDashboard (integration-ish)", () => {
       errorsTab.click();
       completedTab.click();
       currentTab.click();
+    });
+
+    it("filters jobs correctly by displayCategory", async () => {
+      const mockJobs = [
+        {
+          id: "job-1",
+          name: "Ambiguous Job",
+          status: "pending",
+          progress: 0,
+          createdAt: "2024-01-01T00:00:00Z",
+          location: "pending",
+          displayCategory: "current", // fallback to current for ambiguous states
+          tasks: [{ name: "task-1", state: "pending" }],
+        },
+        {
+          id: "job-2",
+          name: "Failed Job",
+          status: "running",
+          progress: 75,
+          createdAt: "2024-01-01T00:00:00Z",
+          location: "current",
+          displayCategory: "errors", // failed task overrides running status
+          tasks: [
+            { name: "task-1", state: "running" },
+            { name: "task-2", state: "failed" },
+          ],
+        },
+        {
+          id: "job-3",
+          name: "Done Job",
+          status: "complete",
+          progress: 100,
+          createdAt: "2024-01-01T00:00:00Z",
+          location: "complete",
+          displayCategory: "complete",
+          tasks: [
+            { name: "task-1", state: "done" },
+            { name: "task-2", state: "done" },
+          ],
+        },
+      ];
+
+      useJobListWithUpdates.mockReturnValue({
+        loading: false,
+        data: mockJobs,
+        error: null,
+        refetch: vi.fn(),
+        connectionStatus: "connected",
+      });
+
+      render(
+        <MemoryRouter>
+          <PromptPipelineDashboard />
+        </MemoryRouter>
+      );
+
+      // Tab counts should reflect displayCategory, not status
+      expect(screen.getByRole("tab", { name: /Current \(1\)/i })).toBeTruthy();
+      expect(screen.getByRole("tab", { name: /Errors \(1\)/i })).toBeTruthy();
+      expect(
+        screen.getByRole("tab", { name: /Completed \(1\)/i })
+      ).toBeTruthy();
+
+      // Switch to errors tab - should show only jobs with displayCategory "errors"
+      const errorsTab = screen.getByRole("tab", { name: /Errors \(1\)/i });
+      errorsTab.click();
+
+      // Should find the failed job even though its status is "running"
+      expect(screen.getByText("Failed Job")).toBeTruthy();
     });
   });
 });

@@ -4,6 +4,8 @@
  * Exports:
  *  - handleJobList() -> { ok: true, data: [...] } | error envelope
  *  - handleJobDetail(jobId) -> { ok: true, data: {...} } | error envelope
+ *  - handleJobListRequest(req, res) -> HTTP response wrapper
+ *  - handleJobDetailRequest(req, res, jobId) -> HTTP response wrapper
  *  - getEndpointStats(jobListResponses, jobDetailResponses) -> stats object
  *
  * These functions return structured results (not HTTP responses) so the server
@@ -19,6 +21,7 @@ import {
   transformJobListForAPI,
 } from "../transformers/list-transformer.js";
 import * as configBridge from "../config-bridge.js";
+import { sendJson } from "../utils/http-utils.js";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { getJobPipelinePath } from "../../config/paths.js";
@@ -254,6 +257,65 @@ async function handleJobDetailById(jobId) {
       "Failed to read job detail",
       jobId
     );
+  }
+}
+
+/**
+ * HTTP wrapper function for job list requests.
+ * Calls handleJobList() and sends the response using sendJson().
+ */
+export async function handleJobListRequest(req, res) {
+  console.info("[JobEndpoints] handleJobListRequest called");
+
+  try {
+    const result = await handleJobList();
+
+    if (result.ok) {
+      sendJson(res, 200, result);
+    } else {
+      // Map error codes to appropriate HTTP status codes
+      const statusCode = result.code === "fs_error" ? 500 : 400;
+      sendJson(res, statusCode, result);
+    }
+  } catch (err) {
+    console.error("handleJobListRequest unexpected error:", err);
+    sendJson(res, 500, {
+      ok: false,
+      code: "internal_error",
+      message: "Internal server error",
+    });
+  }
+}
+
+/**
+ * HTTP wrapper function for job detail requests.
+ * Calls handleJobDetail(jobId) and sends the response using sendJson().
+ */
+export async function handleJobDetailRequest(req, res, jobId) {
+  console.log(`[JobEndpoints] handleJobDetailRequest called for job: ${jobId}`);
+
+  try {
+    const result = await handleJobDetail(jobId);
+
+    if (result.ok) {
+      sendJson(res, 200, result);
+    } else {
+      // Map error codes to appropriate HTTP status codes
+      let statusCode = 400;
+      if (result.code === "job_not_found") {
+        statusCode = 404;
+      } else if (result.code === "fs_error") {
+        statusCode = 500;
+      }
+      sendJson(res, statusCode, result);
+    }
+  } catch (err) {
+    console.error("handleJobDetailRequest unexpected error:", err);
+    sendJson(res, 500, {
+      ok: false,
+      code: "internal_error",
+      message: "Internal server error",
+    });
   }
 }
 

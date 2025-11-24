@@ -56,6 +56,7 @@ describe("Dev routing behavior with Vite middleware (step 1 tests)", () => {
     });
 
     process.env.NODE_ENV = "development";
+    process.env.PO_ROOT = "/tmp/test"; // Set PO_ROOT for development mode
     serverModule = await import("../src/ui/server.js");
   });
 
@@ -148,6 +149,7 @@ describe("SSE endpoint with jobId filtering", () => {
     vi.resetModules();
 
     process.env.NODE_ENV = "development";
+    process.env.PO_ROOT = "/tmp/test"; // Set PO_ROOT for development mode
     serverModule = await import("../src/ui/server.js");
   });
 

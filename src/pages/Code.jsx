@@ -86,7 +86,14 @@ export default function CodePage() {
   useEffect(() => {
     fetch("/api/llm/functions")
       .then((res) => res.json())
-      .then(setLlmFunctions)
+      .then(({ ok, data }) => {
+        if (!ok || typeof data !== "object" || data === null) {
+          throw new Error(
+            "Invalid /api/llm/functions response: expected { ok:true, data:Object }"
+          );
+        }
+        setLlmFunctions(data);
+      })
       .catch(console.error);
   }, []);
 

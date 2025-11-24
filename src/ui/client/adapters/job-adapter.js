@@ -3,6 +3,8 @@ import {
   normalizeTaskState,
   deriveJobStatusFromTasks,
 } from "../../../config/statuses.js";
+import { classifyJobForDisplay } from "../../../utils/jobs.js";
+import { decideTransition } from "../../../core/lifecycle-policy.js";
 
 /**
  * Normalize a raw task state into canonical enum.
@@ -225,6 +227,9 @@ export function adaptJobSummary(apiJob) {
     job.totalTokens = job.costsSummary.totalTokens;
   }
 
+  // Compute and attach display category for UI bucketing
+  job.displayCategory = classifyJobForDisplay(job);
+
   // Include warnings for debugging
   if (warnings.length > 0) job.__warnings = warnings;
 
@@ -284,8 +289,63 @@ export function adaptJobDetail(apiDetail) {
     detail.costs = apiDetail.costs;
   }
 
+  // Compute and attach display category for UI bucketing
+  detail.displayCategory = classifyJobForDisplay(detail);
+
   // Include warnings for debugging
   if (warnings.length > 0) detail.__warnings = warnings;
 
   return detail;
+}
+
+/**
+ * deriveAllowedActions(adaptedJob, pipelineTasks)
+ * - adaptedJob: normalized job object from adaptJobSummary/adaptJobDetail
+ * - pipelineTasks: array of task names in execution order from pipeline.json
+ * Returns { start, restart } boolean flags for UI controls.
+ */
+export function deriveAllowedActions(adaptedJob, pipelineTasks) {
+  // Check if any task is running
+  const hasRunningTask = Object.values(adaptedJob.tasks || {}).some(
+    (task) => task.state === "running"
+  );
+
+  // Default to disabled if job state is running or any task is running
+  if (adaptedJob.status === "running" || hasRunningTask) {
+    return { start: false, restart: false };
+  }
+
+  // Default to enabled for restart if not running
+  const restart = true;
+
+  // Start requires checking if ANY task can be started (not ALL tasks)
+  // Edge case: if no pipeline tasks, default to enabled
+  if (pipelineTasks.length === 0) {
+    return { start: true, restart };
+  }
+
+  const start = pipelineTasks.some((taskName) => {
+    const task = adaptedJob.tasks[taskName];
+    if (!task) return false; // Task not found, skip
+
+    const taskState = task.state || "pending";
+
+    // Check if all upstream tasks are done for dependency evaluation
+    const taskIndex = pipelineTasks.indexOf(taskName);
+    const upstreamTasks = pipelineTasks.slice(0, taskIndex);
+    const dependenciesReady = upstreamTasks.every((upstreamTaskName) => {
+      const upstreamTask = adaptedJob.tasks[upstreamTaskName];
+      return upstreamTask && upstreamTask.state === "done";
+    });
+
+    const startDecision = decideTransition({
+      op: "start",
+      taskState,
+      dependenciesReady,
+    });
+
+    return startDecision.ok;
+  });
+
+  return { start, restart };
 }

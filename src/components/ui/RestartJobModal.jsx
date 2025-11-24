@@ -7,7 +7,7 @@ import { Button } from "./button.jsx";
  * @param {Object} props
  * @param {boolean} props.open - Whether the modal is open
  * @param {Function} props.onClose - Function to call when modal is closed
- * @param {Function} props.onConfirm - Function to call when restart is confirmed
+ * @param {Function} props.onConfirm - Function to call when restart is confirmed (receives options object)
  * @param {string} props.jobId - The ID of the job to restart
  * @param {string} props.taskId - The ID of the task that triggered the restart (optional)
  * @param {boolean} props.isSubmitting - Whether the restart action is in progress
@@ -47,7 +47,10 @@ export function RestartJobModal({
   const handleKeyDown = (e) => {
     if (e.key === "Enter" && !isSubmitting && open) {
       e.preventDefault();
-      onConfirm();
+      // Do not confirm via Enter when a task is set; let the user click explicitly
+      if (!taskId) {
+        onConfirm({ singleTask: false });
+      }
     }
   };
 
@@ -100,9 +103,15 @@ export function RestartJobModal({
               </Text>
 
               {taskId && (
-                <Text as="p" className="text-sm text-gray-600 mb-3">
-                  <strong>Triggered from task:</strong> {taskId}
-                </Text>
+                <>
+                  <Text as="p" className="text-sm text-gray-600 mb-3">
+                    <strong>Triggered from task:</strong> {taskId}
+                  </Text>
+                  <Text as="p" className="text-sm text-blue-600 mb-3">
+                    <strong>Just this task:</strong> Only the selected task will
+                    be reset and re-run. Other tasks remain unchanged.
+                  </Text>
+                </>
               )}
 
               <Text as="p" className="text-sm text-gray-500 italic">
@@ -121,9 +130,20 @@ export function RestartJobModal({
                 Cancel
               </Button>
 
+              {taskId && (
+                <Button
+                  variant="outline"
+                  onClick={() => onConfirm({ singleTask: true })}
+                  disabled={isSubmitting}
+                  className="min-w-[120px]"
+                >
+                  {isSubmitting ? "Running..." : "Just this task"}
+                </Button>
+              )}
+
               <Button
                 variant="destructive"
-                onClick={onConfirm}
+                onClick={() => onConfirm({ singleTask: false })}
                 disabled={isSubmitting}
                 className="min-w-[80px]"
               >

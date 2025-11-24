@@ -20,7 +20,20 @@ export function useJobList() {
         setData(null);
       } else {
         const json = await res.json();
-        setData(json);
+        if (json && typeof json === "object" && "ok" in json) {
+          if (json.ok && Array.isArray(json.data)) {
+            setData(json.data);
+          } else if (!json.ok) {
+            setError({ code: json.code, message: json.message });
+            setData(null);
+          } else {
+            // Fallback: data is not an array; treat as empty to avoid crashes
+            setData([]);
+          }
+        } else {
+          // Legacy path: response is already an array
+          setData(Array.isArray(json) ? json : []);
+        }
       }
     } catch (err) {
       if (err.name === "AbortError") {

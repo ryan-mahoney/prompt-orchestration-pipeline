@@ -192,16 +192,15 @@ describe("API Client - restartJob", () => {
       status: 409,
       json: vi.fn().mockResolvedValue({
         ok: false,
-        code: "unsupported_lifecycle",
-        message:
-          "Job restart is only supported for jobs in 'current' lifecycle",
+        code: "some_other_error",
+        message: "Some other error message",
       }),
     };
     fetchMock.mockResolvedValue(mockResponse);
 
     await expect(restartJob("test-job")).rejects.toEqual({
-      code: "unsupported_lifecycle",
-      message: "Job must be in current to restart.",
+      code: "some_other_error",
+      message: "Some other error message",
       status: 409,
     });
   });
