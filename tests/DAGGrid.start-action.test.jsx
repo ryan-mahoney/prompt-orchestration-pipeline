@@ -54,9 +54,7 @@ describe("DAGGrid Start Action Visibility and Interaction", () => {
         { id: "task-2", status: "pending" },
       ];
 
-      const { container } = render(
-        <DAGGrid {...defaultProps} items={items} />
-      );
+      const { container } = render(<DAGGrid {...defaultProps} items={items} />);
 
       // Get the task card for the running task
       const allListItems = container.querySelectorAll('[role="listitem"]');
@@ -88,9 +86,7 @@ describe("DAGGrid Start Action Visibility and Interaction", () => {
         { id: "task-2", status: "pending" },
       ];
 
-      const { container } = render(
-        <DAGGrid {...defaultProps} items={items} />
-      );
+      const { container } = render(<DAGGrid {...defaultProps} items={items} />);
 
       // Get the task card for the failed task
       const allListItems = container.querySelectorAll('[role="listitem"]');
@@ -117,9 +113,7 @@ describe("DAGGrid Start Action Visibility and Interaction", () => {
         { id: "task-2", status: "pending" },
       ];
 
-      const { container } = render(
-        <DAGGrid {...defaultProps} items={items} />
-      );
+      const { container } = render(<DAGGrid {...defaultProps} items={items} />);
 
       // Get the task card for the done task
       const allListItems = container.querySelectorAll('[role="listitem"]');
@@ -147,9 +141,7 @@ describe("DAGGrid Start Action Visibility and Interaction", () => {
         { id: "task-3", status: "pending" },
       ];
 
-      const { container } = render(
-        <DAGGrid {...defaultProps} items={items} />
-      );
+      const { container } = render(<DAGGrid {...defaultProps} items={items} />);
 
       // All Start buttons should be disabled when any task is running
       const startButtons = within(container).getAllByRole("button", {
@@ -171,9 +163,7 @@ describe("DAGGrid Start Action Visibility and Interaction", () => {
         { id: "task-2", status: "pending" },
       ];
 
-      const { container } = render(
-        <DAGGrid {...defaultProps} items={items} />
-      );
+      const { container } = render(<DAGGrid {...defaultProps} items={items} />);
 
       // All Start buttons should be disabled when job is running
       const startButtons = within(container).getAllByRole("button", {
@@ -192,9 +182,7 @@ describe("DAGGrid Start Action Visibility and Interaction", () => {
         { id: "task-3", status: "pending" },
       ];
 
-      const { container } = render(
-        <DAGGrid {...defaultProps} items={items} />
-      );
+      const { container } = render(<DAGGrid {...defaultProps} items={items} />);
 
       const startButtons = within(container).getAllByRole("button", {
         name: "Start",
@@ -242,7 +230,9 @@ describe("DAGGrid Start Action Visibility and Interaction", () => {
       await fireEvent.click(startButton);
 
       // The task sidebar should not open (no click event should bubble up)
-      expect(container.querySelector('[role="dialog"]")).not.toBeInTheDocument();
+      expect(
+        container.querySelector('[role="dialog"]')
+      ).not.toBeInTheDocument();
       expect(mockStartTask).toHaveBeenCalledWith(mockJobId, "task-1");
     });
 
@@ -283,7 +273,9 @@ describe("DAGGrid Start Action Visibility and Interaction", () => {
       // Should show error alert
       const alert = screen.getByRole("alert");
       expect(alert).toBeInTheDocument();
-      expect(alert).toHaveTextContent("Job is currently running; start is unavailable.");
+      expect(alert).toHaveTextContent(
+        "Job is currently running; start is unavailable."
+      );
       expect(alert).toHaveClass(/bg-yellow-50/); // Warning styling
     });
 
@@ -378,7 +370,9 @@ describe("DAGGrid Start Action Visibility and Interaction", () => {
       // Should show error alert
       const alert = screen.getByRole("alert");
       expect(alert).toBeInTheDocument();
-      expect(alert).toHaveTextContent("Job must be in current to start a task.");
+      expect(alert).toHaveTextContent(
+        "Job must be in current to start a task."
+      );
       expect(alert).toHaveClass(/bg-yellow-50/); // Warning styling
     });
 
@@ -423,7 +417,7 @@ describe("DAGGrid Start Action Visibility and Interaction", () => {
 
       // Resolve the promise
       resolvePromise({ ok: true });
-      await new Promise(resolve => setTimeout(resolve, 0));
+      await new Promise((resolve) => setTimeout(resolve, 0));
 
       // Button should be enabled again
       expect(startButton).not.toBeDisabled();
@@ -465,7 +459,9 @@ describe("DAGGrid Start Action Visibility and Interaction", () => {
       expect(alert).toBeInTheDocument();
 
       // Find and click the dismiss button
-      const dismissButton = within(alert).getByLabelText("Dismiss notification");
+      const dismissButton = within(alert).getByLabelText(
+        "Dismiss notification"
+      );
       await fireEvent.click(dismissButton);
 
       // Alert should be gone
