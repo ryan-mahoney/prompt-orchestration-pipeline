@@ -8,6 +8,7 @@ import {
   resetSingleTask,
   initializeJobArtifacts,
   writeJobStatus,
+  readJobStatus,
 } from "../../core/status-writer.js";
 import { getPipelineConfig } from "../../core/config.js";
 import {
@@ -28,6 +29,9 @@ const restartingJobs = new Set();
 
 // In-memory start guard to prevent duplicate concurrent starts per job
 const startingJobs = new Set();
+
+// In-memory stop guard to prevent duplicate concurrent stops per job
+const stoppingJobs = new Set();
 
 // Helper functions for restart guard
 function isRestartInProgress(jobId) {
@@ -53,6 +57,19 @@ function beginStart(jobId) {
 
 function endStart(jobId) {
   startingJobs.delete(jobId);
+}
+
+// Helper functions for stop guard
+function isStopInProgress(jobId) {
+  return stoppingJobs.has(jobId);
+}
+
+function beginStop(jobId) {
+  stoppingJobs.add(jobId);
+}
+
+function endStop(jobId) {
+  stoppingJobs.delete(jobId);
 }
 
 /**
@@ -529,6 +546,203 @@ export async function handleJobRestart(req, res, jobId, dataDir, sendJson) {
 }
 
 /**
+ * Handle POST /api/jobs/:jobId/stop
+ */
+export async function handleJobStop(req, res, jobId, dataDir, sendJson) {
+  try {
+    // Validate jobId
+    if (!jobId || typeof jobId !== "string" || jobId.trim() === "") {
+      sendJson(res, 400, {
+        ok: false,
+        error: "bad_request",
+        message: "jobId is required",
+      });
+      return;
+    }
+
+    // Resolve job lifecycle
+    const lifecycle = await resolveJobLifecycle(dataDir, jobId);
+    if (!lifecycle) {
+      sendJson(res, 404, {
+        ok: false,
+        code: "job_not_found",
+        message: "Job not found",
+      });
+      return;
+    }
+
+    // Determine job directory; if not in current, rename into current (mirror restart)
+    let jobDir = getJobDirectoryPath(dataDir, jobId, lifecycle);
+
+    if (lifecycle !== "current") {
+      const sourcePath = getJobDirectoryPath(dataDir, jobId, lifecycle);
+      const targetPath = getJobDirectoryPath(dataDir, jobId, "current");
+
+      // Atomically move job to current directory
+      await fs.promises.rename(sourcePath, targetPath);
+      jobDir = targetPath;
+    }
+
+    // Concurrency: if isStopInProgress(jobId) return 409
+    if (isStopInProgress(jobId)) {
+      sendJson(res, 409, {
+        ok: false,
+        code: "job_running",
+        message: "Job stop is already in progress",
+      });
+      return;
+    }
+
+    // beginStop(jobId) before doing work; ensure endStop(jobId) in finally
+    beginStop(jobId);
+
+    try {
+      let pidFound = false;
+      let usedSignal = null;
+      let resetTask = null;
+
+      // Read PID from path.join(jobDir, "runner.pid")
+      const pidPath = path.join(jobDir, "runner.pid");
+      const pidExists = await exists(pidPath);
+
+      if (pidExists) {
+        try {
+          const pidContent = await fs.promises.readFile(pidPath, "utf8");
+          const pid = parseInt(pidContent.trim(), 10);
+
+          if (isNaN(pid)) {
+            // Treat as no runner (remove file)
+            await fs.promises.unlink(pidPath).catch(() => {}); // Ignore ENOENT
+          } else {
+            pidFound = true;
+
+            try {
+              // Try process.kill(pid, "SIGTERM")
+              process.kill(pid, "SIGTERM");
+              usedSignal = "SIGTERM";
+
+              // Wait 1500ms
+              await new Promise((resolve) => setTimeout(resolve, 1500));
+
+              // If process still exists: try process.kill(pid, 0) to check
+              try {
+                process.kill(pid, 0); // Check if process exists
+                // If we get here, process still exists, try SIGKILL
+                process.kill(pid, "SIGKILL");
+                usedSignal = "SIGKILL";
+              } catch (checkError) {
+                if (checkError.code === "ESRCH") {
+                  // Process no longer exists, that's good
+                } else {
+                  throw checkError;
+                }
+              }
+            } catch (killError) {
+              if (killError.code === "ESRCH") {
+                // ESRCH during kill → treat as already stopped; remove pid file; continue
+                usedSignal = null;
+              } else {
+                // Non-ESRCH errors → 500 spawn_failed/internal with message
+                throw killError;
+              }
+            }
+          }
+        } catch (error) {
+          // Remove runner.pid regardless after attempts (unlink ignoring ENOENT)
+          await fs.promises.unlink(pidPath).catch(() => {});
+          throw error;
+        }
+
+        // Remove runner.pid regardless after attempts (unlink ignoring ENOENT)
+        await fs.promises.unlink(pidPath).catch(() => {});
+      }
+
+      // Status reset:
+      // Read tasks-status.json via readJobStatus
+      const snapshot = await readJobStatus(jobDir);
+      if (!snapshot) {
+        sendJson(res, 500, {
+          ok: false,
+          code: "internal_error",
+          message: "Failed to read job status",
+        });
+        return;
+      }
+
+      // Determine running taskId:
+      let runningTaskId = null;
+      if (
+        snapshot.current &&
+        typeof snapshot.current === "string" &&
+        snapshot.tasks[snapshot.current]?.state === "running"
+      ) {
+        runningTaskId = snapshot.current;
+      } else {
+        // Else find first key in snapshot.tasks with state === "running"
+        for (const taskId of Object.keys(snapshot.tasks || {})) {
+          if (snapshot.tasks[taskId].state === "running") {
+            runningTaskId = taskId;
+            break;
+          }
+        }
+      }
+
+      // If running taskId found: await resetSingleTask(jobDir, taskId, { clearTokenUsage: true })
+      if (runningTaskId) {
+        resetTask = runningTaskId;
+        await resetSingleTask(jobDir, runningTaskId, { clearTokenUsage: true });
+      }
+
+      // Always normalize root fields afterward:
+      await writeJobStatus(jobDir, (s) => {
+        s.current = null;
+        s.currentStage = null;
+        return s;
+      });
+
+      // Response: sendJson 200 with { ok: true, jobId, stopped: Boolean(pidFound), resetTask: taskId || null, signal: usedSignal || null }
+      sendJson(res, 200, {
+        ok: true,
+        jobId,
+        stopped: pidFound,
+        resetTask: resetTask,
+        signal: usedSignal,
+      });
+    } finally {
+      // Always endStop(jobId)
+      endStop(jobId);
+    }
+  } catch (error) {
+    console.error(`Error handling POST /api/jobs/${jobId}/stop:`, error);
+
+    // Clean up stop guard on error
+    if (isStopInProgress(jobId)) {
+      endStop(jobId);
+    }
+
+    if (error.code === "ENOENT") {
+      sendJson(res, 404, {
+        ok: false,
+        code: "job_not_found",
+        message: "Job directory not found",
+      });
+    } else if (error.code === "spawn_failed") {
+      sendJson(res, 500, {
+        ok: false,
+        code: "spawn_failed",
+        message: error.message || "Failed to stop pipeline runner",
+      });
+    } else {
+      sendJson(res, 500, {
+        ok: false,
+        code: "internal_error",
+        message: "Internal server error",
+      });
+    }
+  }
+}
+
+/**
  * Handle POST /api/jobs/:jobId/tasks/:taskId/start
  */
 export async function handleTaskStart(
@@ -784,3 +998,6 @@ export { isRestartInProgress, beginRestart, endRestart, resolveJobLifecycle };
 
 // Export start guard functions for testing
 export { isStartInProgress, beginStart, endStart };
+
+// Export stop guard functions for testing
+export { isStopInProgress, beginStop, endStop };
