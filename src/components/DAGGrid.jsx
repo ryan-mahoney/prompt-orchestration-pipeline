@@ -528,7 +528,7 @@ function DAGGrid({
       setAlertType("success");
     } catch (error) {
       let message;
-      let type = "error";
+      let type;
 
       switch (error.code) {
         case "job_running":
