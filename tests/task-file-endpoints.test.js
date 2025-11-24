@@ -17,7 +17,7 @@ describe("Task File Endpoints - Single Lifecycle", () => {
     );
     testDataDir = path.join(tempDir, "data");
 
-    // Create the pipeline-data structure
+    // Create pipeline-data structure
     await fs.mkdir(path.join(testDataDir, "pipeline-data"), {
       recursive: true,
     });

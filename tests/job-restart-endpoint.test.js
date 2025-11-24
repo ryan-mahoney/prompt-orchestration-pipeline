@@ -57,14 +57,16 @@ describe("Job Restart Endpoint", () => {
     });
   });
 
-  it("should return 409 for job not in current lifecycle", async () => {
+  it("should restart a completed job by moving it to current", async () => {
     // Create a job in complete lifecycle
     const jobId = "complete-job-123";
-    const jobDir = getJobDirectoryPath(dataDir, jobId, "complete");
-    await fs.mkdir(jobDir, { recursive: true });
+    const sourceJobDir = getJobDirectoryPath(dataDir, jobId, "complete");
+    const targetJobDir = getJobDirectoryPath(dataDir, jobId, "current");
 
-    // Create tasks-status.json
-    const statusPath = path.join(jobDir, "tasks-status.json");
+    await fs.mkdir(sourceJobDir, { recursive: true });
+
+    // Create tasks-status.json in complete directory
+    const statusPath = path.join(sourceJobDir, "tasks-status.json");
     await fs.writeFile(
       statusPath,
       JSON.stringify({
@@ -73,7 +75,14 @@ describe("Job Restart Endpoint", () => {
         current: null,
         currentStage: null,
         lastUpdated: new Date().toISOString(),
-        tasks: {},
+        tasks: {
+          "task-1": {
+            state: "done",
+            attempts: 1,
+            refinementAttempts: 0,
+            tokenUsage: [{ model: "test", tokens: 100 }],
+          },
+        },
         files: { artifacts: [], logs: [], tmp: [] },
       })
     );
@@ -83,13 +92,32 @@ describe("Job Restart Endpoint", () => {
       headers: { "Content-Type": "application/json" },
     });
 
-    expect(response.status).toBe(409);
+    expect(response.status).toBe(202);
     const body = await response.json();
     expect(body).toEqual({
-      ok: false,
-      code: "unsupported_lifecycle",
-      message: "Job restart is only supported for jobs in 'current' lifecycle",
+      ok: true,
+      jobId,
+      mode: "clean-slate",
+      spawned: true,
     });
+
+    // Verify the job directory no longer exists in complete
+    expect(await fs.access(sourceJobDir).catch(() => false)).toBe(false);
+
+    // Verify the job directory now exists in current
+    expect(await fs.access(targetJobDir).catch(() => false)).toBe(true);
+
+    // Verify status was reset in the new location
+    const updatedStatusPath = path.join(targetJobDir, "tasks-status.json");
+    const updatedStatus = JSON.parse(
+      await fs.readFile(updatedStatusPath, "utf8")
+    );
+    expect(updatedStatus.state).toBe("pending");
+    expect(updatedStatus.current).toBe(null);
+    expect(updatedStatus.currentStage).toBe(null);
+    expect(updatedStatus.tasks["task-1"].state).toBe("pending");
+    expect(updatedStatus.tasks["task-1"].attempts).toBe(0);
+    expect(updatedStatus.tasks["task-1"].tokenUsage).toEqual([]);
   });
 
   it("should return 409 for running job", async () => {
@@ -194,6 +222,103 @@ describe("Job Restart Endpoint", () => {
     expect(updatedStatus.tasks.analysis.refinementAttempts).toBe(0);
     expect(updatedStatus.tasks.analysis.tokenUsage).toEqual([]);
     expect(updatedStatus.tasks.analysis.error).toBeUndefined();
+  });
+
+  it("should reset only target task when singleTask true", async () => {
+    // Create a job in current lifecycle with multiple tasks
+    const jobId = "single-task-restart-789";
+    const jobDir = getJobDirectoryPath(dataDir, jobId, "current");
+    await fs.mkdir(jobDir, { recursive: true });
+
+    // Create tasks-status.json with mixed task states
+    const statusPath = path.join(jobDir, "tasks-status.json");
+    const initialStatus = {
+      id: jobId,
+      state: "failed",
+      current: null,
+      currentStage: null,
+      lastUpdated: new Date().toISOString(),
+      tasks: {
+        research: {
+          state: "done",
+          currentStage: null,
+          attempts: 1,
+          refinementAttempts: 0,
+          tokenUsage: [{ model: "gpt-4", tokens: 1000 }],
+        },
+        analysis: {
+          state: "failed",
+          currentStage: "processing",
+          attempts: 2,
+          refinementAttempts: 1,
+          failedStage: "processing",
+          error: "Processing failed",
+          tokenUsage: [{ model: "gpt-4", tokens: 2000 }],
+        },
+        compose: {
+          state: "done",
+          currentStage: null,
+          attempts: 1,
+          refinementAttempts: 0,
+          tokenUsage: [{ model: "gpt-4", tokens: 1500 }],
+        },
+      },
+      files: {
+        artifacts: ["research-output.txt", "analysis-output.txt"],
+        logs: ["research.log", "analysis.log"],
+        tmp: ["temp-file.tmp"],
+      },
+    };
+    await fs.writeFile(statusPath, JSON.stringify(initialStatus, null, 2));
+
+    // POST to restart endpoint with singleTask=true
+    const response = await fetch(`${baseUrl}/api/jobs/${jobId}/restart`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ fromTask: "analysis", singleTask: true }),
+    });
+
+    expect(response.status).toBe(202);
+    const body = await response.json();
+    expect(body).toEqual({
+      ok: true,
+      jobId,
+      mode: "single-task",
+      spawned: true,
+    });
+
+    // Immediately read tasks-status.json to verify reset behavior
+    const updatedStatus = JSON.parse(await fs.readFile(statusPath, "utf8"));
+
+    // Verify only analysis task was reset
+    expect(updatedStatus.tasks.analysis.state).toBe("pending");
+    expect(updatedStatus.tasks.analysis.currentStage).toBeNull();
+    expect(updatedStatus.tasks.analysis.attempts).toBe(0);
+    expect(updatedStatus.tasks.analysis.refinementAttempts).toBe(0);
+    expect(updatedStatus.tasks.analysis.tokenUsage).toEqual([]);
+    expect(updatedStatus.tasks.analysis.failedStage).toBeUndefined();
+    expect(updatedStatus.tasks.analysis.error).toBeUndefined();
+
+    // Verify other tasks remain unchanged
+    expect(updatedStatus.tasks.research.state).toBe("done");
+    expect(updatedStatus.tasks.research.attempts).toBe(1);
+    expect(updatedStatus.tasks.research.tokenUsage).toEqual([
+      { model: "gpt-4", tokens: 1000 },
+    ]);
+
+    expect(updatedStatus.tasks.compose.state).toBe("done");
+    expect(updatedStatus.tasks.compose.attempts).toBe(1);
+    expect(updatedStatus.tasks.compose.tokenUsage).toEqual([
+      { model: "gpt-4", tokens: 1500 },
+    ]);
+
+    // Verify files arrays remain unchanged
+    expect(updatedStatus.files.artifacts).toEqual([
+      "research-output.txt",
+      "analysis-output.txt",
+    ]);
+    expect(updatedStatus.files.logs).toEqual(["research.log", "analysis.log"]);
+    expect(updatedStatus.files.tmp).toEqual(["temp-file.tmp"]);
   });
 
   it("should successfully restart a completed job", async () => {

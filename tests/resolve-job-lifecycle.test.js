@@ -3,6 +3,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { tmpdir } from "node:os";
 import { resolveJobLifecycle } from "../src/ui/server.js";
+import { decideTransition } from "../src/core/lifecycle-policy.js";
 
 describe("resolveJobLifecycle", () => {
   let tempDir;
@@ -132,5 +133,206 @@ describe("resolveJobLifecycle", () => {
     // The function should return null when directories don't exist, not throw
     const result = await resolveJobLifecycle(invalidDir, jobId);
     expect(result).toBe(null);
+  });
+});
+
+describe("decideTransition", () => {
+  describe("start operation", () => {
+    it("should allow start when dependencies are ready", () => {
+      // Arrange
+      const params = {
+        op: "start",
+        taskState: "pending",
+        dependenciesReady: true,
+      };
+
+      // Act
+      const result = decideTransition(params);
+
+      // Assert
+      expect(result).toEqual({ ok: true });
+    });
+
+    it("should block start when dependencies are not ready", () => {
+      // Arrange
+      const params = {
+        op: "start",
+        taskState: "pending",
+        dependenciesReady: false,
+      };
+
+      // Act
+      const result = decideTransition(params);
+
+      // Assert
+      expect(result).toEqual({
+        ok: false,
+        code: "unsupported_lifecycle",
+        reason: "dependencies",
+      });
+    });
+
+    it("should block start when task is not pending but dependencies are ready", () => {
+      // Arrange
+      const params = {
+        op: "start",
+        taskState: "running",
+        dependenciesReady: true,
+      };
+
+      // Act
+      const result = decideTransition(params);
+
+      // Assert
+      expect(result).toEqual({ ok: true }); // start op only cares about dependencies
+    });
+  });
+
+  describe("restart operation", () => {
+    it("should allow restart for completed task", () => {
+      // Arrange
+      const params = {
+        op: "restart",
+        taskState: "completed",
+        dependenciesReady: false,
+      };
+
+      // Act
+      const result = decideTransition(params);
+
+      // Assert
+      expect(result).toEqual({ ok: true });
+    });
+
+    it("should block restart for failed task", () => {
+      // Arrange
+      const params = {
+        op: "restart",
+        taskState: "failed",
+        dependenciesReady: true,
+      };
+
+      // Act
+      const result = decideTransition(params);
+
+      // Assert
+      expect(result).toEqual({
+        ok: false,
+        code: "unsupported_lifecycle",
+        reason: "policy",
+      });
+    });
+
+    it("should block restart for running task", () => {
+      // Arrange
+      const params = {
+        op: "restart",
+        taskState: "running",
+        dependenciesReady: true,
+      };
+
+      // Act
+      const result = decideTransition(params);
+
+      // Assert
+      expect(result).toEqual({
+        ok: false,
+        code: "unsupported_lifecycle",
+        reason: "policy",
+      });
+    });
+
+    it("should block restart for pending task", () => {
+      // Arrange
+      const params = {
+        op: "restart",
+        taskState: "pending",
+        dependenciesReady: true,
+      };
+
+      // Act
+      const result = decideTransition(params);
+
+      // Assert
+      expect(result).toEqual({
+        ok: false,
+        code: "unsupported_lifecycle",
+        reason: "policy",
+      });
+    });
+  });
+
+  describe("input validation", () => {
+    it("should throw error for invalid operation", () => {
+      // Arrange
+      const params = {
+        op: "invalid",
+        taskState: "pending",
+        dependenciesReady: true,
+      };
+
+      // Act & Assert
+      expect(() => decideTransition(params)).toThrow(
+        'Invalid operation: invalid. Must be "start" or "restart"'
+      );
+    });
+
+    it("should throw error for non-string taskState", () => {
+      // Arrange
+      const params = { op: "start", taskState: null, dependenciesReady: true };
+
+      // Act & Assert
+      expect(() => decideTransition(params)).toThrow(
+        "Invalid taskState: null. Must be a string"
+      );
+    });
+
+    it("should throw error for non-boolean dependenciesReady", () => {
+      // Arrange
+      const params = {
+        op: "start",
+        taskState: "pending",
+        dependenciesReady: "yes",
+      };
+
+      // Act & Assert
+      expect(() => decideTransition(params)).toThrow(
+        "Invalid dependenciesReady: yes. Must be boolean"
+      );
+    });
+  });
+
+  describe("return value immutability", () => {
+    it("should return frozen objects", () => {
+      // Arrange
+      const params = {
+        op: "start",
+        taskState: "pending",
+        dependenciesReady: false,
+      };
+
+      // Act
+      const result = decideTransition(params);
+
+      // Assert
+      expect(Object.isFrozen(result)).toBe(true);
+    });
+
+    it("should not allow mutation of returned objects", () => {
+      // Arrange
+      const params = {
+        op: "start",
+        taskState: "pending",
+        dependenciesReady: false,
+      };
+
+      // Act
+      const result = decideTransition(params);
+
+      // Assert
+      expect(() => {
+        result.ok = true;
+      }).toThrow();
+    });
   });
 });

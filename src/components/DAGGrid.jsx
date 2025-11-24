@@ -10,9 +10,10 @@ import { areGeometriesEqual } from "../utils/geometry-equality.js";
 import { TaskDetailSidebar } from "./TaskDetailSidebar.jsx";
 import { RestartJobModal } from "./ui/RestartJobModal.jsx";
 import { Button } from "./ui/button.jsx";
-import { restartJob } from "../ui/client/api.js";
+import { restartJob, startTask } from "../ui/client/api.js";
 import { createEmptyTaskFiles } from "../utils/task-files.js";
 import { TaskState } from "../config/statuses.js";
+import { deriveAllowedActions } from "../ui/client/adapters/job-adapter.js";
 import TimerText from "./TimerText.jsx";
 import { taskToTimerProps } from "../utils/time-utils.js";
 
@@ -87,6 +88,11 @@ const canShowRestart = (status) => {
   return status === TaskState.FAILED || status === TaskState.DONE;
 };
 
+// Check if Start button should be shown for a given status
+const canShowStart = (status) => {
+  return status === TaskState.PENDING;
+};
+
 // Custom comparison function for TaskCard memoization
 const areEqualTaskCardProps = (prevProps, nextProps) => {
   return (
@@ -95,11 +101,14 @@ const areEqualTaskCardProps = (prevProps, nextProps) => {
     prevProps.status === nextProps.status &&
     prevProps.isActive === nextProps.isActive &&
     prevProps.canRestart === nextProps.canRestart &&
+    prevProps.canStart === nextProps.canStart &&
     prevProps.isSubmitting === nextProps.isSubmitting &&
     prevProps.disabledReason === nextProps.disabledReason &&
+    prevProps.startDisabledReason === nextProps.startDisabledReason &&
     prevProps.onClick === nextProps.onClick &&
     prevProps.onKeyDown === nextProps.onKeyDown &&
-    prevProps.handleRestartClick === nextProps.handleRestartClick
+    prevProps.handleRestartClick === nextProps.handleRestartClick &&
+    prevProps.handleStartClick === nextProps.handleStartClick
   );
 };
 
@@ -111,11 +120,14 @@ const TaskCard = memo(function TaskCard({
   status,
   isActive,
   canRestart,
+  canStart,
   isSubmitting,
   disabledReason,
+  startDisabledReason,
   onClick,
   onKeyDown,
   handleRestartClick,
+  handleStartClick,
 }) {
   const { startMs, endMs } = taskToTimerProps(item);
   const reducedMotion = prefersReducedMotion();
@@ -196,9 +208,24 @@ const TaskCard = memo(function TaskCard({
           <div className="mt-2 text-sm text-gray-700">{item.body}</div>
         )}
 
-        {/* Restart button */}
-        {canShowRestart(status) && (
-          <div className="mt-3 pt-3 border-t border-gray-100">
+        {/* Action buttons */}
+        <div className="mt-3 pt-3 border-t border-gray-100 flex gap-2">
+          {/* Start button */}
+          {canShowStart(status) && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={(e) => handleStartClick(e, item.id)}
+              disabled={!canStart || isSubmitting}
+              className="text-xs cursor-pointer disabled:cursor-not-allowed"
+              title={!canStart ? startDisabledReason : `Start task ${item.id}`}
+            >
+              Start
+            </Button>
+          )}
+
+          {/* Restart button */}
+          {canShowRestart(status) && (
             <Button
               variant="outline"
               size="sm"
@@ -211,8 +238,8 @@ const TaskCard = memo(function TaskCard({
             >
               Restart
             </Button>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </div>
   );
@@ -237,6 +264,7 @@ function DAGGrid({
   jobId,
   filesByTypeForItem = () => createEmptyTaskFiles(),
   taskById = {},
+  pipelineTasks = [],
 }) {
   const overlayRef = useRef(null);
   const gridRef = useRef(null);
@@ -483,6 +511,62 @@ function DAGGrid({
     }
   }, [openIdx]);
 
+  // Start functionality
+  const handleStartClick = async (e, taskId) => {
+    e.stopPropagation(); // Prevent card click
+
+    if (!jobId || isSubmitting) return;
+
+    setIsSubmitting(true);
+    setAlertMessage(null);
+
+    try {
+      await startTask(jobId, taskId);
+
+      const successMessage = `Task ${taskId} started successfully.`;
+      setAlertMessage(successMessage);
+      setAlertType("success");
+    } catch (error) {
+      let message;
+      let type;
+
+      switch (error.code) {
+        case "job_running":
+          message = "Job is currently running; start is unavailable.";
+          type = "warning";
+          break;
+        case "job_not_found":
+          message = "Job not found.";
+          type = "error";
+          break;
+        case "task_not_found":
+          message = "Task not found.";
+          type = "error";
+          break;
+        case "task_not_pending":
+          message = "Task is not in pending state.";
+          type = "warning";
+          break;
+        case "dependencies_not_satisfied":
+          message = "Dependencies not satisfied for task.";
+          type = "warning";
+          break;
+        case "unsupported_lifecycle":
+          message = "Job must be in current to start a task.";
+          type = "warning";
+          break;
+        default:
+          message = error.message || "An unexpected error occurred.";
+          type = "error";
+      }
+
+      setAlertMessage(message);
+      setAlertType(type);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   // Restart functionality
   const handleRestartClick = (e, taskId) => {
     e.stopPropagation(); // Prevent card click
@@ -490,7 +574,7 @@ function DAGGrid({
     setRestartModalOpen(true);
   };
 
-  const handleRestartConfirm = async () => {
+  const handleRestartConfirm = async (options) => {
     if (!jobId || isSubmitting) return;
 
     setIsSubmitting(true);
@@ -501,12 +585,17 @@ function DAGGrid({
       if (restartTaskId) {
         restartOptions.fromTask = restartTaskId;
       }
+      if (options?.singleTask) {
+        restartOptions.singleTask = options.singleTask;
+      }
 
       await restartJob(jobId, restartOptions);
 
-      const successMessage = restartTaskId
-        ? `Restart requested from ${restartTaskId}. The job will start from that task in the background.`
-        : "Restart requested. The job will reset to pending and start in the background.";
+      const successMessage = options?.singleTask
+        ? `Re-running task ${restartTaskId} in isolation. The job will remain in current after completion.`
+        : restartTaskId
+          ? `Restart requested from ${restartTaskId}. The job will start from that task in the background.`
+          : "Restart requested. The job will reset to pending and start in the background.";
       setAlertMessage(successMessage);
       setAlertType("success");
       setRestartModalOpen(false);
@@ -518,10 +607,6 @@ function DAGGrid({
       switch (error.code) {
         case "job_running":
           message = "Job is currently running; restart is unavailable.";
-          type = "warning";
-          break;
-        case "unsupported_lifecycle":
-          message = "Job must be in current lifecycle to restart.";
           type = "warning";
           break;
         case "job_not_found":
@@ -559,41 +644,65 @@ function DAGGrid({
     }
   }, [alertMessage]);
 
-  // Check if restart should be enabled (job lifecycle = current and not running)
+  // Use adapter to derive allowed actions based on job and task states
+  const allowedActions = React.useMemo(() => {
+    // Create a normalized job object for the adapter
+    const adaptedJob = {
+      status: items.some((item) => item?.state === TaskState.RUNNING)
+        ? "running"
+        : "pending",
+      tasks: items.reduce((acc, item) => {
+        if (item?.id) {
+          acc[item.id] = {
+            state: item?.status || TaskState.PENDING,
+          };
+        }
+        return acc;
+      }, {}),
+    };
+
+    return deriveAllowedActions(adaptedJob, pipelineTasks);
+  }, [items, pipelineTasks]);
+
+  // Check if restart should be enabled using adapter logic
   const isRestartEnabled = React.useCallback(() => {
-    // Check if any item indicates that job is running (job-level state)
-    const isJobRunning = items.some(
-      (item) => item?.state === TaskState.RUNNING
-    );
+    return allowedActions.restart;
+  }, [allowedActions]);
 
-    // Check if any task has explicit running status (not derived from activeIndex)
-    const hasRunningTask = items.some(
-      (item) => item?.status === TaskState.RUNNING
-    );
+  // Check if start should be enabled for a specific task using adapter logic
+  const canStartTask = React.useCallback(
+    (task) => {
+      if (!task) return false;
 
-    const jobLifecycle = items[0]?.lifecycle || "current";
+      // Use adapter logic - start is enabled globally, so check if this specific task can start
+      return allowedActions.start && task.status === TaskState.PENDING;
+    },
+    [allowedActions]
+  );
 
-    return jobLifecycle === "current" && !isJobRunning && !hasRunningTask;
-  }, [items]);
-
-  // Get disabled reason for tooltip
+  // Get disabled reason for tooltip using adapter logic
   const getRestartDisabledReason = React.useCallback(() => {
-    // Check if any item indicates that job is running (job-level state)
-    const isJobRunning = items.some(
-      (item) => item?.state === TaskState.RUNNING
-    );
+    if (allowedActions.restart) return "";
+    return "Job is currently running";
+  }, [allowedActions]);
 
-    // Check if any task has explicit running status (not derived from activeIndex)
-    const hasRunningTask = items.some(
-      (item) => item?.status === TaskState.RUNNING
-    );
+  // Get disabled reason for start tooltip using adapter logic
+  const getStartDisabledReason = React.useCallback(
+    (task) => {
+      if (!task) return "Task not found";
 
-    const jobLifecycle = items[0]?.lifecycle || "current";
+      if (task.status !== TaskState.PENDING) {
+        return "Task is not in pending state";
+      }
 
-    if (isJobRunning || hasRunningTask) return "Job is currently running";
-    if (jobLifecycle !== "current") return "Job must be in current lifecycle";
-    return "";
-  }, [items]);
+      if (!allowedActions.start) {
+        return "Job lifecycle policy does not allow starting";
+      }
+
+      return "";
+    },
+    [allowedActions]
+  );
 
   return (
     <div className="relative w-full" role="list">
@@ -690,7 +799,9 @@ function DAGGrid({
           const status = getStatus(idx);
           const isActive = idx === activeIndex;
           const canRestart = isRestartEnabled();
+          const canStart = canStartTask(item);
           const restartDisabledReason = getRestartDisabledReason();
+          const startDisabledReason = getStartDisabledReason(item);
 
           return (
             <TaskCard
@@ -700,8 +811,10 @@ function DAGGrid({
               status={status}
               isActive={isActive}
               canRestart={canRestart}
+              canStart={canStart}
               isSubmitting={isSubmitting}
               disabledReason={restartDisabledReason}
+              startDisabledReason={startDisabledReason}
               onClick={() => {
                 setOpenIdx(idx);
               }}
@@ -712,6 +825,7 @@ function DAGGrid({
                 }
               }}
               handleRestartClick={handleRestartClick}
+              handleStartClick={handleStartClick}
               item={item}
             />
           );

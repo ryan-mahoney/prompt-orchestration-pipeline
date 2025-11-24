@@ -8,12 +8,17 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export default defineConfig({
   plugins: [react()],
   root: "src/ui/client",
+
+  // ADD THIS LINE:
+  publicDir: path.resolve(__dirname, "src/ui/public"),
+
   build: {
     outDir: "../dist",
     emptyOutDir: true,
     assetsDir: "assets",
     cssCodeSplit: false, // Ensure CSS is bundled properly
     minify: false, // Disable minification for better debugging
+    sourcemap: process.env.NODE_ENV === "development" ? true : "hidden", // Generate sourcemaps for debugging
   },
   resolve: {
     alias: {

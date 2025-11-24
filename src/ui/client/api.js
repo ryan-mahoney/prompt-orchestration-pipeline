@@ -3,12 +3,14 @@
  */
 
 /**
- * Restart a job with clean-slate mode
+ * Restart a job with clean-slate mode or from a specific task
  *
  * @param {string} jobId - The ID of the job to restart
  * @param {Object} opts - Options object
- * @param {Object} opts.options - Additional options for the restart
- * @param {boolean} opts.options.clearTokenUsage - Whether to clear token usage (default: true)
+ * @param {string} [opts.fromTask] - Task ID to restart from (inclusive)
+ * @param {boolean} [opts.singleTask] - Whether to run only the target task and then stop
+ * @param {Object} [opts.options] - Additional options for the restart
+ * @param {boolean} [opts.options.clearTokenUsage=true] - Whether to clear token usage
  * @returns {Promise<Object>} Parsed JSON response from the server
  * @throws {Object} Structured error object with { code, message } for non-2xx responses
  */
@@ -19,8 +21,16 @@ export async function restartJob(jobId, opts = {}) {
   };
 
   const requestBody = opts.fromTask
-    ? { fromTask: opts.fromTask, options }
-    : { mode: "clean-slate", options };
+    ? {
+        fromTask: opts.fromTask,
+        options,
+        ...(opts.singleTask !== undefined && { singleTask: opts.singleTask }),
+      }
+    : {
+        mode: "clean-slate",
+        options,
+        ...(opts.singleTask !== undefined && { singleTask: opts.singleTask }),
+      };
 
   try {
     const response = await fetch(
@@ -121,6 +131,59 @@ export async function rescanJob(jobId) {
 }
 
 /**
+ * Start a specific pending task for a job that is not actively running
+ *
+ * @param {string} jobId - The ID of the job
+ * @param {string} taskId - The ID of the task to start
+ * @returns {Promise<Object>} Parsed JSON response from the server
+ * @throws {Object} Structured error object with { code, message } for non-2xx responses
+ */
+export async function startTask(jobId, taskId) {
+  try {
+    const response = await fetch(
+      `/api/jobs/${encodeURIComponent(jobId)}/tasks/${encodeURIComponent(taskId)}/start`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    if (!response.ok) {
+      // Try to parse error response, fall back to status text if parsing fails
+      let errorData;
+      try {
+        errorData = await response.json();
+      } catch {
+        errorData = { message: response.statusText };
+      }
+
+      // Throw structured error with code and message
+      throw {
+        code: errorData.code || getErrorCodeFromStatus(response.status),
+        message: getStartTaskErrorMessage(errorData, response.status),
+        status: response.status,
+      };
+    }
+
+    // Return parsed JSON for successful responses
+    return await response.json();
+  } catch (error) {
+    // Re-throw structured errors as-is
+    if (error.code && error.message) {
+      throw error;
+    }
+
+    // Handle network errors or other unexpected errors
+    throw {
+      code: "network_error",
+      message: error.message || "Failed to connect to server",
+    };
+  }
+}
+
+/**
  * Map HTTP status codes to error codes for structured error handling
  */
 function getErrorCodeFromStatus(status) {
@@ -161,9 +224,6 @@ function getRestartErrorMessage(errorData, status) {
     if (errorData.code === "job_running") {
       return "Job is currently running; restart is unavailable.";
     }
-    if (errorData.code === "unsupported_lifecycle") {
-      return "Job must be in current to restart.";
-    }
     if (errorData.message?.includes("job_running")) {
       return "Job is currently running; restart is unavailable.";
     }
@@ -184,4 +244,41 @@ function getRestartErrorMessage(errorData, status) {
 
   // Fall back to provided message or default
   return errorData.message || "Failed to restart job.";
+}
+
+/**
+ * Get specific error message from error response for start task functionality
+ */
+function getStartTaskErrorMessage(errorData, status) {
+  // Handle specific 409 conflict errors
+  if (status === 409) {
+    if (errorData.code === "job_running") {
+      return "Job is currently running; start is unavailable.";
+    }
+    if (errorData.code === "dependencies_not_satisfied") {
+      return "Dependencies not satisfied for task.";
+    }
+    if (errorData.code === "unsupported_lifecycle") {
+      return "Job must be in current to start a task.";
+    }
+    return "Request conflict.";
+  }
+
+  // Handle 404 errors
+  if (status === 404) {
+    return "Job not found.";
+  }
+
+  // Handle 400 errors
+  if (status === 400) {
+    return errorData.message || "Bad request";
+  }
+
+  // Handle 500 errors
+  if (status === 500) {
+    return "Internal server error";
+  }
+
+  // Fall back to provided message or default
+  return errorData.message || "Failed to start task.";
 }

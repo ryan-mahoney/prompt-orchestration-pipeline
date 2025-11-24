@@ -1,4 +1,5 @@
 // Research Task - Gather information based on seed input
+import { ad } from "vitest/dist/chunks/reporters.d.BFLkQcL6.js";
 import { test } from "../libs/test.js";
 
 export const researchJsonSchema = {

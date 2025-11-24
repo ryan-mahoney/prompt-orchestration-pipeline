@@ -1,4 +1,5 @@
 // Research Task - Gather information based on seed input
+import { ad } from "vitest/dist/chunks/reporters.d.BFLkQcL6.js";
 import { test } from "../libs/test.js";
 
 export const researchJsonSchema = {
@@ -9,15 +10,17 @@ export const researchJsonSchema = {
     "researchSummary",
     "keyFindings",
     "additionalInsights",
-    "criticalPerspectives",
     "researchCompleteness",
   ],
   properties: {
+    additionalProperties: true,
     researchSummary: {
       type: "string",
       minLength: 1,
+      additionalProperties: true,
     },
     keyFindings: {
+      additionalProperties: true,
       type: "array",
       minItems: 1,
       items: {
@@ -45,10 +48,6 @@ export const researchJsonSchema = {
     },
     additionalInsights: {
       type: "string",
-    },
-    criticalPerspectives: {
-      type: "string",
-      minLength: 1,
     },
     researchCompleteness: {
       type: "string",
@@ -128,7 +127,6 @@ IMPORTANT: You must respond with a valid JSON object only. Do not include any te
     }
   ],
   "additionalInsights": "any other relevant information",
-  "criticalPerspectives": "critical analysis and potential concerns about the topic",
   "researchCompleteness": "assessment of how thoroughly the topic was covered"
 }
 
