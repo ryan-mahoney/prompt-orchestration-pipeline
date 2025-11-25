@@ -554,7 +554,7 @@ export async function handleJobStop(req, res, jobId, dataDir, sendJson) {
     if (!jobId || typeof jobId !== "string" || jobId.trim() === "") {
       sendJson(res, 400, {
         ok: false,
-        error: "bad_request",
+        code: "bad_request",
         message: "jobId is required",
       });
       return;
