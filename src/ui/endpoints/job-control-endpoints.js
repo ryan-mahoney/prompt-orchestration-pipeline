@@ -571,18 +571,6 @@ export async function handleJobStop(req, res, jobId, dataDir, sendJson) {
       return;
     }
 
-    // Determine job directory; if not in current, rename into current (mirror restart)
-    let jobDir = getJobDirectoryPath(dataDir, jobId, lifecycle);
-
-    if (lifecycle !== "current") {
-      const sourcePath = getJobDirectoryPath(dataDir, jobId, lifecycle);
-      const targetPath = getJobDirectoryPath(dataDir, jobId, "current");
-
-      // Atomically move job to current directory
-      await fs.promises.rename(sourcePath, targetPath);
-      jobDir = targetPath;
-    }
-
     // Concurrency: if isStopInProgress(jobId) return 409
     if (isStopInProgress(jobId)) {
       sendJson(res, 409, {
@@ -597,6 +585,18 @@ export async function handleJobStop(req, res, jobId, dataDir, sendJson) {
     beginStop(jobId);
 
     try {
+      // Determine job directory; if not in current, rename into current (mirror restart)
+      let jobDir = getJobDirectoryPath(dataDir, jobId, lifecycle);
+
+      if (lifecycle !== "current") {
+        const sourcePath = getJobDirectoryPath(dataDir, jobId, lifecycle);
+        const targetPath = getJobDirectoryPath(dataDir, jobId, "current");
+
+        // Atomically move job to current directory
+        await fs.promises.rename(sourcePath, targetPath);
+        jobDir = targetPath;
+      }
+
       let pidFound = false;
       let usedSignal = null;
       let resetTask = null;
