@@ -7,24 +7,23 @@ import { Box, Flex, Text, Tabs } from "@radix-ui/themes";
 import { Progress } from "../components/ui/progress";
 import { useJobListWithUpdates } from "../ui/client/hooks/useJobListWithUpdates";
 import { adaptJobSummary } from "../ui/client/adapters/job-adapter";
-import { TaskState, JobStatus } from "../config/statuses.js";
 
 // Referenced components — leave these alone
 import JobTable from "../components/JobTable";
 import Layout from "../components/Layout.jsx";
 
-export default function PromptPipelineDashboard({ isConnected }) {
+export default function PromptPipelineDashboard() {
   const navigate = useNavigate();
   const hookResult = useJobListWithUpdates();
 
   if (
+    /* eslint-disable-next-line no-undef */
     process.env.NODE_ENV === "test" &&
     (hookResult === undefined ||
       hookResult === null ||
       typeof hookResult !== "object" ||
       Array.isArray(hookResult))
   ) {
-    // eslint-disable-next-line no-console
     console.error(
       "[PromptPipelineDashboard] useJobListWithUpdates returned unexpected value",
       {
@@ -39,7 +38,7 @@ export default function PromptPipelineDashboard({ isConnected }) {
     );
   }
 
-  const { data: apiJobs, loading, error, connectionStatus } = hookResult;
+  const { data: apiJobs, error } = hookResult;
 
   const jobs = useMemo(() => {
     const src = Array.isArray(apiJobs) ? apiJobs : [];
