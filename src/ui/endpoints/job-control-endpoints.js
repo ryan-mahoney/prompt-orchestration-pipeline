@@ -716,9 +716,6 @@ export async function handleJobStop(req, res, jobId, dataDir, sendJson) {
     console.error(`Error handling POST /api/jobs/${jobId}/stop:`, error);
 
     // Clean up stop guard on error
-    if (isStopInProgress(jobId)) {
-      endStop(jobId);
-    }
 
     if (error.code === "ENOENT") {
       sendJson(res, 404, {
