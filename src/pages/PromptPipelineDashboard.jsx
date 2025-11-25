@@ -12,7 +12,7 @@ import { adaptJobSummary } from "../ui/client/adapters/job-adapter";
 import JobTable from "../components/JobTable";
 import Layout from "../components/Layout.jsx";
 
-export default function PromptPipelineDashboard(_isConnected) {
+export default function PromptPipelineDashboard() {
   const navigate = useNavigate();
   const hookResult = useJobListWithUpdates();
 
