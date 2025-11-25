@@ -5,7 +5,6 @@ import PipelineDetail from "../src/pages/PipelineDetail.jsx";
 import * as apiModule from "../src/ui/client/api.js";
 import * as hooks from "../src/ui/client/hooks/useJobDetailWithUpdates.js";
 import JobDetail from "../src/components/JobDetail.jsx";
-import Layout from "../src/components/Layout.jsx";
 import PageSubheader from "../src/components/PageSubheader.jsx";
 
 // Mock useParams
