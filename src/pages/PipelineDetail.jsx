@@ -9,10 +9,14 @@ import PageSubheader from "../components/PageSubheader.jsx";
 import { statusBadge } from "../utils/ui.jsx";
 import { formatCurrency4, formatTokensCompact } from "../utils/formatters.js";
 import { rescanJob } from "../ui/client/api.js";
+import StopJobModal from "../components/ui/StopJobModal.jsx";
+import { stopJob } from "../ui/client/api.js";
 
 export default function PipelineDetail() {
   const { jobId } = useParams();
   const [isRescanning, setIsRescanning] = useState(false);
+  const [isStopModalOpen, setIsStopModalOpen] = useState(false);
+  const [isStopping, setIsStopping] = useState(false);
 
   // Handle missing job ID (undefined/null)
   if (jobId === undefined || jobId === null) {
@@ -145,6 +149,12 @@ export default function PipelineDetail() {
     ...(job.name ? [{ label: job.name }] : []),
   ];
 
+  // Determine if job is currently running
+  const isRunning =
+    job?.status === "running" ||
+    (job?.tasks &&
+      Object.values(job.tasks).some((task) => task?.state === "running"));
+
   // Derive cost data from job object with safe fallbacks
   const totalCost = job?.totalCost || job?.costs?.summary?.totalCost || 0;
   const totalTokens = job?.totalTokens || job?.costs?.summary?.totalTokens || 0;
@@ -222,13 +232,40 @@ export default function PipelineDetail() {
     }
   };
 
-  // Right side content for PageSubheader: job ID, cost indicator, and status badge
+  const openStopModal = () => setIsStopModalOpen(true);
+  const closeStopModal = () => setIsStopModalOpen(false);
+
+  const handleStopConfirm = async () => {
+    setIsStopping(true);
+    try {
+      await stopJob(jobId);
+      closeStopModal();
+    } catch (error) {
+      console.warn("Failed to stop job:", error);
+      closeStopModal();
+    } finally {
+      setIsStopping(false);
+    }
+  };
+
+  // Right side content for PageSubheader: job ID, cost indicator, status badge, and Stop control
   const subheaderRightContent = (
     <Flex align="center" gap="3" className="shrink-0 flex-wrap">
       <Text size="2" color="gray">
         ID: {job.id || jobId}
       </Text>
       {costIndicatorWithTooltip}
+      {isRunning && (
+        <Button
+          size="1"
+          variant="solid"
+          color="red"
+          disabled={isStopping}
+          onClick={openStopModal}
+        >
+          {isStopping ? "Stopping..." : "Stop"}
+        </Button>
+      )}
       <Button
         size="1"
         variant="soft"
@@ -252,6 +289,14 @@ export default function PipelineDetail() {
         )}
       </PageSubheader>
       <JobDetail job={job} pipeline={pipeline} />
+      <StopJobModal
+        isOpen={isStopModalOpen}
+        onClose={closeStopModal}
+        onConfirm={handleStopConfirm}
+        runningJobs={[{ id: job.id, name: job.name, progress: job.progress }]}
+        defaultJobId={job.id}
+        isSubmitting={isStopping}
+      />
     </Layout>
   );
 }

@@ -184,6 +184,58 @@ export async function startTask(jobId, taskId) {
 }
 
 /**
+ * Stop a running job's pipeline
+ *
+ * @param {string} jobId - The ID of the job to stop
+ * @returns {Promise<Object>} Parsed JSON response from the server
+ * @throws {Object} Structured error object with { code, message } for non-2xx responses
+ */
+export async function stopJob(jobId) {
+  try {
+    const response = await fetch(
+      `/api/jobs/${encodeURIComponent(jobId)}/stop`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    if (!response.ok) {
+      // Try to parse error response, fall back to status text if parsing fails
+      let errorData;
+      try {
+        errorData = await response.json();
+      } catch {
+        errorData = { message: response.statusText };
+      }
+
+      // Throw structured error with code and message
+      throw {
+        code: errorData.code || getErrorCodeFromStatus(response.status),
+        message: getStopErrorMessage(errorData, response.status),
+        status: response.status,
+      };
+    }
+
+    // Return parsed JSON for successful responses
+    return await response.json();
+  } catch (error) {
+    // Re-throw structured errors as-is
+    if (error.code && error.message) {
+      throw error;
+    }
+
+    // Handle network errors or other unexpected errors
+    throw {
+      code: "network_error",
+      message: error.message || "Failed to connect to server",
+    };
+  }
+}
+
+/**
  * Map HTTP status codes to error codes for structured error handling
  */
 function getErrorCodeFromStatus(status) {
@@ -281,4 +333,27 @@ function getStartTaskErrorMessage(errorData, status) {
 
   // Fall back to provided message or default
   return errorData.message || "Failed to start task.";
+}
+
+/**
+ * Get specific error message from error response for stop functionality
+ */
+function getStopErrorMessage(errorData, status) {
+  // Handle 404 errors
+  if (status === 404) {
+    return "Job not found.";
+  }
+
+  // Handle 409 errors
+  if (status === 409) {
+    return errorData.message || "Job stop is already in progress.";
+  }
+
+  // Handle 500 errors
+  if (status === 500) {
+    return "Internal server error";
+  }
+
+  // Fall back to provided message or default
+  return errorData.message || `Request failed with status ${status}`;
 }
