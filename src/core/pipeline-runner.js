@@ -1,4 +1,5 @@
 import fs from "node:fs/promises";
+import fsSync from "node:fs";
 import path from "node:path";
 import { runPipeline } from "./task-runner.js";
 import { loadFreshModule } from "./module-loader.js";
@@ -48,7 +49,16 @@ async function cleanupRunnerPid() {
 }
 
 // Register cleanup handlers for all exit scenarios
-process.on("exit", cleanupRunnerPid);
+// Use synchronous unlink for 'exit' handler since it doesn't allow async operations
+process.on("exit", () => {
+  try {
+    fsSync.unlinkSync(runnerPidPath);
+  } catch (error) {
+    if (error.code !== "ENOENT") {
+      console.error("Failed to cleanup runner PID file:", error);
+    }
+  }
+});
 process.on("SIGINT", () => {
   cleanupRunnerPid().then(() => process.exit(130));
 });
