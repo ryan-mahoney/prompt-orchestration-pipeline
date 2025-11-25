@@ -631,16 +631,16 @@ export async function handleJobStop(req, res, jobId, dataDir, sendJson) {
                 process.kill(pid, "SIGKILL");
                 usedSignal = "SIGKILL";
               } catch (checkError) {
-                if (checkError.code === "ESRCH") {
-                  // Process no longer exists, that's good
-                } else {
+                // ESRCH means process is gone (SIGTERM worked or process ended naturally)
+                if (checkError.code !== "ESRCH") {
                   throw checkError;
                 }
+                // Keep usedSignal as "SIGTERM"
               }
             } catch (killError) {
               if (killError.code === "ESRCH") {
-                // ESRCH during kill → treat as already stopped; remove pid file; continue
-                usedSignal = null;
+                // Process was already dead, keep current usedSignal value
+                // (could be null if SIGTERM threw ESRCH, or "SIGTERM"/"SIGKILL" if set before)
               } else {
                 // Non-ESRCH errors → 500 spawn_failed/internal with message
                 throw killError;
