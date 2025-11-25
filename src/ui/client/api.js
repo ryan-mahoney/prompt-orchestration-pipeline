@@ -346,7 +346,7 @@ function getStopErrorMessage(errorData, status) {
 
   // Handle 409 errors
   if (status === 409) {
-    return "Job stop conflict.";
+    return errorData.message || "Job stop is already in progress.";
   }
 
   // Handle 500 errors
