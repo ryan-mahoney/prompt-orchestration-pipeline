@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { MemoryRouter, useParams } from "react-router-dom";
-import * as tooltip from "@radix-ui/react-tooltip";
 import PipelineDetail from "../src/pages/PipelineDetail.jsx";
 import * as apiModule from "../src/ui/client/api.js";
 import * as hooks from "../src/ui/client/hooks/useJobDetailWithUpdates.js";
