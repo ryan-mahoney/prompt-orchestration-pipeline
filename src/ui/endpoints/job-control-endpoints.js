@@ -639,8 +639,8 @@ export async function handleJobStop(req, res, jobId, dataDir, sendJson) {
               }
             } catch (killError) {
               if (killError.code === "ESRCH") {
-                // Process was already dead, keep current usedSignal value
-                // (could be null if SIGTERM threw ESRCH, or "SIGTERM"/"SIGKILL" if set before)
+                // Process was already dead, no signal was sent
+                usedSignal = null;
               } else {
                 // Non-ESRCH errors → 500 spawn_failed/internal with message
                 throw killError;
