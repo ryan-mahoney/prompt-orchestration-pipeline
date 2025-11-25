@@ -30,7 +30,7 @@ export function StopJobModal({
         defaultJobId || (runningJobs.length === 1 ? runningJobs[0].id : "")
       );
     }
-  }, [isOpen, defaultJobId, runningJobs]);
+  }, [isOpen, defaultJobId]);
 
   // Handle Escape key to close modal
   useEffect(() => {
