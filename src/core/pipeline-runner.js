@@ -447,8 +447,6 @@ try {
     logger.log("Single task run completed, job remains in current", { jobId });
   }
 } catch (error) {
-  // Ensure PID cleanup on any error during pipeline execution
-  await cleanupRunnerPid();
   throw error;
 } finally {
   // Always ensure PID cleanup at the end of execution
