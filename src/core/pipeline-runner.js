@@ -59,11 +59,13 @@ process.on("exit", () => {
     }
   }
 });
-process.on("SIGINT", () => {
-  cleanupRunnerPid().then(() => process.exit(130));
+process.on("SIGINT", async () => {
+  await cleanupRunnerPid();
+  process.exit(130);
 });
-process.on("SIGTERM", () => {
-  cleanupRunnerPid().then(() => process.exit(143));
+process.on("SIGTERM", async () => {
+  await cleanupRunnerPid();
+  process.exit(143);
 });
 
 const startFromTask = process.env.PO_START_FROM_TASK;
