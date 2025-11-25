@@ -73,11 +73,14 @@ describe("Job Stop Endpoint", () => {
         // Simulate process still exists after SIGTERM
         return; // Don't throw error
       }
+      if (signal === 0) {
+        // Simulate process still exists - process.kill(pid, 0) is used to check if process exists
+        // Return without error means process exists
+        return;
+      }
       if (signal === "SIGKILL") {
-        // Simulate successful kill
-        const error = new Error("Process killed");
-        error.code = "ESRCH";
-        throw error;
+        // Simulate successful kill - process killed cleanly
+        return; // Don't throw error, SIGKILL succeeded
       }
       return originalKill.call(process, pid, signal);
     });
@@ -138,9 +141,10 @@ describe("Job Stop Endpoint", () => {
       });
 
       // Verify process.kill was called correctly
-      expect(killCalls).toHaveLength(2);
+      expect(killCalls).toHaveLength(3);
       expect(killCalls[0]).toEqual({ pid: mockPid, signal: "SIGTERM" });
-      expect(killCalls[1]).toEqual({ pid: mockPid, signal: "SIGKILL" });
+      expect(killCalls[1]).toEqual({ pid: mockPid, signal: 0 }); // Process existence check
+      expect(killCalls[2]).toEqual({ pid: mockPid, signal: "SIGKILL" });
 
       // Verify runner.pid was removed
       expect(await fs.access(pidPath).catch(() => false)).toBe(false);
