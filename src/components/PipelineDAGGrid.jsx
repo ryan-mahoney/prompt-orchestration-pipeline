@@ -6,6 +6,7 @@ import React, {
   createRef,
 } from "react";
 import { areGeometriesEqual } from "../utils/geometry-equality.js";
+import { PipelineTypeTaskSidebar } from "./PipelineTypeTaskSidebar.jsx";
 
 // Utility to check for reduced motion preference
 const prefersReducedMotion = () => {
@@ -43,7 +44,6 @@ const PipelineCard = React.memo(function PipelineCard({
   idx,
   nodeRef,
   status,
-  isExpanded,
   onClick,
 }) {
   const reducedMotion = prefersReducedMotion();
@@ -75,24 +75,6 @@ const PipelineCard = React.memo(function PipelineCard({
           </span>
         </div>
       </div>
-
-      {/* Simple inline expansion showing basic info */}
-      {isExpanded && (
-        <div className="p-4 border-t border-gray-100">
-          <div className="text-sm space-y-2">
-            <div>
-              <span className="font-medium text-gray-700">ID:</span>
-              <span className="ml-2 text-gray-600">{item.id}</span>
-            </div>
-            {item.title && (
-              <div>
-                <span className="font-medium text-gray-700">Title:</span>
-                <span className="ml-2 text-gray-600">{item.title}</span>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
     </div>
   );
 });
@@ -109,7 +91,7 @@ function PipelineDAGGrid({ items, cols = 3 }) {
   const nodeRefs = useRef([]);
   const [lines, setLines] = useState([]);
   const [effectiveCols, setEffectiveCols] = useState(cols);
-  const [expandedIndex, setExpandedIndex] = useState(-1);
+  const [openIdx, setOpenIdx] = useState(-1);
 
   // Previous geometry snapshot for throttling connector recomputation
   const prevGeometryRef = useRef(null);
@@ -313,10 +295,24 @@ function PipelineDAGGrid({ items, cols = 3 }) {
     };
   }, [items.length, effectiveCols, visualOrder]);
 
-  // Handle card click to toggle expansion
+  // Handle card click to open sidebar
   const handleCardClick = (idx) => {
-    setExpandedIndex(expandedIndex === idx ? -1 : idx);
+    setOpenIdx(openIdx === idx ? -1 : idx);
   };
+
+  // Handle Escape key to close sidebar
+  React.useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === "Escape" && openIdx !== -1) {
+        setOpenIdx(-1);
+      }
+    };
+
+    if (openIdx !== -1) {
+      document.addEventListener("keydown", handleKeyDown);
+      return () => document.removeEventListener("keydown", handleKeyDown);
+    }
+  }, [openIdx]);
 
   return (
     <div className="relative w-full" role="list">
@@ -375,7 +371,6 @@ function PipelineDAGGrid({ items, cols = 3 }) {
 
           const item = items[idx];
           const status = item.status || "definition";
-          const isExpanded = expandedIndex === idx;
 
           return (
             <PipelineCard
@@ -383,13 +378,23 @@ function PipelineDAGGrid({ items, cols = 3 }) {
               idx={idx}
               nodeRef={nodeRefs.current[idx]}
               status={status}
-              isExpanded={isExpanded}
               onClick={() => handleCardClick(idx)}
               item={item}
             />
           );
         })}
       </div>
+
+      {/* PipelineTypeTaskSidebar */}
+      {openIdx !== -1 && (
+        <PipelineTypeTaskSidebar
+          open={openIdx !== -1}
+          title={formatStepName(items[openIdx], openIdx)}
+          status={items[openIdx]?.status || "definition"}
+          task={items[openIdx]}
+          onClose={() => setOpenIdx(-1)}
+        />
+      )}
     </div>
   );
 }
