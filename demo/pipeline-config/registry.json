@@ -3,8 +3,8 @@
     "content-generation": {
       "name": "Content Generation Pipeline",
       "description": "Generates and processes content using LLM tasks",
-      "pipelinePath": "demo/pipeline-config/content-generation/pipeline.json",
-      "taskRegistryPath": "demo/pipeline-config/content-generation/tasks/index.js"
+      "pipelinePath": "pipeline-config/content-generation/pipeline.json",
+      "taskRegistryPath": "pipeline-config/content-generation/tasks/index.js"
     }
   }
 }

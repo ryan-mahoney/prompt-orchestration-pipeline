@@ -18,6 +18,7 @@ import {
   handleTaskFileListRequest,
   handleTaskFileRequest,
 } from "./endpoints/file-endpoints.js";
+import { handlePipelinesHttpRequest } from "./endpoints/pipelines-endpoint.js";
 import { sendJson } from "./utils/http-utils.js";
 import { PROVIDER_FUNCTIONS } from "../config/models.js";
 
@@ -101,6 +102,11 @@ export function buildExpressApp({ dataDir, viteServer }) {
         message: "Failed to load LLM functions",
       });
     }
+  });
+
+  // GET /api/pipelines
+  app.get("/api/pipelines", async (req, res) => {
+    await handlePipelinesHttpRequest(req, res);
   });
 
   // GET /api/jobs

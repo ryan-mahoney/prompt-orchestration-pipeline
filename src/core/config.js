@@ -39,9 +39,12 @@ function resolveWithBase(rootDir, maybePath) {
 }
 
 function normalizeRegistryEntry(slug, entry, rootDir) {
+  // Support both pipelinePath (legacy) and pipelineJsonPath fields
   const pipelineJsonPath = entry?.pipelineJsonPath
     ? resolveWithBase(rootDir, entry.pipelineJsonPath)
-    : undefined;
+    : entry?.pipelinePath
+      ? resolveWithBase(rootDir, entry.pipelinePath)
+      : undefined;
 
   const configDir = entry?.configDir
     ? resolveWithBase(rootDir, entry.configDir)
