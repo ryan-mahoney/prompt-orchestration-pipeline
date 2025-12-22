@@ -116,7 +116,8 @@ export async function handlePipelinesHttpRequest(req, res) {
     } else {
       // Map error codes to appropriate HTTP status codes
       const statusCode =
-        result.code === "invalid_json" || result.code === "fs_error"
+        result.code === configBridge.Constants.ERROR_CODES.INVALID_JSON ||
+        result.code === configBridge.Constants.ERROR_CODES.FS_ERROR
           ? 500
           : 400;
       sendJson(res, statusCode, result);
