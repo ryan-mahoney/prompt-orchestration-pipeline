@@ -6,7 +6,7 @@ import { Button } from "./ui/button.jsx";
 import Logo from "./ui/Logo.jsx";
 import PageSubheader from "./PageSubheader.jsx";
 import UploadSeed from "./UploadSeed.jsx";
-import { ArrowLeft, Code2, Upload } from "lucide-react";
+import { ArrowLeft, Code2, Upload, List } from "lucide-react";
 import "./ui/focus-styles.css";
 
 /**
@@ -151,6 +151,20 @@ export default function Layout({
               className="hidden md:flex"
             >
               <Flex align="center" gap="6">
+                <RadixLink
+                  href="/pipelines"
+                  className={`text-sm font-medium transition-colors hover:text-blue-600 ${
+                    isActivePath("/pipelines")
+                      ? "text-blue-600"
+                      : "text-gray-11 hover:text-gray-12"
+                  }`}
+                  aria-current={isActivePath("/pipelines") ? "page" : undefined}
+                >
+                  <Flex align="center" gap="2">
+                    <List className="h-4 w-4" />
+                    Pipelines
+                  </Flex>
+                </RadixLink>
                 <RadixLink
                   href="/code"
                   className={`text-sm font-medium transition-colors hover:text-blue-600 ${
