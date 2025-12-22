@@ -62,16 +62,15 @@ export default function PipelineList() {
   // Loading state
   if (loading) {
     return (
-      <Layout pageTitle={pageTitle} breadcrumbs={breadcrumbs}>
-        <PageSubheader breadcrumbs={breadcrumbs}>
-          <Flex align="center" justify="center" className="min-h-64">
-            <Box className="text-center">
-              <Text size="5" weight="medium" className="mb-2">
-                Loading pipelines...
-              </Text>
-            </Box>
-          </Flex>
-        </PageSubheader>
+      <Layout>
+        <PageSubheader breadcrumbs={breadcrumbs} />
+        <Box>
+          <Box mb="8">
+            <Heading size="6" mb="4">
+              Loading pipeline types...
+            </Heading>
+          </Box>
+        </Box>
       </Layout>
     );
   }
@@ -79,19 +78,22 @@ export default function PipelineList() {
   // Error state
   if (error) {
     return (
-      <Layout pageTitle={pageTitle} breadcrumbs={breadcrumbs}>
-        <PageSubheader breadcrumbs={breadcrumbs}>
-          <Flex align="center" justify="center" className="min-h-64">
-            <Box className="text-center">
-              <Text size="5" weight="medium" color="red" className="mb-2">
-                Failed to load pipelines
-              </Text>
-              <Text size="2" color="gray" className="mt-2">
-                {error}
-              </Text>
-            </Box>
-          </Flex>
-        </PageSubheader>
+      <Layout>
+        <PageSubheader breadcrumbs={breadcrumbs} />
+        <Box>
+          <Box mb="8">
+            <Heading size="6" mb="4">
+              Failed
+            </Heading>
+            <Flex align="center" justify="center" className="min-h-64">
+              <Box className="text-center">
+                <Text size="2" color="gray" className="mt-2">
+                  {error}
+                </Text>
+              </Box>
+            </Flex>
+          </Box>
+        </Box>
       </Layout>
     );
   }
@@ -99,30 +101,34 @@ export default function PipelineList() {
   // Empty state
   if (pipelines.length === 0) {
     return (
-      <Layout pageTitle={pageTitle} breadcrumbs={breadcrumbs}>
-        <PageSubheader breadcrumbs={breadcrumbs}>
-          <Flex align="center" justify="center" className="min-h-64">
-            <Box className="text-center">
-              <Text size="5" weight="medium" className="mb-2">
-                No pipelines available
-              </Text>
-              <Text size="2" color="gray" className="mt-2">
-                Check back later for available pipelines.
-              </Text>
-            </Box>
-          </Flex>
-        </PageSubheader>
+      <Layout>
+        <PageSubheader breadcrumbs={breadcrumbs} />
+        <Box>
+          <Box mb="8">
+            <Heading size="6" mb="4">
+              No pipelines available
+            </Heading>
+            <Flex align="center" justify="center" className="min-h-64">
+              <Box className="text-center">
+                <Text size="2" color="gray" className="mt-2">
+                  Check back later for available pipelines.
+                </Text>
+              </Box>
+            </Flex>
+          </Box>
+        </Box>
       </Layout>
     );
   }
 
   // Main content with pipeline cards
   return (
-    <Layout pageTitle={pageTitle} breadcrumbs={breadcrumbs}>
-      <PageSubheader breadcrumbs={breadcrumbs}>
-        <Box className="py-6">
-          <Heading size="6" weight="medium" className="mb-6">
-            Available Pipelines
+    <Layout>
+      <PageSubheader breadcrumbs={breadcrumbs} />
+      <Box>
+        <Box mb="8">
+          <Heading size="6" mb="4">
+            Pipeline Types
           </Heading>
 
           {/* Responsive grid layout */}
@@ -166,7 +172,7 @@ export default function PipelineList() {
             ))}
           </div>
         </Box>
-      </PageSubheader>
+      </Box>
     </Layout>
   );
 }
