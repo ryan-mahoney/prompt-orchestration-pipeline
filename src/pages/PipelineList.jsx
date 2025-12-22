@@ -57,8 +57,6 @@ export default function PipelineList() {
 
   const breadcrumbs = [{ label: "Home", href: "/" }, { label: "Pipelines" }];
 
-  const pageTitle = "Pipelines";
-
   // Loading state
   if (loading) {
     return (
