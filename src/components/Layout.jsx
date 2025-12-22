@@ -6,7 +6,7 @@ import { Button } from "./ui/button.jsx";
 import Logo from "./ui/Logo.jsx";
 import PageSubheader from "./PageSubheader.jsx";
 import UploadSeed from "./UploadSeed.jsx";
-import { ArrowLeft, Code2, Upload, List } from "lucide-react";
+import { Code2, Upload, List } from "lucide-react";
 import "./ui/focus-styles.css";
 
 /**
