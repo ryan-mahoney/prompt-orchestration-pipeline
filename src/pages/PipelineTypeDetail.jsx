@@ -4,8 +4,7 @@ import { Box, Flex, Text } from "@radix-ui/themes";
 import Layout from "../components/Layout.jsx";
 import PageSubheader from "../components/PageSubheader.jsx";
 
-// PipelineDAGGrid will be created in step 5
-// import PipelineDAGGrid from "../components/PipelineDAGGrid.jsx";
+import PipelineDAGGrid from "../components/PipelineDAGGrid.jsx";
 
 export default function PipelineTypeDetail() {
   const { slug } = useParams();
@@ -169,29 +168,12 @@ export default function PipelineTypeDetail() {
 
         {pipeline.tasks && pipeline.tasks.length > 0 ? (
           <Box>
-            {/* Temporary placeholder until PipelineDAGGrid is implemented in step 5 */}
-            <Text size="2" color="gray">
+            <Text size="2" color="gray" className="mb-4">
               {pipeline.tasks.length} task
               {pipeline.tasks.length !== 1 ? "s" : ""} defined
             </Text>
-            <Box className="mt-2 space-y-1">
-              {pipeline.tasks.map((task, index) => (
-                <Box
-                  key={task.id}
-                  className="bg-white rounded p-2 border border-gray-200"
-                >
-                  <Text size="2" weight="medium">
-                    {index + 1}. {task.title || task.id}
-                  </Text>
-                  <Text size="1" color="gray">
-                    Status: {task.status}
-                  </Text>
-                </Box>
-              ))}
-            </Box>
 
-            {/* PipelineDAGGrid will be rendered here in step 5 */}
-            {/* <PipelineDAGGrid items={pipeline.tasks} /> */}
+            <PipelineDAGGrid items={pipeline.tasks} />
           </Box>
         ) : (
           <Text size="2" color="gray">
