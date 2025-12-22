@@ -139,14 +139,6 @@ export default function PipelineList() {
               >
                 <Card
                   className="h-full transition-all duration-200 hover:shadow-md hover:border-blue-200 cursor-pointer"
-                  role="button"
-                  tabIndex={0}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      window.location.href = `/pipeline/${pipeline.slug}`;
-                    }
-                  }}
                 >
                   <CardHeader className="pb-3">
                     <CardTitle className="text-lg font-semibold group-hover:text-blue-600 transition-colors">
