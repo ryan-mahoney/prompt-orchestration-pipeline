@@ -18,6 +18,7 @@ import PromptPipelineDashboard from "@/pages/PromptPipelineDashboard.jsx";
 import PipelineDetail from "@/pages/PipelineDetail.jsx";
 import Code from "@/pages/Code.jsx";
 import PipelineList from "@/pages/PipelineList.jsx";
+import PipelineTypeDetail from "@/pages/PipelineTypeDetail.jsx";
 import { Theme } from "@radix-ui/themes";
 import { ToastProvider } from "@/components/ui/toast.jsx";
 
@@ -36,6 +37,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(
             <Route path="/" element={<PromptPipelineDashboard />} />
             <Route path="/pipeline/:jobId" element={<PipelineDetail />} />
             <Route path="/pipelines" element={<PipelineList />} />
+            <Route path="/pipelines/:slug" element={<PipelineTypeDetail />} />
             <Route path="/code" element={<Code />} />
           </Routes>
         </BrowserRouter>

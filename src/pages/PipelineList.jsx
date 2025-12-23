@@ -134,12 +134,10 @@ export default function PipelineList() {
             {pipelines.map((pipeline) => (
               <Link
                 key={pipeline.slug}
-                to={`/pipeline/${pipeline.slug}`}
+                to={`/pipelines/${pipeline.slug}`}
                 className="group block"
               >
-                <Card
-                  className="h-full transition-all duration-200 hover:shadow-md hover:border-blue-200 cursor-pointer"
-                >
+                <Card className="h-full transition-all duration-200 hover:shadow-md hover:border-blue-200 cursor-pointer">
                   <CardHeader className="pb-3">
                     <CardTitle className="text-lg font-semibold group-hover:text-blue-600 transition-colors">
                       {pipeline.name}
