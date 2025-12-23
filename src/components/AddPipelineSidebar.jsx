@@ -1,74 +1,32 @@
-import React, { useState, useEffect, useRef } from "react";
+import * as Dialog from "@radix-ui/react-dialog";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Box, Flex, Text, TextField, Button } from "@radix-ui/themes";
-import { useToast } from "./ui/toast.jsx";
 
-/**
- * AddPipelineSidebar component for creating new pipeline types
- * @param {Object} props - Component props
- * @param {boolean} props.open - Whether the sidebar is open
- * @param {Function} props.onClose - Close handler
- * @param {Function} props.onSuccess - Success callback after creation
- */
-export function AddPipelineSidebar({ open, onClose, onSuccess }) {
+export function AddPipelineSidebar({ open, onOpenChange }) {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
   const navigate = useNavigate();
-  const { success: toastSuccess, error: toastError } = useToast();
-  const closeButtonRef = useRef(null);
-  const nameInputRef = useRef(null);
 
-  // Focus name input when sidebar opens
   useEffect(() => {
-    if (open && nameInputRef.current) {
-      nameInputRef.current.focus();
-    }
-  }, [open]);
-
-  // Reset form when sidebar opens
-  useEffect(() => {
-    if (open) {
+    if (!open) {
       setName("");
       setDescription("");
       setError(null);
     }
   }, [open]);
 
-  // Focus close button when loading starts
-  useEffect(() => {
-    if (loading && closeButtonRef.current) {
-      closeButtonRef.current.focus();
-    }
-  }, [loading]);
-
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError(null);
+    setSubmitting(true);
 
-    // Frontend validation
-    if (!name.trim()) {
-      setError("Name is required");
+    if (!name.trim() || !description.trim()) {
+      setError("Name and description are required");
+      setSubmitting(false);
       return;
     }
-
-    if (name.trim().length > 100) {
-      setError("Name must be 100 characters or less");
-      return;
-    }
-
-    if (!description.trim()) {
-      setError("Description is required");
-      return;
-    }
-
-    if (description.trim().length > 500) {
-      setError("Description must be 500 characters or less");
-      return;
-    }
-
-    setLoading(true);
 
     try {
       const response = await fetch("/api/pipelines", {
@@ -82,144 +40,79 @@ export function AddPipelineSidebar({ open, onClose, onSuccess }) {
         }),
       });
 
-      const result = await response.json();
-
-      if (!result.ok) {
-        throw new Error(result.message || "Failed to create pipeline");
+      if (!response.ok) {
+        const result = await response.json();
+        throw new Error(result.error || "Failed to create pipeline");
       }
 
-      toastSuccess("Pipeline created successfully");
-
-      // Close sidebar and navigate to new pipeline
-      onClose();
-      onSuccess?.(result.data);
-      navigate(`/pipelines/${result.data.slug}`);
+      const { slug } = await response.json();
+      onOpenChange(false);
+      navigate(`/pipelines/${slug}`);
     } catch (err) {
-      const errorMessage =
-        err.message || "Failed to create pipeline. Please try again.";
-      setError(errorMessage);
-      toastError(errorMessage);
-    } finally {
-      setLoading(false);
+      setError(err.message || "Failed to create pipeline");
+      setSubmitting(false);
     }
   };
 
-  if (!open) {
-    return null;
-  }
-
   return (
-    <aside
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="add-pipeline-title"
-      className="fixed inset-y-0 right-0 z-[2000] w-full max-w-md bg-white border-l border-gray-200 shadow-xl"
-    >
-      {/* Header */}
-      <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-        <h2 id="add-pipeline-title" className="text-lg font-semibold">
-          Add Pipeline Type
-        </h2>
-        <button
-          ref={closeButtonRef}
-          type="button"
-          aria-label="Close"
-          onClick={onClose}
-          disabled={loading}
-          className="rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50 px-3 py-1.5 text-base disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          ×
-        </button>
-      </div>
+    <Dialog.Root open={open} onOpenChange={onOpenChange}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="fixed inset-0 bg-black/50" />
+        <Dialog.Content className="fixed right-0 top-0 bottom-0 w-96 bg-white p-6 shadow-xl flex flex-col overflow-y-auto">
+          <Dialog.Title className="text-lg font-semibold mb-4">
+            Add a Pipeline Type
+          </Dialog.Title>
 
-      {/* Form */}
-      <form
-        onSubmit={handleSubmit}
-        className="p-6 space-y-6 h-full overflow-y-auto"
-      >
-        {/* Error message */}
-        {error && (
-          <Box className="bg-red-50 border border-red-200 rounded-lg p-4">
-            <Text size="2" color="red">
-              {error}
-            </Text>
-          </Box>
-        )}
+          <form onSubmit={handleSubmit} className="flex flex-col flex-1">
+            <label className="block mb-4">
+              <span className="block text-sm font-medium text-gray-700 mb-1">
+                Name
+              </span>
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="My Pipeline"
+              />
+            </label>
 
-        {/* Name field */}
-        <Box>
-          <label htmlFor="pipeline-name">
-            <Text as="label" size="2" weight="medium" color="gray">
-              Pipeline Name
-            </Text>
-          </label>
-          <TextField.Root
-            id="pipeline-name"
-            ref={nameInputRef}
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="e.g., Content Generation Pipeline"
-            disabled={loading}
-            required
-            className="mt-2"
-          >
-            <TextField.Slot />
-          </TextField.Root>
-          <Text size="1" color="gray" className="mt-1">
-            Human-readable name for the pipeline
-          </Text>
-        </Box>
+            <label className="block mb-4">
+              <span className="block text-sm font-medium text-gray-700 mb-1">
+                Description
+              </span>
+              <textarea
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                rows={3}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                placeholder="Describe what this pipeline does"
+              />
+            </label>
 
-        {/* Description field */}
-        <Box>
-          <label htmlFor="pipeline-description">
-            <Text as="label" size="2" weight="medium" color="gray">
-              Description
-            </Text>
-          </label>
-          <TextField.Root
-            id="pipeline-description"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            placeholder="Describe what this pipeline does..."
-            disabled={loading}
-            required
-            multiline
-            className="mt-2 min-h-24"
-          >
-            <TextField.Slot />
-          </TextField.Root>
-          <Text size="1" color="gray" className="mt-1">
-            Brief description of the pipeline's purpose
-          </Text>
-        </Box>
+            {error && <p className="text-red-600 text-sm mb-4">{error}</p>}
 
-        {/* Info box */}
-        <Box className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-          <Text size="2" color="blue">
-            <strong>Note:</strong> The system will automatically generate a
-            unique slug, pipeline configuration file, and task registry for this
-            pipeline type.
-          </Text>
-        </Box>
-
-        {/* Actions */}
-        <Flex gap="3" justify="end" className="pt-4 border-t border-gray-200">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={onClose}
-            disabled={loading}
-          >
-            Cancel
-          </Button>
-          <Button type="submit" disabled={loading}>
-            {loading ? "Creating..." : "Create Pipeline"}
-          </Button>
-        </Flex>
-      </form>
-    </aside>
+            <div className="flex gap-3 mt-auto pt-4">
+              <button
+                type="button"
+                onClick={() => onOpenChange(false)}
+                className="flex-1 px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={submitting}
+                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {submitting ? "Creating..." : "Create"}
+              </button>
+            </div>
+          </form>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
   );
 }
 
-export default React.memo(AddPipelineSidebar);
+export default AddPipelineSidebar;
