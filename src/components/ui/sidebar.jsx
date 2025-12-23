@@ -45,7 +45,7 @@ export const Sidebar = forwardRef(
           <Dialog.Overlay className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[1999] data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
           <Dialog.Content
             ref={ref}
-            className={`fixed inset-y-0 right-0 z-[2000] w-full max-w-[640px] min-w-[384px] bg-card shadow-2xl transform transition-all duration-300 ease-in-out data-[state=closed]:translate-x-full data-[state=open]:translate-x-0 data-[state=closed]:animate-out data-[state=open]:animate-in ${contentClassName}`}
+            className={`fixed inset-y-0 right-0 z-[2000] w-full max-w-[640px] min-w-[384px] !bg-card shadow-2xl transform transition-all duration-300 ease-in-out data-[state=closed]:translate-x-full data-[state=open]:translate-x-0 data-[state=closed]:animate-out data-[state=open]:animate-in ${contentClassName}`}
             {...props}
           >
             {/* Header */}
