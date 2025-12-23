@@ -47,6 +47,10 @@ export function AddPipelineSidebar({ open, onOpenChange }) {
 
       const { slug } = await response.json();
       onOpenChange(false);
+
+      // Wait for watcher to detect registry change and reload config
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+
       navigate(`/pipelines/${slug}`);
     } catch (err) {
       setError(err.message || "Failed to create pipeline");
