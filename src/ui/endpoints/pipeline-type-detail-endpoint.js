@@ -39,6 +39,14 @@ export async function handlePipelineTypeDetail(slug) {
     );
   }
 
+  // Enforce safe characters in slug to prevent path traversal and similar issues
+  const slugIsValid = /^[A-Za-z0-9_-]+$/.test(slug);
+  if (!slugIsValid) {
+    return configBridge.createErrorResponse(
+      configBridge.Constants.ERROR_CODES.BAD_REQUEST,
+      "Invalid slug parameter: only letters, numbers, hyphens, and underscores are allowed"
+    );
+  }
   try {
     // Resolve pipeline configuration using existing config system
     let pipelineConfig;
