@@ -4,22 +4,14 @@
 
 /* Steel Terminal Theme - CSS Variables */
 :root {
-  /* Base colors */
-  --background: 30 5% 97%; /* Soft warm gray */
-  --foreground: 210 15% 15%; /* Deep slate */
-  --card: 0 0% 100%; /* Pure white */
-  --card-foreground: 210 15% 15%; /* Deep slate */
-  --popover: 0 0% 100%; /* Pure white */
-  --popover-foreground: 210 15% 15%; /* Deep slate */
-
-  /* Primary colors - Indigo for primary actions with clear active state */
-  --primary: 243deg 75% 59%; /* #4f46e5 - indigo-600 */
+  /* Primary colors - Muted slate blue-gray for actions */
+  --primary: 215deg 16% 38%; /* #475569 - slate-600 */
   --primary-foreground: 0deg 0% 100%; /* #ffffff */
-  --primary-hover: 243deg 77% 49%; /* #4338ca - indigo-700 */
+  --primary-hover: 215deg 16% 28%; /* #334155 - slate-700 */
 
   /* Secondary colors - For outline buttons */
   --secondary: 210deg 20% 98%; /* #f8fafc - slate-50 */
-  --secondary-foreground: 243deg 75% 30%; /* #312e81 - indigo-950 */
+  --secondary-foreground: 215deg 16% 38%; /* #475569 */
 
   /* Destructive colors - For danger actions */
   --destructive: 0deg 84% 60%; /* #dc2626 - red-600 */
@@ -27,18 +19,18 @@
 
   /* Muted colors - For disabled/subtle states */
   --muted: 210deg 40% 96%; /* #f1f5f9 - slate-100 */
-  --muted-foreground: 243deg 50% 45%; /* #6366f1 - indigo-500 */
+  --muted-foreground: 215deg 16% 47%; /* #64748b - slate-500 */
 
   /* Accent colors - For highlights */
   --accent: 210deg 40% 96%; /* #f1f5f9 - slate-100 */
-  --accent-foreground: 243deg 75% 59%; /* #4f46e5 - indigo-600 */
+  --accent-foreground: 215deg 16% 38%; /* #475569 */
 
   /* Border and input colors */
   --border: 214deg 32% 91%; /* #e2e8f0 - slate-200 */
   --input: 214deg 32% 91%; /* #e2e8f0 - slate-200 */
 
   /* Ring - For focus states */
-  --ring: 243deg 75% 59%; /* #4f46e5 - indigo-600 */
+  --ring: 215deg 16% 38%; /* #475569 */
 
   /* Status colors */
   --success: 142deg 76% 36%; /* #16a34a - green-600 */
