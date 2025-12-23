@@ -172,12 +172,6 @@ export default function TaskCreationSidebar({ isOpen, onClose, pipelineSlug }) {
           </div>
         ))}
 
-        {messages.length === 0 && (
-          <div className="text-center text-muted-foreground mt-8">
-            Describe the task you want to create...
-          </div>
-        )}
-
         <div ref={messagesEndRef} />
 
         {error && (
