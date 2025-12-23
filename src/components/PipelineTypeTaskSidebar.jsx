@@ -1,5 +1,6 @@
-import React, { useEffect, useRef } from "react";
-import { Box, Text } from "@radix-ui/themes";
+import React from "react";
+import { Text } from "@radix-ui/themes";
+import { Sidebar, SidebarSection } from "./ui/sidebar.jsx";
 
 /**
  * PipelineTypeTaskSidebar component for displaying pipeline type task details in a slide-over panel
@@ -17,101 +18,73 @@ export function PipelineTypeTaskSidebar({
   task,
   onClose,
 }) {
-  const closeButtonRef = useRef(null);
-
   // Get CSS classes for card header based on status
   const getHeaderClasses = (status) => {
     switch (status) {
       case "definition":
         return "bg-blue-50 border-blue-200 text-blue-700";
       default:
-        return "bg-gray-100 border-gray-200 text-gray-700";
+        return "bg-muted/50 border-input text-foreground";
     }
   };
-
-  // Focus close button when sidebar opens
-  useEffect(() => {
-    if (open && closeButtonRef.current) {
-      closeButtonRef.current.focus();
-    }
-  }, [open]);
 
   if (!open) {
     return null;
   }
 
   return (
-    <aside
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="slide-over-title"
-      className="fixed inset-y-0 right-0 z-[2000] w-full max-w-4xl bg-white border-l border-gray-200 transform transition-transform duration-300 ease-out translate-x-0"
+    <Sidebar
+      open={open}
+      onOpenChange={(isOpen) => !isOpen && onClose()}
+      title={title}
+      headerClassName={getHeaderClasses(status)}
     >
-      {/* Header */}
-      <div
-        className={`px-6 py-4 border-b flex items-center justify-between ${getHeaderClasses(status)}`}
-      >
-        <div id="slide-over-title" className="text-lg font-semibold truncate">
-          {title}
-        </div>
-        <button
-          ref={closeButtonRef}
-          type="button"
-          aria-label="Close details"
-          onClick={onClose}
-          className="rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50 px-3 py-1.5 text-base"
-        >
-          ×
-        </button>
-      </div>
-
-      {/* Content */}
-      <div className="p-6 space-y-6 overflow-y-auto h-full">
+      <SidebarSection>
         {/* Task ID */}
-        <Box>
-          <Text size="2" weight="medium" color="gray" className="mb-1">
+        <div className="space-y-1 mb-6">
+          <label className="text-sm font-medium text-muted-foreground">
             Task ID
-          </Text>
+          </label>
           <Text size="3">{task?.id || "N/A"}</Text>
-        </Box>
+        </div>
 
         {/* Task Title (if different from header) */}
         {task?.title && task.title !== title && (
-          <Box>
-            <Text size="2" weight="medium" color="gray" className="mb-1">
+          <div className="space-y-1 mb-6">
+            <label className="text-sm font-medium text-muted-foreground">
               Title
-            </Text>
+            </label>
             <Text size="3">{task.title}</Text>
-          </Box>
+          </div>
         )}
 
         {/* Task Status */}
-        <Box>
-          <Text size="2" weight="medium" color="gray" className="mb-1">
+        <div className="space-y-1 mb-6">
+          <label className="text-sm font-medium text-muted-foreground">
             Status
-          </Text>
+          </label>
           <Text size="3">{status}</Text>
-        </Box>
+        </div>
 
         {/* Additional metadata could be added here as needed */}
         {task?.description && (
-          <Box>
-            <Text size="2" weight="medium" color="gray" className="mb-1">
+          <div className="space-y-1 mb-6">
+            <label className="text-sm font-medium text-muted-foreground">
               Description
-            </Text>
+            </label>
             <Text size="3">{task.description}</Text>
-          </Box>
+          </div>
         )}
 
         {/* Note about pipeline type view */}
-        <Box className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+        <div className="bg-info/10 border border-info/20 rounded-lg p-4">
           <Text size="2" color="blue">
             This is a pipeline type definition view. For detailed task execution
             information, view a specific job instance.
           </Text>
-        </Box>
-      </div>
-    </aside>
+        </div>
+      </SidebarSection>
+    </Sidebar>
   );
 }
 

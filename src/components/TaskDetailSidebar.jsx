@@ -1,7 +1,8 @@
-import React, { useEffect, useRef, useState } from "react";
-import { Callout } from "@radix-ui/themes";
+import React, { useState, useEffect } from "react";
+import { Callout, Table, Text, Box } from "@radix-ui/themes";
 import { TaskFilePane } from "./TaskFilePane.jsx";
 import { TaskState } from "../config/statuses.js";
+import { Sidebar, SidebarSection } from "./ui/sidebar.jsx";
 
 /**
  * TaskDetailSidebar component for displaying task details in a slide-over panel
@@ -12,9 +13,11 @@ import { TaskState } from "../config/statuses.js";
  * @param {string} props.jobId - Job ID for file operations
  * @param {string} props.taskId - Task ID for file operations
  * @param {string|null} props.taskBody - Task body for error callout when status is FAILED
+ * @param {Object} props.taskError - Error object with message and stack
  * @param {Function} props.filesByTypeForItem - Selector returning { artifacts, logs, tmp }
  * @param {Object} props.task - Original task item, passed for filesByTypeForItem
  * @param {Function} props.onClose - Close handler
+ * @param {number} props.taskIndex - Task index for ID compatibility
  */
 export function TaskDetailSidebar({
   open,
@@ -27,35 +30,27 @@ export function TaskDetailSidebar({
   filesByTypeForItem = () => ({ artifacts: [], logs: [], tmp: [] }),
   task,
   onClose,
-  taskIndex, // Add taskIndex for ID compatibility
+  taskIndex: _taskIndex, // eslint-disable-line no-unused-vars
 }) {
   // Internal state
   const [filePaneType, setFilePaneType] = useState("artifacts");
   const [filePaneOpen, setFilePaneOpen] = useState(false);
   const [filePaneFilename, setFilePaneFilename] = useState(null);
   const [showStack, setShowStack] = useState(false);
-  const closeButtonRef = useRef(null);
 
   // Get CSS classes for card header based on status (mirrored from DAGGrid)
   const getHeaderClasses = (status) => {
     switch (status) {
       case TaskState.DONE:
-        return "bg-green-50 border-green-200 text-green-700";
+        return "bg-success/10 border-success/30 text-success-foreground";
       case TaskState.RUNNING:
-        return "bg-amber-50 border-amber-200 text-amber-700";
+        return "bg-warning/10 border-warning/30 text-warning-foreground";
       case TaskState.FAILED:
-        return "bg-pink-50 border-pink-200 text-pink-700";
+        return "bg-error/10 border-error/30 text-error-foreground";
       default:
-        return "bg-gray-100 border-gray-200 text-gray-700";
+        return "bg-muted/50 border-input text-foreground";
     }
   };
-
-  // Focus close button when sidebar opens
-  useEffect(() => {
-    if (open && closeButtonRef.current) {
-      closeButtonRef.current.focus();
-    }
-  }, [open]);
 
   // Reset internal state when open changes
   useEffect(() => {
@@ -93,100 +88,80 @@ export function TaskDetailSidebar({
   const filesForTab = filesForStep[filePaneType] ?? [];
 
   return (
-    <aside
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby={`slide-over-title-${taskIndex}`}
-      aria-hidden={false}
-      className={`fixed inset-y-0 right-0 z-[2000] w-full max-w-4xl bg-white border-l border-gray-200 transform transition-transform duration-300 ease-out translate-x-0`}
-    >
-      {/* Header */}
-      <div
-        className={`px-6 py-4 border-b flex items-center justify-between ${getHeaderClasses(status)}`}
+    <>
+      <Sidebar
+        open={open}
+        onOpenChange={(isOpen) => !isOpen && onClose()}
+        title={title}
+        headerClassName={getHeaderClasses(status)}
       >
-        <div
-          id={`slide-over-title-${taskIndex}`}
-          className="text-lg font-semibold truncate"
-        >
-          {title}
-        </div>
-        <button
-          ref={closeButtonRef}
-          type="button"
-          aria-label="Close details"
-          onClick={onClose}
-          className="rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50 px-3 py-1.5 text-base"
-        >
-          ×
-        </button>
-      </div>
-
-      <div className="p-6 space-y-8 overflow-y-auto h-full">
         {/* Error Callout - shown when task has error status */}
         {status === TaskState.FAILED && (taskError?.message || taskBody) && (
-          <section aria-label="Error">
-            <Callout.Root role="alert" aria-live="assertive">
-              <Callout.Text className="whitespace-pre-wrap break-words">
-                {taskError?.message || taskBody}
-              </Callout.Text>
-            </Callout.Root>
+          <SidebarSection className="bg-destructive/5 border-b">
+            <section aria-label="Error">
+              <Callout.Root role="alert" aria-live="assertive">
+                <Callout.Text className="whitespace-pre-wrap break-words">
+                  {taskError?.message || taskBody}
+                </Callout.Text>
+              </Callout.Root>
 
-            {/* Stack trace toggle */}
-            {taskError?.stack && (
-              <div className="mt-3">
-                <button
-                  onClick={() => setShowStack(!showStack)}
-                  className="text-sm text-blue-600 hover:text-blue-800 underline"
-                  aria-expanded={showStack}
-                  aria-controls="error-stack"
-                >
-                  {showStack ? "Hide stack" : "Show stack"}
-                </button>
-                {showStack && (
-                  <pre
-                    id="error-stack"
-                    className="mt-2 p-2 bg-gray-50 border rounded text-xs font-mono max-h-64 overflow-auto whitespace-pre-wrap"
+              {/* Stack trace toggle */}
+              {taskError?.stack && (
+                <div className="mt-3">
+                  <button
+                    onClick={() => setShowStack(!showStack)}
+                    className="text-sm text-primary hover:text-primary/80 underline"
+                    aria-expanded={showStack}
+                    aria-controls="error-stack"
                   >
-                    {taskError.stack}
-                  </pre>
-                )}
-              </div>
-            )}
-          </section>
+                    {showStack ? "Hide stack" : "Show stack"}
+                  </button>
+                  {showStack && (
+                    <pre
+                      id="error-stack"
+                      className="mt-2 p-2 bg-muted border rounded text-xs font-mono max-h-64 overflow-auto whitespace-pre-wrap"
+                    >
+                      {taskError.stack}
+                    </pre>
+                  )}
+                </div>
+              )}
+            </section>
+          </SidebarSection>
         )}
 
         {/* File Display Area with Type Tabs */}
-        <section className="mt-6">
+        <SidebarSection>
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-base font-semibold text-gray-900">Files</h3>
+            <h3 className="text-base font-semibold text-foreground">Files</h3>
             <div className="flex items-center space-x-2">
-              <div className="flex rounded-lg border border-gray-200 bg-gray-50 p-1">
+              <div className="flex rounded-lg border border-input bg-muted p-1">
                 <button
                   onClick={() => setFilePaneType("artifacts")}
-                  className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                  className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors border-l-2 ${
                     filePaneType === "artifacts"
-                      ? "bg-white text-gray-900 shadow-sm"
-                      : "text-gray-600 hover:text-gray-900"
+                      ? "bg-background text-foreground shadow-sm border-indigo-400"
+                      : "text-muted-foreground hover:text-foreground border-transparent"
                   }`}
                 >
                   Artifacts
                 </button>
                 <button
                   onClick={() => setFilePaneType("logs")}
-                  className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                  className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors border-l-2 ${
                     filePaneType === "logs"
-                      ? "bg-white text-gray-900 shadow-sm"
-                      : "text-gray-600 hover:text-gray-900"
+                      ? "bg-background text-foreground shadow-sm border-indigo-400"
+                      : "text-muted-foreground hover:text-foreground border-transparent"
                   }`}
                 >
                   Logs
                 </button>
                 <button
                   onClick={() => setFilePaneType("tmp")}
-                  className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                  className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors border-l-2 ${
                     filePaneType === "tmp"
-                      ? "bg-white text-gray-900 shadow-sm"
-                      : "text-gray-600 hover:text-gray-900"
+                      ? "bg-background text-foreground shadow-sm border-indigo-400"
+                      : "text-muted-foreground hover:text-foreground border-transparent"
                   }`}
                 >
                   Temp
@@ -194,46 +169,73 @@ export function TaskDetailSidebar({
               </div>
             </div>
           </div>
-        </section>
 
-        {/* File List */}
-        <div className="space-y-2">
-          <div className="text-sm text-gray-600">
-            {filePaneType.charAt(0).toUpperCase() + filePaneType.slice(1)} files
-            for {taskId}
-          </div>
-          <div className="space-y-1">
+          {/* File List Table */}
+          <div className="space-y-2">
+            <Text size="2" className="text-muted-foreground">
+              {filePaneType.charAt(0).toUpperCase() + filePaneType.slice(1)}{" "}
+              files for {taskId}
+            </Text>
             {filesForTab.length === 0 ? (
-              <div className="text-sm text-gray-500 italic py-4 text-center">
-                No {filePaneType} files available for this task
-              </div>
+              <Box className="py-4 text-center">
+                <Text size="2" className="text-muted-foreground italic">
+                  No {filePaneType} files available for this task
+                </Text>
+              </Box>
             ) : (
-              filesForTab.map((name) => (
-                <div
-                  key={`${filePaneType}-${name}`}
-                  className="flex items-center justify-between p-2 rounded border border-gray-200 hover:border-gray-300 hover:bg-gray-50 cursor-pointer transition-colors"
-                  onClick={() => handleFileClick(name)}
-                >
-                  <div className="flex items-center space-x-2">
-                    <span className="text-sm text-gray-700">{name}</span>
-                  </div>
-                </div>
-              ))
+              <Table.Root radius="none">
+                <Table.Header>
+                  <Table.Row>
+                    <Table.ColumnHeaderCell>File Name</Table.ColumnHeaderCell>
+                  </Table.Row>
+                </Table.Header>
+                <Table.Body>
+                  {filesForTab.map((name) => (
+                    <Table.Row
+                      key={`${filePaneType}-${name}`}
+                      className="cursor-pointer hover:bg-slate-50/50"
+                      onClick={() => handleFileClick(name)}
+                    >
+                      <Table.Cell>
+                        <Text size="2">{name}</Text>
+                      </Table.Cell>
+                    </Table.Row>
+                  ))}
+                </Table.Body>
+              </Table.Root>
             )}
           </div>
-        </div>
 
-        {/* TaskFilePane Modal */}
-        <TaskFilePane
-          isOpen={filePaneOpen}
-          jobId={jobId}
-          taskId={taskId}
-          type={filePaneType}
-          filename={filePaneFilename}
-          onClose={handleFilePaneClose}
-        />
-      </div>
-    </aside>
+          {/* Inline File Preview */}
+          {filePaneOpen && (
+            <div className="mt-4 border-t pt-4">
+              <div className="flex items-center justify-between mb-2">
+                <Text size="2" weight="medium" className="text-foreground">
+                  File Preview
+                </Text>
+                <button
+                  onClick={handleFilePaneClose}
+                  className="text-sm text-muted-foreground hover:text-foreground"
+                >
+                  Close Preview
+                </button>
+              </div>
+              <div className="h-96 overflow-auto">
+                <TaskFilePane
+                  isOpen={filePaneOpen}
+                  jobId={jobId}
+                  taskId={taskId}
+                  type={filePaneType}
+                  filename={filePaneFilename}
+                  onClose={handleFilePaneClose}
+                  inline={true}
+                />
+              </div>
+            </div>
+          )}
+        </SidebarSection>
+      </Sidebar>
+    </>
   );
 }
 

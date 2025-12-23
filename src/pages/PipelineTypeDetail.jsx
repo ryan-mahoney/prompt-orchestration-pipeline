@@ -3,14 +3,17 @@ import { useParams } from "react-router-dom";
 import { Box, Flex, Text } from "@radix-ui/themes";
 import Layout from "../components/Layout.jsx";
 import PageSubheader from "../components/PageSubheader.jsx";
+import { Button } from "../components/ui/button.jsx";
 
 import PipelineDAGGrid from "../components/PipelineDAGGrid.jsx";
+import TaskCreationSidebar from "../components/TaskCreationSidebar.jsx";
 
 export default function PipelineTypeDetail() {
   const { slug } = useParams();
   const [pipeline, setPipeline] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
     const fetchPipeline = async () => {
@@ -146,9 +149,18 @@ export default function PipelineTypeDetail() {
   return (
     <Layout pageTitle={pageTitle} breadcrumbs={breadcrumbs}>
       <PageSubheader breadcrumbs={breadcrumbs} maxWidth="max-w-7xl">
-        <Text size="2" color="gray">
-          Slug: {slug}
-        </Text>
+        <Flex gap="3" align="center">
+          <Text size="2" color="gray">
+            Slug: {slug}
+          </Text>
+          <Button
+            variant="solid"
+            size="md"
+            onClick={() => setSidebarOpen(true)}
+          >
+            Add Task
+          </Button>
+        </Flex>
       </PageSubheader>
 
       {/* Pipeline description */}
@@ -183,6 +195,12 @@ export default function PipelineTypeDetail() {
           </Box>
         )}
       </Box>
+
+      <TaskCreationSidebar
+        isOpen={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
+        pipelineSlug={slug}
+      />
     </Layout>
   );
 }

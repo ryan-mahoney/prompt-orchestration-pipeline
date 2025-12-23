@@ -63,13 +63,26 @@ export function start(paths, onChange, options = {}) {
   };
 
   // Handle file events
-  watcher.on("add", (rawPath) => {
+  watcher.on("add", async (rawPath) => {
     // Compute relative path from baseDir and normalize
     const rel = normalizePath(path.relative(baseDir, rawPath));
     // Always use relative path for consistency with tests
     const normalizedPath = rel;
 
     console.debug("[Watcher] File added:", normalizedPath);
+
+    // Detect registry.json changes and reload config
+    if (normalizedPath === "pipeline-config/registry.json") {
+      console.log("[Watcher] registry.json added, reloading config...");
+      try {
+        const { resetConfig } = await import("../core/config.js");
+        resetConfig();
+        console.log("[Watcher] Config cache invalidated successfully");
+      } catch (error) {
+        console.error("[Watcher] Failed to reload config:", error);
+      }
+    }
+
     pendingChanges.push({ path: normalizedPath, type: "created" });
     scheduleFlush();
 
@@ -81,13 +94,26 @@ export function start(paths, onChange, options = {}) {
     }
   });
 
-  watcher.on("change", (rawPath) => {
+  watcher.on("change", async (rawPath) => {
     // Compute relative path from baseDir and normalize
     const rel = normalizePath(path.relative(baseDir, rawPath));
     // Always use relative path for consistency with tests
     const normalizedPath = rel;
 
     console.debug("[Watcher] File changed:", normalizedPath);
+
+    // Detect registry.json changes and reload config
+    if (normalizedPath === "pipeline-config/registry.json") {
+      console.log("[Watcher] registry.json modified, reloading config...");
+      try {
+        const { resetConfig } = await import("../core/config.js");
+        resetConfig();
+        console.log("[Watcher] Config cache invalidated successfully");
+      } catch (error) {
+        console.error("[Watcher] Failed to reload config:", error);
+      }
+    }
+
     pendingChanges.push({ path: normalizedPath, type: "modified" });
     scheduleFlush();
 

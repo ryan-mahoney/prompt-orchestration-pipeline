@@ -21,6 +21,7 @@ import {
 import { handlePipelinesHttpRequest } from "./endpoints/pipelines-endpoint.js";
 import { handleCreatePipeline } from "./endpoints/create-pipeline-endpoint.js";
 import { handlePipelineTypeDetailRequest } from "./endpoints/pipeline-type-detail-endpoint.js";
+import { handleTaskPlan } from "./endpoints/task-creation-endpoint.js";
 import { sendJson } from "./utils/http-utils.js";
 import { PROVIDER_FUNCTIONS } from "../config/models.js";
 
@@ -184,6 +185,9 @@ export function buildExpressApp({ dataDir, viteServer }) {
       dataDir,
     });
   });
+
+  // POST /api/ai/task-plan
+  app.post("/api/ai/task-plan", handleTaskPlan);
 
   // Dev middleware (mount after all API routes)
   if (viteServer && viteServer.middlewares) {

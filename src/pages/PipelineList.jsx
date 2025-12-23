@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Box, Flex, Text, Heading, Table, Button } from "@radix-ui/themes";
+import { Box, Flex, Text, Heading, Table } from "@radix-ui/themes";
 import { ChevronRight, Plus } from "lucide-react";
 import Layout from "../components/Layout.jsx";
 import PageSubheader from "../components/PageSubheader.jsx";
 import AddPipelineSidebar from "../components/AddPipelineSidebar.jsx";
+import { Button } from "../components/ui/button.jsx";
 
 /**
  * PipelineList component displays available pipelines in a table layout
@@ -126,7 +127,7 @@ export default function PipelineList() {
   return (
     <Layout>
       <PageSubheader breadcrumbs={breadcrumbs}>
-        <Button size="2" onClick={() => setSidebarOpen(true)}>
+        <Button size="md" variant="solid" onClick={() => setSidebarOpen(true)}>
           <Plus className="h-4 w-4 mr-2" />
           Add a Pipeline Type
         </Button>
@@ -192,8 +193,8 @@ export default function PipelineList() {
                     <Table.Cell>
                       <Button
                         variant="ghost"
-                        size="1"
-                        className="opacity-0 group-hover:opacity-100 transition-opacity text-slate-500 hover:text-slate-700"
+                        size="sm"
+                        className="opacity-0 group-hover:opacity-100 transition-opacity"
                         aria-label={`View ${pipelineName} pipeline`}
                       >
                         <ChevronRight className="h-4 w-4" />
