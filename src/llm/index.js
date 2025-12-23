@@ -91,6 +91,15 @@ export function calculateCost(provider, model, usage) {
 
 // Core chat function - no metrics handling needed!
 export async function chat(options) {
+  console.log("[llm] chat() called with options:", {
+    provider: options.provider,
+    model: options.model,
+    messageCount: options.messages?.length || 0,
+    hasTemperature: options.temperature !== undefined,
+    hasMaxTokens: options.maxTokens !== undefined,
+    responseFormat: options.responseFormat,
+  });
+
   const {
     provider,
     model,
@@ -111,7 +120,11 @@ export async function chat(options) {
 
   const available = getAvailableProviders();
 
+  console.log("[llm] Available providers:", available);
+  console.log("[llm] Requested provider:", provider);
+
   if (!available[provider]) {
+    console.error("[llm] Provider not available:", provider);
     throw new Error(`Provider ${provider} not available. Check API keys.`);
   }
 
@@ -126,10 +139,23 @@ export async function chat(options) {
   const userMessages = messages.filter((m) => m.role === "user");
   const userMsg = userMessages.map((m) => m.content).join("\n");
 
+  console.log("[llm] Message analysis:", {
+    hasSystemMessage: !!systemMsg,
+    systemMessageLength: systemMsg.length,
+    userMessageCount: userMessages.length,
+    userMessageLength: userMsg.length,
+    totalMessageLength: systemMsg.length + userMsg.length,
+  });
+
   // DEBUG write_to_file messages to /tmp/messages.log for debugging
   fs.writeFileSync(
     "/tmp/messages.log",
     JSON.stringify({ messages, systemMsg, userMsg, provider, model }, null, 2)
+  );
+
+  console.log(
+    "[llm] Emitting llm:request:start event for requestId:",
+    requestId
   );
 
   // Emit request start event
@@ -142,10 +168,12 @@ export async function chat(options) {
   });
 
   try {
+    console.log("[llm] Starting provider call for:", provider);
     let response;
     let usage;
 
     if (provider === "mock") {
+      console.log("[llm] Using mock provider");
       if (!mockProviderInstance) {
         throw new Error(
           "Mock provider not registered. Call registerMockProvider() first."
@@ -159,6 +187,7 @@ export async function chat(options) {
         maxTokens,
         ...rest,
       });
+      console.log("[llm] Mock provider returned result");
 
       response = {
         content: result.content,
@@ -171,6 +200,7 @@ export async function chat(options) {
         totalTokens: result.usage.total_tokens,
       };
     } else if (provider === "openai") {
+      console.log("[llm] Using OpenAI provider");
       const openaiArgs = {
         messages,
         model: model || "gpt-5-chat-latest",
@@ -178,6 +208,11 @@ export async function chat(options) {
         maxTokens,
         ...rest,
       };
+      console.log("[llm] OpenAI call parameters:", {
+        model: openaiArgs.model,
+        hasMessages: !!openaiArgs.messages,
+        messageCount: openaiArgs.messages?.length,
+      });
       openaiArgs.responseFormat = finalResponseFormat;
       if (topP !== undefined) openaiArgs.topP = topP;
       if (frequencyPenalty !== undefined)
@@ -186,7 +221,13 @@ export async function chat(options) {
         openaiArgs.presencePenalty = presencePenalty;
       if (stop !== undefined) openaiArgs.stop = stop;
 
+      console.log("[llm] Calling openaiChat()...");
       const result = await openaiChat(openaiArgs);
+      console.log("[llm] openaiChat() returned:", {
+        hasResult: !!result,
+        hasContent: !!result?.content,
+        hasUsage: !!result?.usage,
+      });
 
       response = {
         content:
@@ -213,6 +254,7 @@ export async function chat(options) {
         };
       }
     } else if (provider === "deepseek") {
+      console.log("[llm] Using DeepSeek provider");
       const deepseekArgs = {
         messages,
         model: model || "deepseek-reasoner",
@@ -220,6 +262,11 @@ export async function chat(options) {
         maxTokens,
         ...rest,
       };
+      console.log("[llm] DeepSeek call parameters:", {
+        model: deepseekArgs.model,
+        hasMessages: !!deepseekArgs.messages,
+        messageCount: deepseekArgs.messages?.length,
+      });
       if (topP !== undefined) deepseekArgs.topP = topP;
       if (frequencyPenalty !== undefined)
         deepseekArgs.frequencyPenalty = frequencyPenalty;
@@ -228,7 +275,13 @@ export async function chat(options) {
       if (stop !== undefined) deepseekArgs.stop = stop;
       deepseekArgs.responseFormat = finalResponseFormat;
 
+      console.log("[llm] Calling deepseekChat()...");
       const result = await deepseekChat(deepseekArgs);
+      console.log("[llm] deepseekChat() returned:", {
+        hasResult: !!result,
+        hasContent: !!result?.content,
+        hasUsage: !!result?.usage,
+      });
 
       response = {
         content: result.content,
@@ -254,6 +307,7 @@ export async function chat(options) {
         };
       }
     } else if (provider === "anthropic") {
+      console.log("[llm] Using Anthropic provider");
       const defaultAlias = DEFAULT_MODEL_BY_PROVIDER.anthropic;
       const defaultModelConfig = MODEL_CONFIG[defaultAlias];
       const defaultModel = defaultModelConfig?.model;
@@ -265,11 +319,22 @@ export async function chat(options) {
         maxTokens,
         ...rest,
       };
+      console.log("[llm] Anthropic call parameters:", {
+        model: anthropicArgs.model,
+        hasMessages: !!anthropicArgs.messages,
+        messageCount: anthropicArgs.messages?.length,
+      });
       if (topP !== undefined) anthropicArgs.topP = topP;
       if (stop !== undefined) anthropicArgs.stop = stop;
       anthropicArgs.responseFormat = finalResponseFormat;
 
+      console.log("[llm] Calling anthropicChat()...");
       const result = await anthropicChat(anthropicArgs);
+      console.log("[llm] anthropicChat() returned:", {
+        hasResult: !!result,
+        hasContent: !!result?.content,
+        hasUsage: !!result?.usage,
+      });
 
       response = {
         content: result.content,
@@ -296,6 +361,7 @@ export async function chat(options) {
         };
       }
     } else if (provider === "gemini") {
+      console.log("[llm] Using Gemini provider");
       const geminiArgs = {
         messages,
         model: model || "gemini-2.5-flash",
@@ -303,11 +369,22 @@ export async function chat(options) {
         maxTokens,
         ...rest,
       };
+      console.log("[llm] Gemini call parameters:", {
+        model: geminiArgs.model,
+        hasMessages: !!geminiArgs.messages,
+        messageCount: geminiArgs.messages?.length,
+      });
       if (topP !== undefined) geminiArgs.topP = topP;
       if (stop !== undefined) geminiArgs.stop = stop;
       geminiArgs.responseFormat = finalResponseFormat;
 
+      console.log("[llm] Calling geminiChat()...");
       const result = await geminiChat(geminiArgs);
+      console.log("[llm] geminiChat() returned:", {
+        hasResult: !!result,
+        hasContent: !!result?.content,
+        hasUsage: !!result?.usage,
+      });
 
       response = {
         content: result.content,
@@ -334,6 +411,7 @@ export async function chat(options) {
         };
       }
     } else if (provider === "zhipu") {
+      console.log("[llm] Using Zhipu provider");
       const defaultAlias = DEFAULT_MODEL_BY_PROVIDER.zhipu;
       const defaultModelConfig = MODEL_CONFIG[defaultAlias];
       const defaultModel = defaultModelConfig?.model;
@@ -345,11 +423,22 @@ export async function chat(options) {
         maxTokens,
         ...rest,
       };
+      console.log("[llm] Zhipu call parameters:", {
+        model: zhipuArgs.model,
+        hasMessages: !!zhipuArgs.messages,
+        messageCount: zhipuArgs.messages?.length,
+      });
       if (topP !== undefined) zhipuArgs.topP = topP;
       if (stop !== undefined) zhipuArgs.stop = stop;
       zhipuArgs.responseFormat = finalResponseFormat;
 
+      console.log("[llm] Calling zhipuChat()...");
       const result = await zhipuChat(zhipuArgs);
+      console.log("[llm] zhipuChat() returned:", {
+        hasResult: !!result,
+        hasContent: !!result?.content,
+        hasUsage: !!result?.usage,
+      });
 
       response = {
         content: result.content,
@@ -376,11 +465,20 @@ export async function chat(options) {
         };
       }
     } else {
+      console.error("[llm] Unknown provider:", provider);
       throw new Error(`Provider ${provider} not yet implemented`);
     }
 
+    console.log("[llm] Processing response from provider:", provider);
+
     const duration = Date.now() - startTime;
     const cost = calculateCost(provider, model, usage);
+
+    console.log("[llm] Request completed:", {
+      duration: `${duration}ms`,
+      cost,
+      usage,
+    });
 
     // Emit success event with metrics
     llmEvents.emit("llm:request:complete", {
@@ -401,6 +499,13 @@ export async function chat(options) {
     };
   } catch (error) {
     const duration = Date.now() - startTime;
+
+    console.error("[llm] Error in chat():", {
+      error: error.message,
+      name: error.name,
+      stack: error.stack,
+      duration: `${duration}ms`,
+    });
 
     // Emit error event
     llmEvents.emit("llm:request:error", {

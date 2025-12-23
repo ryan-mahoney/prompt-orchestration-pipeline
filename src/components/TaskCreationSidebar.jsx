@@ -93,24 +93,50 @@ export default function TaskCreationSidebar({ isOpen, onClose, pipelineSlug }) {
   };
 
   const sendToAPI = async (allMessages) => {
+    console.log("[TaskCreationSidebar] Starting API call with:", {
+      messageCount: allMessages.length,
+      pipelineSlug,
+    });
+
     // Add empty assistant message to accumulate response
     setMessages([...allMessages, { role: "assistant", content: "" }]);
 
     try {
+      console.log("[TaskCreationSidebar] Fetching /api/ai/task-plan...");
       const response = await fetch("/api/ai/task-plan", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ messages: allMessages, pipelineSlug }),
       });
 
+      console.log("[TaskCreationSidebar] Response received:", {
+        status: response.status,
+        statusText: response.statusText,
+        ok: response.ok,
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("[TaskCreationSidebar] Non-OK response:", errorText);
+        throw new Error(`HTTP ${response.status}: ${errorText}`);
+      }
+
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
       let currentEvent = "";
+      let chunksReceived = 0;
 
+      console.log("[TaskCreationSidebar] Starting to read SSE stream...");
       while (true) {
         const { done, value } = await reader.read();
-        if (done) break;
+        if (done) {
+          console.log(
+            "[TaskCreationSidebar] Stream ended. Total chunks received:",
+            chunksReceived
+          );
+          break;
+        }
 
         buffer += decoder.decode(value, { stream: true });
         const lines = buffer.split("\n");
@@ -119,26 +145,50 @@ export default function TaskCreationSidebar({ isOpen, onClose, pipelineSlug }) {
         for (const line of lines) {
           if (line.startsWith("event: ")) {
             currentEvent = line.slice(7);
+            console.log("[TaskCreationSidebar] SSE event type:", currentEvent);
           } else if (line.startsWith("data: ")) {
-            const data = JSON.parse(line.slice(6));
-
-            if (currentEvent === "chunk" && data.content) {
-              setMessages((prev) => {
-                const updated = [...prev];
-                updated[updated.length - 1].content += data.content;
-                return updated;
+            try {
+              const data = JSON.parse(line.slice(6));
+              console.log("[TaskCreationSidebar] SSE data received:", {
+                eventType: currentEvent,
+                hasContent: !!data.content,
+                message: data.message,
               });
-            } else if (currentEvent === "error" && data.message) {
-              setError(data.message);
+
+              if (currentEvent === "chunk" && data.content) {
+                chunksReceived++;
+                setMessages((prev) => {
+                  const updated = [...prev];
+                  updated[updated.length - 1].content += data.content;
+                  return updated;
+                });
+              } else if (currentEvent === "error" && data.message) {
+                console.error(
+                  "[TaskCreationSidebar] SSE error event:",
+                  data.message
+                );
+                setError(data.message);
+              } else if (currentEvent === "done") {
+                console.log("[TaskCreationSidebar] SSE done event received");
+              }
+              // Reset current event after processing data
+              currentEvent = "";
+            } catch (parseError) {
+              console.error(
+                "[TaskCreationSidebar] Failed to parse SSE data:",
+                parseError,
+                "Raw line:",
+                line
+              );
             }
-            // Reset current event after processing data
-            currentEvent = "";
           }
         }
       }
     } catch (err) {
+      console.error("[TaskCreationSidebar] Error in sendToAPI:", err);
       setError(`Connection failed: ${err.message}`);
     } finally {
+      console.log("[TaskCreationSidebar] sendToAPI completed");
       setIsStreaming(false);
     }
   };
