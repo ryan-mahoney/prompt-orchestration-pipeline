@@ -19,6 +19,7 @@ import {
   handleTaskFileRequest,
 } from "./endpoints/file-endpoints.js";
 import { handlePipelinesHttpRequest } from "./endpoints/pipelines-endpoint.js";
+import { handleCreatePipeline } from "./endpoints/create-pipeline-endpoint.js";
 import { handlePipelineTypeDetailRequest } from "./endpoints/pipeline-type-detail-endpoint.js";
 import { sendJson } from "./utils/http-utils.js";
 import { PROVIDER_FUNCTIONS } from "../config/models.js";
@@ -36,6 +37,12 @@ const __dirname = path.dirname(__filename);
  */
 export function buildExpressApp({ dataDir, viteServer }) {
   const app = express();
+
+  // Parse JSON request bodies
+  app.use(express.json());
+
+  // Parse URL-encoded request bodies (for form submissions)
+  app.use(express.urlencoded({ extended: true }));
 
   // API guard middleware mounted on /api
   app.use("/api", (req, res, next) => {
@@ -109,6 +116,9 @@ export function buildExpressApp({ dataDir, viteServer }) {
   app.get("/api/pipelines", async (req, res) => {
     await handlePipelinesHttpRequest(req, res);
   });
+
+  // POST /api/pipelines
+  app.post("/api/pipelines", handleCreatePipeline);
 
   // GET /api/pipelines/:slug
   app.get("/api/pipelines/:slug", async (req, res) => {

@@ -176,9 +176,11 @@ export default function PipelineTypeDetail() {
             <PipelineDAGGrid items={pipeline.tasks} />
           </Box>
         ) : (
-          <Text size="2" color="gray">
-            No tasks defined for this pipeline
-          </Text>
+          <Box className="mb-4">
+            <Text size="2" color="gray">
+              No tasks defined for this pipeline
+            </Text>
+          </Box>
         )}
       </Box>
     </Layout>

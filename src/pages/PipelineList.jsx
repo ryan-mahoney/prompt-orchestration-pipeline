@@ -1,28 +1,27 @@
 import React, { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
-import { Box, Flex, Text, Heading } from "@radix-ui/themes";
-import {
-  Card,
-  CardHeader,
-  CardTitle,
-  CardContent,
-} from "../components/ui/card.jsx";
+import { useNavigate } from "react-router-dom";
+import { Box, Flex, Text, Heading, Table, Button } from "@radix-ui/themes";
+import { ChevronRight, Plus } from "lucide-react";
 import Layout from "../components/Layout.jsx";
 import PageSubheader from "../components/PageSubheader.jsx";
+import AddPipelineSidebar from "../components/AddPipelineSidebar.jsx";
 
 /**
- * PipelineList component displays available pipelines in a responsive grid
+ * PipelineList component displays available pipelines in a table layout
  *
  * Fetches pipeline data from /api/pipelines endpoint and handles:
  * - Loading state during fetch
  * - Error state for failed requests
  * - Empty state when no pipelines are available
- * - Responsive grid layout using Tailwind CSS
+ * - Table layout using Radix UI components
+ * - Add pipeline type functionality via sidebar
  */
 export default function PipelineList() {
   const [pipelines, setPipelines] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const navigate = useNavigate();
 
   useEffect(() => {
     const fetchPipelines = async () => {
@@ -56,6 +55,10 @@ export default function PipelineList() {
   }, []);
 
   const breadcrumbs = [{ label: "Home", href: "/" }, { label: "Pipelines" }];
+
+  const openPipeline = (slug) => {
+    navigate(`/pipelines/${slug}`);
+  };
 
   // Loading state
   if (loading) {
@@ -119,48 +122,92 @@ export default function PipelineList() {
     );
   }
 
-  // Main content with pipeline cards
+  // Main content with pipeline table
   return (
     <Layout>
-      <PageSubheader breadcrumbs={breadcrumbs} />
+      <PageSubheader breadcrumbs={breadcrumbs}>
+        <Button size="2" onClick={() => setSidebarOpen(true)}>
+          <Plus className="h-4 w-4 mr-2" />
+          Add a Pipeline Type
+        </Button>
+      </PageSubheader>
       <Box>
         <Box mb="8">
           <Heading size="6" mb="4">
             Pipeline Types
           </Heading>
 
-          {/* Responsive grid layout */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {pipelines.map((pipeline) => (
-              <Link
-                key={pipeline.slug}
-                to={`/pipelines/${pipeline.slug}`}
-                className="group block"
-              >
-                <Card className="h-full transition-all duration-200 hover:shadow-md hover:border-blue-200 cursor-pointer">
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-lg font-semibold group-hover:text-blue-600 transition-colors">
-                      {pipeline.name}
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="pt-0">
-                    <Text size="2" color="gray" className="line-clamp-3">
-                      {pipeline.description || "No description available"}
-                    </Text>
-                    <Text
-                      size="1"
-                      color="blue"
-                      className="mt-3 block group-hover:text-blue-700"
-                    >
-                      View pipeline →
-                    </Text>
-                  </CardContent>
-                </Card>
-              </Link>
-            ))}
-          </div>
+          <Table.Root radius="none">
+            <Table.Header>
+              <Table.Row>
+                <Table.ColumnHeaderCell>Pipeline Name</Table.ColumnHeaderCell>
+                <Table.ColumnHeaderCell>Description</Table.ColumnHeaderCell>
+                <Table.ColumnHeaderCell className="w-12"></Table.ColumnHeaderCell>
+              </Table.Row>
+            </Table.Header>
+
+            <Table.Body>
+              {pipelines.map((pipeline) => {
+                const pipelineName = pipeline.name;
+                const pipelineSlug = pipeline.slug;
+                const description = pipeline.description || "—";
+
+                return (
+                  <Table.Row
+                    key={pipelineSlug}
+                    className="group cursor-pointer hover:bg-slate-50/50 transition-colors"
+                    onClick={() => openPipeline(pipelineSlug)}
+                    onKeyDown={(e) => {
+                      if (e.key === " ") {
+                        e.preventDefault();
+                        openPipeline(pipelineSlug);
+                      } else if (e.key === "Enter") {
+                        openPipeline(pipelineSlug);
+                      }
+                    }}
+                    tabIndex={0}
+                    aria-label={`Open ${pipelineName} pipeline`}
+                  >
+                    <Table.Cell>
+                      <Flex direction="column" gap="1">
+                        <Text
+                          size="2"
+                          weight="medium"
+                          className="text-slate-900"
+                        >
+                          {pipelineName}
+                        </Text>
+                        <Text size="1" className="text-slate-500">
+                          {pipelineSlug}
+                        </Text>
+                      </Flex>
+                    </Table.Cell>
+
+                    <Table.Cell>
+                      <Text size="2" className="text-slate-700">
+                        {description}
+                      </Text>
+                    </Table.Cell>
+
+                    <Table.Cell>
+                      <Button
+                        variant="ghost"
+                        size="1"
+                        className="opacity-0 group-hover:opacity-100 transition-opacity text-slate-500 hover:text-slate-700"
+                        aria-label={`View ${pipelineName} pipeline`}
+                      >
+                        <ChevronRight className="h-4 w-4" />
+                      </Button>
+                    </Table.Cell>
+                  </Table.Row>
+                );
+              })}
+            </Table.Body>
+          </Table.Root>
         </Box>
       </Box>
+
+      <AddPipelineSidebar open={sidebarOpen} onOpenChange={setSidebarOpen} />
     </Layout>
   );
 }
