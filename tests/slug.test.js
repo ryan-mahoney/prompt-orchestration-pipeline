@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect } from "vitest";
 import { generateSlug, ensureUniqueSlug } from "../src/ui/utils/slug.js";
 
 describe("generateSlug", () => {
