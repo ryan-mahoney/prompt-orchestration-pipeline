@@ -3,7 +3,7 @@ import { streamSSE } from "../lib/sse.js";
 import { createHighLevelLLM } from "../../llm/index.js";
 
 export async function handleTaskPlan(req, res) {
-  const { messages } = req.body;
+  const { messages, pipelineSlug } = req.body;
 
   // Validate input
   if (!Array.isArray(messages)) {
