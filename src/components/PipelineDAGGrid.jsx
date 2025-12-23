@@ -144,7 +144,7 @@ function PipelineDAGGrid({ items, cols = 3 }) {
 
       const isReversedRow = r % 2 === 1; // odd rows RTL
       if (isReversedRow) {
-        // Reverse order for even rows (snake pattern)
+        // Reverse order for odd rows (snake pattern)
         const reversed = slice.reverse();
         const pad = effectiveCols - rowLen;
         order.push(...Array(pad).fill(-1), ...reversed);
