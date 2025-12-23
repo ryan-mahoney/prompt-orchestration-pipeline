@@ -38,6 +38,12 @@ const __dirname = path.dirname(__filename);
 export function buildExpressApp({ dataDir, viteServer }) {
   const app = express();
 
+  // Parse JSON request bodies
+  app.use(express.json());
+
+  // Parse URL-encoded request bodies (for form submissions)
+  app.use(express.urlencoded({ extended: true }));
+
   // API guard middleware mounted on /api
   app.use("/api", (req, res, next) => {
     // Set CORS headers
