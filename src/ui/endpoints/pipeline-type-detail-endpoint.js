@@ -105,9 +105,9 @@ export async function handlePipelineTypeDetail(slug) {
     }
 
     // Transform tasks to API format
-    const tasks = pipelineData.tasks.map((taskId) => {
+    const tasks = pipelineData.tasks.map((taskId, index) => {
       if (typeof taskId !== "string" || !taskId.trim()) {
-        throw new Error(`Invalid task ID: ${taskId}`);
+        throw new Error(`Invalid task ID at index ${index}: ${taskId}`);
       }
 
       return {
