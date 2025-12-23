@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { Button } from "./ui/button.jsx";
 
 function MessageContent({ content }) {
   // Split content by code blocks (```...```)
@@ -199,7 +200,9 @@ export default function TaskCreationSidebar({ isOpen, onClose, pipelineSlug }) {
           {error && (
             <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg">
               <p className="text-red-800 font-medium mb-2">{error}</p>
-              <button
+              <Button
+                variant="destructive"
+                size="md"
                 onClick={() => {
                   setError(null);
                   // Re-send last user message
@@ -219,10 +222,9 @@ export default function TaskCreationSidebar({ isOpen, onClose, pipelineSlug }) {
                     ]);
                   }
                 }}
-                className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition-colors"
               >
                 Retry
-              </button>
+              </Button>
             </div>
           )}
         </div>
@@ -238,13 +240,14 @@ export default function TaskCreationSidebar({ isOpen, onClose, pipelineSlug }) {
               placeholder="Describe the task you want to create..."
               className="flex-1 border rounded px-3 py-2 disabled:bg-gray-100 disabled:cursor-not-allowed"
             />
-            <button
+            <Button
+              variant="solid"
+              size="md"
               type="submit"
               disabled={isStreaming || !input.trim()}
-              className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-blue-300 disabled:cursor-not-allowed transition-colors"
             >
               Send
-            </button>
+            </Button>
           </form>
         </div>
       </div>

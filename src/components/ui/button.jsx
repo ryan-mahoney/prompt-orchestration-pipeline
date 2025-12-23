@@ -20,12 +20,21 @@ export function Button({
   className = "",
   disabled,
   children,
-  type = "button",
   ...props
 }) {
-  // Base classes for all buttons
-  const baseClasses =
-    "inline-flex items-center justify-center font-medium rounded-md transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed";
+  // Map custom variant names to Radix UI variants
+  const radixVariant =
+    variant === "solid"
+      ? "solid"
+      : variant === "soft"
+        ? "soft"
+        : variant === "outline"
+          ? "outline"
+          : variant === "ghost"
+            ? "ghost"
+            : variant === "destructive"
+              ? "solid"
+              : "solid";
 
   // Variant styles using Steel Terminal theme colors
   const variantClasses = {
@@ -49,11 +58,11 @@ export function Button({
     lg: "px-6 py-3 text-lg",
   };
 
+  // Combine base classes with any additional className
+  const combinedClassName = `transition-all duration-200 ${className}`;
+
   // Disable button when loading or explicitly disabled
   const isDisabled = disabled || loading;
-
-  // Combine all classes
-  const combinedClassName = `${baseClasses} ${variantClasses[variant]} ${sizeClasses[size]} ${className}`;
 
   return (
     <button
@@ -70,6 +79,6 @@ export function Button({
       ) : (
         children
       )}
-    </button>
+    </RadixButton>
   );
 }

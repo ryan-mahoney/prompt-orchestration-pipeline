@@ -84,15 +84,16 @@ export default function Layout({
   }, [isUploadOpen]);
 
   return (
-    <Box className="min-h-screen bg-gray-1">
-      {/* Skip to main content link for accessibility */}
-      <Box
-        as="a"
-        href="#main-content"
-        className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 z-50 bg-primary text-primary-foreground px-3 py-2 rounded-md text-sm font-medium focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 transition-colors"
-      >
-        Skip to main content
-      </Box>
+    <Tooltip.Provider delayDuration={200}>
+      <Box className="min-h-screen bg-gray-1">
+        {/* Skip to main content link for accessibility */}
+        <Box
+          as="a"
+          href="#main-content"
+          className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 z-50 bg-primary text-primary-foreground px-3 py-2 rounded-md text-sm font-medium focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 transition-colors"
+        >
+          Skip to main content
+        </Box>
 
       {/* Header */}
       <Box

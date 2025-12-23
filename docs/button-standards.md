@@ -5,73 +5,10 @@ This document defines the standardized usage of buttons throughout the Prompt Or
 ## Design Principles
 
 1. **Consistency**: All buttons of the same type look and behave identically
-2. **Clarity**: Button copy clearly communicates action
+2. **Clarity**: Button copy clearly communicates the action
 3. **Accessibility**: Buttons meet WCAG AA standards and support keyboard navigation
 4. **Theme Compliance**: Buttons use Steel Terminal semantic colors, not hardcoded values
 5. **Visual Hierarchy**: Button variants establish clear action priority
-6. **Component Uniformity**: Always use the custom Button component from `src/components/ui/button.jsx`, not Radix UI's Button directly
-
-## Visual Hierarchy
-
-Button hierarchy establishes visual priority and guides users through actions.
-
-### Primary Actions (CTAs)
-
-Use for the most important action in a view. These are the actions you want users to take most often.
-
-**Variant:** `solid`  
-**Size:** `md` (standard)  
-**Examples:**
-
-- "Add Task" (PipelineTypeDetail page header)
-- "Add a Pipeline Type" (PipelineList page header)
-- "Upload Seed" (Layout header)
-- "Send" (TaskCreationSidebar)
-- "Create" (Dialog confirmations)
-
-**Styling:** Indigo background (#4f46e5), white text, clear active state
-
-### Secondary Actions
-
-Use for supporting actions that are important but less critical than primary actions.
-
-**Variant:** `soft` or `outline`  
-**Size:** `md` or `sm`  
-**Examples:**
-
-- "Cancel" (Dialog actions)
-- "Close" (Modal dismissals)
-- "Rescan" (Refresh actions)
-
-**Styling:** Light slate background (10% opacity) or bordered, lower visual weight
-
-### Destructive Actions
-
-Use for actions that have negative consequences or are irreversible.
-
-**Variant:** `destructive`  
-**Size:** `md` or `sm`  
-**Examples:**
-
-- "Stop" (Running job actions)
-- "Delete" (Resource removal)
-- "Remove" (Item deletion)
-
-**Styling:** Red background (#dc2626), white text, clear danger indication
-
-### Minimal Actions
-
-Use for subtle, inline actions or icon-only controls.
-
-**Variant:** `ghost`  
-**Size:** `sm`  
-**Examples:**
-
-- Chevron navigation (table rows)
-- Copy to clipboard
-- Edit icons
-
-**Styling:** Transparent background, visible on hover
 
 ## Button Component
 
@@ -352,41 +289,14 @@ All buttons must:
 
 All button variants use Steel Terminal semantic colors defined in CSS variables:
 
-- `--primary` - Primary actions (#4f46e5 - indigo-600)
-- `--primary-foreground` - Text on primary buttons (white)
-- `--primary-hover` - Hover state for primary (#4338ca - indigo-700)
-- `--destructive` - Destructive actions (#dc2626 - red-600)
-- `--destructive-foreground` - Text on destructive buttons (white)
-- `--secondary` - Secondary/outline buttons (#f8fafc - slate-50)
-- `--secondary-foreground` - Text on secondary buttons (#312e81 - indigo-950)
-- `--muted-foreground` - Muted text (#6366f1 - indigo-500)
-- `--ring` - Focus ring color (#4f46e5 - indigo-600)
+- `--primary` - Primary actions (steel blue-gray)
+- `--primary-foreground` - Text on primary buttons
+- `--destructive` - Destructive actions (crimson)
+- `--destructive-foreground` - Text on destructive buttons
+- `--secondary` - Secondary/outline buttons
+- `--secondary-foreground` - Text on secondary buttons
 
-Never use hardcoded colors like `bg-blue-600` or `bg-red-600`. The Button component handles theme colors automatically using CSS variables with HSL syntax.
-
-### Color Rationale
-
-The primary color is `indigo-600` (#4f46e5), a vibrant indigo that:
-
-- Provides clear visual distinction as an active state (vs. grayish inactive appearance)
-- Offers excellent contrast with light backgrounds
-- Maintains professional appearance while being clearly interactive
-- Aligns with modern design standards while honoring Steel Terminal's technical aesthetic
-- Maintains accessibility (WCAG AA compliant with 4.8:1 contrast ratio)
-
-### Customizing Colors
-
-To adjust button colors, modify the CSS variables in `src/ui/client/index.css`:
-
-```css
-:root {
-  /* Change primary to a different shade */
-  --primary: 215deg 16% 38%; /* Adjust lightness for lighter/darker */
-  --primary-hover: 215deg 16% 28%; /* Match hue, adjust lightness */
-}
-```
-
-See also: `docs/theme.md` for complete theme documentation.
+Never use hardcoded colors like `bg-blue-600` or `bg-red-600`. The Button component handles theme colors automatically.
 
 ## Migration Checklist
 
