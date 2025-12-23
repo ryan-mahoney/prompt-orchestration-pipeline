@@ -45,6 +45,26 @@ export default function TaskCreationSidebar({ isOpen, onClose, pipelineSlug }) {
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState(null);
 
+  const handleSend = (e) => {
+    e.preventDefault();
+
+    if (!input.trim()) return;
+
+    const newMessage = { role: "user", content: input.trim() };
+    setMessages([...messages, newMessage]);
+    setInput("");
+    setIsStreaming(true);
+    setError(null);
+
+    // sendToAPI will be implemented in step 7
+    sendToAPI([...messages, newMessage]);
+  };
+
+  // Placeholder for sendToAPI - will be implemented in step 7
+  const sendToAPI = async (allMessages) => {
+    // Implementation will be added in step 7
+  };
+
   if (!isOpen) {
     return null;
   }
@@ -100,12 +120,20 @@ export default function TaskCreationSidebar({ isOpen, onClose, pipelineSlug }) {
                 onClick={() => {
                   setError(null);
                   // Re-send last user message
-                  const lastUserMessage = [...messages]
+                  const lastUserMessageIndex = [...messages]
                     .reverse()
-                    .find((m) => m.role === "user");
-                  if (lastUserMessage) {
-                    // This will be connected to sendToAPI in step 7
-                    setMessages([...messages]);
+                    .findIndex((m) => m.role === "user");
+                  if (lastUserMessageIndex !== -1) {
+                    const lastUserMessage =
+                      messages[messages.length - 1 - lastUserMessageIndex];
+                    const messagesBeforeLastUserMessage = messages.slice(
+                      0,
+                      messages.length - 1 - lastUserMessageIndex
+                    );
+                    sendToAPI([
+                      ...messagesBeforeLastUserMessage,
+                      lastUserMessage,
+                    ]);
                   }
                 }}
                 className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition-colors"
@@ -118,7 +146,23 @@ export default function TaskCreationSidebar({ isOpen, onClose, pipelineSlug }) {
 
         {/* Input area */}
         <div className="border-t p-4">
-          {/* Input field will be implemented in step 6 */}
+          <form onSubmit={handleSend} className="flex gap-2">
+            <input
+              type="text"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              disabled={isStreaming}
+              placeholder="Describe the task you want to create..."
+              className="flex-1 border rounded px-3 py-2 disabled:bg-gray-100 disabled:cursor-not-allowed"
+            />
+            <button
+              type="submit"
+              disabled={isStreaming || !input.trim()}
+              className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-blue-300 disabled:cursor-not-allowed transition-colors"
+            >
+              Send
+            </button>
+          </form>
         </div>
       </div>
     </>
