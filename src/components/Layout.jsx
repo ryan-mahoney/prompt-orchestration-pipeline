@@ -84,16 +84,15 @@ export default function Layout({
   }, [isUploadOpen]);
 
   return (
-    <Tooltip.Provider delayDuration={200}>
-      <Box className="min-h-screen bg-gray-1">
-        {/* Skip to main content link for accessibility */}
-        <Box
-          as="a"
-          href="#main-content"
-          className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 z-50 bg-primary text-primary-foreground px-3 py-2 rounded-md text-sm font-medium focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 transition-colors"
-        >
-          Skip to main content
-        </Box>
+    <Box className="min-h-screen bg-gray-1">
+      {/* Skip to main content link for accessibility */}
+      <Box
+        as="a"
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 z-50 bg-primary text-primary-foreground px-3 py-2 rounded-md text-sm font-medium focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 transition-colors"
+      >
+        Skip to main content
+      </Box>
 
       {/* Header */}
       <Box
@@ -223,87 +222,7 @@ export default function Layout({
               </Box>
             )}
 
-              {/* App title - clickable to navigate to dashboard */}
-              <Box
-                asChild
-                className="shrink-0 cursor-pointer hover:bg-gray-3 rounded p-1 -m-1 transition-colors"
-                onClick={() => navigate("/")}
-              >
-                <Heading
-                  size="6"
-                  weight="medium"
-                  className="text-gray-12 truncate"
-                >
-                  <>
-                    Prompt
-                    <br />
-                    Pipeline
-                  </>
-                </Heading>
-              </Box>
-            </Flex>
-
-            {/* Center: Navigation */}
-            <nav
-              role="navigation"
-              aria-label="Main navigation"
-              className="hidden md:flex"
-            >
-              <Flex align="center" gap="6">
-                <RadixLink
-                  href="/pipelines"
-                  className={`text-sm font-medium transition-colors hover:text-blue-600 ${
-                    isActivePath("/pipelines")
-                      ? "text-blue-600"
-                      : "text-gray-11 hover:text-gray-12"
-                  }`}
-                  aria-current={isActivePath("/pipelines") ? "page" : undefined}
-                >
-                  <Flex align="center" gap="2">
-                    <List className="h-4 w-4" />
-                    Pipelines
-                  </Flex>
-                </RadixLink>
-                <RadixLink
-                  href="/code"
-                  className={`text-sm font-medium transition-colors hover:text-blue-600 ${
-                    isActivePath("/code")
-                      ? "text-blue-600"
-                      : "text-gray-11 hover:text-gray-12"
-                  }`}
-                  aria-current={isActivePath("/code") ? "page" : undefined}
-                >
-                  <Flex align="center" gap="2">
-                    <Code2 className="h-4 w-4" />
-                    Help
-                  </Flex>
-                </RadixLink>
-              </Flex>
-            </nav>
-
-            {/* Right side: Actions */}
-            <Flex align="center" gap="3" className="shrink-0">
-              {actions}
-              <Tooltip.Root delayDuration={200}>
-                <Tooltip.Trigger asChild>
-                  <Button
-                    size="md"
-                    variant="solid"
-                    onClick={toggleUploadPanel}
-                    aria-controls="layout-upload-panel"
-                    aria-expanded={isUploadOpen}
-                  >
-                    <Upload className="h-4 w-4" />
-                    <Text size="2" className="ml-2">
-                      Upload Seed
-                    </Text>
-                  </Button>
-                </Tooltip.Trigger>
-                <Tooltip.Content side="bottom" sideOffset={5}>
-                  <Text size="2">Upload seed file</Text>
-                </Tooltip.Content>
-              </Tooltip.Root>
-            </Flex>
+            <UploadSeed onUploadSuccess={handleSeedUploadSuccess} />
           </Flex>
         </Box>
       )}
