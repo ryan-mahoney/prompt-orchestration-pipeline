@@ -59,7 +59,7 @@ export const Sidebar = forwardRef(
             </Dialog.Title>
 
             {description && (
-              <Dialog.Description className="px-6 pb-4 text-sm text-muted-foreground">
+              <Dialog.Description className="px-6 pb-4 pt-3 text-sm text-muted-foreground">
                 {description}
               </Dialog.Description>
             )}
