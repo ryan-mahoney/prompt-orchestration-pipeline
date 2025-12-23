@@ -162,7 +162,7 @@ export default function TaskCreationSidebar({ isOpen, onClose, pipelineSlug }) {
       />
 
       {/* Sidebar */}
-      <div className="fixed inset-y-0 right-0 w-[800px] max-w-full bg-white shadow-xl z-40 flex flex-col">
+      <div className="fixed inset-y-0 right-0 w-full lg:w-[800px] bg-white shadow-xl z-40 flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b">
           <h2 className="text-lg font-medium">Task Assistant</h2>
