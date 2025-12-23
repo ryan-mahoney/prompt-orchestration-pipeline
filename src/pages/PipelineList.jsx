@@ -157,10 +157,14 @@ export default function PipelineList() {
                     key={pipelineSlug}
                     className="group cursor-pointer hover:bg-slate-50/50 transition-colors"
                     onClick={() => openPipeline(pipelineSlug)}
-                    onKeyDown={(e) =>
-                      (e.key === "Enter" || e.key === " ") &&
-                      openPipeline(pipelineSlug)
-                    }
+                    onKeyDown={(e) => {
+                      if (e.key === " ") {
+                        e.preventDefault();
+                        openPipeline(pipelineSlug);
+                      } else if (e.key === "Enter") {
+                        openPipeline(pipelineSlug);
+                      }
+                    }}
                     tabIndex={0}
                     aria-label={`Open ${pipelineName} pipeline`}
                   >
