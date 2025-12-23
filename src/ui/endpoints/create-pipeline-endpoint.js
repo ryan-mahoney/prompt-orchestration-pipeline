@@ -124,6 +124,12 @@ export async function handleCreatePipeline(req, res) {
 
     // Generate unique slug
     const baseSlug = generateSlug(name.trim());
+    if (!baseSlug) {
+      res
+        .status(400)
+        .json({ error: "Invalid pipeline name; unable to generate slug" });
+      return;
+    }
     const existingSlugs = new Set(Object.keys(registryData.pipelines));
     const slug = ensureUniqueSlug(baseSlug, existingSlugs);
 
