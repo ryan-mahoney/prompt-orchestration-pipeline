@@ -5,10 +5,73 @@ This document defines the standardized usage of buttons throughout the Prompt Or
 ## Design Principles
 
 1. **Consistency**: All buttons of the same type look and behave identically
-2. **Clarity**: Button copy clearly communicates the action
+2. **Clarity**: Button copy clearly communicates action
 3. **Accessibility**: Buttons meet WCAG AA standards and support keyboard navigation
 4. **Theme Compliance**: Buttons use Steel Terminal semantic colors, not hardcoded values
 5. **Visual Hierarchy**: Button variants establish clear action priority
+6. **Component Uniformity**: Always use the custom Button component from `src/components/ui/button.jsx`, not Radix UI's Button directly
+
+## Visual Hierarchy
+
+Button hierarchy establishes visual priority and guides users through actions.
+
+### Primary Actions (CTAs)
+
+Use for the most important action in a view. These are the actions you want users to take most often.
+
+**Variant:** `solid`  
+**Size:** `md` (standard)  
+**Examples:**
+
+- "Add Task" (PipelineTypeDetail page header)
+- "Add a Pipeline Type" (PipelineList page header)
+- "Upload Seed" (Layout header)
+- "Send" (TaskCreationSidebar)
+- "Create" (Dialog confirmations)
+
+**Styling:** Blue background, white text, prominent hover state
+
+### Secondary Actions
+
+Use for supporting actions that are important but less critical than primary actions.
+
+**Variant:** `soft` or `outline`  
+**Size:** `md` or `sm`  
+**Examples:**
+
+- "Cancel" (Dialog actions)
+- "Close" (Modal dismissals)
+- "Rescan" (Refresh actions)
+
+**Styling:** Light background or bordered, lower visual weight than solid
+
+### Destructive Actions
+
+Use for actions that have negative consequences or are irreversible.
+
+**Variant:** `destructive`  
+**Size:** `md` or `sm`  
+**Examples:**
+
+- "Stop" (Running job actions)
+- "Delete" (Resource removal)
+- "Remove" (Item deletion)
+
+**Styling:** Red background, white text, clear danger indication
+
+### Minimal Actions
+
+Use for subtle, inline actions or icon-only controls.
+
+**Variant:** `ghost`  
+**Size:** `sm`  
+**Examples:**
+
+- Chevron navigation (table rows)
+- Copy to clipboard
+- Edit icons
+
+**Styling:** Transparent background, visible on hover
 
 ## Button Component
 

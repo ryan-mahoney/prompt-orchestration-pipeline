@@ -30,6 +30,7 @@ export function Button({
   // Variant styles using Steel Terminal theme colors
   const variantClasses = {
     solid: "bg-blue-600 text-white hover:bg-blue-700 focus:ring-blue-500",
+    default: "bg-blue-600 text-white hover:bg-blue-700 focus:ring-blue-500",
     soft: "bg-blue-50 text-blue-900 hover:bg-blue-100 focus:ring-blue-500 border border-blue-200",
     outline:
       "border border-gray-300 text-gray-700 bg-transparent hover:bg-gray-50 focus:ring-gray-500",
