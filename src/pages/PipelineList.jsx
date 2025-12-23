@@ -4,7 +4,7 @@ import { Box, Flex, Text, Heading, Table, Button } from "@radix-ui/themes";
 import { ChevronRight, Plus } from "lucide-react";
 import Layout from "../components/Layout.jsx";
 import PageSubheader from "../components/PageSubheader.jsx";
-import { AddPipelineSidebar } from "../components/AddPipelineSidebar.jsx";
+import AddPipelineSidebar from "../components/AddPipelineSidebar.jsx";
 
 /**
  * PipelineList component displays available pipelines in a table layout
@@ -22,19 +22,6 @@ export default function PipelineList() {
   const [error, setError] = useState(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const navigate = useNavigate();
-
-  const handleCreatePipeline = useCallback(() => {
-    setSidebarOpen(true);
-  }, []);
-
-  const handleSidebarClose = useCallback(() => {
-    setSidebarOpen(false);
-  }, []);
-
-  const handlePipelineCreated = useCallback((data) => {
-    // Optionally refresh the pipeline list
-    console.log("Pipeline created:", data);
-  }, []);
 
   useEffect(() => {
     const fetchPipelines = async () => {
@@ -139,7 +126,7 @@ export default function PipelineList() {
   return (
     <Layout>
       <PageSubheader breadcrumbs={breadcrumbs}>
-        <Button size="2" onClick={handleCreatePipeline}>
+        <Button size="2" onClick={() => setSidebarOpen(true)}>
           <Plus className="h-4 w-4 mr-2" />
           Add a Pipeline Type
         </Button>
@@ -216,12 +203,7 @@ export default function PipelineList() {
         </Box>
       </Box>
 
-      {/* Add Pipeline Sidebar */}
-      <AddPipelineSidebar
-        open={sidebarOpen}
-        onClose={handleSidebarClose}
-        onSuccess={handlePipelineCreated}
-      />
+      <AddPipelineSidebar open={sidebarOpen} onOpenChange={setSidebarOpen} />
     </Layout>
   );
 }
