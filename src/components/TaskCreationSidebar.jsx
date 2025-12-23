@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 function MessageContent({ content }) {
   // Split content by code blocks (```...```)
@@ -44,6 +44,36 @@ export default function TaskCreationSidebar({ isOpen, onClose, pipelineSlug }) {
   const [input, setInput] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState(null);
+
+  // Keyboard handling for Escape key
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKey = (e) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [isOpen, onClose]);
+
+  // Beforeunload warning when messages exist
+  useEffect(() => {
+    if (messages.length === 0) return;
+    const handleUnload = (e) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handleUnload);
+    return () => window.removeEventListener("beforeunload", handleUnload);
+  }, [messages.length]);
+
+  // Close handler with confirmation
+  const handleClose = () => {
+    if (messages.length > 0 && !confirm("Close and lose conversation?")) return;
+    setMessages([]);
+    setInput("");
+    setError(null);
+    onClose();
+  };
 
   const handleSend = (e) => {
     e.preventDefault();
@@ -120,7 +150,7 @@ export default function TaskCreationSidebar({ isOpen, onClose, pipelineSlug }) {
       {/* Backdrop */}
       <div
         className="fixed inset-0 bg-black/20 z-30"
-        onClick={onClose}
+        onClick={handleClose}
         role="presentation"
         aria-hidden="true"
       />
@@ -131,7 +161,7 @@ export default function TaskCreationSidebar({ isOpen, onClose, pipelineSlug }) {
         <div className="flex items-center justify-between p-4 border-b">
           <h2 className="text-lg font-medium">Task Assistant</h2>
           <button
-            onClick={onClose}
+            onClick={handleClose}
             className="text-gray-500 hover:text-gray-700 text-xl"
             aria-label="Close"
           >
