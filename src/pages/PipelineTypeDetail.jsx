@@ -5,12 +5,14 @@ import Layout from "../components/Layout.jsx";
 import PageSubheader from "../components/PageSubheader.jsx";
 
 import PipelineDAGGrid from "../components/PipelineDAGGrid.jsx";
+import TaskCreationSidebar from "../components/TaskCreationSidebar.jsx";
 
 export default function PipelineTypeDetail() {
   const { slug } = useParams();
   const [pipeline, setPipeline] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
     const fetchPipeline = async () => {
@@ -146,9 +148,17 @@ export default function PipelineTypeDetail() {
   return (
     <Layout pageTitle={pageTitle} breadcrumbs={breadcrumbs}>
       <PageSubheader breadcrumbs={breadcrumbs} maxWidth="max-w-7xl">
-        <Text size="2" color="gray">
-          Slug: {slug}
-        </Text>
+        <Flex gap="3" align="center">
+          <Text size="2" color="gray">
+            Slug: {slug}
+          </Text>
+          <button
+            onClick={() => setSidebarOpen(true)}
+            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+          >
+            Add Task
+          </button>
+        </Flex>
       </PageSubheader>
 
       {/* Pipeline description */}
@@ -183,6 +193,12 @@ export default function PipelineTypeDetail() {
           </Box>
         )}
       </Box>
+
+      <TaskCreationSidebar
+        isOpen={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
+        pipelineSlug={slug}
+      />
     </Layout>
   );
 }
