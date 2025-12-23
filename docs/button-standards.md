@@ -29,7 +29,7 @@ Use for the most important action in a view. These are the actions you want user
 - "Send" (TaskCreationSidebar)
 - "Create" (Dialog confirmations)
 
-**Styling:** Blue background, white text, prominent hover state
+**Styling:** Slate blue-gray background (#475569), white text, professional appearance
 
 ### Secondary Actions
 
@@ -43,7 +43,7 @@ Use for supporting actions that are important but less critical than primary act
 - "Close" (Modal dismissals)
 - "Rescan" (Refresh actions)
 
-**Styling:** Light background or bordered, lower visual weight than solid
+**Styling:** Light slate background (10% opacity) or bordered, lower visual weight
 
 ### Destructive Actions
 
@@ -57,7 +57,7 @@ Use for actions that have negative consequences or are irreversible.
 - "Delete" (Resource removal)
 - "Remove" (Item deletion)
 
-**Styling:** Red background, white text, clear danger indication
+**Styling:** Red background (#dc2626), white text, clear danger indication
 
 ### Minimal Actions
 
@@ -352,14 +352,41 @@ All buttons must:
 
 All button variants use Steel Terminal semantic colors defined in CSS variables:
 
-- `--primary` - Primary actions (steel blue-gray)
-- `--primary-foreground` - Text on primary buttons
-- `--destructive` - Destructive actions (crimson)
-- `--destructive-foreground` - Text on destructive buttons
-- `--secondary` - Secondary/outline buttons
-- `--secondary-foreground` - Text on secondary buttons
+- `--primary` - Primary actions (#475569 - slate-600, muted blue-gray)
+- `--primary-foreground` - Text on primary buttons (white)
+- `--primary-hover` - Hover state for primary (#334155 - slate-700)
+- `--destructive` - Destructive actions (#dc2626 - red-600)
+- `--destructive-foreground` - Text on destructive buttons (white)
+- `--secondary` - Secondary/outline buttons (#f8fafc - slate-50)
+- `--secondary-foreground` - Text on secondary buttons (#475569)
+- `--muted-foreground` - Muted text (#64748b - slate-500)
+- `--ring` - Focus ring color (#475569)
 
-Never use hardcoded colors like `bg-blue-600` or `bg-red-600`. The Button component handles theme colors automatically.
+Never use hardcoded colors like `bg-blue-600` or `bg-red-600`. The Button component handles theme colors automatically using CSS variables with HSL syntax.
+
+### Color Rationale
+
+The primary color is `slate-600` (#475569), a muted blue-gray that:
+
+- Provides professional, understated appearance
+- Offers excellent contrast with light backgrounds
+- Doesn't overwhelm the page like brighter blues
+- Aligns with Steel Terminal's "terminal" aesthetic
+- Maintains accessibility (WCAG AA compliant)
+
+### Customizing Colors
+
+To adjust button colors, modify the CSS variables in `src/ui/client/index.css`:
+
+```css
+:root {
+  /* Change primary to a different shade */
+  --primary: 215deg 16% 38%; /* Adjust lightness for lighter/darker */
+  --primary-hover: 215deg 16% 28%; /* Match hue, adjust lightness */
+}
+```
+
+See also: `docs/theme.md` for complete theme documentation.
 
 ## Migration Checklist
 
