@@ -1,77 +1,90 @@
 /**
  * Canonical model configuration for prompt orchestration pipeline.
  * This module serves as single source of truth for all model metadata.
+ *
+ * Last updated: December 2025
  */
 
 // Model alias constants grouped by provider
 export const ModelAlias = Object.freeze({
-  // DeepSeek
+  // DeepSeek (V3.2-Exp unified pricing as of Sept 2025)
   DEEPSEEK_CHAT: "deepseek:chat",
   DEEPSEEK_REASONER: "deepseek:reasoner",
 
-  // OpenAI
-  OPENAI_GPT_5: "openai:gpt-5",
-  OPENAI_GPT_5_CORE: "openai:gpt-5-core",
-  OPENAI_GPT_5_CHAT: "openai:gpt-5-chat",
-  OPENAI_GPT_5_PRO: "openai:gpt-5-pro",
+  // OpenAI (GPT-5.2 flagship as of Dec 2025)
+  OPENAI_GPT_5_2: "openai:gpt-5.2", // NEW: Current flagship
+  OPENAI_GPT_5_2_PRO: "openai:gpt-5.2-pro", // NEW: High-compute tier
+  OPENAI_GPT_5_1: "openai:gpt-5.1", // NEW: Previous flagship (being sunset)
+  OPENAI_GPT_5: "openai:gpt-5", // Stable, still available
   OPENAI_GPT_5_MINI: "openai:gpt-5-mini",
   OPENAI_GPT_5_NANO: "openai:gpt-5-nano",
 
   // Legacy aliases for backward compatibility (tests)
+  OPENAI_GPT_4_1: "openai:gpt-4.1", // Updated: GPT-4.1 replaced GPT-4 Turbo
   OPENAI_GPT_4: "openai:gpt-4",
-  OPENAI_GPT_4_TURBO: "openai:gpt-4-turbo",
 
-  // Google Gemini
+  // Google Gemini (Gemini 3 series released Dec 2025)
+  GEMINI_3_PRO: "gemini:pro-3", // NEW: Latest flagship
+  GEMINI_3_FLASH: "gemini:flash-3", // NEW: Released Dec 17, 2025
   GEMINI_2_5_PRO: "gemini:pro-2.5",
   GEMINI_2_5_FLASH: "gemini:flash-2.5",
   GEMINI_2_5_FLASH_LITE: "gemini:flash-2.5-lite",
-  GEMINI_2_5_FLASH_IMAGE: "gemini:flash-2.5-image",
 
-  // Z.ai (formerly Zhipu) - standardized to "zhipu" provider
+  // Z.ai (formerly Zhipu) - GLM-4.6V released Dec 2025
+  ZAI_GLM_4_6V: "zhipu:glm-4.6v", // NEW: Vision-language model
   ZAI_GLM_4_6: "zhipu:glm-4.6",
   ZAI_GLM_4_5: "zhipu:glm-4.5",
   ZAI_GLM_4_5_AIR: "zhipu:glm-4.5-air",
 
-  // Anthropic
+  // Anthropic (Opus 4.5 released Nov 2025)
+  ANTHROPIC_OPUS_4_5: "anthropic:opus-4-5", // NEW: Current flagship
   ANTHROPIC_SONNET_4_5: "anthropic:sonnet-4-5",
   ANTHROPIC_HAIKU_4_5: "anthropic:haiku-4-5",
-  ANTHROPIC_OPUS_4_1: "anthropic:opus-4-1",
+  ANTHROPIC_OPUS_4_1: "anthropic:opus-4-1", // Legacy, still available
 });
 
 // Consolidated model configuration with pricing metadata
 export const MODEL_CONFIG = Object.freeze({
-  // DeepSeek (2025)
+  // ─── DeepSeek (2025) ───
+  // V3.2-Exp unified pricing as of Sept 29, 2025 - 50% price reduction
   [ModelAlias.DEEPSEEK_CHAT]: {
     provider: "deepseek",
-    model: "deepseek-chat", // V3.2 Exp (non-thinking) under the hood
-    tokenCostInPerMillion: 0.27,
-    tokenCostOutPerMillion: 1.1,
+    model: "deepseek-chat", // V3.2-Exp (non-thinking mode)
+    tokenCostInPerMillion: 0.28, // Updated: cache miss price
+    tokenCostOutPerMillion: 0.42, // Updated: unified output price
   },
   [ModelAlias.DEEPSEEK_REASONER]: {
     provider: "deepseek",
-    model: "deepseek-reasoner", // R1 family
-    tokenCostInPerMillion: 0.55,
-    tokenCostOutPerMillion: 2.19,
+    model: "deepseek-reasoner", // V3.2-Exp (thinking mode)
+    tokenCostInPerMillion: 0.28, // Updated: same as chat now
+    tokenCostOutPerMillion: 0.42, // Updated: unified pricing
   },
 
-  // — OpenAI (2025) —
+  // ─── OpenAI (2025) ───
+  // GPT-5.2 released Dec 2025 as new flagship
+  [ModelAlias.OPENAI_GPT_5_2]: {
+    provider: "openai",
+    model: "gpt-5.2", // Current flagship for coding/agentic tasks
+    tokenCostInPerMillion: 1.75,
+    tokenCostOutPerMillion: 14.0,
+  },
+  [ModelAlias.OPENAI_GPT_5_2_PRO]: {
+    provider: "openai",
+    model: "gpt-5.2-pro", // Maximum intelligence tier
+    tokenCostInPerMillion: 17.5, // Estimated based on prior Pro pricing
+    tokenCostOutPerMillion: 140.0,
+  },
+  [ModelAlias.OPENAI_GPT_5_1]: {
+    provider: "openai",
+    model: "gpt-5.1", // Previous flagship, being sunset from ChatGPT
+    tokenCostInPerMillion: 1.5,
+    tokenCostOutPerMillion: 12.0,
+  },
   [ModelAlias.OPENAI_GPT_5]: {
     provider: "openai",
-    model: "gpt-5", // stable flagship
+    model: "gpt-5", // Stable, still available
     tokenCostInPerMillion: 1.25,
     tokenCostOutPerMillion: 10.0,
-  },
-  [ModelAlias.OPENAI_GPT_5_CHAT]: {
-    provider: "openai",
-    model: "gpt-5-chat-latest", // Chat variant
-    tokenCostInPerMillion: 1.25,
-    tokenCostOutPerMillion: 10.0,
-  },
-  [ModelAlias.OPENAI_GPT_5_PRO]: {
-    provider: "openai",
-    model: "gpt-5-pro", // higher-compute tier
-    tokenCostInPerMillion: 15.0,
-    tokenCostOutPerMillion: 120.0,
   },
   [ModelAlias.OPENAI_GPT_5_MINI]: {
     provider: "openai",
@@ -86,24 +99,37 @@ export const MODEL_CONFIG = Object.freeze({
     tokenCostOutPerMillion: 0.4,
   },
 
-  // Legacy models for backward compatibility (tests)
+  // Legacy models for backward compatibility
+  [ModelAlias.OPENAI_GPT_4_1]: {
+    provider: "openai",
+    model: "gpt-4.1", // Replaced GPT-4 Turbo
+    tokenCostInPerMillion: 2.0,
+    tokenCostOutPerMillion: 8.0,
+  },
   [ModelAlias.OPENAI_GPT_4]: {
     provider: "openai",
     model: "gpt-4",
     tokenCostInPerMillion: 0.5,
     tokenCostOutPerMillion: 2.0,
   },
-  [ModelAlias.OPENAI_GPT_4_TURBO]: {
-    provider: "openai",
-    model: "gpt-4-turbo",
-    tokenCostInPerMillion: 0.3,
-    tokenCostOutPerMillion: 1.0,
-  },
 
-  // — Google Gemini (2025) —
+  // ─── Google Gemini (2025) ───
+  // Gemini 3 series released Nov-Dec 2025
+  [ModelAlias.GEMINI_3_PRO]: {
+    provider: "gemini",
+    model: "gemini-3-pro-preview", // Most intelligent model
+    tokenCostInPerMillion: 2.0, // ≤200k tokens
+    tokenCostOutPerMillion: 12.0,
+  },
+  [ModelAlias.GEMINI_3_FLASH]: {
+    provider: "gemini",
+    model: "gemini-3-flash-preview", // Released Dec 17, 2025
+    tokenCostInPerMillion: 0.5,
+    tokenCostOutPerMillion: 3.0,
+  },
   [ModelAlias.GEMINI_2_5_PRO]: {
     provider: "gemini",
-    model: "gemini-2.5-pro", // ≤200k input tier shown; >200k is higher
+    model: "gemini-2.5-pro", // ≤200k input tier; >200k is 2x
     tokenCostInPerMillion: 1.25,
     tokenCostOutPerMillion: 10.0,
   },
@@ -119,51 +145,57 @@ export const MODEL_CONFIG = Object.freeze({
     tokenCostInPerMillion: 0.1,
     tokenCostOutPerMillion: 0.4,
   },
-  [ModelAlias.GEMINI_2_5_FLASH_IMAGE]: {
-    provider: "gemini",
-    model: "gemini-2.5-flash-image",
-    // Inputs follow 2.5 Flash text pricing; outputs are **image tokens** at $30/M (≈$0.039 per 1024² image)
-    tokenCostInPerMillion: 0.3,
-    tokenCostOutPerMillion: 30.0,
-  },
 
-  // — Z.ai (formerly Zhipu) —
+  // ─── Z.ai (formerly Zhipu) ───
+  // GLM-4.6V released Dec 8, 2025 with 50% API price cut
+  [ModelAlias.ZAI_GLM_4_6V]: {
+    provider: "zhipu",
+    model: "glm-4.6v", // Vision-language model (106B)
+    tokenCostInPerMillion: 0.3,
+    tokenCostOutPerMillion: 0.9,
+  },
   [ModelAlias.ZAI_GLM_4_6]: {
     provider: "zhipu",
-    model: "glm-4.6",
-    tokenCostInPerMillion: 0.6,
-    tokenCostOutPerMillion: 2.2,
+    model: "glm-4.6", // Released Sept 2025
+    tokenCostInPerMillion: 0.3, // Updated: price cuts
+    tokenCostOutPerMillion: 0.9,
   },
   [ModelAlias.ZAI_GLM_4_5]: {
     provider: "zhipu",
     model: "glm-4.5",
-    tokenCostInPerMillion: 0.6,
-    tokenCostOutPerMillion: 2.2,
+    tokenCostInPerMillion: 0.11, // Updated: aggressive pricing
+    tokenCostOutPerMillion: 0.28,
   },
   [ModelAlias.ZAI_GLM_4_5_AIR]: {
     provider: "zhipu",
-    model: "glm-4.5-air",
-    tokenCostInPerMillion: 0.2,
-    tokenCostOutPerMillion: 1.1,
+    model: "glm-4.5-air", // Lightweight variant
+    tokenCostInPerMillion: 0.05,
+    tokenCostOutPerMillion: 0.15,
   },
 
-  // — Anthropic —
-  // current (Claude 4.5 / 4.1)
+  // ─── Anthropic ───
+  // Claude Opus 4.5 released Nov 24, 2025
+  [ModelAlias.ANTHROPIC_OPUS_4_5]: {
+    provider: "anthropic",
+    model: "claude-opus-4-5-20251101", // Current flagship
+    tokenCostInPerMillion: 5.0, // Significant reduction from Opus 4.1
+    tokenCostOutPerMillion: 25.0,
+  },
   [ModelAlias.ANTHROPIC_SONNET_4_5]: {
     provider: "anthropic",
-    model: "claude-sonnet-4-5-20250929", // Use actual model ID
+    model: "claude-sonnet-4-5-20250929",
     tokenCostInPerMillion: 3.0,
     tokenCostOutPerMillion: 15.0,
   },
   [ModelAlias.ANTHROPIC_HAIKU_4_5]: {
     provider: "anthropic",
-    model: "claude-haiku-4-5-20250929", // Use actual model ID
-    tokenCostInPerMillion: 0.25, // Correct pricing
-    tokenCostOutPerMillion: 1.25, // Correct pricing
+    model: "claude-haiku-4-5-20251001",
+    tokenCostInPerMillion: 1.0, // Updated from 0.25
+    tokenCostOutPerMillion: 5.0, // Updated from 1.25
   },
   [ModelAlias.ANTHROPIC_OPUS_4_1]: {
     provider: "anthropic",
-    model: "claude-opus-4-1-20240229", // Use actual model ID
+    model: "claude-opus-4-1-20250805", // Legacy, still available
     tokenCostInPerMillion: 15.0,
     tokenCostOutPerMillion: 75.0,
   },
@@ -175,10 +207,10 @@ export const VALID_MODEL_ALIASES = new Set(Object.keys(MODEL_CONFIG));
 // Default model alias for each provider (used when no model specified)
 export const DEFAULT_MODEL_BY_PROVIDER = Object.freeze({
   deepseek: ModelAlias.DEEPSEEK_CHAT,
-  openai: ModelAlias.OPENAI_GPT_5,
-  gemini: ModelAlias.GEMINI_2_5_FLASH,
+  openai: ModelAlias.OPENAI_GPT_5_2, // Updated: GPT-5.2 is new default
+  gemini: ModelAlias.GEMINI_3_FLASH, // Updated: Gemini 3 Flash is new default
   zhipu: ModelAlias.ZAI_GLM_4_6,
-  anthropic: ModelAlias.ANTHROPIC_SONNET_4_5,
+  anthropic: ModelAlias.ANTHROPIC_OPUS_4_5, // Updated: Opus 4.5 available at better price
 });
 
 /**
@@ -245,7 +277,7 @@ export function buildProviderFunctionsIndex() {
 
 /**
  * Pre-built provider functions index for convenience.
- * Uses dotted style: llm.anthropic.sonnet45, llm.openai.gpt5, etc.
+ * Uses dotted style: llm.anthropic.opus45, llm.openai.gpt52, etc.
  */
 export const PROVIDER_FUNCTIONS = buildProviderFunctionsIndex();
 
