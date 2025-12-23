@@ -10,6 +10,7 @@ import { Button } from "./ui/button.jsx";
  * @param {string} props.type - File type (artifacts|logs|tmp)
  * @param {string} props.filename - File name to display
  * @param {Function} props.onClose - Close handler
+ * @param {boolean} props.inline - Whether to render inline (vs modal)
  */
 export function TaskFilePane({
   isOpen,
@@ -18,6 +19,7 @@ export function TaskFilePane({
   type,
   filename,
   onClose,
+  inline = false,
 }) {
   const [copyNotice, setCopyNotice] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -496,12 +498,18 @@ export function TaskFilePane({
     return null;
   }
 
+  const containerClassName = inline
+    ? "flex flex-col h-full"
+    : "bg-white rounded-lg shadow-xl w-full max-w-6xl max-h-[90vh] flex flex-col";
+
   return (
-    <div className="bg-white rounded-lg shadow-xl w-full max-w-6xl max-h-[90vh] flex flex-col">
+    <div className={containerClassName}>
       {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b">
+      <div className="flex items-center justify-between p-4 border-b bg-white">
         <div>
-          <h2 className="text-lg font-semibold">File Preview</h2>
+          <h2 className="text-lg font-semibold">
+            {inline ? "File Preview" : filename}
+          </h2>
         </div>
         <button
           ref={closeButtonRef}
@@ -526,45 +534,88 @@ export function TaskFilePane({
       </div>
 
       {/* Preview */}
-      <div className="flex-1 flex flex-col bg-gray-50">
-        {/* Preview Header */}
-        <div className="bg-white border-b p-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="font-medium">{filename}</h3>
-              <div className="flex items-center text-sm text-gray-500 mt-1">
-                {size && <span>{formatSize(size)}</span>}
-                {size && mtime && <span className="mx-1">•</span>}
-                {mtime && <span>{formatDate(mtime)}</span>}
-                {mime && (size || mtime) && <span className="mx-1">•</span>}
-                {mime && <span>{mime}</span>}
+      <div className="flex-1 flex flex-col bg-gray-50 overflow-hidden">
+        {/* Preview Header - only show filename in non-inline mode */}
+        {!inline && (
+          <div className="bg-white border-b p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="font-medium">{filename}</h3>
+                <div className="flex items-center text-sm text-gray-500 mt-1">
+                  {size && <span>{formatSize(size)}</span>}
+                  {size && mtime && <span className="mx-1">•</span>}
+                  {mtime && <span>{formatDate(mtime)}</span>}
+                  {mime && (size || mtime) && <span className="mx-1">•</span>}
+                  {mime && <span>{mime}</span>}
+                </div>
+              </div>
+              <div className="flex items-center space-x-2">
+                {copyNotice && (
+                  <div
+                    className={`text-sm ${
+                      copyNotice.type === "success"
+                        ? "text-green-600"
+                        : "text-red-600"
+                    }`}
+                  >
+                    {copyNotice.message}
+                  </div>
+                )}
+                {content && encoding === "utf8" && (
+                  <Button
+                    variant="solid"
+                    size="sm"
+                    onClick={handleCopy}
+                    aria-label="Copy content to clipboard"
+                  >
+                    Copy
+                  </Button>
+                )}
               </div>
             </div>
-            <div className="flex items-center space-x-2">
-              {copyNotice && (
-                <div
-                  className={`text-sm ${
-                    copyNotice.type === "success"
-                      ? "text-green-600"
-                      : "text-red-600"
-                  }`}
-                >
-                  {copyNotice.message}
+          </div>
+        )}
+
+        {/* Inline preview header with filename and actions */}
+        {inline && (
+          <div className="bg-white border-b p-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="font-medium text-sm">{filename}</h3>
+                <div className="flex items-center text-xs text-gray-500 mt-1">
+                  {size && <span>{formatSize(size)}</span>}
+                  {size && mtime && <span className="mx-1">•</span>}
+                  {mtime && <span>{formatDate(mtime)}</span>}
+                  {mime && (size || mtime) && <span className="mx-1">•</span>}
+                  {mime && <span>{mime}</span>}
                 </div>
-              )}
-              {content && encoding === "utf8" && (
-                <Button
-                  variant="solid"
-                  size="sm"
-                  onClick={handleCopy}
-                  aria-label="Copy content to clipboard"
-                >
-                  Copy
-                </Button>
-              )}
+              </div>
+              <div className="flex items-center space-x-2">
+                {copyNotice && (
+                  <div
+                    className={`text-xs ${
+                      copyNotice.type === "success"
+                        ? "text-green-600"
+                        : "text-red-600"
+                    }`}
+                  >
+                    {copyNotice.message}
+                  </div>
+                )}
+                {content && encoding === "utf8" && (
+                  <Button
+                    variant="solid"
+                    size="sm"
+                    onClick={handleCopy}
+                    aria-label="Copy content to clipboard"
+                  >
+                    Copy
+                  </Button>
+                )}
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
         {/* Preview Content */}
         <div className="flex-1 overflow-auto">{renderContent()}</div>
