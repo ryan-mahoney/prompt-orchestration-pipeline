@@ -19,7 +19,7 @@ import {
   handleTaskFileRequest,
 } from "./endpoints/file-endpoints.js";
 import { handlePipelinesHttpRequest } from "./endpoints/pipelines-endpoint.js";
-import { handleCreatePipelineHttpRequest } from "./endpoints/create-pipeline-endpoint.js";
+import { handleCreatePipeline } from "./endpoints/create-pipeline-endpoint.js";
 import { handlePipelineTypeDetailRequest } from "./endpoints/pipeline-type-detail-endpoint.js";
 import { sendJson } from "./utils/http-utils.js";
 import { PROVIDER_FUNCTIONS } from "../config/models.js";
@@ -112,9 +112,7 @@ export function buildExpressApp({ dataDir, viteServer }) {
   });
 
   // POST /api/pipelines
-  app.post("/api/pipelines", async (req, res) => {
-    await handleCreatePipelineHttpRequest(req, res);
-  });
+  app.post("/api/pipelines", handleCreatePipeline);
 
   // GET /api/pipelines/:slug
   app.get("/api/pipelines/:slug", async (req, res) => {
