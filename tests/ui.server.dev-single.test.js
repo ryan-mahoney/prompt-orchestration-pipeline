@@ -2,26 +2,34 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { EventEmitter } from "events";
 
 // Hoisted mocks so they are available before module import
-const { mockVite, mockWatcher, mockState } = vi.hoisted(() => ({
-  mockVite: {
-    createServer: vi.fn(),
-  },
-  mockWatcher: {
-    start: vi.fn(),
-    stop: vi.fn(),
-  },
-  mockState: {
-    getState: vi.fn(),
-    recordChange: vi.fn(),
-    reset: vi.fn(),
-    setWatchedPaths: vi.fn(),
-  },
-}));
+const { mockVite, mockWatcher, mockState, mockEnvironment } = vi.hoisted(
+  () => ({
+    mockVite: {
+      createServer: vi.fn(),
+    },
+    mockWatcher: {
+      start: vi.fn(),
+      stop: vi.fn(),
+    },
+    mockState: {
+      getState: vi.fn(),
+      recordChange: vi.fn(),
+      reset: vi.fn(),
+      setWatchedPaths: vi.fn(),
+    },
+    mockEnvironment: {
+      loadEnvironment: vi
+        .fn()
+        .mockResolvedValue({ loaded: [], warnings: [], config: {} }),
+    },
+  })
+);
 
 // Provide the mocked modules
 vi.mock("vite", () => mockVite);
 vi.mock("../src/ui/watcher", () => mockWatcher);
 vi.mock("../src/ui/state", () => mockState);
+vi.mock("../src/core/environment", () => mockEnvironment);
 
 describe("Dev single-process Vite integration (step 1 tests)", () => {
   let serverModule;
@@ -69,6 +77,8 @@ describe("Dev single-process Vite integration (step 1 tests)", () => {
 
     // Force development mode for these tests
     process.env.NODE_ENV = "development";
+    // Set PO_ROOT to avoid test failures
+    process.env.PO_ROOT = process.cwd();
 
     // Import server module after we set up mocks
     serverModule = await import("../src/ui/server.js");
@@ -92,6 +102,11 @@ describe("Dev single-process Vite integration (step 1 tests)", () => {
     vi.resetModules();
     vi.useRealTimers();
     delete process.env.NODE_ENV;
+  });
+
+  it("loads environment on startup", async () => {
+    await serverModule.startServer({ port: 0 });
+    expect(mockEnvironment.loadEnvironment).toHaveBeenCalled();
   });
 
   it("creates Vite dev server in middlewareMode and closes it on shutdown", async () => {

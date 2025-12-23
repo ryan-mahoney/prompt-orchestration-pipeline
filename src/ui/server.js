@@ -6,6 +6,7 @@
 import http from "http";
 import path from "path";
 import { fileURLToPath } from "url";
+import { loadEnvironment } from "../core/environment.js";
 import { start as startWatcher, stop as stopWatcher } from "./watcher.js";
 import * as state from "./state.js";
 import { sseRegistry } from "./sse.js";
@@ -135,6 +136,9 @@ function initializeWatcher() {
  */
 async function startServer({ dataDir, port: customPort }) {
   try {
+    // Load environment variables from .env file for API keys and other config
+    await loadEnvironment();
+
     // Initialize config-bridge paths early to ensure consistent path resolution
     // This prevents path caching issues when dataDir changes between tests
     const { initPATHS } = await import("./config-bridge.node.js");
