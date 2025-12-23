@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { Box, Flex, Text, Heading, Table, Button } from "@radix-ui/themes";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, Plus } from "lucide-react";
 import Layout from "../components/Layout.jsx";
 import PageSubheader from "../components/PageSubheader.jsx";
+import { AddPipelineSidebar } from "../components/AddPipelineSidebar.jsx";
 
 /**
  * PipelineList component displays available pipelines in a table layout
@@ -13,12 +14,27 @@ import PageSubheader from "../components/PageSubheader.jsx";
  * - Error state for failed requests
  * - Empty state when no pipelines are available
  * - Table layout using Radix UI components
+ * - Add pipeline type functionality via sidebar
  */
 export default function PipelineList() {
   const [pipelines, setPipelines] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const navigate = useNavigate();
+
+  const handleCreatePipeline = useCallback(() => {
+    setSidebarOpen(true);
+  }, []);
+
+  const handleSidebarClose = useCallback(() => {
+    setSidebarOpen(false);
+  }, []);
+
+  const handlePipelineCreated = useCallback((data) => {
+    // Optionally refresh the pipeline list
+    console.log("Pipeline created:", data);
+  }, []);
 
   useEffect(() => {
     const fetchPipelines = async () => {
@@ -122,7 +138,12 @@ export default function PipelineList() {
   // Main content with pipeline table
   return (
     <Layout>
-      <PageSubheader breadcrumbs={breadcrumbs} />
+      <PageSubheader breadcrumbs={breadcrumbs}>
+        <Button size="2" onClick={handleCreatePipeline}>
+          <Plus className="h-4 w-4 mr-2" />
+          Add a Pipeline Type
+        </Button>
+      </PageSubheader>
       <Box>
         <Box mb="8">
           <Heading size="6" mb="4">
@@ -194,6 +215,13 @@ export default function PipelineList() {
           </Table.Root>
         </Box>
       </Box>
+
+      {/* Add Pipeline Sidebar */}
+      <AddPipelineSidebar
+        open={sidebarOpen}
+        onClose={handleSidebarClose}
+        onSuccess={handlePipelineCreated}
+      />
     </Layout>
   );
 }
