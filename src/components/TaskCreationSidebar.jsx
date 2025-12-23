@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 
 function MessageContent({ content }) {
   // Split content by code blocks (```...```)
@@ -44,6 +44,7 @@ export default function TaskCreationSidebar({ isOpen, onClose, pipelineSlug }) {
   const [input, setInput] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState(null);
+  const messagesEndRef = useRef(null);
 
   // Keyboard handling for Escape key
   useEffect(() => {
@@ -54,6 +55,11 @@ export default function TaskCreationSidebar({ isOpen, onClose, pipelineSlug }) {
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
   }, [isOpen, onClose]);
+
+  // Auto-scroll to bottom when messages change
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
 
   // Beforeunload warning when messages exist
   useEffect(() => {
@@ -189,6 +195,7 @@ export default function TaskCreationSidebar({ isOpen, onClose, pipelineSlug }) {
             </div>
           )}
 
+          <div ref={messagesEndRef} />
           {error && (
             <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg">
               <p className="text-red-800 font-medium mb-2">{error}</p>
