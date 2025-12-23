@@ -1,6 +1,7 @@
 import * as Dialog from "@radix-ui/react-dialog";
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { Button } from "./ui/button.jsx";
 
 export function AddPipelineSidebar({ open, onOpenChange }) {
   const [name, setName] = useState("");
@@ -65,7 +66,7 @@ export function AddPipelineSidebar({ open, onOpenChange }) {
         <Dialog.Overlay className="fixed inset-0 bg-black/50" />
         <Dialog.Content className="fixed right-0 top-0 bottom-0 w-96 bg-white p-6 shadow-xl flex flex-col overflow-y-auto">
           <Dialog.Title className="text-lg font-semibold mb-4">
-            Add a Pipeline Type
+            Add Pipeline Type
           </Dialog.Title>
 
           <form onSubmit={handleSubmit} className="flex flex-col flex-1">
@@ -98,20 +99,24 @@ export function AddPipelineSidebar({ open, onOpenChange }) {
             {error && <p className="text-red-600 text-sm mb-4">{error}</p>}
 
             <div className="flex gap-3 mt-auto pt-4">
-              <button
+              <Button
+                variant="outline"
+                size="md"
                 type="button"
                 onClick={() => onOpenChange(false)}
-                className="flex-1 px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50"
+                className="flex-1"
               >
                 Cancel
-              </button>
-              <button
+              </Button>
+              <Button
+                variant="solid"
+                size="md"
                 type="submit"
-                disabled={submitting}
-                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                loading={submitting}
+                className="flex-1"
               >
-                {submitting ? "Creating..." : "Create"}
-              </button>
+                Create
+              </Button>
             </div>
           </form>
         </Dialog.Content>

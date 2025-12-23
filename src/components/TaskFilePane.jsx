@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import { Button } from "./ui/button.jsx";
 
 /**
  * TaskFilePane component for displaying a single task file with preview
@@ -364,12 +365,14 @@ export function TaskFilePane({
                 <p className="mt-1 text-sm text-red-700">
                   {error.error?.message || "Unknown error"}
                 </p>
-                <button
+                <Button
+                  variant="ghost"
+                  size="sm"
                   onClick={handleRetry}
-                  className="mt-2 text-sm text-red-600 hover:text-red-800 underline"
+                  className="mt-2 text-red-600 hover:text-red-800"
                 >
                   Retry
-                </button>
+                </Button>
               </div>
             </div>
           </div>
@@ -550,13 +553,14 @@ export function TaskFilePane({
                 </div>
               )}
               {content && encoding === "utf8" && (
-                <button
+                <Button
+                  variant="solid"
+                  size="sm"
                   onClick={handleCopy}
-                  className="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
                   aria-label="Copy content to clipboard"
                 >
                   Copy
-                </button>
+                </Button>
               )}
             </div>
           </div>
