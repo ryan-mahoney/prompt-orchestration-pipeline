@@ -77,13 +77,13 @@
         "defaultProvider": {
           "type": "string",
           "description": "Default LLM provider",
-          "enum": ["openai", "deepseek", "anthropic"],
-          "default": "openai"
+          "enum": ["openai", "deepseek", "anthropic", "gemini", "zhipu"],
+          "default": "deepseek"
         },
         "defaultModel": {
           "type": "string",
           "description": "Default model to use",
-          "default": "gpt-5-chat-latest"
+          "default": "deepseek-chat"
         },
         "maxConcurrency": {
           "type": "integer",
