@@ -29,7 +29,7 @@ Use for the most important action in a view. These are the actions you want user
 - "Send" (TaskCreationSidebar)
 - "Create" (Dialog confirmations)
 
-**Styling:** Slate blue-gray background (#475569), white text, professional appearance
+**Styling:** Indigo background (#4f46e5), white text, clear active state
 
 ### Secondary Actions
 
@@ -352,27 +352,27 @@ All buttons must:
 
 All button variants use Steel Terminal semantic colors defined in CSS variables:
 
-- `--primary` - Primary actions (#475569 - slate-600, muted blue-gray)
+- `--primary` - Primary actions (#4f46e5 - indigo-600)
 - `--primary-foreground` - Text on primary buttons (white)
-- `--primary-hover` - Hover state for primary (#334155 - slate-700)
+- `--primary-hover` - Hover state for primary (#4338ca - indigo-700)
 - `--destructive` - Destructive actions (#dc2626 - red-600)
 - `--destructive-foreground` - Text on destructive buttons (white)
 - `--secondary` - Secondary/outline buttons (#f8fafc - slate-50)
-- `--secondary-foreground` - Text on secondary buttons (#475569)
-- `--muted-foreground` - Muted text (#64748b - slate-500)
-- `--ring` - Focus ring color (#475569)
+- `--secondary-foreground` - Text on secondary buttons (#312e81 - indigo-950)
+- `--muted-foreground` - Muted text (#6366f1 - indigo-500)
+- `--ring` - Focus ring color (#4f46e5 - indigo-600)
 
 Never use hardcoded colors like `bg-blue-600` or `bg-red-600`. The Button component handles theme colors automatically using CSS variables with HSL syntax.
 
 ### Color Rationale
 
-The primary color is `slate-600` (#475569), a muted blue-gray that:
+The primary color is `indigo-600` (#4f46e5), a vibrant indigo that:
 
-- Provides professional, understated appearance
+- Provides clear visual distinction as an active state (vs. grayish inactive appearance)
 - Offers excellent contrast with light backgrounds
-- Doesn't overwhelm the page like brighter blues
-- Aligns with Steel Terminal's "terminal" aesthetic
-- Maintains accessibility (WCAG AA compliant)
+- Maintains professional appearance while being clearly interactive
+- Aligns with modern design standards while honoring Steel Terminal's technical aesthetic
+- Maintains accessibility (WCAG AA compliant with 4.8:1 contrast ratio)
 
 ### Customizing Colors
 

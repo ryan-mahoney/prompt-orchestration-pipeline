@@ -25,19 +25,19 @@ The "Steel Terminal" theme prioritizes:
   --card-foreground: 210 15% 15%; /* Deep slate */
   --popover: 0 0% 100%; /* Pure white */
   --popover-foreground: 210 15% 15%; /* Deep slate */
-  --primary: 200 15% 35%; /* Steel blue-gray */
+  --primary: 243deg 75% 59%; /* Indigo-600 - Primary actions */
   --primary-foreground: 0 0% 100%; /* Pure white */
   --secondary: 210 10% 92%; /* Cool gray */
-  --secondary-foreground: 210 15% 15%; /* Deep slate */
+  --secondary-foreground: 243deg 75% 30%; /* Indigo-950 */
   --muted: 210 10% 92%; /* Cool gray */
-  --muted-foreground: 210 10% 45%; /* Medium gray */
+  --muted-foreground: 243deg 50% 45%; /* Indigo-500 */
   --accent: 175 45% 48%; /* Muted teal */
-  --accent-foreground: 0 0% 100%; /* Pure white */
+  --accent-foreground: 243deg 75% 59%; /* Indigo-600 */
   --destructive: 0 70% 55%; /* Crimson */
   --destructive-foreground: 0 0% 100%; /* Pure white */
   --border: 210 10% 85%; /* Light gray */
   --input: 210 10% 92%; /* Cool gray */
-  --ring: 200 15% 35%; /* Steel blue-gray */
+  --ring: 243deg 75% 59%; /* Indigo-600 */
   --radius: 0.5rem;
 }
 ```
