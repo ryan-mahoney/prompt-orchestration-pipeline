@@ -1,5 +1,4 @@
-import React from "react";
-import { Text } from "@radix-ui/themes";
+import React, { Text } from "@radix-ui/themes";
 import { Sidebar, SidebarSection } from "./ui/sidebar.jsx";
 
 /**

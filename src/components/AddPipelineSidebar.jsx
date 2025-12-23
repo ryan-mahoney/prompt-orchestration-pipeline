@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "./ui/button.jsx";
+import { Sidebar, SidebarFooter } from "./ui/sidebar.jsx";
 
 export function AddPipelineSidebar({ open, onOpenChange }) {
   const [name, setName] = useState("");
@@ -60,13 +61,33 @@ export function AddPipelineSidebar({ open, onOpenChange }) {
   };
 
   return (
-    <Dialog.Root open={open} onOpenChange={onOpenChange}>
-      <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 bg-black/50" />
-        <Dialog.Content className="fixed right-0 top-0 bottom-0 w-96 bg-white p-6 shadow-xl flex flex-col overflow-y-auto">
-          <Dialog.Title className="text-lg font-semibold mb-4">
-            Add Pipeline Type
-          </Dialog.Title>
+    <Sidebar
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Add Pipeline Type"
+      description="Create a new pipeline type for your workflow"
+    >
+      <form onSubmit={handleSubmit}>
+        <div className="p-6 space-y-4">
+          <label className="block">
+            <span className="block text-sm font-medium text-foreground mb-1">
+              Name
+            </span>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="w-full px-3 py-2 border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring bg-background"
+              placeholder="My Pipeline"
+              aria-describedby="name-description"
+            />
+            <span
+              id="name-description"
+              className="text-xs text-muted-foreground"
+            >
+              A unique identifier for this pipeline type
+            </span>
+          </label>
 
           <label className="block">
             <span className="block text-sm font-medium text-foreground mb-1">
@@ -88,40 +109,9 @@ export function AddPipelineSidebar({ open, onOpenChange }) {
             </span>
           </label>
 
-            <label className="block mb-4">
-              <span className="block text-sm font-medium text-gray-700 mb-1">
-                Description
-              </span>
-              <textarea
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                rows={3}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
-                placeholder="Describe what this pipeline does"
-              />
-            </label>
-
-            {error && <p className="text-red-600 text-sm mb-4">{error}</p>}
-
-            <div className="flex gap-3 mt-auto pt-4">
-              <Button
-                variant="outline"
-                size="md"
-                type="button"
-                onClick={() => onOpenChange(false)}
-                className="flex-1"
-              >
-                Cancel
-              </Button>
-              <Button
-                variant="solid"
-                size="md"
-                type="submit"
-                loading={submitting}
-                className="flex-1"
-              >
-                Create
-              </Button>
+          {error && (
+            <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-md">
+              <p className="text-sm text-destructive">{error}</p>
             </div>
           )}
         </div>

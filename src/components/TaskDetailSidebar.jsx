@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Callout, Table, Text, Box } from "@radix-ui/themes";
+import { Callout } from "@radix-ui/themes";
 import { TaskFilePane } from "./TaskFilePane.jsx";
 import { TaskState } from "../config/statuses.js";
 import { Sidebar, SidebarSection } from "./ui/sidebar.jsx";
@@ -140,8 +140,8 @@ export function TaskDetailSidebar({
                   onClick={() => setFilePaneType("artifacts")}
                   className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors border-l-2 ${
                     filePaneType === "artifacts"
-                      ? "bg-background text-foreground shadow-sm border-indigo-400"
-                      : "text-muted-foreground hover:text-foreground border-transparent"
+                      ? "bg-background text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
                   }`}
                 >
                   Artifacts
@@ -150,8 +150,8 @@ export function TaskDetailSidebar({
                   onClick={() => setFilePaneType("logs")}
                   className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors border-l-2 ${
                     filePaneType === "logs"
-                      ? "bg-background text-foreground shadow-sm border-indigo-400"
-                      : "text-muted-foreground hover:text-foreground border-transparent"
+                      ? "bg-background text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
                   }`}
                 >
                   Logs
@@ -160,8 +160,8 @@ export function TaskDetailSidebar({
                   onClick={() => setFilePaneType("tmp")}
                   className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors border-l-2 ${
                     filePaneType === "tmp"
-                      ? "bg-background text-foreground shadow-sm border-indigo-400"
-                      : "text-muted-foreground hover:text-foreground border-transparent"
+                      ? "bg-background text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
                   }`}
                 >
                   Temp
@@ -170,71 +170,44 @@ export function TaskDetailSidebar({
             </div>
           </div>
 
-          {/* File List Table */}
+          {/* File List */}
           <div className="space-y-2">
-            <Text size="2" className="text-muted-foreground">
+            <div className="text-sm text-muted-foreground">
               {filePaneType.charAt(0).toUpperCase() + filePaneType.slice(1)}{" "}
               files for {taskId}
-            </Text>
-            {filesForTab.length === 0 ? (
-              <Box className="py-4 text-center">
-                <Text size="2" className="text-muted-foreground italic">
-                  No {filePaneType} files available for this task
-                </Text>
-              </Box>
-            ) : (
-              <Table.Root radius="none">
-                <Table.Header>
-                  <Table.Row>
-                    <Table.ColumnHeaderCell>File Name</Table.ColumnHeaderCell>
-                  </Table.Row>
-                </Table.Header>
-                <Table.Body>
-                  {filesForTab.map((name) => (
-                    <Table.Row
-                      key={`${filePaneType}-${name}`}
-                      className="cursor-pointer hover:bg-slate-50/50"
-                      onClick={() => handleFileClick(name)}
-                    >
-                      <Table.Cell>
-                        <Text size="2">{name}</Text>
-                      </Table.Cell>
-                    </Table.Row>
-                  ))}
-                </Table.Body>
-              </Table.Root>
-            )}
-          </div>
-
-          {/* Inline File Preview */}
-          {filePaneOpen && (
-            <div className="mt-4 border-t pt-4">
-              <div className="flex items-center justify-between mb-2">
-                <Text size="2" weight="medium" className="text-foreground">
-                  File Preview
-                </Text>
-                <button
-                  onClick={handleFilePaneClose}
-                  className="text-sm text-muted-foreground hover:text-foreground"
-                >
-                  Close Preview
-                </button>
-              </div>
-              <div className="h-96 overflow-auto">
-                <TaskFilePane
-                  isOpen={filePaneOpen}
-                  jobId={jobId}
-                  taskId={taskId}
-                  type={filePaneType}
-                  filename={filePaneFilename}
-                  onClose={handleFilePaneClose}
-                  inline={true}
-                />
-              </div>
             </div>
-          )}
+            <div className="space-y-1">
+              {filesForTab.length === 0 ? (
+                <div className="text-sm text-muted-foreground italic py-4 text-center">
+                  No {filePaneType} files available for this task
+                </div>
+              ) : (
+                filesForTab.map((name) => (
+                  <div
+                    key={`${filePaneType}-${name}`}
+                    className="flex items-center justify-between p-2 rounded border border-input hover:border-foreground/20 hover:bg-muted/50 cursor-pointer transition-colors"
+                    onClick={() => handleFileClick(name)}
+                  >
+                    <div className="flex items-center space-x-2">
+                      <span className="text-sm text-foreground">{name}</span>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
         </SidebarSection>
       </Sidebar>
+
+      {/* TaskFilePane Modal */}
+      <TaskFilePane
+        isOpen={filePaneOpen}
+        jobId={jobId}
+        taskId={taskId}
+        type={filePaneType}
+        filename={filePaneFilename}
+        onClose={handleFilePaneClose}
+      />
     </>
   );
 }

@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { Button } from "./ui/button.jsx";
+import { Sidebar, SidebarFooter } from "./ui/sidebar.jsx";
 
 function MessageContent({ content }) {
   // Split content by code blocks (```...```)
@@ -14,12 +15,12 @@ function MessageContent({ content }) {
           const language = part || "";
           return (
             <div key={index} className="relative group">
-              <pre className="bg-gray-800 text-gray-100 p-3 rounded mt-2 overflow-x-auto">
+              <pre className="bg-muted text-muted-foreground p-3 rounded mt-2 overflow-x-auto">
                 <code className={`language-${language} text-sm`}>{code}</code>
               </pre>
               <button
                 onClick={() => navigator.clipboard.writeText(code)}
-                className="absolute top-2 right-2 bg-gray-600 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity"
+                className="absolute top-2 right-2 bg-muted-foreground text-background text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity"
               >
                 Copy
               </button>
@@ -47,16 +48,6 @@ export default function TaskCreationSidebar({ isOpen, onClose, pipelineSlug }) {
   const [error, setError] = useState(null);
   const messagesEndRef = useRef(null);
 
-  // Keyboard handling for Escape key
-  useEffect(() => {
-    if (!isOpen) return;
-    const handleKey = (e) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", handleKey);
-    return () => window.removeEventListener("keydown", handleKey);
-  }, [isOpen, onClose]);
-
   // Auto-scroll to bottom when messages change
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -69,12 +60,17 @@ export default function TaskCreationSidebar({ isOpen, onClose, pipelineSlug }) {
       e.preventDefault();
       e.returnValue = "";
     };
+    /* eslint-disable-next-line no-restricted-globals */
     window.addEventListener("beforeunload", handleUnload);
-    return () => window.removeEventListener("beforeunload", handleUnload);
+    return () => {
+      /* eslint-disable-next-line no-restricted-globals */
+      window.removeEventListener("beforeunload", handleUnload);
+    };
   }, [messages.length]);
 
   // Close handler with confirmation
   const handleClose = () => {
+    /* eslint-disable-next-line no-restricted-globals */
     if (messages.length > 0 && !confirm("Close and lose conversation?")) return;
     setMessages([]);
     setInput("");
@@ -93,7 +89,6 @@ export default function TaskCreationSidebar({ isOpen, onClose, pipelineSlug }) {
     setIsStreaming(true);
     setError(null);
 
-    // sendToAPI will be implemented in step 7
     sendToAPI([...messages, newMessage]);
   };
 
@@ -148,111 +143,99 @@ export default function TaskCreationSidebar({ isOpen, onClose, pipelineSlug }) {
     }
   };
 
-  if (!isOpen) {
-    return null;
-  }
-
   return (
-    <>
-      {/* Backdrop */}
-      <div
-        className="fixed inset-0 bg-black/20 z-30"
-        onClick={handleClose}
-        role="presentation"
-        aria-hidden="true"
-      />
-
-      {/* Sidebar */}
-      <div className="fixed inset-y-0 right-0 w-full lg:w-[800px] bg-white shadow-xl z-40 flex flex-col">
-        {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b">
-          <h2 className="text-lg font-medium">Task Assistant</h2>
-          <button
-            onClick={handleClose}
-            className="text-gray-500 hover:text-gray-700 text-xl"
-            aria-label="Close"
+    <Sidebar
+      open={isOpen}
+      onOpenChange={(open) => {
+        if (!open) handleClose();
+      }}
+      title="Task Assistant"
+      description="Describe the task you want to create"
+      contentClassName="flex flex-col max-h-screen"
+    >
+      {/* Messages area */}
+      <div className="flex-1 overflow-y-auto p-6 space-y-4">
+        {messages.map((msg, i) => (
+          <div
+            key={i}
+            className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
           >
-            ✕
-          </button>
-        </div>
-
-        {/* Messages area */}
-        <div className="flex-1 overflow-y-auto p-4">
-          {messages.map((msg, i) => (
-            <div key={i} className={msg.role === "user" ? "ml-8" : "mr-8"}>
-              <div
-                className={`rounded-lg p-3 ${
-                  msg.role === "user" ? "bg-blue-100" : "bg-gray-100"
-                }`}
-              >
-                <MessageContent content={msg.content} />
-              </div>
+            <div
+              className={`rounded-lg p-3 max-w-[80%] ${
+                msg.role === "user"
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-muted text-muted-foreground"
+              }`}
+            >
+              <MessageContent content={msg.content} />
             </div>
-          ))}
+          </div>
+        ))}
 
-          {messages.length === 0 && (
-            <div className="text-center text-gray-500 mt-8">
-              Describe the task you want to create...
-            </div>
-          )}
+        {messages.length === 0 && (
+          <div className="text-center text-muted-foreground mt-8">
+            Describe the task you want to create...
+          </div>
+        )}
 
-          <div ref={messagesEndRef} />
-          {error && (
-            <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg">
-              <p className="text-red-800 font-medium mb-2">{error}</p>
-              <Button
-                variant="destructive"
-                size="md"
-                onClick={() => {
-                  setError(null);
-                  // Re-send last user message
-                  const lastUserMessageIndex = [...messages]
-                    .reverse()
-                    .findIndex((m) => m.role === "user");
-                  if (lastUserMessageIndex !== -1) {
-                    const lastUserMessage =
-                      messages[messages.length - 1 - lastUserMessageIndex];
-                    const messagesBeforeLastUserMessage = messages.slice(
-                      0,
-                      messages.length - 1 - lastUserMessageIndex
-                    );
-                    sendToAPI([
-                      ...messagesBeforeLastUserMessage,
-                      lastUserMessage,
-                    ]);
-                  }
-                }}
-              >
-                Retry
-              </Button>
-            </div>
-          )}
-        </div>
+        <div ref={messagesEndRef} />
 
-        {/* Input area */}
-        <div className="border-t p-4">
-          <form onSubmit={handleSend}>
-            <textarea
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              disabled={isStreaming}
-              placeholder="Describe the task you want to create..."
-              rows={3}
-              className="w-full border rounded-md px-3 py-2 resize-none disabled:bg-gray-100 disabled:cursor-not-allowed mb-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-            <div className="flex justify-end">
-              <Button
-                variant="solid"
-                size="md"
-                type="submit"
-                disabled={isStreaming || !input.trim()}
-              >
-                Send
-              </Button>
-            </div>
-          </form>
-        </div>
+        {error && (
+          <div className="mt-4 p-4 bg-destructive/10 border border-destructive/20 rounded-lg">
+            <p className="text-destructive font-medium mb-2">{error}</p>
+            <Button
+              variant="destructive"
+              size="md"
+              onClick={() => {
+                setError(null);
+                // Re-send last user message
+                const lastUserMessageIndex = [...messages]
+                  .reverse()
+                  .findIndex((m) => m.role === "user");
+                if (lastUserMessageIndex !== -1) {
+                  const lastUserMessage =
+                    messages[messages.length - 1 - lastUserMessageIndex];
+                  const messagesBeforeLastUserMessage = messages.slice(
+                    0,
+                    messages.length - 1 - lastUserMessageIndex
+                  );
+                  sendToAPI([
+                    ...messagesBeforeLastUserMessage,
+                    lastUserMessage,
+                  ]);
+                }
+              }}
+            >
+              Retry
+            </Button>
+          </div>
+        )}
       </div>
-    </>
+
+      {/* Input area */}
+      <SidebarFooter className="bg-card">
+        <form onSubmit={handleSend} className="w-full">
+          <textarea
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            disabled={isStreaming}
+            placeholder="Describe the task you want to create..."
+            rows={3}
+            className="w-full border rounded-md px-3 py-2 resize-none disabled:bg-muted disabled:cursor-not-allowed mb-3 focus:outline-none focus:ring-2 focus:ring-ring bg-background"
+            aria-label="Task description input"
+          />
+          <div className="flex justify-end">
+            <Button
+              variant="solid"
+              size="md"
+              type="submit"
+              disabled={isStreaming || !input.trim()}
+            >
+              {isStreaming ? "Sending..." : "Send"}
+            </Button>
+          </div>
+        </form>
+      </SidebarFooter>
+    </Sidebar>
   );
 }
