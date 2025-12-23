@@ -1,6 +1,7 @@
 import React from "react";
-import { Box, Flex, Table, Text, Button } from "@radix-ui/themes";
+import { Box, Flex, Table, Text } from "@radix-ui/themes";
 import { Progress } from "./ui/progress";
+import { Button } from "./ui/button.jsx";
 import { TimerReset, ChevronRight } from "lucide-react";
 import { fmtDuration, jobCumulativeDurationMs } from "../utils/duration.js";
 import { countCompleted } from "../utils/jobs";
@@ -234,8 +235,8 @@ export default function JobTable({ jobs, pipeline, onOpenJob }) {
                 <Table.Cell>
                   <Button
                     variant="ghost"
-                    size="1"
-                    className="opacity-0 group-hover:opacity-100 transition-opacity text-slate-500 hover:text-slate-700"
+                    size="sm"
+                    className="opacity-0 group-hover:opacity-100 transition-opacity"
                     aria-label={`View details for ${jobTitle}`}
                   >
                     <ChevronRight className="h-4 w-4" />

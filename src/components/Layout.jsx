@@ -188,8 +188,8 @@ export default function Layout({
               <Tooltip.Root delayDuration={200}>
                 <Tooltip.Trigger asChild>
                   <Button
-                    size="sm"
-                    variant="default"
+                    size="md"
+                    variant="solid"
                     onClick={toggleUploadPanel}
                     aria-controls="layout-upload-panel"
                     aria-expanded={isUploadOpen}

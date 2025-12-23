@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { data, useParams } from "react-router-dom";
-import { Box, Flex, Text, Button } from "@radix-ui/themes";
+import { Box, Flex, Text } from "@radix-ui/themes";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import JobDetail from "../components/JobDetail.jsx";
 import { useJobDetailWithUpdates } from "../ui/client/hooks/useJobDetailWithUpdates.js";
@@ -11,6 +11,7 @@ import { formatCurrency4, formatTokensCompact } from "../utils/formatters.js";
 import { rescanJob } from "../ui/client/api.js";
 import StopJobModal from "../components/ui/StopJobModal.jsx";
 import { stopJob } from "../ui/client/api.js";
+import { Button } from "../components/ui/button.jsx";
 
 export default function PipelineDetail() {
   const { jobId } = useParams();
@@ -257,9 +258,8 @@ export default function PipelineDetail() {
       {costIndicatorWithTooltip}
       {isRunning && (
         <Button
-          size="1"
-          variant="solid"
-          color="red"
+          size="sm"
+          variant="destructive"
           disabled={isStopping}
           onClick={openStopModal}
         >
@@ -267,8 +267,8 @@ export default function PipelineDetail() {
         </Button>
       )}
       <Button
-        size="1"
-        variant="soft"
+        size="sm"
+        variant="outline"
         disabled={isRescanning}
         onClick={handleRescan}
       >
