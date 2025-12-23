@@ -60,9 +60,55 @@ export default function TaskCreationSidebar({ isOpen, onClose, pipelineSlug }) {
     sendToAPI([...messages, newMessage]);
   };
 
-  // Placeholder for sendToAPI - will be implemented in step 7
   const sendToAPI = async (allMessages) => {
-    // Implementation will be added in step 7
+    // Add empty assistant message to accumulate response
+    setMessages([...allMessages, { role: "assistant", content: "" }]);
+
+    try {
+      const response = await fetch("/api/ai/task-plan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messages: allMessages, pipelineSlug }),
+      });
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let currentEvent = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop(); // Keep incomplete line in buffer
+
+        for (const line of lines) {
+          if (line.startsWith("event: ")) {
+            currentEvent = line.slice(7);
+          } else if (line.startsWith("data: ")) {
+            const data = JSON.parse(line.slice(6));
+
+            if (currentEvent === "chunk" && data.content) {
+              setMessages((prev) => {
+                const updated = [...prev];
+                updated[updated.length - 1].content += data.content;
+                return updated;
+              });
+            } else if (currentEvent === "error" && data.message) {
+              setError(data.message);
+            }
+            // Reset current event after processing data
+            currentEvent = "";
+          }
+        }
+      }
+    } catch (err) {
+      setError(`Connection failed: ${err.message}`);
+    } finally {
+      setIsStreaming(false);
+    }
   };
 
   if (!isOpen) {
