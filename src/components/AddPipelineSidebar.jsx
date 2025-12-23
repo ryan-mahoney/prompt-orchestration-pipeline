@@ -50,6 +50,7 @@ export function AddPipelineSidebar({ open, onOpenChange }) {
       navigate(`/pipelines/${slug}`);
     } catch (err) {
       setError(err.message || "Failed to create pipeline");
+    } finally {
       setSubmitting(false);
     }
   };
