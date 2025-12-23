@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from "react";
-import { Box, Text, Flex } from "@radix-ui/themes";
+import { Box, Text } from "@radix-ui/themes";
 
 /**
  * PipelineTypeTaskSidebar component for displaying pipeline type task details in a slide-over panel
