@@ -589,17 +589,30 @@ export function TaskFilePane({
                   {mime && (size || mtime) && <span className="mx-1">•</span>}
                   {mime && <span>{mime}</span>}
                 </div>
-              )}
-              {content && encoding === "utf8" && (
-                <Button
-                  variant="solid"
-                  size="sm"
-                  onClick={handleCopy}
-                  aria-label="Copy content to clipboard"
-                >
-                  Copy
-                </Button>
-              )}
+              </div>
+              <div className="flex items-center space-x-2">
+                {copyNotice && (
+                  <div
+                    className={`text-xs ${
+                      copyNotice.type === "success"
+                        ? "text-green-600"
+                        : "text-red-600"
+                    }`}
+                  >
+                    {copyNotice.message}
+                  </div>
+                )}
+                {content && encoding === "utf8" && (
+                  <Button
+                    variant="solid"
+                    size="sm"
+                    onClick={handleCopy}
+                    aria-label="Copy content to clipboard"
+                  >
+                    Copy
+                  </Button>
+                )}
+              </div>
             </div>
           </div>
         )}
