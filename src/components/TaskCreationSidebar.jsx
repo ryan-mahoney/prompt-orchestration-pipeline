@@ -131,8 +131,6 @@ export default function TaskCreationSidebar({ isOpen, onClose, pipelineSlug }) {
             } else if (currentEvent === "error" && data.message) {
               setError(data.message);
             }
-            // Reset current event after processing data
-            currentEvent = "";
           }
         }
       }
