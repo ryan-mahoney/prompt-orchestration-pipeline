@@ -20,35 +20,21 @@ export function Button({
   className = "",
   disabled,
   children,
+  type = "button",
   ...props
 }) {
-  // Map custom variant names to Radix UI variants
-  const radixVariant =
-    variant === "solid"
-      ? "solid"
-      : variant === "soft"
-        ? "soft"
-        : variant === "outline"
-          ? "outline"
-          : variant === "ghost"
-            ? "ghost"
-            : variant === "destructive"
-              ? "solid"
-              : "solid";
+  // Base classes for all buttons
+  const baseClasses =
+    "inline-flex items-center justify-center font-medium rounded-md transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed";
 
   // Variant styles using Steel Terminal theme colors
   const variantClasses = {
-    solid:
-      "bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] hover:bg-[hsl(var(--primary-hover))] focus:ring-[hsl(var(--primary))]",
-    default:
-      "bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] hover:bg-[hsl(var(--primary-hover))] focus:ring-[hsl(var(--primary))]",
-    soft: "bg-[hsl(var(--primary))]/10 text-[hsl(var(--primary))] hover:bg-[hsl(var(--primary))]/15 focus:ring-[hsl(var(--primary))] border border-[hsl(var(--primary))]/20",
+    solid: "bg-blue-600 text-white hover:bg-blue-700 focus:ring-blue-500",
+    soft: "bg-blue-50 text-blue-900 hover:bg-blue-100 focus:ring-blue-500 border border-blue-200",
     outline:
-      "border border-[hsl(var(--border))] text-[hsl(var(--secondary-foreground))] bg-transparent hover:bg-[hsl(var(--secondary))] focus:ring-[hsl(var(--ring))]",
-    ghost:
-      "text-[hsl(var(--muted-foreground))] bg-transparent hover:bg-[hsl(var(--secondary))] hover:text-[hsl(var(--secondary-foreground))] focus:ring-[hsl(var(--ring))]",
-    destructive:
-      "bg-[hsl(var(--destructive))] text-[hsl(var(--destructive-foreground))] hover:bg-[hsl(var(--destructive))]/90 focus:ring-[hsl(var(--destructive))]",
+      "border border-gray-300 text-gray-700 bg-transparent hover:bg-gray-50 focus:ring-gray-500",
+    ghost: "text-gray-700 bg-transparent hover:bg-gray-100 focus:ring-gray-500",
+    destructive: "bg-red-600 text-white hover:bg-red-700 focus:ring-red-500",
   };
 
   // Size styles
@@ -58,11 +44,11 @@ export function Button({
     lg: "px-6 py-3 text-lg",
   };
 
-  // Combine base classes with any additional className
-  const combinedClassName = `transition-all duration-200 ${className}`;
-
   // Disable button when loading or explicitly disabled
   const isDisabled = disabled || loading;
+
+  // Combine all classes
+  const combinedClassName = `${baseClasses} ${variantClasses[variant]} ${sizeClasses[size]} ${className}`;
 
   return (
     <button
@@ -79,6 +65,6 @@ export function Button({
       ) : (
         children
       )}
-    </RadixButton>
+    </button>
   );
 }

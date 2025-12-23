@@ -231,23 +231,25 @@ export default function TaskCreationSidebar({ isOpen, onClose, pipelineSlug }) {
 
         {/* Input area */}
         <div className="border-t p-4">
-          <form onSubmit={handleSend} className="flex gap-2">
-            <input
-              type="text"
+          <form onSubmit={handleSend}>
+            <textarea
               value={input}
               onChange={(e) => setInput(e.target.value)}
               disabled={isStreaming}
               placeholder="Describe the task you want to create..."
-              className="flex-1 border rounded px-3 py-2 disabled:bg-gray-100 disabled:cursor-not-allowed"
+              rows={3}
+              className="w-full border rounded-md px-3 py-2 resize-none disabled:bg-gray-100 disabled:cursor-not-allowed mb-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
-            <Button
-              variant="solid"
-              size="md"
-              type="submit"
-              disabled={isStreaming || !input.trim()}
-            >
-              Send
-            </Button>
+            <div className="flex justify-end">
+              <Button
+                variant="solid"
+                size="md"
+                type="submit"
+                disabled={isStreaming || !input.trim()}
+              >
+                Send
+              </Button>
+            </div>
           </form>
         </div>
       </div>
