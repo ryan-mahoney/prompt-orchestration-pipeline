@@ -20,14 +20,23 @@ import path from "node:path";
 /**
  * Create starter files for a new pipeline
  */
-async function createStarterFiles(pipelineDir, slug) {
+async function createStarterFiles(pipelineDir, slug, name, description) {
   // Create tasks directory
   const tasksDir = path.join(pipelineDir, "tasks");
   await fs.mkdir(tasksDir, { recursive: true });
 
-  // Create pipeline.json
+  // Create pipeline.json with correct schema
   const pipelineJsonPath = path.join(pipelineDir, "pipeline.json");
-  const pipelineJsonContent = JSON.stringify({ stages: [] }, null, 2);
+  const pipelineJsonContent = JSON.stringify(
+    {
+      name: slug,
+      version: "1.0.0",
+      description: description,
+      tasks: [],
+    },
+    null,
+    2
+  );
   await fs.writeFile(pipelineJsonPath, pipelineJsonContent, "utf8");
 
   // Create tasks/index.js
@@ -129,7 +138,12 @@ export async function handleCreatePipeline(req, res) {
 
     // Create starter files
     try {
-      await createStarterFiles(pipelineDir, slug);
+      await createStarterFiles(
+        pipelineDir,
+        slug,
+        name.trim(),
+        description.trim()
+      );
     } catch (error) {
       console.error("[CreatePipelineEndpoint] Failed to create files:", error);
       res.status(500).json({ error: "Failed to create pipeline" });
