@@ -74,7 +74,10 @@ Provide complete, working code. Use markdown code blocks.`;
     console.log("[task-creation-endpoint] Calling LLM chat...");
     // Call LLM - streaming not yet implemented, send complete response as chunks
     // TODO: Implement streaming when LLM module supports it
-    const response = await llm.chat({ messages: llmMessages });
+    const response = await llm.chat({
+      messages: llmMessages,
+      responseFormat: "text",
+    });
 
     console.log("[task-creation-endpoint] LLM response received:", {
       hasContent: !!response.content,
