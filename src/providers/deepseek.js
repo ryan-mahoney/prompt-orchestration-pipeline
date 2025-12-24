@@ -12,19 +12,22 @@ export async function deepseekChat({
   model = "deepseek-chat",
   temperature = 0.7,
   maxTokens,
-  responseFormat,
+  responseFormat = "json_object",
   topP,
   frequencyPenalty,
   presencePenalty,
   stop,
   maxRetries = 3,
 }) {
-  // Enforce JSON mode - reject calls without proper JSON responseFormat
-  ensureJsonResponseFormat(responseFormat, "DeepSeek");
-
   if (!process.env.DEEPSEEK_API_KEY) {
     throw new Error("DeepSeek API key not configured");
   }
+
+  // Determine if JSON mode is requested
+  const isJsonMode =
+    responseFormat?.type === "json_object" ||
+    responseFormat?.type === "json_schema" ||
+    responseFormat === "json";
 
   const { systemMsg, userMsg } = extractMessages(messages);
 
@@ -49,8 +52,8 @@ export async function deepseekChat({
         stop,
       };
 
-      // Add response format - this is now required for all calls
-      if (responseFormat?.type === "json_object" || responseFormat === "json") {
+      // Add response format only for JSON mode
+      if (isJsonMode) {
         requestBody.response_format = { type: "json_object" };
       }
 
@@ -76,19 +79,27 @@ export async function deepseekChat({
       const data = await response.json();
       const content = data.choices[0].message.content;
 
-      // Parse JSON - this is now required for all calls
-      const parsed = tryParseJSON(content);
-      if (!parsed) {
-        throw new ProviderJsonParseError(
-          "DeepSeek",
-          model,
-          content.substring(0, 200),
-          "Failed to parse JSON response from DeepSeek API"
-        );
+      // Parse JSON only in JSON mode; return raw string for text mode
+      if (isJsonMode) {
+        const parsed = tryParseJSON(content);
+        if (!parsed) {
+          throw new ProviderJsonParseError(
+            "DeepSeek",
+            model,
+            content.substring(0, 200),
+            "Failed to parse JSON response from DeepSeek API"
+          );
+        }
+        return {
+          content: parsed,
+          usage: data.usage,
+          raw: data,
+        };
       }
 
+      // Text mode - return raw string
       return {
-        content: parsed,
+        content,
         usage: data.usage,
         raw: data,
       };

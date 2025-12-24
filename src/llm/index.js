@@ -131,9 +131,6 @@ export async function chat(options) {
   const startTime = Date.now();
   const requestId = `req_${Date.now()}_${Math.random().toString(36).substring(7)}`;
 
-  // Default to JSON mode if not specified
-  const finalResponseFormat = responseFormat ?? "json";
-
   // Extract system and user messages
   const systemMsg = messages.find((m) => m.role === "system")?.content || "";
   const userMessages = messages.filter((m) => m.role === "user");
@@ -213,7 +210,9 @@ export async function chat(options) {
         hasMessages: !!openaiArgs.messages,
         messageCount: openaiArgs.messages?.length,
       });
-      openaiArgs.responseFormat = finalResponseFormat;
+      if (responseFormat !== undefined) {
+        openaiArgs.responseFormat = responseFormat;
+      }
       if (topP !== undefined) openaiArgs.topP = topP;
       if (frequencyPenalty !== undefined)
         openaiArgs.frequencyPenalty = frequencyPenalty;
@@ -273,7 +272,9 @@ export async function chat(options) {
       if (presencePenalty !== undefined)
         deepseekArgs.presencePenalty = presencePenalty;
       if (stop !== undefined) deepseekArgs.stop = stop;
-      deepseekArgs.responseFormat = finalResponseFormat;
+      if (responseFormat !== undefined) {
+        deepseekArgs.responseFormat = responseFormat;
+      }
 
       console.log("[llm] Calling deepseekChat()...");
       const result = await deepseekChat(deepseekArgs);
@@ -326,7 +327,9 @@ export async function chat(options) {
       });
       if (topP !== undefined) anthropicArgs.topP = topP;
       if (stop !== undefined) anthropicArgs.stop = stop;
-      anthropicArgs.responseFormat = finalResponseFormat;
+      if (responseFormat !== undefined) {
+        anthropicArgs.responseFormat = responseFormat;
+      }
 
       console.log("[llm] Calling anthropicChat()...");
       const result = await anthropicChat(anthropicArgs);
@@ -376,7 +379,9 @@ export async function chat(options) {
       });
       if (topP !== undefined) geminiArgs.topP = topP;
       if (stop !== undefined) geminiArgs.stop = stop;
-      geminiArgs.responseFormat = finalResponseFormat;
+      if (responseFormat !== undefined) {
+        geminiArgs.responseFormat = responseFormat;
+      }
 
       console.log("[llm] Calling geminiChat()...");
       const result = await geminiChat(geminiArgs);
@@ -430,7 +435,9 @@ export async function chat(options) {
       });
       if (topP !== undefined) zhipuArgs.topP = topP;
       if (stop !== undefined) zhipuArgs.stop = stop;
-      zhipuArgs.responseFormat = finalResponseFormat;
+      if (responseFormat !== undefined) {
+        zhipuArgs.responseFormat = responseFormat;
+      }
 
       console.log("[llm] Calling zhipuChat()...");
       const result = await zhipuChat(zhipuArgs);
