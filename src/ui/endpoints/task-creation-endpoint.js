@@ -87,10 +87,14 @@ Provide complete, working code. Use markdown code blocks.`;
         typeof response.content === "string" ? response.content.length : 0,
     });
 
-    const content =
-      typeof response.content === "string"
-        ? response.content
-        : JSON.stringify(response.content);
+    const content = response?.content ?? "";
+
+    if (!content) {
+      console.error("[task-creation-endpoint] LLM returned empty content");
+      sse.send("error", { message: "No response generated" });
+      sse.close();
+      return;
+    }
 
     console.log(
       "[task-creation-endpoint] Sending content as SSE chunks, total length:",
@@ -98,7 +102,7 @@ Provide complete, working code. Use markdown code blocks.`;
     );
 
     // Send content in chunks for streaming effect
-    const chunkSize = 50; // characters per chunk
+    const chunkSize = 500; // characters per chunk
     let chunkCount = 0;
     for (let i = 0; i < content.length; i += chunkSize) {
       const chunk = content.slice(i, i + chunkSize);
@@ -106,7 +110,11 @@ Provide complete, working code. Use markdown code blocks.`;
       chunkCount++;
     }
 
-    console.log("[task-creation-endpoint] Sent", chunkCount, "chunks via SSE");
+    console.log(
+      "[task-creation-endpoint] Sent",
+      chunkCount,
+      "chunks via SSE (" + chunkSize + " chars each)"
+    );
 
     // Send done event
     console.log("[task-creation-endpoint] Sending 'done' event...");
