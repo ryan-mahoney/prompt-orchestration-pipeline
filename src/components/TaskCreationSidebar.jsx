@@ -3,8 +3,11 @@ import { Button } from "./ui/button.jsx";
 import { Sidebar, SidebarFooter } from "./ui/sidebar.jsx";
 
 function MessageContent({ content }) {
+  // Ensure content is a string
+  const safeContent = content || "";
+
   // Split content by code blocks (```...```)
-  const parts = content.split(/```(\w+)?\n([\s\S]*?)```/g);
+  const parts = safeContent.split(/```(\w+)?\n([\s\S]*?)```/g);
 
   return (
     <>
@@ -28,7 +31,7 @@ function MessageContent({ content }) {
           );
         }
         // Even indices are regular text
-        if (part.trim()) {
+        if (part && part.trim()) {
           return (
             <p key={index} className="whitespace-pre-wrap">
               {part}
