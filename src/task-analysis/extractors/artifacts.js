@@ -1,4 +1,7 @@
-import traverse from "@babel/traverse";
+import { createRequire } from "node:module";
+const require = createRequire(import.meta.url);
+const traverse =
+  require("@babel/traverse").default ?? require("@babel/traverse");
 import * as t from "@babel/types";
 import { isInsideTryCatch, getStageName } from "../utils/ast.js";
 

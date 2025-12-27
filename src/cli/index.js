@@ -7,6 +7,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
 import { updatePipelineJson } from "./update-pipeline-json.js";
+import { analyzeTaskFile } from "./analyze-task.js";
 
 // Derive package root for resolving internal paths regardless of host CWD
 const currentFile = fileURLToPath(import.meta.url);
@@ -366,6 +367,13 @@ program
       console.error(`Error adding pipeline: ${error.message}`);
       process.exit(1);
     }
+  });
+
+program
+  .command("analyze <task-path>")
+  .description("Analyze a task file and output metadata")
+  .action(async (taskPath) => {
+    await analyzeTaskFile(taskPath);
   });
 
 program
