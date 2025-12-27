@@ -183,7 +183,11 @@ export default function TaskCreationSidebar({ isOpen, onClose, pipelineSlug }) {
           if (updated[messageIndex]) {
             updated[messageIndex] = {
               ...updated[messageIndex],
-              error: errorData.message || "Failed to create task",
+              error:
+                (typeof errorData === "string"
+                  ? errorData
+                  : errorData.error || errorData.message) ||
+                "Failed to create task",
             };
           }
           return updated;
