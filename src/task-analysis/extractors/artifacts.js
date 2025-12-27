@@ -12,7 +12,7 @@ import { isInsideTryCatch, getStageName } from "../utils/ast.js";
 export function extractArtifactReads(ast) {
   const reads = [];
 
-  traverse.default(ast, {
+  traverse(ast, {
     CallExpression(path) {
       const { callee } = path.node;
 
@@ -61,7 +61,7 @@ export function extractArtifactReads(ast) {
 export function extractArtifactWrites(ast) {
   const writes = [];
 
-  traverse.default(ast, {
+  traverse(ast, {
     CallExpression(path) {
       const { callee } = path.node;
 
