@@ -3,6 +3,71 @@ import { Button } from "./ui/button.jsx";
 import { Sidebar, SidebarFooter } from "./ui/sidebar.jsx";
 import { MarkdownRenderer } from "./MarkdownRenderer.jsx";
 
+const TASK_PROPOSAL_REGEX =
+  /\[TASK_PROPOSAL\]\s*FILENAME:\s*(\S+)\s*TASKNAME:\s*(\S+)\s*CODE:\s*```javascript\s*([\s\S]*?)\s*```\s*\[\/TASK_PROPOSAL\]/;
+
+function parseTaskProposal(content) {
+  const match = content.match(TASK_PROPOSAL_REGEX);
+  if (!match) return null;
+
+  const [, filename, taskName, code] = match;
+  return { filename, taskName, code, proposalBlock: match[0] };
+}
+
+function TaskProposalCard({ proposal, isCreating, onCreate }) {
+  const [isExpanded, setIsExpanded] = useState(false);
+
+  return (
+    <div className="mt-3 p-4 bg-card border border-border rounded-lg shadow-sm">
+      <div className="flex items-start justify-between mb-2">
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <span className="px-2 py-0.5 text-xs font-medium bg-primary/10 text-primary rounded-full">
+              Task Proposal
+            </span>
+          </div>
+          <p className="text-sm font-medium text-foreground">
+            {proposal.filename}
+          </p>
+          <p className="text-xs text-muted-foreground">{proposal.taskName}</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setIsExpanded(!isExpanded)}
+          className="text-xs text-muted-foreground hover:text-foreground"
+        >
+          {isExpanded ? "Hide" : "Show"} code
+        </button>
+      </div>
+      {isExpanded && (
+        <pre className="mt-2 p-3 bg-muted rounded text-xs overflow-x-auto">
+          <code>{proposal.code}</code>
+        </pre>
+      )}
+      {proposal.error && (
+        <p className="mt-2 text-sm text-destructive">{proposal.error}</p>
+      )}
+      {proposal.created && (
+        <p className="mt-2 text-sm text-green-600 dark:text-green-400">
+          ✓ Task created successfully
+        </p>
+      )}
+      {!proposal.created && (
+        <div className="mt-3">
+          <Button
+            variant="solid"
+            size="sm"
+            onClick={onCreate}
+            disabled={isCreating}
+          >
+            {isCreating ? "Creating..." : "Create Task"}
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function TaskCreationSidebar({ isOpen, onClose, pipelineSlug }) {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
@@ -10,11 +75,27 @@ export default function TaskCreationSidebar({ isOpen, onClose, pipelineSlug }) {
   const [isWaiting, setIsWaiting] = useState(false);
   const [isReceiving, setIsReceiving] = useState(false);
   const [error, setError] = useState(null);
+  const [taskProposals, setTaskProposals] = useState({});
+  const [creatingTask, setCreatingTask] = useState({});
   const messagesEndRef = useRef(null);
 
   // Auto-scroll to bottom when messages change
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  // Detect task proposals in assistant messages
+  useEffect(() => {
+    const newProposals = {};
+    messages.forEach((msg, i) => {
+      if (msg.role === "assistant") {
+        const proposal = parseTaskProposal(msg.content);
+        if (proposal) {
+          newProposals[i] = proposal;
+        }
+      }
+    });
+    setTaskProposals(newProposals);
   }, [messages]);
 
   // Beforeunload warning when messages exist
@@ -39,6 +120,8 @@ export default function TaskCreationSidebar({ isOpen, onClose, pipelineSlug }) {
     setMessages([]);
     setInput("");
     setError(null);
+    setTaskProposals({});
+    setCreatingTask({});
     onClose();
   };
 
@@ -56,6 +139,70 @@ export default function TaskCreationSidebar({ isOpen, onClose, pipelineSlug }) {
     setError(null);
 
     sendToAPI([...messages, newMessage]);
+  };
+
+  const handleCreateTask = async (messageIndex, proposal) => {
+    setCreatingTask((prev) => ({ ...prev, [messageIndex]: true }));
+    setTaskProposals((prev) => {
+      const updated = { ...prev };
+      if (updated[messageIndex]) {
+        updated[messageIndex] = { ...updated[messageIndex], error: null };
+      }
+      return updated;
+    });
+
+    try {
+      const response = await fetch("/api/tasks/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          pipelineSlug,
+          filename: proposal.filename,
+          taskName: proposal.taskName,
+          code: proposal.code,
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setTaskProposals((prev) => {
+          const updated = { ...prev };
+          if (updated[messageIndex]) {
+            updated[messageIndex] = {
+              ...updated[messageIndex],
+              created: true,
+              path: data.path,
+            };
+          }
+          return updated;
+        });
+      } else {
+        const errorData = await response.json();
+        setTaskProposals((prev) => {
+          const updated = { ...prev };
+          if (updated[messageIndex]) {
+            updated[messageIndex] = {
+              ...updated[messageIndex],
+              error: errorData.message || "Failed to create task",
+            };
+          }
+          return updated;
+        });
+      }
+    } catch (err) {
+      setTaskProposals((prev) => {
+        const updated = { ...prev };
+        if (updated[messageIndex]) {
+          updated[messageIndex] = {
+            ...updated[messageIndex],
+            error: "Network error: " + err.message,
+          };
+        }
+        return updated;
+      });
+    } finally {
+      setCreatingTask((prev) => ({ ...prev, [messageIndex]: false }));
+    }
   };
 
   const sendToAPI = async (allMessages) => {
@@ -185,38 +332,48 @@ export default function TaskCreationSidebar({ isOpen, onClose, pipelineSlug }) {
       {/* Messages area */}
       <div className="flex-1 overflow-y-auto p-6 space-y-4">
         {messages.map((msg, i) => (
-          <div
-            key={i}
-            className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
-          >
+          <div key={i}>
             <div
-              className={`rounded-lg p-3 max-w-full ${
-                msg.role === "user"
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-muted text-muted-foreground"
-              }`}
+              className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
             >
-              {msg.role === "assistant" ? (
-                <>
-                  <MarkdownRenderer content={msg.content} />
-                  {isWaiting && !msg.content && (
-                    <div className="flex items-center gap-1 text-muted-foreground mt-2">
-                      {Array.from({ length: 5 }).map((_, i) => (
-                        <span
-                          key={i}
-                          className="animate-bounce-wave"
-                          style={{ animationDelay: `${i * 0.1}s` }}
-                        >
-                          •
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </>
-              ) : (
-                <p className="whitespace-pre-wrap">{msg.content}</p>
-              )}
+              <div
+                className={`rounded-lg p-3 max-w-full ${
+                  msg.role === "user"
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-muted text-muted-foreground"
+                }`}
+              >
+                {msg.role === "assistant" ? (
+                  <>
+                    <MarkdownRenderer
+                      content={msg.content.replace(TASK_PROPOSAL_REGEX, "")}
+                    />
+                    {isWaiting && !msg.content && (
+                      <div className="flex items-center gap-1 text-muted-foreground mt-2">
+                        {Array.from({ length: 5 }).map((_, idx) => (
+                          <span
+                            key={idx}
+                            className="animate-bounce-wave"
+                            style={{ animationDelay: `${idx * 0.1}s` }}
+                          >
+                            •
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <p className="whitespace-pre-wrap">{msg.content}</p>
+                )}
+              </div>
             </div>
+            {taskProposals[i] && (
+              <TaskProposalCard
+                proposal={taskProposals[i]}
+                isCreating={creatingTask[i]}
+                onCreate={() => handleCreateTask(i, taskProposals[i])}
+              />
+            )}
           </div>
         ))}
 

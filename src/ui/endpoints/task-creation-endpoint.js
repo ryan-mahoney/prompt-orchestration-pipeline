@@ -36,26 +36,24 @@ export async function handleTaskPlan(req, res) {
     guidelines.length
   );
 
-  // Truncate messages to last 20 if too long
-  const truncatedMessages =
-    messages.length > 20 ? messages.slice(-20) : messages;
-
-  console.log("[task-creation-endpoint] Messages truncated:", {
-    original: messages.length,
-    truncated: truncatedMessages.length,
-  });
-
   // Build LLM messages array
   const systemPrompt = `You are a pipeline task assistant. Help users create task definitions following these guidelines:
 
 ${guidelines}
 
-Provide complete, working code. Use markdown code blocks.`;
+Provide complete, working code. Use markdown code blocks.
 
-  const llmMessages = [
-    { role: "system", content: systemPrompt },
-    ...truncatedMessages,
-  ];
+When you have completed a task definition that the user wants to create, wrap it in this format:
+[TASK_PROPOSAL]
+FILENAME: <filename.js>
+TASKNAME: <task-name>
+CODE:
+\`\`\`javascript
+<the complete task code here>
+\`\`\`
+[/TASK_PROPOSAL]`;
+
+  const llmMessages = [{ role: "system", content: systemPrompt }, ...messages];
 
   console.log("[task-creation-endpoint] LLM messages array created:", {
     totalMessages: llmMessages.length,
