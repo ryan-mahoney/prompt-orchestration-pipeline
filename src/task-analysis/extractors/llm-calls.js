@@ -11,27 +11,57 @@ import { getStageName } from "../utils/ast.js";
  * - llm.anthropic.sonnet45(...)
  * - llm.gemini.flash25(...)
  *
+ * And destructured calls like:
+ * - const { deepseek } = llm; deepseek.chat(...)
+ *
  * @param {import("@babel/types").File} ast - The AST to analyze
  * @returns {Array<{provider: string, method: string, stage: string}>} Array of LLM call references
  * @throws {Error} If LLM call is found outside an exported function
  */
 export function extractLLMCalls(ast) {
   const calls = [];
+  const destructuredProviders = new Map();
 
-  traverse.default(ast, {
+  // First pass: collect destructured providers from llm param
+  traverse(ast, {
+    VariableDeclarator(path) {
+      const { id, init } = path.node;
+
+      // Match: const { deepseek } = llm
+      if (t.isObjectPattern(id) && t.isIdentifier(init, { name: "llm" })) {
+        id.properties.forEach((prop) => {
+          if (t.isObjectProperty(prop) && t.isIdentifier(prop.key)) {
+            destructuredProviders.set(prop.key.name, "llm");
+          }
+        });
+      }
+    },
+  });
+
+  // Second pass: extract LLM calls
+  traverse(ast, {
     CallExpression(path) {
       const { callee } = path.node;
 
       // Match: llm.provider.method(...)
-      // This is a nested member expression with 3 levels: llm.provider.method
-      if (isLLMCall(callee)) {
-        // Extract provider (second level: llm.provider)
+      if (isDirectLLMCall(callee)) {
         const provider = callee.object.property.name;
-
-        // Extract method (third level: provider.method)
         const method = callee.property.name;
+        const stage = getStageName(path);
 
-        // Get the stage name (must be in an exported function)
+        if (!stage) {
+          throw new Error(
+            `LLM call found outside an exported function at ${path.node.loc?.start?.line}:${path.node.loc?.start?.column}`
+          );
+        }
+
+        calls.push({ provider, method, stage });
+      }
+
+      // Match: provider.method(...) where provider was destructured from llm
+      if (isDestructuredLLMCall(callee, destructuredProviders)) {
+        const provider = callee.object.name;
+        const method = callee.property.name;
         const stage = getStageName(path);
 
         if (!stage) {
@@ -49,14 +79,14 @@ export function extractLLMCalls(ast) {
 }
 
 /**
- * Check if a callee node is an LLM call pattern.
+ * Check if a callee node is a direct LLM call pattern.
  *
  * Matches nested member expressions: llm.provider.method
  *
  * @param {import("@babel/types").Node} callee - The callee node to check
- * @returns {boolean} True if the callee is an LLM call pattern
+ * @returns {boolean} True if the callee is a direct LLM call pattern
  */
-function isLLMCall(callee) {
+function isDirectLLMCall(callee) {
   // Must be a member expression (e.g., llm.provider.method)
   if (!t.isMemberExpression(callee)) {
     return false;
@@ -74,6 +104,39 @@ function isLLMCall(callee) {
 
   // The object property must be an identifier (the provider)
   if (!t.isIdentifier(callee.object.property)) {
+    return false;
+  }
+
+  // The callee property must be an identifier (the method)
+  if (!t.isIdentifier(callee.property)) {
+    return false;
+  }
+
+  return true;
+}
+
+/**
+ * Check if a callee node is a destructured LLM call pattern.
+ *
+ * Matches: provider.method(...) where provider was destructured from llm
+ *
+ * @param {import("@babel/types").Node} callee - The callee node to check
+ * @param {Map<string, string>} destructuredProviders - Map of destructured provider names
+ * @returns {boolean} True if the callee is a destructured LLM call pattern
+ */
+function isDestructuredLLMCall(callee, destructuredProviders) {
+  // Must be a member expression (e.g., provider.method)
+  if (!t.isMemberExpression(callee)) {
+    return false;
+  }
+
+  // The object must be an identifier (the destructured provider)
+  if (!t.isIdentifier(callee.object)) {
+    return false;
+  }
+
+  // The object name must be in the destructured providers map
+  if (!destructuredProviders.has(callee.object.name)) {
     return false;
   }
 
