@@ -44,8 +44,11 @@ export async function handleTaskSave(req, res) {
     const taskRegistryPath = path.join(rootDir, pipelineEntry.taskRegistryPath);
     const tasksDir = path.dirname(taskRegistryPath);
 
-    // Write task file
-    const taskFilePath = path.join(tasksDir, filename);
+    // Write task file (prevent path traversal by validating resolved path)
+    const taskFilePath = path.resolve(tasksDir, filename);
+    if (!taskFilePath.startsWith(tasksDir)) {
+      return sendJson(res, 400, { error: "Invalid filename" });
+    }
     await fs.writeFile(taskFilePath, code, "utf8");
 
     // Update index.js to export new task
