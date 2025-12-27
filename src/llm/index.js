@@ -256,7 +256,7 @@ export async function chat(options) {
       console.log("[llm] Using DeepSeek provider");
       const deepseekArgs = {
         messages,
-        model: model || "deepseek-reasoner",
+        model: model || MODEL_CONFIG[DEFAULT_MODEL_BY_PROVIDER.deepseek].model,
         temperature,
         maxTokens,
         ...rest,

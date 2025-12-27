@@ -1,53 +1,14 @@
 import { useState, useEffect, useRef } from "react";
 import { Button } from "./ui/button.jsx";
 import { Sidebar, SidebarFooter } from "./ui/sidebar.jsx";
-
-function MessageContent({ content }) {
-  // Ensure content is a string
-  const safeContent = content || "";
-
-  // Split content by code blocks (```...```)
-  const parts = safeContent.split(/```(\w+)?\n([\s\S]*?)```/g);
-
-  return (
-    <>
-      {parts.map((part, index) => {
-        // Odd indices are code blocks (language is index-1, code is index)
-        if (index % 2 === 1) {
-          const code = parts[index + 1] || "";
-          const language = part || "";
-          return (
-            <div key={index} className="relative group">
-              <pre className="bg-muted text-muted-foreground p-3 rounded mt-2 overflow-x-auto">
-                <code className={`language-${language} text-sm`}>{code}</code>
-              </pre>
-              <button
-                onClick={() => navigator.clipboard.writeText(code)}
-                className="absolute top-2 right-2 bg-muted-foreground text-background text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity"
-              >
-                Copy
-              </button>
-            </div>
-          );
-        }
-        // Even indices are regular text
-        if (part && part.trim()) {
-          return (
-            <p key={index} className="whitespace-pre-wrap">
-              {part}
-            </p>
-          );
-        }
-        return null;
-      })}
-    </>
-  );
-}
+import { MarkdownRenderer } from "./MarkdownRenderer.jsx";
 
 export default function TaskCreationSidebar({ isOpen, onClose, pipelineSlug }) {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
-  const [isStreaming, setIsStreaming] = useState(false);
+  const [isSending, setIsSending] = useState(false);
+  const [isWaiting, setIsWaiting] = useState(false);
+  const [isReceiving, setIsReceiving] = useState(false);
   const [error, setError] = useState(null);
   const messagesEndRef = useRef(null);
 
@@ -89,7 +50,9 @@ export default function TaskCreationSidebar({ isOpen, onClose, pipelineSlug }) {
     const newMessage = { role: "user", content: input.trim() };
     setMessages([...messages, newMessage]);
     setInput("");
-    setIsStreaming(true);
+    setIsSending(true);
+    setIsWaiting(true);
+    setIsReceiving(false);
     setError(null);
 
     sendToAPI([...messages, newMessage]);
@@ -103,6 +66,9 @@ export default function TaskCreationSidebar({ isOpen, onClose, pipelineSlug }) {
 
     // Add empty assistant message to accumulate response
     setMessages([...allMessages, { role: "assistant", content: "" }]);
+
+    // Transition: sending → waiting after 300ms
+    setTimeout(() => setIsSending(false), 300);
 
     try {
       console.log("[TaskCreationSidebar] Fetching /api/ai/task-plan...");
@@ -159,6 +125,11 @@ export default function TaskCreationSidebar({ isOpen, onClose, pipelineSlug }) {
               });
 
               if (currentEvent === "chunk" && data.content) {
+                // Transition: waiting → receiving on first chunk
+                if (chunksReceived === 0) {
+                  setIsWaiting(false);
+                  setIsReceiving(true);
+                }
                 chunksReceived++;
                 setMessages((prev) => {
                   const updated = [...prev];
@@ -192,7 +163,9 @@ export default function TaskCreationSidebar({ isOpen, onClose, pipelineSlug }) {
       setError(`Connection failed: ${err.message}`);
     } finally {
       console.log("[TaskCreationSidebar] sendToAPI completed");
-      setIsStreaming(false);
+      setIsWaiting(false);
+      setIsReceiving(false);
+      setIsSending(false);
     }
   };
 
@@ -214,13 +187,32 @@ export default function TaskCreationSidebar({ isOpen, onClose, pipelineSlug }) {
             className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
           >
             <div
-              className={`rounded-lg p-3 max-w-[80%] ${
+              className={`rounded-lg p-3 max-w-full ${
                 msg.role === "user"
                   ? "bg-primary text-primary-foreground"
                   : "bg-muted text-muted-foreground"
               }`}
             >
-              <MessageContent content={msg.content} />
+              {msg.role === "assistant" ? (
+                <>
+                  <MarkdownRenderer content={msg.content} />
+                  {isWaiting && !msg.content && (
+                    <div className="flex items-center gap-1 text-muted-foreground mt-2">
+                      {Array.from({ length: 5 }).map((_, i) => (
+                        <span
+                          key={i}
+                          className="animate-bounce-wave"
+                          style={{ animationDelay: `${i * 0.1}s` }}
+                        >
+                          •
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </>
+              ) : (
+                <p className="whitespace-pre-wrap">{msg.content}</p>
+              )}
             </div>
           </div>
         ))}
@@ -265,7 +257,7 @@ export default function TaskCreationSidebar({ isOpen, onClose, pipelineSlug }) {
           <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            disabled={isStreaming}
+            disabled={isSending || isWaiting || isReceiving}
             placeholder="Describe the task you want to create..."
             rows={3}
             className="w-full border rounded-md px-3 py-2 resize-none disabled:bg-muted disabled:cursor-not-allowed mb-3 focus:outline-none focus:ring-2 focus:ring-ring bg-background"
@@ -276,9 +268,12 @@ export default function TaskCreationSidebar({ isOpen, onClose, pipelineSlug }) {
               variant="solid"
               size="md"
               type="submit"
-              disabled={isStreaming || !input.trim()}
+              disabled={isSending || isWaiting || isReceiving || !input.trim()}
             >
-              {isStreaming ? "Sending..." : "Send"}
+              {isSending && "Sending..."}
+              {isWaiting && "Thinking..."}
+              {isReceiving && "Receiving..."}
+              {!isSending && !isWaiting && !isReceiving && "Send"}
             </Button>
           </div>
         </form>

@@ -46,7 +46,7 @@ export const Sidebar = forwardRef(
           <Dialog.Content
             ref={ref}
             style={{ backgroundColor: "white" }}
-            className={`fixed inset-y-0 right-0 z-[2000] w-full max-w-[640px] min-w-[384px] bg-card shadow-2xl transform transition-all duration-300 ease-in-out data-[state=closed]:translate-x-full data-[state=open]:translate-x-0 data-[state=closed]:animate-out data-[state=open]:animate-in ${contentClassName}`}
+            className={`fixed inset-y-0 right-0 z-[2000] w-full max-w-[900px] min-w-[384px] bg-card shadow-2xl transform transition-all duration-300 ease-in-out data-[state=closed]:translate-x-full data-[state=open]:translate-x-0 data-[state=closed]:animate-out data-[state=open]:animate-in ${contentClassName}`}
             {...props}
           >
             {/* Header */}
