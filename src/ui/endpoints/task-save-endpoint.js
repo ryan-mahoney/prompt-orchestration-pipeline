@@ -15,6 +15,9 @@ export async function handleTaskSave(req, res) {
   try {
     const { pipelineSlug, filename, taskName, code } = req.body;
 
+    if (!pipelineSlug) {
+      return sendJson(res, 400, { error: "pipelineSlug is required" });
+    }
     // Validate filename ends with .js
     if (!filename || !filename.endsWith(".js")) {
       return sendJson(res, 400, { error: "Filename must end with .js" });
