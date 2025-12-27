@@ -221,4 +221,53 @@ describe("extractStages", () => {
     expect(stages).toHaveLength(1);
     expect(stages[0].order).toBe(0);
   });
+
+  it("extracts names from exported function expressions", () => {
+    const code = `
+      export const ingestion = function() {
+        return "data";
+      };
+
+      export const processing = function() {
+        return "processed";
+      };
+
+      export const output = function() {
+        return "result";
+      };
+    `;
+
+    const ast = parseTaskSource(code);
+    const stages = extractStages(ast);
+
+    expect(stages).toHaveLength(3);
+    expect(stages.map((s) => s.name)).toEqual([
+      "ingestion",
+      "processing",
+      "output",
+    ]);
+  });
+
+  it("correctly identifies async function expressions", () => {
+    const code = `
+      export const syncFunc = function() {
+        return "sync";
+      };
+
+      export const asyncFunc = async function() {
+        return await Promise.resolve("async");
+      };
+    `;
+
+    const ast = parseTaskSource(code);
+    const stages = extractStages(ast);
+
+    expect(stages).toHaveLength(2);
+
+    const syncFunc = stages.find((s) => s.name === "syncFunc");
+    expect(syncFunc.isAsync).toBe(false);
+
+    const asyncFunc = stages.find((s) => s.name === "asyncFunc");
+    expect(asyncFunc.isAsync).toBe(true);
+  });
 });

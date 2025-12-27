@@ -31,11 +31,12 @@ export function extractStages(ast) {
       }
 
       // Handle: export const name = () => {} or export const name = async () => {}
+      // or export const name = function() {}
       if (declaration?.type === "VariableDeclaration") {
         const declarator = declaration.declarations[0];
         const init = declarator?.init;
 
-        if (init?.type === "ArrowFunctionExpression") {
+        if (init?.type === "ArrowFunctionExpression" || init?.type === "FunctionExpression") {
           stages.push({
             name: declarator.id.name,
             order: path.node.loc?.start.line ?? 0,
