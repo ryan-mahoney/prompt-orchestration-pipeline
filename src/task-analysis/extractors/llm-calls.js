@@ -156,9 +156,12 @@ function isDestructuredLLMCall(callee, path) {
 
     if (llmProperty) {
       // Check if the provider identifier is in the nested ObjectPattern
+      // Handles both shorthand ({ llm: { provider } }) and renamed ({ llm: { provider: alias } }) patterns
       const providerInPattern = llmProperty.value.properties.some((innerProp) =>
         t.isObjectProperty(innerProp)
-          ? t.isIdentifier(innerProp.key, { name: callee.object.name }) ||
+          ? // Check key for shorthand pattern: { provider }
+            t.isIdentifier(innerProp.key, { name: callee.object.name }) ||
+            // Check value for renamed pattern: { provider: alias } where we're looking for alias
             t.isIdentifier(innerProp.value, { name: callee.object.name })
           : false
       );
