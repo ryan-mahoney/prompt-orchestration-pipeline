@@ -152,8 +152,8 @@ async function* createStreamGenerator(stream) {
           try {
             const parsed = JSON.parse(data);
             const content = parsed.choices?.[0]?.delta?.content;
-            // Skip empty/whitespace-only chunks to prevent duplicates
-            if (content && content.trim()) {
+            // Skip only truly empty chunks; preserve whitespace-only content
+            if (content !== undefined && content !== null && content !== "") {
               yield { content };
             }
           } catch (e) {
