@@ -33,7 +33,7 @@ export async function openaiChat({
   temperature,
   maxTokens,
   max_tokens, // Explicitly destructure to prevent it from being in ...rest
-  responseFormat,
+  responseFormat = "json_object",
   seed,
   stop,
   topP,
@@ -46,15 +46,18 @@ export async function openaiChat({
   console.log("[OpenAI] Model:", model);
   console.log("[OpenAI] Response format:", responseFormat);
 
-  // Enforce JSON mode - reject calls without proper JSON responseFormat
-  ensureJsonResponseFormat(responseFormat, "OpenAI");
-
   const openai = getClient();
   if (!openai) throw new Error("OpenAI API key not configured");
 
   const { systemMsg, userMsg } = extractMessages(messages);
   console.log("[OpenAI] System message length:", systemMsg.length);
   console.log("[OpenAI] User message length:", userMsg.length);
+
+  // Determine if JSON mode is requested
+  const isJsonMode =
+    responseFormat?.json_schema ||
+    responseFormat?.type === "json_object" ||
+    responseFormat === "json";
 
   let lastError;
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
@@ -109,19 +112,27 @@ export async function openaiChat({
           total_tokens: promptTokens + completionTokens,
         };
 
-        // Parse JSON - this is now required for all calls
-        const parsed = tryParseJSON(text);
-        if (!parsed) {
-          throw new ProviderJsonParseError(
-            "OpenAI",
-            model,
-            text.substring(0, 200),
-            "Failed to parse JSON response from Responses API"
+        // Parse JSON only in JSON mode; return raw string for text mode
+        if (isJsonMode) {
+          const parsed = tryParseJSON(text);
+          if (!parsed) {
+            throw new ProviderJsonParseError(
+              "OpenAI",
+              model,
+              text.substring(0, 200),
+              "Failed to parse JSON response from Responses API"
+            );
+          }
+          console.log(
+            "[OpenAI] Returning response from Responses API (JSON mode)"
           );
+          return { content: parsed, text, usage, raw: resp };
         }
 
-        console.log("[OpenAI] Returning response from Responses API");
-        return { content: parsed, text, usage, raw: resp };
+        console.log(
+          "[OpenAI] Returning response from Responses API (text mode)"
+        );
+        return { content: text, text, usage, raw: resp };
       }
 
       // ---------- CLASSIC CHAT COMPLETIONS path (non-GPT-5) ----------
@@ -156,19 +167,27 @@ export async function openaiChat({
         classicText.length
       );
 
-      // Parse JSON - this is now required for all calls
-      const classicParsed = tryParseJSON(classicText);
-      if (!classicParsed) {
-        throw new ProviderJsonParseError(
-          "OpenAI",
-          model,
-          classicText.substring(0, 200),
-          "Failed to parse JSON response from Classic API"
-        );
+      // Parse JSON only in JSON mode; return raw string for text mode
+      if (isJsonMode) {
+        const classicParsed = tryParseJSON(classicText);
+        if (!classicParsed) {
+          throw new ProviderJsonParseError(
+            "OpenAI",
+            model,
+            classicText.substring(0, 200),
+            "Failed to parse JSON response from Classic API"
+          );
+        }
+        return {
+          content: classicParsed,
+          text: classicText,
+          usage: classicRes?.usage,
+          raw: classicRes,
+        };
       }
 
       return {
-        content: classicParsed,
+        content: classicText,
         text: classicText,
         usage: classicRes?.usage,
         raw: classicRes,
@@ -211,19 +230,27 @@ export async function openaiChat({
         const classicRes = await openai.chat.completions.create(classicReq);
         const text = classicRes?.choices?.[0]?.message?.content ?? "";
 
-        // Parse JSON - this is now required for all calls
-        const parsed = tryParseJSON(text);
-        if (!parsed) {
-          throw new ProviderJsonParseError(
-            "OpenAI",
-            model,
-            text.substring(0, 200),
-            "Failed to parse JSON response from fallback Classic API"
-          );
+        // Parse JSON only in JSON mode; return raw string for text mode
+        if (isJsonMode) {
+          const parsed = tryParseJSON(text);
+          if (!parsed) {
+            throw new ProviderJsonParseError(
+              "OpenAI",
+              model,
+              text.substring(0, 200),
+              "Failed to parse JSON response from fallback Classic API"
+            );
+          }
+          return {
+            content: parsed,
+            text,
+            usage: classicRes?.usage,
+            raw: classicRes,
+          };
         }
 
         return {
-          content: parsed,
+          content: text,
           text,
           usage: classicRes?.usage,
           raw: classicRes,

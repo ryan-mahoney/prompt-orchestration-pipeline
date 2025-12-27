@@ -12,19 +12,23 @@ export async function deepseekChat({
   model = "deepseek-chat",
   temperature = 0.7,
   maxTokens,
-  responseFormat,
+  responseFormat = "json_object",
   topP,
   frequencyPenalty,
   presencePenalty,
   stop,
+  stream = false,
   maxRetries = 3,
 }) {
-  // Enforce JSON mode - reject calls without proper JSON responseFormat
-  ensureJsonResponseFormat(responseFormat, "DeepSeek");
-
   if (!process.env.DEEPSEEK_API_KEY) {
     throw new Error("DeepSeek API key not configured");
   }
+
+  // Determine if JSON mode is requested
+  const isJsonMode =
+    responseFormat?.type === "json_object" ||
+    responseFormat?.type === "json_schema" ||
+    responseFormat === "json";
 
   const { systemMsg, userMsg } = extractMessages(messages);
 
@@ -47,10 +51,11 @@ export async function deepseekChat({
         frequency_penalty: frequencyPenalty,
         presence_penalty: presencePenalty,
         stop,
+        stream,
       };
 
-      // Add response format - this is now required for all calls
-      if (responseFormat?.type === "json_object" || responseFormat === "json") {
+      // Add response format only for JSON mode (streaming uses text mode)
+      if (isJsonMode && !stream) {
         requestBody.response_format = { type: "json_object" };
       }
 
@@ -73,22 +78,35 @@ export async function deepseekChat({
         throw { status: response.status, ...error };
       }
 
+      // Streaming mode - return async generator for real-time chunks
+      if (stream) {
+        return createStreamGenerator(response.body);
+      }
+
       const data = await response.json();
       const content = data.choices[0].message.content;
 
-      // Parse JSON - this is now required for all calls
-      const parsed = tryParseJSON(content);
-      if (!parsed) {
-        throw new ProviderJsonParseError(
-          "DeepSeek",
-          model,
-          content.substring(0, 200),
-          "Failed to parse JSON response from DeepSeek API"
-        );
+      // Parse JSON only in JSON mode; return raw string for text mode
+      if (isJsonMode) {
+        const parsed = tryParseJSON(content);
+        if (!parsed) {
+          throw new ProviderJsonParseError(
+            "DeepSeek",
+            model,
+            content.substring(0, 200),
+            "Failed to parse JSON response from DeepSeek API"
+          );
+        }
+        return {
+          content: parsed,
+          usage: data.usage,
+          raw: data,
+        };
       }
 
+      // Text mode - return raw string
       return {
-        content: parsed,
+        content,
         usage: data.usage,
         raw: data,
       };
@@ -106,4 +124,46 @@ export async function deepseekChat({
   }
 
   throw lastError || new Error(`Failed after ${maxRetries + 1} attempts`);
+}
+
+/**
+ * Create async generator for streaming DeepSeek responses.
+ * DeepSeek uses Server-Sent Events format with "data:" prefix.
+ */
+async function* createStreamGenerator(stream) {
+  const decoder = new TextDecoder();
+  const reader = stream.getReader();
+  let buffer = "";
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop(); // Keep incomplete line
+
+      for (const line of lines) {
+        if (line.startsWith("data: ")) {
+          const data = line.slice(6);
+          if (data === "[DONE]") continue;
+
+          try {
+            const parsed = JSON.parse(data);
+            const content = parsed.choices?.[0]?.delta?.content;
+            // Skip only truly empty chunks; preserve whitespace-only content
+            if (content !== undefined && content !== null && content !== "") {
+              yield { content };
+            }
+          } catch (e) {
+            // Skip malformed JSON
+            console.warn("[deepseek] Failed to parse stream chunk:", e);
+          }
+        }
+      }
+    }
+  } finally {
+    reader.releaseLock();
+  }
 }

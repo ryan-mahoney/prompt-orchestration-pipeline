@@ -13,8 +13,8 @@
     "llmRequestTimeout": 60000
   },
   "llm": {
-    "defaultProvider": "openai",
-    "defaultModel": "gpt-5-chat-latest",
+    "defaultProvider": "deepseek",
+    "defaultModel": "deepseek-chat",
     "maxConcurrency": 5,
     "retryMaxAttempts": 3,
     "retryBackoffMs": 1000,

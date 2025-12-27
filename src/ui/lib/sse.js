@@ -1,59 +1,30 @@
 export function streamSSE(res) {
-  let active = true;
+  console.log("[sse] Creating new SSE stream");
 
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache");
   res.setHeader("Connection", "keep-alive");
   res.flushHeaders();
 
-  // Mark connection inactive when the client disconnects or an error occurs
-  res.on("close", () => {
-    active = false;
-  });
-
-  res.on("error", () => {
-    if (!active) {
-      return;
-    }
-    active = false;
-    try {
-      res.end();
-    } catch {
-      // ignore further errors on close
-    }
-  });
+  console.log("[sse] SSE headers set and flushed");
 
   return {
     send(event, data) {
-      if (!active) {
-        return false;
-      }
-      try {
-        res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
-        return true;
-      } catch {
-        active = false;
-        try {
-          res.end();
-        } catch {
-          // ignore further errors on close
-        }
-        return false;
-      }
+      console.log("[sse] Sending event:", {
+        eventType: event,
+        hasData: !!data,
+        dataKeys: data ? Object.keys(data) : [],
+      });
+
+      const eventData = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+      res.write(eventData);
+
+      console.log("[sse] Event sent successfully");
     },
     end() {
-      if (!active) {
-        return;
-      }
-      active = false;
-      try {
-        res.end();
-      } catch {
-        // ignore errors when ending the response
-      }
-    },
-    isActive() {
-      return active;
+      console.log("[sse] Ending SSE stream");
+      res.end();
+      console.log("[sse] SSE stream ended");
     },
   };
 }

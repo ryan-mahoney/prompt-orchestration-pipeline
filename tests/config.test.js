@@ -52,7 +52,7 @@ describe("Configuration Module", () => {
     it("should have sensible default values", () => {
       expect(defaultConfig.orchestrator.shutdownTimeout).toBe(2000);
       expect(defaultConfig.taskRunner.maxRefinementAttempts).toBe(2);
-      expect(defaultConfig.llm.defaultProvider).toBe("openai");
+      expect(defaultConfig.llm.defaultProvider).toBe("deepseek");
       expect(defaultConfig.ui.port).toBe(3000);
       expect(defaultConfig.logging.level).toBe("info");
     });
@@ -88,7 +88,7 @@ describe("Configuration Module", () => {
     it("should return default config on first call", () => {
       const config = getConfig();
       expect(config.orchestrator.shutdownTimeout).toBe(2000);
-      expect(config.llm.defaultProvider).toBe("openai");
+      expect(config.llm.defaultProvider).toBe("deepseek");
     });
 
     it("should return cached config on subsequent calls", () => {
@@ -140,7 +140,7 @@ describe("Configuration Module", () => {
       const config = await loadConfig({ configPath });
       expect(config.orchestrator.shutdownTimeout).toBe(3000);
       expect(config.orchestrator.processSpawnRetries).toBe(3); // default value
-      expect(config.llm.defaultProvider).toBe("openai"); // default value
+      expect(config.llm.defaultProvider).toBe("deepseek"); // default value
     });
 
     it("should prioritize environment variables over file config", async () => {
