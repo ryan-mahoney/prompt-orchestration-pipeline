@@ -112,6 +112,7 @@ export async function chat(options) {
     presencePenalty,
     stop,
     responseFormat,
+    stream = false,
     ...rest
   } = options;
 
@@ -266,6 +267,7 @@ export async function chat(options) {
         hasMessages: !!deepseekArgs.messages,
         messageCount: deepseekArgs.messages?.length,
       });
+      if (stream !== undefined) deepseekArgs.stream = stream;
       if (topP !== undefined) deepseekArgs.topP = topP;
       if (frequencyPenalty !== undefined)
         deepseekArgs.frequencyPenalty = frequencyPenalty;
@@ -280,9 +282,15 @@ export async function chat(options) {
       const result = await deepseekChat(deepseekArgs);
       console.log("[llm] deepseekChat() returned:", {
         hasResult: !!result,
+        isStream: typeof result?.[Symbol.asyncIterator] !== "undefined",
         hasContent: !!result?.content,
         hasUsage: !!result?.usage,
       });
+
+      // Streaming mode - return async generator directly
+      if (stream && typeof result?.[Symbol.asyncIterator] !== "undefined") {
+        return result;
+      }
 
       response = {
         content: result.content,

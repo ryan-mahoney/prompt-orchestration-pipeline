@@ -133,7 +133,10 @@ export default function TaskCreationSidebar({ isOpen, onClose, pipelineSlug }) {
                 chunksReceived++;
                 setMessages((prev) => {
                   const updated = [...prev];
-                  updated[updated.length - 1].content += data.content;
+                  // Create shallow copy of message object to avoid mutation
+                  const lastMsg = { ...updated[updated.length - 1] };
+                  lastMsg.content += data.content;
+                  updated[updated.length - 1] = lastMsg;
                   return updated;
                 });
               } else if (currentEvent === "error" && data.message) {

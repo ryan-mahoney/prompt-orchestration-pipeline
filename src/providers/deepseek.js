@@ -17,6 +17,7 @@ export async function deepseekChat({
   frequencyPenalty,
   presencePenalty,
   stop,
+  stream = false,
   maxRetries = 3,
 }) {
   if (!process.env.DEEPSEEK_API_KEY) {
@@ -50,10 +51,11 @@ export async function deepseekChat({
         frequency_penalty: frequencyPenalty,
         presence_penalty: presencePenalty,
         stop,
+        stream,
       };
 
-      // Add response format only for JSON mode
-      if (isJsonMode) {
+      // Add response format only for JSON mode (streaming uses text mode)
+      if (isJsonMode && !stream) {
         requestBody.response_format = { type: "json_object" };
       }
 
@@ -74,6 +76,11 @@ export async function deepseekChat({
           .json()
           .catch(() => ({ error: response.statusText }));
         throw { status: response.status, ...error };
+      }
+
+      // Streaming mode - return async generator for real-time chunks
+      if (stream) {
+        return createStreamGenerator(response.body);
       }
 
       const data = await response.json();
@@ -117,4 +124,46 @@ export async function deepseekChat({
   }
 
   throw lastError || new Error(`Failed after ${maxRetries + 1} attempts`);
+}
+
+/**
+ * Create async generator for streaming DeepSeek responses.
+ * DeepSeek uses Server-Sent Events format with "data:" prefix.
+ */
+async function* createStreamGenerator(stream) {
+  const decoder = new TextDecoder();
+  const reader = stream.getReader();
+  let buffer = "";
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop(); // Keep incomplete line
+
+      for (const line of lines) {
+        if (line.startsWith("data: ")) {
+          const data = line.slice(6);
+          if (data === "[DONE]") continue;
+
+          try {
+            const parsed = JSON.parse(data);
+            const content = parsed.choices?.[0]?.delta?.content;
+            // Skip empty/whitespace-only chunks to prevent duplicates
+            if (content && content.trim()) {
+              yield { content };
+            }
+          } catch (e) {
+            // Skip malformed JSON
+            console.warn("[deepseek] Failed to parse stream chunk:", e);
+          }
+        }
+      }
+    }
+  } finally {
+    reader.releaseLock();
+  }
 }

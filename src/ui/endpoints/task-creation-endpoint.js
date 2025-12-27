@@ -71,50 +71,28 @@ Provide complete, working code. Use markdown code blocks.`;
     // Get LLM instance (uses default provider from config)
     const llm = createHighLevelLLM();
 
-    console.log("[task-creation-endpoint] Calling LLM chat...");
-    // Call LLM - streaming not yet implemented, send complete response as chunks
-    // TODO: Implement streaming when LLM module supports it
+    console.log("[task-creation-endpoint] Calling LLM chat with streaming...");
+    // Call LLM with streaming enabled
     const response = await llm.chat({
       messages: llmMessages,
       responseFormat: "text",
+      stream: true,
     });
 
     console.log("[task-creation-endpoint] LLM response received:", {
-      hasContent: !!response.content,
-      contentType: typeof response.content,
-      hasUsage: !!response.usage,
-      contentLength:
-        typeof response.content === "string" ? response.content.length : 0,
+      isStream: typeof response[Symbol.asyncIterator] !== "undefined",
     });
 
-    const content = response?.content ?? "";
-
-    if (!content) {
-      console.error("[task-creation-endpoint] LLM returned empty content");
-      sse.send("error", { message: "No response generated" });
-      sse.close();
-      return;
-    }
-
-    console.log(
-      "[task-creation-endpoint] Sending content as SSE chunks, total length:",
-      content.length
-    );
-
-    // Send content in chunks for streaming effect
-    const chunkSize = 500; // characters per chunk
+    // Stream is an async generator
     let chunkCount = 0;
-    for (let i = 0; i < content.length; i += chunkSize) {
-      const chunk = content.slice(i, i + chunkSize);
-      sse.send("chunk", { content: chunk });
-      chunkCount++;
+    for await (const chunk of response) {
+      if (chunk?.content) {
+        sse.send("chunk", { content: chunk.content });
+        chunkCount++;
+      }
     }
 
-    console.log(
-      "[task-creation-endpoint] Sent",
-      chunkCount,
-      "chunks via SSE (" + chunkSize + " chars each)"
-    );
+    console.log("[task-creation-endpoint] Sent", chunkCount, "chunks via SSE");
 
     // Send done event
     console.log("[task-creation-endpoint] Sending 'done' event...");
