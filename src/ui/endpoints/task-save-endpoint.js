@@ -55,6 +55,14 @@ export async function handleTaskSave(req, res) {
     const indexPath = taskRegistryPath;
     let indexContent = await fs.readFile(indexPath, "utf8");
 
+    // Check if task name already exists in the index
+    const taskNamePattern = new RegExp(`^\\s*${taskName}\\s*:`, "m");
+    if (taskNamePattern.test(indexContent)) {
+      return sendJson(res, 400, {
+        error: `Task "${taskName}" already exists in the registry`,
+      });
+    }
+
     // Find the line containing "export default {"
     const exportLine = "export default {";
     const exportLineIndex = indexContent.indexOf(exportLine);
