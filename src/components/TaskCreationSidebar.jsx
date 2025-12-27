@@ -4,7 +4,7 @@ import { Sidebar, SidebarFooter } from "./ui/sidebar.jsx";
 import { MarkdownRenderer } from "./MarkdownRenderer.jsx";
 
 const TASK_PROPOSAL_REGEX =
-  /\[TASK_PROPOSAL\]\s*FILENAME:\s*(\S+)\s*TASKNAME:\s*(\S+)\s*CODE:\s*```javascript\s*([\s\S]*?)\s*```\s*\[\/TASK_PROPOSAL\]/;
+  /\[TASK_PROPOSAL\]\r?\nFILENAME:\s*(\S+)\r?\nTASKNAME:\s*(\S+)\r?\nCODE:\s*```javascript\s*([\s\S]*?)\s*```\s*\[\/TASK_PROPOSAL\]/;
 
 function parseTaskProposal(content) {
   const match = content.match(TASK_PROPOSAL_REGEX);
