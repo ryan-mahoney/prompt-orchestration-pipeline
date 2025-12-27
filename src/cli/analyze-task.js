@@ -26,11 +26,26 @@ export async function analyzeTaskFile(taskPath) {
     // Output as JSON
     console.log(JSON.stringify(analysis, null, 2));
   } catch (error) {
-    if (error.code === "ENOENT") {
+    if (error && error.code === "ENOENT") {
       console.error(`Error: Task file not found: ${taskPath}`);
       process.exit(1);
     }
-    console.error(`Error analyzing task: ${error.message}`);
+
+    const isDev =
+      process.env.NODE_ENV === "development" ||
+      process.env.DEBUG_TASK_ANALYSIS === "1";
+
+    console.error("Error analyzing task:");
+
+    if (isDev) {
+      // In development/debug mode, preserve full error context (including stack trace)
+      console.error(error && error.stack ? error.stack : error);
+    } else if (error && typeof error.message === "string") {
+      // In normal mode, show a concise message while keeping the library's formatting
+      console.error(error.message);
+    } else {
+      console.error(String(error));
+    }
     process.exit(1);
   }
 }
