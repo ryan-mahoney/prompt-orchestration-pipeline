@@ -2,6 +2,8 @@ import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
 const traverse =
   require("@babel/traverse").default ?? require("@babel/traverse");
+const generate =
+  require("@babel/generator").default ?? require("@babel/generator");
 import * as t from "@babel/types";
 import { isInsideTryCatch, getStageName } from "../utils/ast.js";
 
@@ -114,9 +116,11 @@ function extractFileName(node) {
 
   // Handle template literals: `file.json` or `file-${name}.json`
   if (t.isTemplateLiteral(node)) {
-    // Extract the template literal as-is for Phase 1
-    // Note: This includes expressions as placeholders, e.g., "file-${name}.json"
-    return node.quasis.map((q) => q.value.cooked).join("");
+    // Use @babel/generator to reconstruct the template literal with expressions preserved
+    // This ensures dynamic filenames like `file-${name}.json` are preserved as-is
+    const generated = generate(node, { concise: true });
+    // Remove the backticks from the generated code
+    return generated.code.slice(1, -1);
   }
 
   return null;

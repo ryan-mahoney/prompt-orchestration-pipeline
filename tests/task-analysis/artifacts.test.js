@@ -64,7 +64,7 @@ describe("extractArtifactReads", () => {
     expect(reads[0].required).toBe(false);
   });
 
-  it("extracts template literals as-is", () => {
+  it("extracts template literals with expressions preserved", () => {
     const code = `
       export function stageOne({ io }) {
         const data = io.readArtifact(\`file-\${name}.json\`);
@@ -76,7 +76,7 @@ describe("extractArtifactReads", () => {
     const reads = extractArtifactReads(ast);
 
     expect(reads).toHaveLength(1);
-    expect(reads[0].fileName).toBe("file-.json");
+    expect(reads[0].fileName).toBe("file-${name}.json");
   });
 
   it("extracts simple template literal without expressions", () => {
@@ -215,7 +215,7 @@ describe("extractArtifactWrites", () => {
     expect(writes[0]).not.toHaveProperty("data");
   });
 
-  it("extracts template literals as-is", () => {
+  it("extracts template literals with expressions preserved", () => {
     const code = `
       export function stageOne({ io }) {
         const data = { result: "success" };
@@ -228,7 +228,7 @@ describe("extractArtifactWrites", () => {
     const writes = extractArtifactWrites(ast);
 
     expect(writes).toHaveLength(1);
-    expect(writes[0].fileName).toBe("output-.json");
+    expect(writes[0].fileName).toBe("output-${timestamp}.json");
   });
 
   it("throws error for non-string literal argument", () => {
