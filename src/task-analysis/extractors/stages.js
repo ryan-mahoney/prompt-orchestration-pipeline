@@ -13,7 +13,7 @@ import traverse from "@babel/traverse";
 export function extractStages(ast) {
   const stages = [];
 
-  traverse.default(ast, {
+  traverse(ast, {
     ExportNamedDeclaration(path) {
       const declaration = path.node.declaration;
 
