@@ -23,80 +23,7 @@ import { getStageName } from "../utils/ast.js";
  */
 export function extractLLMCalls(ast) {
   const calls = [];
-  const destructuredProviders = new Map();
 
-  // First pass: collect destructured providers from llm param
-  traverse(ast, {
-    VariableDeclarator(path) {
-      const { id, init } = path.node;
-
-      // Match: const { deepseek } = llm
-      if (t.isObjectPattern(id) && t.isIdentifier(init, { name: "llm" })) {
-        id.properties.forEach((prop) => {
-          if (t.isObjectProperty(prop) && t.isIdentifier(prop.key)) {
-            destructuredProviders.set(prop.key.name, "llm");
-          }
-        });
-      }
-    },
-
-    // Match destructuring in function parameters: ({ llm: { gemini } }) => {}
-    FunctionDeclaration(path) {
-      const params = path.node.params;
-      params.forEach((param) => {
-        if (t.isObjectPattern(param)) {
-          param.properties.forEach((prop) => {
-            if (
-              t.isObjectProperty(prop) &&
-              t.isIdentifier(prop.key) &&
-              t.isObjectPattern(prop.value)
-            ) {
-              // Match: llm: { gemini }
-              if (prop.key.name === "llm") {
-                prop.value.properties.forEach((llmProp) => {
-                  if (
-                    t.isObjectProperty(llmProp) &&
-                    t.isIdentifier(llmProp.key)
-                  ) {
-                    destructuredProviders.set(llmProp.key.name, "llm");
-                  }
-                });
-              }
-            }
-          });
-        }
-      });
-    },
-
-    ArrowFunctionExpression(path) {
-      const params = path.node.params;
-      params.forEach((param) => {
-        if (t.isObjectPattern(param)) {
-          param.properties.forEach((prop) => {
-            if (
-              t.isObjectProperty(prop) &&
-              t.isIdentifier(prop.key) &&
-              t.isObjectPattern(prop.value)
-            ) {
-              // Match: llm: { gemini }
-              if (prop.key.name === "llm") {
-                prop.value.properties.forEach((llmProp) => {
-                  if (
-                    t.isObjectProperty(llmProp) &&
-                    t.isIdentifier(llmProp.key)
-                  ) {
-                    destructuredProviders.set(llmProp.key.name, "llm");
-                  }
-                });
-              }
-            }
-          });
-        }
-      });
-    },
-  });
-
-  // Second pass: extract LLM calls
   traverse(ast, {
     CallExpression(path) {
       const { callee } = path.node;
@@ -117,7 +44,7 @@ export function extractLLMCalls(ast) {
       }
 
       // Match: provider.method(...) where provider was destructured from llm
-      if (isDestructuredLLMCall(callee, destructuredProviders)) {
+      if (isDestructuredLLMCall(callee, path)) {
         const provider = callee.object.name;
         const method = callee.property.name;
         const stage = getStageName(path);
@@ -177,12 +104,14 @@ function isDirectLLMCall(callee) {
  * Check if a callee node is a destructured LLM call pattern.
  *
  * Matches: provider.method(...) where provider was destructured from llm
+ * Uses scope analysis to verify the identifier was actually destructured from llm
+ * in the current scope, avoiding false positives from same-named identifiers in different scopes.
  *
  * @param {import("@babel/types").Node} callee - The callee node to check
- * @param {Map<string, string>} destructuredProviders - Map of destructured provider names
+ * @param {import("@babel/traverse").NodePath} path - The path of the call expression
  * @returns {boolean} True if the callee is a destructured LLM call pattern
  */
-function isDestructuredLLMCall(callee, destructuredProviders) {
+function isDestructuredLLMCall(callee, path) {
   // Must be a member expression (e.g., provider.method)
   if (!t.isMemberExpression(callee)) {
     return false;
@@ -193,15 +122,52 @@ function isDestructuredLLMCall(callee, destructuredProviders) {
     return false;
   }
 
-  // The object name must be in the destructured providers map
-  if (!destructuredProviders.has(callee.object.name)) {
-    return false;
-  }
-
   // The callee property must be an identifier (the method)
   if (!t.isIdentifier(callee.property)) {
     return false;
   }
 
-  return true;
+  // Get the binding for this identifier in the current scope
+  const binding = path.scope.getBinding(callee.object.name);
+  if (!binding) {
+    return false;
+  }
+
+  // Check if it was destructured from llm in a variable declaration
+  if (t.isVariableDeclarator(binding.path.node)) {
+    const { id, init } = binding.path.node;
+    // Match: const { provider } = llm
+    if (t.isObjectPattern(id) && t.isIdentifier(init, { name: "llm" })) {
+      return true;
+    }
+  }
+
+  // Check if it was destructured from llm in function parameters
+  // Match: ({ llm: { provider } }) => {}
+  if (binding.kind === "param" && t.isObjectPattern(binding.path.node)) {
+    // The binding points to the entire parameter ObjectPattern
+    // Look for a property with key "llm" whose value is an ObjectPattern
+    const llmProperty = binding.path.node.properties.find(
+      (prop) =>
+        t.isObjectProperty(prop) &&
+        t.isIdentifier(prop.key, { name: "llm" }) &&
+        t.isObjectPattern(prop.value)
+    );
+
+    if (llmProperty) {
+      // Check if the provider identifier is in the nested ObjectPattern
+      const providerInPattern = llmProperty.value.properties.some((innerProp) =>
+        t.isObjectProperty(innerProp)
+          ? t.isIdentifier(innerProp.key, { name: callee.object.name }) ||
+            t.isIdentifier(innerProp.value, { name: callee.object.name })
+          : false
+      );
+
+      if (providerInPattern) {
+        return true;
+      }
+    }
+  }
+
+  return false;
 }

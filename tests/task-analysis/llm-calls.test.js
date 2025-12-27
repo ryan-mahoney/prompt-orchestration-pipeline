@@ -270,4 +270,29 @@ describe("extractLLMCalls", () => {
 
     expect(calls).toHaveLength(0);
   });
+
+  it("should not create false positives from same provider name in different scopes", () => {
+    const code = `
+      export const stage1 = async ({ llm }) => {
+        const { deepseek } = llm;
+        await deepseek.chat({ messages: [] });
+      };
+
+      export const stage2 = async ({ data }) => {
+        const { deepseek } = data;
+        await deepseek.chat({ messages: [] });
+      };
+    `;
+
+    const ast = parseTaskSource(code);
+    const calls = extractLLMCalls(ast);
+
+    // Should only extract the call from stage1, not stage2
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toEqual({
+      provider: "deepseek",
+      method: "chat",
+      stage: "stage1",
+    });
+  });
 });
