@@ -116,11 +116,21 @@ function extractFileName(node) {
 
   // Handle template literals: `file.json` or `file-${name}.json`
   if (t.isTemplateLiteral(node)) {
-    // Use @babel/generator to reconstruct the template literal with expressions preserved
+    // If there are no expressions, use the simple approach
+    if (!node.expressions || node.expressions.length === 0) {
+      return node.quasis.map((q) => q.value.cooked).join("");
+    }
+
+    // For template literals with expressions, use @babel/generator to preserve them
     // This ensures dynamic filenames like `file-${name}.json` are preserved as-is
     const generated = generate(node, { concise: true });
     // Remove the backticks from the generated code
-    return generated.code.slice(1, -1);
+    const code = generated.code;
+    if (code.startsWith("`") && code.endsWith("`")) {
+      return code.slice(1, -1);
+    }
+    // Fallback in case the generated code doesn't have backticks
+    return code;
   }
 
   return null;
