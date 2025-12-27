@@ -36,6 +36,61 @@ export function extractLLMCalls(ast) {
         });
       }
     },
+
+    // Match destructuring in function parameters: ({ llm: { gemini } }) => {}
+    FunctionDeclaration(path) {
+      const params = path.node.params;
+      params.forEach((param) => {
+        if (t.isObjectPattern(param)) {
+          param.properties.forEach((prop) => {
+            if (
+              t.isObjectProperty(prop) &&
+              t.isIdentifier(prop.key) &&
+              t.isObjectPattern(prop.value)
+            ) {
+              // Match: llm: { gemini }
+              if (prop.key.name === "llm") {
+                prop.value.properties.forEach((llmProp) => {
+                  if (
+                    t.isObjectProperty(llmProp) &&
+                    t.isIdentifier(llmProp.key)
+                  ) {
+                    destructuredProviders.set(llmProp.key.name, "llm");
+                  }
+                });
+              }
+            }
+          });
+        }
+      });
+    },
+
+    ArrowFunctionExpression(path) {
+      const params = path.node.params;
+      params.forEach((param) => {
+        if (t.isObjectPattern(param)) {
+          param.properties.forEach((prop) => {
+            if (
+              t.isObjectProperty(prop) &&
+              t.isIdentifier(prop.key) &&
+              t.isObjectPattern(prop.value)
+            ) {
+              // Match: llm: { gemini }
+              if (prop.key.name === "llm") {
+                prop.value.properties.forEach((llmProp) => {
+                  if (
+                    t.isObjectProperty(llmProp) &&
+                    t.isIdentifier(llmProp.key)
+                  ) {
+                    destructuredProviders.set(llmProp.key.name, "llm");
+                  }
+                });
+              }
+            }
+          });
+        }
+      });
+    },
   });
 
   // Second pass: extract LLM calls
