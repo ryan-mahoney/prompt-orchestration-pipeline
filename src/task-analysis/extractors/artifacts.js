@@ -2,6 +2,8 @@ import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
 const traverse =
   require("@babel/traverse").default ?? require("@babel/traverse");
+const generate =
+  require("@babel/generator").default ?? require("@babel/generator");
 import * as t from "@babel/types";
 import { isInsideTryCatch, getStageName } from "../utils/ast.js";
 
@@ -114,9 +116,21 @@ function extractFileName(node) {
 
   // Handle template literals: `file.json` or `file-${name}.json`
   if (t.isTemplateLiteral(node)) {
-    // Extract the template literal as-is for Phase 1
-    // Note: This includes expressions as placeholders, e.g., "file-${name}.json"
-    return node.quasis.map((q) => q.value.cooked).join("");
+    // If there are no expressions, use the simple approach
+    if (!node.expressions || node.expressions.length === 0) {
+      return node.quasis.map((q) => q.value.cooked).join("");
+    }
+
+    // For template literals with expressions, use @babel/generator to preserve them
+    // This ensures dynamic filenames like `file-${name}.json` are preserved as-is
+    const generated = generate(node, { concise: true });
+    // Remove the backticks from the generated code
+    const code = generated.code;
+    if (code.startsWith("`") && code.endsWith("`")) {
+      return code.slice(1, -1);
+    }
+    // Fallback in case the generated code doesn't have backticks
+    return code;
   }
 
   return null;
