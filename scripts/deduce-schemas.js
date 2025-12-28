@@ -18,7 +18,7 @@ program
   .option(
     "-o, --output <path>",
     "Output directory for schema files",
-    "./schemas"
+    "."
   )
   .parse(process.argv);
 
