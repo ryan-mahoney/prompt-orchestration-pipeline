@@ -34,7 +34,7 @@ async function main() {
     analysisData = JSON.parse(content);
   } catch (error) {
     console.error(`Error: Cannot read analysis file: ${analysis}`);
-    console.error("Make sure you've run the task analysis first.");
+    console.error(`Details: ${error.message}`);
     process.exit(1);
   }
 
@@ -52,6 +52,7 @@ async function main() {
     taskCode = await fs.readFile(task, "utf8");
   } catch (error) {
     console.error(`Error: Cannot read task file: ${task}`);
+    console.error(`Details: ${error.message}`);
     process.exit(1);
   }
 
@@ -60,6 +61,7 @@ async function main() {
     await fs.mkdir(output, { recursive: true });
   } catch (error) {
     console.error(`Error: Cannot create output directory: ${output}`);
+    console.error(`Details: ${error.message}`);
     process.exit(1);
   }
 
