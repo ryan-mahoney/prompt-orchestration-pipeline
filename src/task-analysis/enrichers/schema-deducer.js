@@ -22,20 +22,47 @@ export async function deduceArtifactSchema(taskCode, artifact) {
     ],
   });
 
+  if (!response || typeof response !== "object") {
+    throw new Error(
+      `LLM response is missing or not an object when deducing artifact schema for "${artifact.fileName}".`
+    );
+  }
+
   const result = response.content;
 
+  if (!result || typeof result !== "object") {
+    throw new Error(
+      `LLM response.content is missing or not an object when deducing artifact schema for "${artifact.fileName}".`
+    );
+  }
+
+  const { schema, example, reasoning } = result;
+
+  if (
+    !schema ||
+    typeof schema !== "object" ||
+    !example ||
+    typeof example !== "object" ||
+    typeof reasoning !== "string"
+  ) {
+    throw new Error(
+      `LLM returned invalid structured output when deducing artifact schema for "${artifact.fileName}". ` +
+        `Expected properties: { schema: object, example: object, reasoning: string }.`
+    );
+  }
+
   // Validate the generated example against the generated schema
-  const validate = ajv.compile(result.schema);
-  if (!validate(result.example)) {
+  const validate = ajv.compile(schema);
+  if (!validate(example)) {
     throw new Error(
       `Generated example does not validate against schema: ${JSON.stringify(validate.errors)}`
     );
   }
 
   return {
-    schema: result.schema,
-    example: result.example,
-    reasoning: result.reasoning,
+    schema,
+    example,
+    reasoning,
   };
 }
 
