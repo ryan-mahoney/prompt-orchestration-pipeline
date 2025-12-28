@@ -17,31 +17,19 @@ export async function writeSchemaFiles(
   deducedData
 ) {
   // Validate that deducedData contains all required properties
-  if (
-    !deducedData ||
-    typeof deducedData !== "object" ||
-    deducedData === null
-  ) {
+  if (!deducedData || typeof deducedData !== "object") {
     throw new Error(
       `Invalid deducedData: expected an object but got ${typeof deducedData}`
     );
   }
 
-  if (
-    !deducedData.schema ||
-    typeof deducedData.schema !== "object" ||
-    deducedData.schema === null
-  ) {
+  if (!deducedData.schema || typeof deducedData.schema !== "object") {
     throw new Error(
       `Invalid deducedData.schema: expected an object but got ${typeof deducedData.schema}`
     );
   }
 
-  if (
-    !deducedData.example ||
-    typeof deducedData.example !== "object" ||
-    deducedData.example === null
-  ) {
+  if (!deducedData.example || typeof deducedData.example !== "object") {
     throw new Error(
       `Invalid deducedData.example: expected an object but got ${typeof deducedData.example}`
     );
