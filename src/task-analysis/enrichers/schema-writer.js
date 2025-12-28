@@ -17,25 +17,37 @@ export async function writeSchemaFiles(
   deducedData
 ) {
   // Validate that deducedData contains all required properties
-  if (!deducedData || typeof deducedData !== "object") {
+  if (
+    !deducedData ||
+    typeof deducedData !== "object" ||
+    deducedData === null
+  ) {
     throw new Error(
       `Invalid deducedData: expected an object but got ${typeof deducedData}`
     );
   }
 
-  if (!deducedData.schema || typeof deducedData.schema !== "object") {
+  if (
+    !deducedData.schema ||
+    typeof deducedData.schema !== "object" ||
+    deducedData.schema === null
+  ) {
     throw new Error(
       `Invalid deducedData.schema: expected an object but got ${typeof deducedData.schema}`
     );
   }
 
-  if (!deducedData.example || typeof deducedData.example !== "object") {
+  if (
+    !deducedData.example ||
+    typeof deducedData.example !== "object" ||
+    deducedData.example === null
+  ) {
     throw new Error(
       `Invalid deducedData.example: expected an object but got ${typeof deducedData.example}`
     );
   }
 
-  if (typeof deducedData.reasoning !== "string") {
+  if (!deducedData.reasoning || typeof deducedData.reasoning !== "string") {
     throw new Error(
       `Invalid deducedData.reasoning: expected a string but got ${typeof deducedData.reasoning}`
     );
