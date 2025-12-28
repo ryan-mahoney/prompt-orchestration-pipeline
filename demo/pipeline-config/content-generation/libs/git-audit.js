@@ -58,6 +58,7 @@ export async function initAuditBranch(jobId, pipelineSlug, seedData = {}, codeRe
 /**
  * Commit task artifacts to the audit branch
  * First commit includes code branch as second parent to show lineage
+ * Accumulates files from previous commits rather than replacing
  *
  * @param {string} taskName - Name of the task (e.g., 'research', 'analysis')
  * @param {object} artifacts - Map of filename -> content to commit
@@ -72,18 +73,18 @@ export async function commitTaskArtifacts(taskName, artifacts, metadata = {}) {
 
   const { repo, git } = await getRepo();
 
-  // Build tree with artifacts
-  const tree = new (await import('hologit')).TreeObject(repo);
+  // Load existing tree from current branch head to accumulate files
+  const currentHead = await git.revParse(jobBranchRef);
+  const { TreeObject } = await import('hologit');
+  const tree = await TreeObject.createFromRef(repo, currentHead);
 
+  // Add new artifacts to the existing tree
   for (const [filename, content] of Object.entries(artifacts)) {
     const contentStr = typeof content === 'string' ? content : JSON.stringify(content, null, 2);
     await tree.writeChild(`${taskName}/${filename}`, contentStr);
   }
 
   const treeHash = await tree.write();
-
-  // Get current branch head
-  const currentHead = await git.revParse(jobBranchRef);
 
   // Build parent list - include code parent on first real commit
   const parents = [currentHead];
@@ -142,12 +143,13 @@ export async function finalizeAuditBranch(summary = {}) {
 
   const { repo, git } = await getRepo();
 
-  // Create summary tree
-  const tree = new (await import('hologit')).TreeObject(repo);
+  // Load existing tree and add summary
+  const currentHead = await git.revParse(jobBranchRef);
+  const { TreeObject } = await import('hologit');
+  const tree = await TreeObject.createFromRef(repo, currentHead);
   await tree.writeChild('_summary.json', JSON.stringify(summary, null, 2));
 
   const treeHash = await tree.write();
-  const currentHead = await git.revParse(jobBranchRef);
 
   const commitHash = await git.commitTree(treeHash, {
     p: [currentHead],
