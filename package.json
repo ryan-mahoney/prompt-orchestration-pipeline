@@ -20,6 +20,8 @@
     "access": "public"
   },
   "scripts": {
+    "analyze": "node src/cli/index.js analyze",
+    "deduce-schemas": "node scripts/deduce-schemas.js",
     "test": "vitest run --config ./vite.config.js --root .",
     "lint": "eslint . --ext .js,.jsx",
     "backend": "NODE_ENV=development nodemon src/ui/server.js",
