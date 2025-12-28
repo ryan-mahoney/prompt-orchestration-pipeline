@@ -1,4 +1,5 @@
-// Analysis Task - Analyze research findings and extract insights
+// Reanalyze Task - Second pass analysis of research findings
+import { commitTaskArtifacts } from "../libs/git-audit.js";
 
 export const analysisJsonSchema = {
   $schema: "http://json-schema.org/draft-07/schema#",
@@ -126,7 +127,7 @@ Now produce ONLY the JSON object in the specified structure.`,
 // Step 3: Call LLM with prompt
 export const inference = async ({
   io,
-  llm: { gemini },
+  llm: { anthropic },
   data: {
     promptTemplating: { system, prompt },
   },
@@ -135,7 +136,7 @@ export const inference = async ({
 }) => {
   //throw new Error("Disabled for demo purposes");
 
-  const response = await gemini.flash25({
+  const response = await anthropic.sonnet45({
     messages: [
       { role: "system", content: system },
       { role: "user", content: prompt },
@@ -179,4 +180,23 @@ export const validateStructure = async ({
     output: {},
     flags,
   };
+};
+
+// Step 5: Integration — persist to git audit branch
+export const integration = async ({ io, data, flags, output }) => {
+  try {
+    const analysisOutput = await io.readArtifact("analysis-output.json");
+
+    await commitTaskArtifacts("reanalyze", {
+      "analysis-output.json": analysisOutput,
+    }, {
+      prompt: data.promptTemplating?.prompt,
+      systemPrompt: data.promptTemplating?.system,
+      model: "anthropic:sonnet-4.5",
+    });
+  } catch (err) {
+    console.warn('[reanalyze:integration] Git audit commit failed (continuing):', err.message);
+  }
+
+  return { output, flags };
 };

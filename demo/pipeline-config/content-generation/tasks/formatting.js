@@ -1,4 +1,5 @@
 // Formatting Task - Format final output according to specifications
+import { commitTaskArtifacts, finalizeAuditBranch } from "../libs/git-audit.js";
 
 export const formattingJsonSchema = {
   $schema: "http://json-schema.org/draft-07/schema#",
@@ -60,13 +61,13 @@ Now produce ONLY the JSON object in the specified structure.
 
 export const inference = async ({
   io,
-  llm: { deepseek },
+  llm: { anthropic },
   data: {
     promptTemplating: { system, prompt },
   },
   flags,
 }) => {
-  const response = await deepseek.chat({
+  const response = await anthropic.haiku45({
     messages: [
       { role: "system", content: system },
       { role: "user", content: prompt },
@@ -128,4 +129,33 @@ export const validateStructure = async ({
     output: {},
     flags,
   };
+};
+
+// Step 5: Integration — persist to git audit branch and finalize
+export const integration = async ({ io, data, flags, output }) => {
+  try {
+    const formattedOutput = await io.readArtifact("formatted-output.md");
+
+    await commitTaskArtifacts("formatting", {
+      "formatted-output.md": formattedOutput,
+    }, {
+      prompt: data.promptTemplating?.prompt,
+      systemPrompt: data.promptTemplating?.system,
+      model: "anthropic:haiku-4.5",
+    });
+
+    // Finalize the audit branch (last task)
+    const result = await finalizeAuditBranch({
+      completedAt: new Date().toISOString(),
+      tasks: ["research", "analysis", "reanalyze", "synthesis", "formatting"],
+    });
+
+    if (result) {
+      console.log(`[formatting:integration] Pipeline DAG complete: ${result.branchRef}`);
+    }
+  } catch (err) {
+    console.warn('[formatting:integration] Git audit commit failed (continuing):', err.message);
+  }
+
+  return { output, flags };
 };

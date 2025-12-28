@@ -1,4 +1,5 @@
 // Synthesis Task - Combine analysis outputs into coherent narrative
+import { commitTaskArtifacts } from "../libs/git-audit.js";
 
 export const synthesisJsonSchema = {
   $schema: "http://json-schema.org/draft-07/schema#",
@@ -121,13 +122,13 @@ Now produce ONLY the JSON object in the specified structure.
 
 export const inference = async ({
   io,
-  llm: { openai },
+  llm: { anthropic },
   data: {
     promptTemplating: { system, prompt },
   },
   flags,
 }) => {
-  const response = await openai.gpt5Mini({
+  const response = await anthropic.opus45({
     messages: [
       { role: "system", content: system },
       { role: "user", content: prompt },
@@ -170,4 +171,23 @@ export const validateStructure = async ({
     output: {},
     flags,
   };
+};
+
+// Step 5: Integration — persist to git audit branch
+export const integration = async ({ io, data, flags, output }) => {
+  try {
+    const synthesisOutput = await io.readArtifact("synthesis-output.json");
+
+    await commitTaskArtifacts("synthesis", {
+      "synthesis-output.json": synthesisOutput,
+    }, {
+      prompt: data.promptTemplating?.prompt,
+      systemPrompt: data.promptTemplating?.system,
+      model: "anthropic:opus-4.5",
+    });
+  } catch (err) {
+    console.warn('[synthesis:integration] Git audit commit failed (continuing):', err.message);
+  }
+
+  return { output, flags };
 };
