@@ -1,5 +1,6 @@
 // Research Task - Gather information based on seed input
 import { test } from "../libs/test.js";
+import { initAuditBranch, commitTaskArtifacts } from "../libs/git-audit.js";
 
 export const researchJsonSchema = {
   $schema: "http://json-schema.org/draft-07/schema#",
@@ -58,24 +59,34 @@ export const researchJsonSchema = {
 };
 
 // Step 1: Load and prepare input data
-export const ingestion = ({
+export const ingestion = async ({
   io,
   llm,
   data: {
+    seed,
     seed: {
       data: { topic, focusAreas, requirements },
     },
   },
   meta,
   flags,
-}) => ({
-  output: {
-    topic,
-    focusAreas,
-    requirements,
-  },
-  flags,
-});
+}) => {
+  // Initialize git audit branch for this pipeline run
+  try {
+    await initAuditBranch(meta.jobId, seed.pipeline, seed.data);
+  } catch (err) {
+    console.warn('[research:ingestion] Git audit init failed (continuing):', err.message);
+  }
+
+  return {
+    output: {
+      topic,
+      focusAreas,
+      requirements,
+    },
+    flags,
+  };
+};
 
 // Step 2: Optional preprocessing - normalize/prepare input for prompt creation
 // Contract: read from prior stage (ingestion) and produce preprocessed output for templating
@@ -379,8 +390,22 @@ export const finalValidation = async ({
 
 // Step 11: Integration — persist, organize, or hand off final results
 // Contract: write artifacts or produce a final payload for downstream tasks
-export const integration = ({ io, llm, data, meta, flags, output }) => {
-  // No-op for now; implement file writes or downstream handoff here
+export const integration = async ({ io, llm, data, meta, flags, output }) => {
+  // Commit research artifacts to git audit branch
+  try {
+    const researchOutput = await io.readArtifact("research-output.json");
+
+    await commitTaskArtifacts("research", {
+      "research-output.json": researchOutput,
+    }, {
+      prompt: data.promptTemplating?.prompt,
+      systemPrompt: data.promptTemplating?.system,
+      model: "anthropic:opus-4.5",
+    });
+  } catch (err) {
+    console.warn('[research:integration] Git audit commit failed (continuing):', err.message);
+  }
+
   return {
     output,
     flags,

@@ -1,4 +1,5 @@
 // Analysis Task - Analyze research findings and extract insights
+import { commitTaskArtifacts } from "../libs/git-audit.js";
 
 export const analysisJsonSchema = {
   $schema: "http://json-schema.org/draft-07/schema#",
@@ -179,4 +180,23 @@ export const validateStructure = async ({
     output: {},
     flags,
   };
+};
+
+// Step 5: Integration — persist to git audit branch
+export const integration = async ({ io, data, flags, output }) => {
+  try {
+    const analysisOutput = await io.readArtifact("analysis-output.json");
+
+    await commitTaskArtifacts("analysis", {
+      "analysis-output.json": analysisOutput,
+    }, {
+      prompt: data.promptTemplating?.prompt,
+      systemPrompt: data.promptTemplating?.system,
+      model: "anthropic:opus-4.5",
+    });
+  } catch (err) {
+    console.warn('[analysis:integration] Git audit commit failed (continuing):', err.message);
+  }
+
+  return { output, flags };
 };

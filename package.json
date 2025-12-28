@@ -50,6 +50,7 @@
     "dotenv": "^17.2.3",
     "express": "^4.19.2",
     "fflate": "^0.8.2",
+    "hologit": "^0.46.2",
     "lucide-react": "^0.544.0",
     "openai": "^5.23.1",
     "react": "^19.2.0",

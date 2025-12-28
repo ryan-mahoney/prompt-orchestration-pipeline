@@ -1,4 +1,5 @@
 // Synthesis Task - Combine analysis outputs into coherent narrative
+import { commitTaskArtifacts } from "../libs/git-audit.js";
 
 export const synthesisJsonSchema = {
   $schema: "http://json-schema.org/draft-07/schema#",
@@ -170,4 +171,23 @@ export const validateStructure = async ({
     output: {},
     flags,
   };
+};
+
+// Step 5: Integration — persist to git audit branch
+export const integration = async ({ io, data, flags, output }) => {
+  try {
+    const synthesisOutput = await io.readArtifact("synthesis-output.json");
+
+    await commitTaskArtifacts("synthesis", {
+      "synthesis-output.json": synthesisOutput,
+    }, {
+      prompt: data.promptTemplating?.prompt,
+      systemPrompt: data.promptTemplating?.system,
+      model: "anthropic:opus-4.5",
+    });
+  } catch (err) {
+    console.warn('[synthesis:integration] Git audit commit failed (continuing):', err.message);
+  }
+
+  return { output, flags };
 };
