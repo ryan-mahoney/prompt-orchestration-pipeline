@@ -42,7 +42,7 @@ export async function initAuditBranch(jobId, pipelineSlug, seedData = {}, codeRe
   const treeHash = await tree.write();
 
   const initialCommit = await git.commitTree(treeHash, {
-    m: `initialized ${pipelineSlug}/${jobId}\n\n## Seed\n\n${JSON.stringify(seedData, null, 2)}`
+    m: `initialized ${pipelineSlug}/${jobId}`
   });
 
   // Capture code branch as second parent for lineage
@@ -158,7 +158,7 @@ export async function finalizeAuditBranch(summary = {}) {
 
   const commitHash = await git.commitTree(treeHash, {
     p: [currentHead],
-    m: `completed\n\n## Summary\n\n${JSON.stringify(summary, null, 2)}`
+    m: `completed`
   });
 
   await git.updateRef(jobBranchRef, commitHash);
