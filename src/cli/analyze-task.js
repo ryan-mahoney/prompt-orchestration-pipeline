@@ -21,7 +21,7 @@ export async function analyzeTaskFile(taskPath) {
     const code = await fs.readFile(absolutePath, "utf8");
 
     // Run analysis
-    const analysis = analyzeTask(code);
+    const analysis = analyzeTask(code, absolutePath);
 
     // Output as JSON
     console.log(JSON.stringify(analysis, null, 2));

@@ -16,6 +16,7 @@ import { extractLLMCalls } from "./extractors/llm-calls.js";
  * - Models (LLM provider and method calls with stage context)
  *
  * @param {string} code - The task source code to analyze
+ * @param {string|null} taskFilePath - Path to the task file (optional)
  * @returns {TaskAnalysis} Complete analysis of the task
  * @throws {Error} If parsing or extraction fails
  *
@@ -27,9 +28,10 @@ import { extractLLMCalls } from "./extractors/llm-calls.js";
  *     io.writeArtifact("output.json", result);
  *   }
  * `;
- * const analysis = analyzeTask(code);
+ * const analysis = analyzeTask(code, "/path/to/task.js");
  * // Returns:
  * // {
+ * //   taskFilePath: "/path/to/task.js",
  * //   stages: [{ name: "ingestion", order: 2, isAsync: false }],
  * //   artifacts: {
  * //     reads: [{ fileName: "input.json", stage: "ingestion", required: true }],
@@ -38,7 +40,7 @@ import { extractLLMCalls } from "./extractors/llm-calls.js";
  * //   models: [{ provider: "deepseek", method: "chat", stage: "ingestion" }]
  * // }
  */
-export function analyzeTask(code) {
+export function analyzeTask(code, taskFilePath = null) {
   // Parse the source code into an AST
   const ast = parseTaskSource(code);
 
@@ -50,6 +52,7 @@ export function analyzeTask(code) {
 
   // Compose into the TaskAnalysis object
   return {
+    taskFilePath,
     stages,
     artifacts: {
       reads,
@@ -61,6 +64,7 @@ export function analyzeTask(code) {
 
 /**
  * @typedef {Object} TaskAnalysis
+ * @property {string|null} taskFilePath - Path to the task file
  * @property {Array<Stage>} stages - Array of exported function stages
  * @property {Object} artifacts - Artifact operations
  * @property {Array<ArtifactRead>} artifacts.reads - Artifact read operations
