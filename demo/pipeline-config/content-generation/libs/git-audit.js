@@ -85,7 +85,21 @@ export async function commitTaskArtifacts(taskName, artifacts, metadata = {}) {
 
   // Add new artifacts to the existing tree
   for (const [filename, content] of Object.entries(artifacts)) {
-    const contentStr = typeof content === 'string' ? content : JSON.stringify(content, null, 2);
+    let contentStr;
+    if (typeof content === 'string') {
+      // If it's a JSON file, re-parse and pretty print
+      if (filename.endsWith('.json')) {
+        try {
+          contentStr = JSON.stringify(JSON.parse(content), null, 2);
+        } catch {
+          contentStr = content; // Not valid JSON, use as-is
+        }
+      } else {
+        contentStr = content;
+      }
+    } else {
+      contentStr = JSON.stringify(content, null, 2);
+    }
     await tree.writeChild(`${taskName}/${filename}`, contentStr);
   }
 
