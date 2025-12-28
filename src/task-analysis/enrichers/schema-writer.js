@@ -16,6 +16,31 @@ export async function writeSchemaFiles(
   artifactName,
   deducedData
 ) {
+  // Validate that deducedData contains all required properties
+  if (!deducedData || typeof deducedData !== "object") {
+    throw new Error(
+      `Invalid deducedData: expected an object but got ${typeof deducedData}`
+    );
+  }
+
+  if (!deducedData.schema || typeof deducedData.schema !== "object") {
+    throw new Error(
+      `Invalid deducedData.schema: expected an object but got ${typeof deducedData.schema}`
+    );
+  }
+
+  if (!deducedData.example || typeof deducedData.example !== "object") {
+    throw new Error(
+      `Invalid deducedData.example: expected an object but got ${typeof deducedData.example}`
+    );
+  }
+
+  if (!deducedData.reasoning || typeof deducedData.reasoning !== "string") {
+    throw new Error(
+      `Invalid deducedData.reasoning: expected a string but got ${typeof deducedData.reasoning}`
+    );
+  }
+
   const schemasDir = path.join(pipelinePath, "schemas");
   await fs.mkdir(schemasDir, { recursive: true });
 
