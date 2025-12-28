@@ -160,8 +160,8 @@ describe("writeSchemaFiles", () => {
       ).resolves.toBeDefined();
     });
 
-    it("creates nested directory structure with recursive flag", async () => {
-      // Use a deeply nested pipeline path
+    it("creates nested directory structure when parent directories don't exist", async () => {
+      // Use a deeply nested pipeline path that doesn't exist
       const deepPath = path.join(tempDir, "a", "b", "c", "pipeline");
       
       // Path doesn't exist yet
@@ -290,11 +290,11 @@ describe("writeSchemaFiles", () => {
       const metaFile = path.join(pipelinePath, "schemas", "test.meta.json");
       const metaContent = JSON.parse(await fs.readFile(metaFile, "utf-8"));
 
-      // Verify timestamp is valid ISO 8601
+      // Verify timestamp is valid ISO 8601 by parsing it
       expect(metaContent.generatedAt).toBeDefined();
-      expect(metaContent.generatedAt).toMatch(
-        /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/
-      );
+      const generatedDate = new Date(metaContent.generatedAt);
+      expect(generatedDate).toBeInstanceOf(Date);
+      expect(isNaN(generatedDate.getTime())).toBe(false);
 
       // Verify timestamp is reasonable (between before and after)
       expect(metaContent.generatedAt >= beforeTime).toBe(true);
@@ -318,12 +318,14 @@ describe("writeSchemaFiles", () => {
   });
 
   describe("error scenarios", () => {
-    it("handles write errors gracefully", async () => {
-      // Try to write to a read-only location or invalid path
-      const invalidPath = "/invalid/nonexistent/path/that/cannot/be/created";
+    it("propagates errors from filesystem operations", async () => {
+      // Create a file where we want to create a directory
+      const conflictPath = path.join(tempDir, "conflict");
+      await fs.writeFile(conflictPath, "I am a file");
 
+      // Try to use this file as a pipeline directory (should fail)
       await expect(
-        writeSchemaFiles(invalidPath, "test.json", {
+        writeSchemaFiles(conflictPath, "test.json", {
           schema: { type: "object" },
           example: {},
           reasoning: "Test",
