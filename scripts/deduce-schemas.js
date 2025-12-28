@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 import "dotenv/config";
 import fs from "node:fs/promises";
-import path from "node:path";
 import { Command } from "commander";
 import { deduceArtifactSchema } from "../src/task-analysis/enrichers/schema-deducer.js";
 import { writeSchemaFiles } from "../src/task-analysis/enrichers/schema-writer.js";
