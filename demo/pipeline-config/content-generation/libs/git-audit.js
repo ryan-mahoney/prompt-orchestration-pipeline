@@ -24,20 +24,25 @@ async function getRepo() {
 
 /**
  * Initialize audit branch for a new pipeline job
- * Creates an empty initial commit and sets up the branch
+ * Creates initial commit with seed data and sets up the branch
  *
  * @param {string} jobId - Unique job identifier
  * @param {string} pipelineSlug - Pipeline name (e.g., 'content-generation')
- * @param {object} seedData - Original seed data to include in first commit body
+ * @param {object} seedData - Original seed data to include in first commit
  * @param {string} codeRef - Reference to code branch (default: HEAD)
  * @returns {Promise<string>} Branch ref path
  */
 export async function initAuditBranch(jobId, pipelineSlug, seedData = {}, codeRef = 'HEAD') {
   const { repo, git } = await getRepo();
+  const { TreeObject } = await import('hologit');
 
-  // Create empty initial commit
-  const emptyCommit = await git.commitTree(EMPTY_TREE_HASH, {
-    m: `initialized ${pipelineSlug}/${jobId}`
+  // Create initial commit with seed data
+  const tree = new TreeObject(repo);
+  await tree.writeChild('seed.json', JSON.stringify(seedData, null, 2));
+  const treeHash = await tree.write();
+
+  const initialCommit = await git.commitTree(treeHash, {
+    m: `initialized ${pipelineSlug}/${jobId}\n\n## Seed\n\n${JSON.stringify(seedData, null, 2)}`
   });
 
   // Capture code branch as second parent for lineage
@@ -45,7 +50,7 @@ export async function initAuditBranch(jobId, pipelineSlug, seedData = {}, codeRe
 
   // Set up branch ref
   jobBranchRef = `refs/heads/runs/${pipelineSlug}/${jobId}`;
-  await git.updateRef(jobBranchRef, emptyCommit);
+  await git.updateRef(jobBranchRef, initialCommit);
 
   isFirstCommit = true;
 
