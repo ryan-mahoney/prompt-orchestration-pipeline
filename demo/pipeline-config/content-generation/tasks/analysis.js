@@ -126,7 +126,7 @@ Now produce ONLY the JSON object in the specified structure.`,
 // Step 3: Call LLM with prompt
 export const inference = async ({
   io,
-  llm: { gemini },
+  llm: { anthropic },
   data: {
     promptTemplating: { system, prompt },
   },
@@ -135,7 +135,7 @@ export const inference = async ({
 }) => {
   //throw new Error("Disabled for demo purposes");
 
-  const response = await gemini.flash25({
+  const response = await anthropic.opus45({
     messages: [
       { role: "system", content: system },
       { role: "user", content: prompt },

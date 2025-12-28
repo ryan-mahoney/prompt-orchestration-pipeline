@@ -121,13 +121,13 @@ Now produce ONLY the JSON object in the specified structure.
 
 export const inference = async ({
   io,
-  llm: { openai },
+  llm: { anthropic },
   data: {
     promptTemplating: { system, prompt },
   },
   flags,
 }) => {
-  const response = await openai.gpt5Mini({
+  const response = await anthropic.opus45({
     messages: [
       { role: "system", content: system },
       { role: "user", content: prompt },

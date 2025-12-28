@@ -147,14 +147,14 @@ Now provide your research findings in the specified JSON format:`,
 // Step 4: Call LLM with prompt
 export const inference = async ({
   io,
-  llm: { deepseek },
+  llm: { anthropic },
   data: {
     promptTemplating: { system, prompt },
   },
   meta,
   flags,
 }) => {
-  const response = await deepseek.chat({
+  const response = await anthropic.opus45({
     messages: [
       { role: "system", content: system },
       { role: "user", content: prompt },
@@ -303,7 +303,7 @@ OUTPUT FORMAT:
 // Contract: can depend on flags.needsRefinement; should set refined=true when implemented
 export const refine = async ({
   io,
-  llm: { deepseek },
+  llm: { anthropic },
   data: {
     critique: { revisedPrompt },
     promptTemplating: { system },
@@ -312,7 +312,7 @@ export const refine = async ({
   flags,
   output,
 }) => {
-  const response = await deepseek.chat({
+  const response = await anthropic.sonnet45({
     messages: [
       { role: "system", content: system },
       { role: "user", content: revisedPrompt },
