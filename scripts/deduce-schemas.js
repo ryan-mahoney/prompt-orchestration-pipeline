@@ -39,7 +39,7 @@ async function main() {
   }
 
   // Validate analysis structure
-  if (!analysisData.artifacts || !analysisData.artifacts.writes) {
+  if (!analysisData.artifacts || !Array.isArray(analysisData.artifacts.writes)) {
     console.error(
       "Error: Invalid analysis format. Expected 'artifacts.writes' array."
     );
