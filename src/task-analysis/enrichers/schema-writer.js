@@ -19,7 +19,7 @@ export async function writeSchemaFiles(
   const schemasDir = path.join(pipelinePath, "schemas");
   await fs.mkdir(schemasDir, { recursive: true });
 
-  const baseName = artifactName.replace(".json", "");
+  const baseName = path.parse(artifactName).name;
 
   // 1. Write pure schema (valid JSON Schema Draft-07)
   await fs.writeFile(
