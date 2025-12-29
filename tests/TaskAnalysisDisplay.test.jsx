@@ -205,7 +205,7 @@ describe("TaskAnalysisDisplay", () => {
     expect(screen.getByText("Models")).toBeInTheDocument();
   });
 
-  it("handles empty artifacts arrays", () => {
+  it("handles empty artifacts arrays with empty state messages", () => {
     const analysis = {
       artifacts: {
         reads: [],
@@ -224,6 +224,10 @@ describe("TaskAnalysisDisplay", () => {
     expect(screen.getByText("Artifacts")).toBeInTheDocument();
     expect(screen.getByText(/Reads/)).toBeInTheDocument();
     expect(screen.getByText(/Writes/)).toBeInTheDocument();
+
+    // Should display empty state messages
+    expect(screen.getByText("No reads")).toBeInTheDocument();
+    expect(screen.getByText("No writes")).toBeInTheDocument();
   });
 
   it("handles empty models array", () => {
@@ -266,5 +270,43 @@ describe("TaskAnalysisDisplay", () => {
       .getAllByTestId("badge")
       .filter((b) => b.textContent === "required");
     expect(requiredBadges).toHaveLength(1);
+  });
+
+  it("shows 'No reads' when only reads are empty", () => {
+    const analysis = {
+      artifacts: {
+        reads: [],
+        writes: [{ fileName: "output.json", stage: "processing" }],
+      },
+      stages: [],
+      models: [],
+      analyzedAt: "2025-01-01T12:00:00Z",
+    };
+
+    render(
+      <TaskAnalysisDisplay loading={false} analysis={analysis} error={null} />
+    );
+
+    expect(screen.getByText("No reads")).toBeInTheDocument();
+    expect(screen.getByText("output.json")).toBeInTheDocument();
+  });
+
+  it("shows 'No writes' when only writes are empty", () => {
+    const analysis = {
+      artifacts: {
+        reads: [{ fileName: "input.json", stage: "ingestion", required: true }],
+        writes: [],
+      },
+      stages: [],
+      models: [],
+      analyzedAt: "2025-01-01T12:00:00Z",
+    };
+
+    render(
+      <TaskAnalysisDisplay loading={false} analysis={analysis} error={null} />
+    );
+
+    expect(screen.getByText("input.json")).toBeInTheDocument();
+    expect(screen.getByText("No writes")).toBeInTheDocument();
   });
 });
