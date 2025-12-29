@@ -7,7 +7,7 @@ const formatDate = (isoString) => {
   if (!isoString || typeof isoString !== "string") return "Unknown";
   try {
     const date = new Date(isoString);
-    if (isNaN(date.getTime())) return "Unknown";
+    if (Number.isNaN(date.getTime())) return "Unknown";
     return new Intl.DateTimeFormat("en-US", {
       dateStyle: "medium",
       timeStyle: "short",
