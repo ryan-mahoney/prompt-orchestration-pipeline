@@ -24,21 +24,31 @@ const formatDate = (isoString) => {
   }
 };
 
-const ArtifactList = ({ artifacts, showRequired }) => (
-  <ul className="space-y-2">
-    {artifacts.map((artifact, idx) => (
-      <li key={idx} className="flex items-center gap-2 flex-wrap">
-        <code className="text-sm bg-slate-100 px-2 py-0.5 rounded">
-          {artifact.fileName}
-        </code>
-        <Badge intent="blue">{artifact.stage}</Badge>
-        {showRequired && artifact.required && (
-          <Badge intent="red">required</Badge>
-        )}
-      </li>
-    ))}
-  </ul>
-);
+const ArtifactList = ({ artifacts, showRequired, emptyMessage }) => {
+  if (artifacts.length === 0) {
+    return (
+      <div className="text-sm text-muted-foreground italic">
+        {emptyMessage}
+      </div>
+    );
+  }
+
+  return (
+    <ul className="space-y-2">
+      {artifacts.map((artifact, idx) => (
+        <li key={idx} className="flex items-center gap-2 flex-wrap">
+          <code className="text-sm bg-slate-100 px-2 py-0.5 rounded">
+            {artifact.fileName}
+          </code>
+          <Badge intent="blue">{artifact.stage}</Badge>
+          {showRequired && artifact.required && (
+            <Badge intent="red">required</Badge>
+          )}
+        </li>
+      ))}
+    </ul>
+  );
+};
 
 const ModelList = ({ models }) => (
   <ul className="space-y-1 text-sm">
@@ -82,7 +92,11 @@ export const TaskAnalysisDisplay = React.memo(
           <div className="space-y-4">
             <div>
               <h4 className="text-sm font-medium text-slate-700 mb-2">Reads</h4>
-              <ArtifactList artifacts={analysis.artifacts.reads} showRequired />
+              <ArtifactList
+                artifacts={analysis.artifacts.reads}
+                showRequired
+                emptyMessage="No reads"
+              />
             </div>
             <div>
               <h4 className="text-sm font-medium text-slate-700 mb-2">
@@ -91,6 +105,7 @@ export const TaskAnalysisDisplay = React.memo(
               <ArtifactList
                 artifacts={analysis.artifacts.writes}
                 showRequired={false}
+                emptyMessage="No writes"
               />
             </div>
           </div>
