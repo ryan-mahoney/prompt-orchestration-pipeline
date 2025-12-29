@@ -256,8 +256,7 @@ describe("handleSchemaFileRequest", () => {
 
     config.getPipelineConfig.mockReturnValue({ pipelineJsonPath });
 
-    const originalReadFile = fs.readFile;
-    fs.readFile = vi.fn().mockRejectedValue(new Error("Unexpected error"));
+    vi.spyOn(fs, "readFile").mockRejectedValue(new Error("Unexpected error"));
 
     await handleSchemaFileRequest(mockReq, mockRes);
 
@@ -272,7 +271,5 @@ describe("handleSchemaFileRequest", () => {
         message: "Internal server error",
       })
     );
-
-    fs.readFile = originalReadFile;
   });
 });
