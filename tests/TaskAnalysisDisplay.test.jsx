@@ -246,6 +246,7 @@ describe("TaskAnalysisDisplay", () => {
     );
 
     expect(screen.getByText("Models")).toBeInTheDocument();
+    expect(screen.getByText("No models used")).toBeInTheDocument();
   });
 
   it("does not show required badge for writes", () => {
