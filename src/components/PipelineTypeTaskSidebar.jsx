@@ -26,7 +26,15 @@ export function PipelineTypeTaskSidebar({
   const [analysisError, setAnalysisError] = useState(null);
 
   useEffect(() => {
-    if (!open || !task?.id || !pipelineSlug) {
+    if (!open) {
+      // Reset analysis state when sidebar closes to prevent stale data
+      setAnalysis(null);
+      setAnalysisLoading(false);
+      setAnalysisError(null);
+      return;
+    }
+
+    if (!task?.id || !pipelineSlug) {
       return;
     }
 
