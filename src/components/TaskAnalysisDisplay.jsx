@@ -13,8 +13,8 @@ const formatDate = (isoString) => {
 
 const ArtifactList = ({ artifacts, showRequired }) => (
   <ul className="space-y-2">
-    {artifacts.map((artifact, idx) => (
-      <li key={idx} className="flex items-center gap-2 flex-wrap">
+    {artifacts.map((artifact) => (
+      <li key={`${artifact.fileName}-${artifact.stage}`} className="flex items-center gap-2 flex-wrap">
         <code className="text-sm bg-slate-100 px-2 py-0.5 rounded">
           {artifact.fileName}
         </code>
@@ -29,8 +29,8 @@ const ArtifactList = ({ artifacts, showRequired }) => (
 
 const ModelList = ({ models }) => (
   <ul className="space-y-1 text-sm">
-    {models.map((model, idx) => (
-      <li key={idx} className="text-slate-700">
+    {models.map((model) => (
+      <li key={`${model.provider}-${model.method}-${model.stage}`} className="text-slate-700">
         {model.provider}.{model.method} @ {model.stage}
       </li>
     ))}
