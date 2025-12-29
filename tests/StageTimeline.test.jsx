@@ -96,4 +96,54 @@ describe("StageTimeline", () => {
     expect(stageElements[1]).toHaveTextContent("second");
     expect(stageElements[2]).toHaveTextContent("third");
   });
+
+  it("filters out stages without name property", () => {
+    const stages = [
+      { name: "valid", order: 1, isAsync: false },
+      { order: 2, isAsync: false }, // Missing name
+      null, // Null stage
+      undefined, // Undefined stage
+      { name: "another-valid", order: 3, isAsync: false },
+    ];
+
+    render(<StageTimeline stages={stages} />);
+
+    const stageElements = screen.getAllByRole("listitem");
+    expect(stageElements).toHaveLength(2);
+    expect(stageElements[0]).toHaveTextContent("valid");
+    expect(stageElements[1]).toHaveTextContent("another-valid");
+  });
+
+  it("handles stages with missing order property", () => {
+    const stages = [
+      { name: "with-order", order: 1, isAsync: false },
+      { name: "without-order", isAsync: false }, // Missing order
+      { name: "another-with-order", order: 2, isAsync: false },
+    ];
+
+    render(<StageTimeline stages={stages} />);
+
+    const stageElements = screen.getAllByRole("listitem");
+    expect(stageElements).toHaveLength(3);
+    // Stages with order should come first, stage without order should come last
+    expect(stageElements[0]).toHaveTextContent("with-order");
+    expect(stageElements[1]).toHaveTextContent("another-with-order");
+    expect(stageElements[2]).toHaveTextContent("without-order");
+  });
+
+  it("handles null or undefined stages array", () => {
+    const { container: container1 } = render(<StageTimeline stages={null} />);
+    const list1 = screen.getByRole("list");
+    expect(list1).toBeInTheDocument();
+    expect(container1.querySelectorAll("li")).toHaveLength(0);
+
+    cleanup();
+
+    const { container: container2 } = render(
+      <StageTimeline stages={undefined} />
+    );
+    const list2 = screen.getByRole("list");
+    expect(list2).toBeInTheDocument();
+    expect(container2.querySelectorAll("li")).toHaveLength(0);
+  });
 });
