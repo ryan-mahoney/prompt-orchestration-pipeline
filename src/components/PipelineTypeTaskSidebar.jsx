@@ -1,6 +1,7 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { Text } from "@radix-ui/themes";
 import { Sidebar, SidebarSection } from "./ui/sidebar.jsx";
+import { TaskAnalysisDisplay } from "./TaskAnalysisDisplay.jsx";
 
 /**
  * PipelineTypeTaskSidebar component for displaying pipeline type task details in a slide-over panel
@@ -9,6 +10,7 @@ import { Sidebar, SidebarSection } from "./ui/sidebar.jsx";
  * @param {string} props.title - Preformatted step name for the header
  * @param {string} props.status - Status for styling
  * @param {Object} props.task - Task object with id, title, and other metadata
+ * @param {string} props.pipelineSlug - Pipeline slug for fetching analysis
  * @param {Function} props.onClose - Close handler
  */
 export function PipelineTypeTaskSidebar({
@@ -16,8 +18,43 @@ export function PipelineTypeTaskSidebar({
   title,
   status,
   task,
+  pipelineSlug,
   onClose,
 }) {
+  const [analysis, setAnalysis] = useState(null);
+  const [analysisLoading, setAnalysisLoading] = useState(false);
+  const [analysisError, setAnalysisError] = useState(null);
+
+  useEffect(() => {
+    if (!open || !task?.id || !pipelineSlug) {
+      return;
+    }
+
+    const fetchAnalysis = async () => {
+      setAnalysisLoading(true);
+      setAnalysisError(null);
+
+      try {
+        const response = await fetch(
+          `/api/pipelines/${pipelineSlug}/tasks/${task.id}/analysis`
+        );
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.message || "Failed to fetch analysis");
+        }
+
+        setAnalysis(data.data);
+      } catch (err) {
+        setAnalysisError(err.message);
+      } finally {
+        setAnalysisLoading(false);
+      }
+    };
+
+    fetchAnalysis();
+  }, [open, task?.id, pipelineSlug]);
+
   // Get CSS classes for card header based on status
   const getHeaderClasses = (status) => {
     switch (status) {
@@ -39,51 +76,11 @@ export function PipelineTypeTaskSidebar({
       title={title}
       headerClassName={getHeaderClasses(status)}
     >
-      <SidebarSection>
-        {/* Task ID */}
-        <div className="space-y-1 mb-6">
-          <label className="text-sm font-medium text-muted-foreground">
-            Task ID
-          </label>
-          <Text size="3">{task?.id || "N/A"}</Text>
-        </div>
-
-        {/* Task Title (if different from header) */}
-        {task?.title && task.title !== title && (
-          <div className="space-y-1 mb-6">
-            <label className="text-sm font-medium text-muted-foreground">
-              Title
-            </label>
-            <Text size="3">{task.title}</Text>
-          </div>
-        )}
-
-        {/* Task Status */}
-        <div className="space-y-1 mb-6">
-          <label className="text-sm font-medium text-muted-foreground">
-            Status
-          </label>
-          <Text size="3">{status}</Text>
-        </div>
-
-        {/* Additional metadata could be added here as needed */}
-        {task?.description && (
-          <div className="space-y-1 mb-6">
-            <label className="text-sm font-medium text-muted-foreground">
-              Description
-            </label>
-            <Text size="3">{task.description}</Text>
-          </div>
-        )}
-
-        {/* Note about pipeline type view */}
-        <div className="bg-info/10 border border-info/20 rounded-lg p-4">
-          <Text size="2" color="blue">
-            This is a pipeline type definition view. For detailed task execution
-            information, view a specific job instance.
-          </Text>
-        </div>
-      </SidebarSection>
+      <TaskAnalysisDisplay
+        analysis={analysis}
+        loading={analysisLoading}
+        error={analysisError}
+      />
     </Sidebar>
   );
 }

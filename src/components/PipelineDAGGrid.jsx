@@ -84,8 +84,9 @@ const PipelineCard = React.memo(function PipelineCard({
  * @param {Object} props
  * @param {Array} props.items - Array of pipeline items with id, title?, status?
  * @param {number} props.cols - Number of columns for grid layout (default: 3)
+ * @param {string} props.pipelineSlug - Slug identifier for the pipeline
  */
-function PipelineDAGGrid({ items, cols = 3 }) {
+function PipelineDAGGrid({ items, cols = 3, pipelineSlug }) {
   const overlayRef = useRef(null);
   const gridRef = useRef(null);
   const nodeRefs = useRef([]);
@@ -392,6 +393,7 @@ function PipelineDAGGrid({ items, cols = 3 }) {
           title={formatStepName(items[openIdx], openIdx)}
           status={items[openIdx]?.status || "definition"}
           task={items[openIdx]}
+          pipelineSlug={pipelineSlug}
           onClose={() => setOpenIdx(-1)}
         />
       )}
