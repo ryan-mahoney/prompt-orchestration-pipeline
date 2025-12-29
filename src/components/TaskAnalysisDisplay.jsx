@@ -27,15 +27,23 @@ const ArtifactList = ({ artifacts, showRequired }) => (
   </ul>
 );
 
-const ModelList = ({ models }) => (
-  <ul className="space-y-1 text-sm">
-    {models.map((model, idx) => (
-      <li key={idx} className="text-slate-700">
-        {model.provider}.{model.method} @ {model.stage}
-      </li>
-    ))}
-  </ul>
-);
+const ModelList = ({ models }) => {
+  if (models.length === 0) {
+    return (
+      <div className="text-sm text-muted-foreground">No models used</div>
+    );
+  }
+
+  return (
+    <ul className="space-y-1 text-sm">
+      {models.map((model, idx) => (
+        <li key={idx} className="text-slate-700">
+          {model.provider}.{model.method} @ {model.stage}
+        </li>
+      ))}
+    </ul>
+  );
+};
 
 export const TaskAnalysisDisplay = React.memo(
   ({ analysis, loading, error }) => {
