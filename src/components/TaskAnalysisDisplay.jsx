@@ -4,7 +4,9 @@ import { Badge } from "./ui/badge.jsx";
 import { StageTimeline } from "./StageTimeline.jsx";
 
 const formatDate = (isoString) => {
+  if (!isoString) return "Unknown";
   const date = new Date(isoString);
+  if (isNaN(date.getTime())) return "Unknown";
   return new Intl.DateTimeFormat("en-US", {
     dateStyle: "medium",
     timeStyle: "short",

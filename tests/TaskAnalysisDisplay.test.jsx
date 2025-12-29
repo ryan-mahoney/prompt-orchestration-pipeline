@@ -393,4 +393,23 @@ describe("TaskAnalysisDisplay", () => {
     expect(screen.getByText("Models")).toBeInTheDocument();
     expect(screen.queryByText(/Analyzed at:/)).not.toBeInTheDocument();
   });
+
+  it("handles invalid date string gracefully", () => {
+    const analysis = {
+      artifacts: {
+        reads: [],
+        writes: [],
+      },
+      stages: [],
+      models: [],
+      analyzedAt: "invalid-date-string",
+    };
+
+    render(
+      <TaskAnalysisDisplay loading={false} analysis={analysis} error={null} />
+    );
+
+    // Should render without errors and show "Unknown" for invalid date
+    expect(screen.getByText(/Analyzed at: Unknown/)).toBeInTheDocument();
+  });
 });
