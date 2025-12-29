@@ -43,6 +43,8 @@ export const SchemaPreviewPanel = ({
       ref={panelRef}
       tabIndex={-1}
       onKeyDown={handleKeyDown}
+      role="region"
+      aria-label={`${type} preview for ${fileName}`}
       className="fixed bottom-0 left-0 right-0 h-[50%] bg-white border-t shadow-lg flex flex-col z-10"
     >
       <div className="flex items-center justify-between px-4 py-2 border-b bg-slate-50">
