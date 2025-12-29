@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from "react";
-import { Text } from "@radix-ui/themes";
 import { Sidebar } from "./ui/sidebar.jsx";
 import { TaskAnalysisDisplay } from "./TaskAnalysisDisplay.jsx";
 
