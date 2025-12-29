@@ -412,4 +412,23 @@ describe("TaskAnalysisDisplay", () => {
     // Should render without errors and show "Unknown" for invalid date
     expect(screen.getByText(/Analyzed at: Unknown/)).toBeInTheDocument();
   });
+
+  it("handles non-string analyzedAt value gracefully", () => {
+    const analysis = {
+      artifacts: {
+        reads: [],
+        writes: [],
+      },
+      stages: [],
+      models: [],
+      analyzedAt: 12345, // number instead of string
+    };
+
+    render(
+      <TaskAnalysisDisplay loading={false} analysis={analysis} error={null} />
+    );
+
+    // Should render without errors and show "Unknown" for non-string value
+    expect(screen.getByText(/Analyzed at: Unknown/)).toBeInTheDocument();
+  });
 });
