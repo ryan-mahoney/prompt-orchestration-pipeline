@@ -5,6 +5,7 @@ import {
   extractArtifactWrites,
 } from "./extractors/artifacts.js";
 import { extractLLMCalls } from "./extractors/llm-calls.js";
+import { writeAnalysisFile } from "./enrichers/analysis-writer.js";
 
 /**
  * Analyze task source code and extract metadata.
@@ -40,6 +41,8 @@ import { extractLLMCalls } from "./extractors/llm-calls.js";
  * //   models: [{ provider: "deepseek", method: "chat", stage: "ingestion" }]
  * // }
  */
+export { writeAnalysisFile };
+
 export function analyzeTask(code, taskFilePath = null) {
   // Parse the source code into an AST
   const ast = parseTaskSource(code);

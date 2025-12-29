@@ -303,6 +303,137 @@ describe("writeSchemaFiles", () => {
     });
   });
 
+  describe("input validation", () => {
+    it("throws on invalid deducedData parameter (null)", async () => {
+      await expect(
+        writeSchemaFiles(pipelinePath, "test.json", null)
+      ).rejects.toThrow(
+        "Invalid deducedData: expected an object but got object"
+      );
+    });
+
+    it("throws on invalid deducedData parameter (undefined)", async () => {
+      await expect(
+        writeSchemaFiles(pipelinePath, "test.json", undefined)
+      ).rejects.toThrow(
+        "Invalid deducedData: expected an object but got undefined"
+      );
+    });
+
+    it("throws on invalid deducedData parameter (string)", async () => {
+      await expect(
+        writeSchemaFiles(pipelinePath, "test.json", "not an object")
+      ).rejects.toThrow(
+        "Invalid deducedData: expected an object but got string"
+      );
+    });
+
+    it("throws on missing schema property", async () => {
+      await expect(
+        writeSchemaFiles(pipelinePath, "test.json", {
+          example: {},
+          reasoning: "Test",
+        })
+      ).rejects.toThrow(
+        "Invalid deducedData.schema: expected an object but got undefined"
+      );
+    });
+
+    it("throws on invalid schema property (string)", async () => {
+      await expect(
+        writeSchemaFiles(pipelinePath, "test.json", {
+          schema: "not an object",
+          example: {},
+          reasoning: "Test",
+        })
+      ).rejects.toThrow(
+        "Invalid deducedData.schema: expected an object but got string"
+      );
+    });
+
+    it("throws on missing example property (undefined)", async () => {
+      await expect(
+        writeSchemaFiles(pipelinePath, "test.json", {
+          schema: { type: "object" },
+          reasoning: "Test",
+        })
+      ).rejects.toThrow(
+        "Invalid deducedData.example: expected a value but got undefined"
+      );
+    });
+
+    it("throws on null example property", async () => {
+      await expect(
+        writeSchemaFiles(pipelinePath, "test.json", {
+          schema: { type: "object" },
+          example: null,
+          reasoning: "Test",
+        })
+      ).rejects.toThrow(
+        "Invalid deducedData.example: expected a value but got null"
+      );
+    });
+
+    it("throws on missing reasoning property", async () => {
+      await expect(
+        writeSchemaFiles(pipelinePath, "test.json", {
+          schema: { type: "object" },
+          example: {},
+        })
+      ).rejects.toThrow(
+        "Invalid deducedData.reasoning: expected a string but got undefined"
+      );
+    });
+
+    it("throws on invalid reasoning property (number)", async () => {
+      await expect(
+        writeSchemaFiles(pipelinePath, "test.json", {
+          schema: { type: "object" },
+          example: {},
+          reasoning: 123,
+        })
+      ).rejects.toThrow(
+        "Invalid deducedData.reasoning: expected a string but got number"
+      );
+    });
+
+    it("allows primitive values for example (string)", async () => {
+      await writeSchemaFiles(pipelinePath, "test.json", {
+        schema: { type: "string" },
+        example: "test value",
+        reasoning: "Test",
+      });
+
+      const sampleFile = path.join(pipelinePath, "schemas", "test.sample.json");
+      const sampleContent = JSON.parse(await fs.readFile(sampleFile, "utf-8"));
+      expect(sampleContent).toBe("test value");
+    });
+
+    it("allows primitive values for example (number)", async () => {
+      await writeSchemaFiles(pipelinePath, "test.json", {
+        schema: { type: "number" },
+        example: 42,
+        reasoning: "Test",
+      });
+
+      const sampleFile = path.join(pipelinePath, "schemas", "test.sample.json");
+      const sampleContent = JSON.parse(await fs.readFile(sampleFile, "utf-8"));
+      expect(sampleContent).toBe(42);
+    });
+
+    it("allows empty string for reasoning", async () => {
+      await writeSchemaFiles(pipelinePath, "test.json", {
+        schema: { type: "object" },
+        example: {},
+        reasoning: "",
+      });
+
+      const metaFile = path.join(pipelinePath, "schemas", "test.meta.json");
+      const metaContent = JSON.parse(await fs.readFile(metaFile, "utf-8"));
+      expect(metaContent.reasoning).toBe("");
+    });
+  });
+
   describe("error scenarios", () => {
     it("propagates errors from filesystem operations", async () => {
       // Create a file where we want to create a directory

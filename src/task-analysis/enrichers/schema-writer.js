@@ -29,13 +29,13 @@ export async function writeSchemaFiles(
     );
   }
 
-  if (!deducedData.example || typeof deducedData.example !== "object") {
+  if (deducedData.example === undefined || deducedData.example === null) {
     throw new Error(
-      `Invalid deducedData.example: expected an object but got ${typeof deducedData.example}`
+      `Invalid deducedData.example: expected a value but got ${deducedData.example}`
     );
   }
 
-  if (!deducedData.reasoning || typeof deducedData.reasoning !== "string") {
+  if (typeof deducedData.reasoning !== "string") {
     throw new Error(
       `Invalid deducedData.reasoning: expected a string but got ${typeof deducedData.reasoning}`
     );
