@@ -1,5 +1,11 @@
-import { render, screen, cleanup } from "@testing-library/react";
-import { describe, it, expect, vi, afterEach } from "vitest";
+import {
+  render,
+  screen,
+  cleanup,
+  fireEvent,
+  waitFor,
+} from "@testing-library/react";
+import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
 import { TaskAnalysisDisplay } from "../src/components/TaskAnalysisDisplay.jsx";
 
 vi.mock("../src/components/ui/sidebar.jsx", () => ({
@@ -19,6 +25,30 @@ vi.mock("../src/components/ui/badge.jsx", () => ({
   ),
 }));
 
+vi.mock("../src/components/ui/button.jsx", () => ({
+  Button: ({ children, onClick, variant, size }) => (
+    <button
+      data-testid="button"
+      data-variant={variant}
+      data-size={size}
+      onClick={onClick}
+    >
+      {children}
+    </button>
+  ),
+}));
+
+vi.mock("@radix-ui/themes", () => ({
+  Table: {
+    Root: ({ children }) => <table data-testid="table">{children}</table>,
+    Header: ({ children }) => <thead>{children}</thead>,
+    Body: ({ children }) => <tbody>{children}</tbody>,
+    Row: ({ children }) => <tr>{children}</tr>,
+    ColumnHeaderCell: ({ children }) => <th>{children}</th>,
+    Cell: ({ children }) => <td>{children}</td>,
+  },
+}));
+
 vi.mock("../src/components/StageTimeline.jsx", () => ({
   StageTimeline: ({ stages }) => (
     <div data-testid="stage-timeline">
@@ -29,14 +59,48 @@ vi.mock("../src/components/StageTimeline.jsx", () => ({
   ),
 }));
 
+vi.mock("../src/components/SchemaPreviewPanel.jsx", () => ({
+  SchemaPreviewPanel: ({
+    fileName,
+    type,
+    content,
+    loading,
+    error,
+    onClose,
+  }) => (
+    <div data-testid="schema-preview-panel">
+      <div data-testid="preview-file-name">{fileName}</div>
+      <div data-testid="preview-type">{type}</div>
+      {loading && <div>Loading...</div>}
+      {error && <div data-testid="preview-error">{error}</div>}
+      {content && <div data-testid="preview-content">{content}</div>}
+      <button onClick={onClose} data-testid="preview-close">
+        Close
+      </button>
+    </div>
+  ),
+}));
+
 describe("TaskAnalysisDisplay", () => {
+  beforeEach(() => {
+    global.fetch = vi.fn();
+  });
+
   afterEach(() => {
     cleanup();
     vi.restoreAllMocks();
+    delete global.fetch;
   });
 
   it("renders loading state with accessible busy indicator", () => {
-    render(<TaskAnalysisDisplay loading={true} analysis={null} error={null} />);
+    render(
+      <TaskAnalysisDisplay
+        loading={true}
+        analysis={null}
+        error={null}
+        pipelineSlug="test-pipeline"
+      />
+    );
 
     const loadingElement = screen.getByText("Loading analysis...");
     expect(loadingElement).toBeInTheDocument();
@@ -50,6 +114,7 @@ describe("TaskAnalysisDisplay", () => {
         loading={false}
         analysis={null}
         error={errorMessage}
+        pipelineSlug="test-pipeline"
       />
     );
 
@@ -60,13 +125,18 @@ describe("TaskAnalysisDisplay", () => {
 
   it('renders "No analysis available" when analysis is null', () => {
     render(
-      <TaskAnalysisDisplay loading={false} analysis={null} error={null} />
+      <TaskAnalysisDisplay
+        loading={false}
+        analysis={null}
+        error={null}
+        pipelineSlug="test-pipeline"
+      />
     );
 
     expect(screen.getByText("No analysis available")).toBeInTheDocument();
   });
 
-  it("renders artifacts reads and writes with correct stage/required info", () => {
+  it("renders artifacts reads and writes in table with correct stage/required info", () => {
     const analysis = {
       artifacts: {
         reads: [
@@ -84,7 +154,12 @@ describe("TaskAnalysisDisplay", () => {
     };
 
     render(
-      <TaskAnalysisDisplay loading={false} analysis={analysis} error={null} />
+      <TaskAnalysisDisplay
+        loading={false}
+        analysis={analysis}
+        error={null}
+        pipelineSlug="test-pipeline"
+      />
     );
 
     // Check reads section
@@ -96,6 +171,10 @@ describe("TaskAnalysisDisplay", () => {
     expect(screen.getByText(/Writes/)).toBeInTheDocument();
     expect(screen.getByText("output.json")).toBeInTheDocument();
     expect(screen.getByText("summary.md")).toBeInTheDocument();
+
+    // Check tables are rendered
+    const tables = screen.getAllByTestId("table");
+    expect(tables.length).toBeGreaterThanOrEqual(2);
 
     // Check badges
     const badges = screen.getAllByTestId("badge");
@@ -125,7 +204,12 @@ describe("TaskAnalysisDisplay", () => {
     };
 
     render(
-      <TaskAnalysisDisplay loading={false} analysis={analysis} error={null} />
+      <TaskAnalysisDisplay
+        loading={false}
+        analysis={analysis}
+        error={null}
+        pipelineSlug="test-pipeline"
+      />
     );
 
     const timeline = screen.getByTestId("stage-timeline");
@@ -149,7 +233,12 @@ describe("TaskAnalysisDisplay", () => {
     };
 
     render(
-      <TaskAnalysisDisplay loading={false} analysis={analysis} error={null} />
+      <TaskAnalysisDisplay
+        loading={false}
+        analysis={analysis}
+        error={null}
+        pipelineSlug="test-pipeline"
+      />
     );
 
     expect(screen.getByText(/Models/)).toBeInTheDocument();
@@ -171,7 +260,12 @@ describe("TaskAnalysisDisplay", () => {
     };
 
     render(
-      <TaskAnalysisDisplay loading={false} analysis={analysis} error={null} />
+      <TaskAnalysisDisplay
+        loading={false}
+        analysis={analysis}
+        error={null}
+        pipelineSlug="test-pipeline"
+      />
     );
 
     const analyzedAtText = screen.getByText(/Analyzed at:/);
@@ -192,7 +286,12 @@ describe("TaskAnalysisDisplay", () => {
     };
 
     render(
-      <TaskAnalysisDisplay loading={false} analysis={analysis} error={null} />
+      <TaskAnalysisDisplay
+        loading={false}
+        analysis={analysis}
+        error={null}
+        pipelineSlug="test-pipeline"
+      />
     );
 
     // Check all sections are rendered
@@ -217,7 +316,12 @@ describe("TaskAnalysisDisplay", () => {
     };
 
     render(
-      <TaskAnalysisDisplay loading={false} analysis={analysis} error={null} />
+      <TaskAnalysisDisplay
+        loading={false}
+        analysis={analysis}
+        error={null}
+        pipelineSlug="test-pipeline"
+      />
     );
 
     // Component should render without errors
@@ -242,7 +346,12 @@ describe("TaskAnalysisDisplay", () => {
     };
 
     render(
-      <TaskAnalysisDisplay loading={false} analysis={analysis} error={null} />
+      <TaskAnalysisDisplay
+        loading={false}
+        analysis={analysis}
+        error={null}
+        pipelineSlug="test-pipeline"
+      />
     );
 
     expect(screen.getByText("Models")).toBeInTheDocument();
@@ -263,7 +372,12 @@ describe("TaskAnalysisDisplay", () => {
     };
 
     render(
-      <TaskAnalysisDisplay loading={false} analysis={analysis} error={null} />
+      <TaskAnalysisDisplay
+        loading={false}
+        analysis={analysis}
+        error={null}
+        pipelineSlug="test-pipeline"
+      />
     );
 
     // Only one "required" badge should appear (from reads)
@@ -285,7 +399,12 @@ describe("TaskAnalysisDisplay", () => {
     };
 
     render(
-      <TaskAnalysisDisplay loading={false} analysis={analysis} error={null} />
+      <TaskAnalysisDisplay
+        loading={false}
+        analysis={analysis}
+        error={null}
+        pipelineSlug="test-pipeline"
+      />
     );
 
     expect(screen.getByText("No reads")).toBeInTheDocument();
@@ -304,10 +423,179 @@ describe("TaskAnalysisDisplay", () => {
     };
 
     render(
-      <TaskAnalysisDisplay loading={false} analysis={analysis} error={null} />
+      <TaskAnalysisDisplay
+        loading={false}
+        analysis={analysis}
+        error={null}
+        pipelineSlug="test-pipeline"
+      />
     );
 
     expect(screen.getByText("input.json")).toBeInTheDocument();
     expect(screen.getByText("No writes")).toBeInTheDocument();
+  });
+
+  it("renders Schema and Sample buttons for JSON artifacts", () => {
+    const analysis = {
+      artifacts: {
+        reads: [{ fileName: "data.json", stage: "ingestion", required: true }],
+        writes: [],
+      },
+      stages: [],
+      models: [],
+      analyzedAt: "2025-01-01T12:00:00Z",
+    };
+
+    render(
+      <TaskAnalysisDisplay
+        loading={false}
+        analysis={analysis}
+        error={null}
+        pipelineSlug="test-pipeline"
+      />
+    );
+
+    expect(screen.getByText("Schema")).toBeInTheDocument();
+    expect(screen.getByText("Sample")).toBeInTheDocument();
+  });
+
+  it("does not render action buttons for non-JSON artifacts", () => {
+    const analysis = {
+      artifacts: {
+        reads: [
+          { fileName: "config.yaml", stage: "ingestion", required: true },
+        ],
+        writes: [{ fileName: "output.txt", stage: "processing" }],
+      },
+      stages: [],
+      models: [],
+      analyzedAt: "2025-01-01T12:00:00Z",
+    };
+
+    render(
+      <TaskAnalysisDisplay
+        loading={false}
+        analysis={analysis}
+        error={null}
+        pipelineSlug="test-pipeline"
+      />
+    );
+
+    expect(screen.queryByText("Schema")).not.toBeInTheDocument();
+    expect(screen.queryByText("Sample")).not.toBeInTheDocument();
+  });
+
+  it("calls fetch when Schema button clicked", async () => {
+    global.fetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({ ok: true, data: '{"test": "schema"}' }),
+    });
+
+    const analysis = {
+      artifacts: {
+        reads: [{ fileName: "data.json", stage: "ingestion", required: true }],
+        writes: [],
+      },
+      stages: [],
+      models: [],
+      analyzedAt: "2025-01-01T12:00:00Z",
+    };
+
+    render(
+      <TaskAnalysisDisplay
+        loading={false}
+        analysis={analysis}
+        error={null}
+        pipelineSlug="test-pipeline"
+      />
+    );
+
+    const schemaButton = screen.getByText("Schema");
+    fireEvent.click(schemaButton);
+
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalledWith(
+        "/api/pipelines/test-pipeline/schemas/data.json?type=schema"
+      );
+    });
+  });
+
+  it("renders SchemaPreviewPanel when previewFile is set", async () => {
+    global.fetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({ ok: true, data: '{"test": "content"}' }),
+    });
+
+    const analysis = {
+      artifacts: {
+        reads: [{ fileName: "data.json", stage: "ingestion", required: true }],
+        writes: [],
+      },
+      stages: [],
+      models: [],
+      analyzedAt: "2025-01-01T12:00:00Z",
+    };
+
+    render(
+      <TaskAnalysisDisplay
+        loading={false}
+        analysis={analysis}
+        error={null}
+        pipelineSlug="test-pipeline"
+      />
+    );
+
+    const schemaButton = screen.getByText("Schema");
+    fireEvent.click(schemaButton);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("schema-preview-panel")).toBeInTheDocument();
+      expect(screen.getByTestId("preview-file-name")).toHaveTextContent(
+        "data.json"
+      );
+      expect(screen.getByTestId("preview-type")).toHaveTextContent("schema");
+    });
+  });
+
+  it("closes preview panel when onClose called", async () => {
+    global.fetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({ ok: true, data: '{"test": "content"}' }),
+    });
+
+    const analysis = {
+      artifacts: {
+        reads: [{ fileName: "data.json", stage: "ingestion", required: true }],
+        writes: [],
+      },
+      stages: [],
+      models: [],
+      analyzedAt: "2025-01-01T12:00:00Z",
+    };
+
+    render(
+      <TaskAnalysisDisplay
+        loading={false}
+        analysis={analysis}
+        error={null}
+        pipelineSlug="test-pipeline"
+      />
+    );
+
+    const schemaButton = screen.getByText("Schema");
+    fireEvent.click(schemaButton);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("schema-preview-panel")).toBeInTheDocument();
+    });
+
+    const closeButton = screen.getByTestId("preview-close");
+    fireEvent.click(closeButton);
+
+    await waitFor(() => {
+      expect(
+        screen.queryByTestId("schema-preview-panel")
+      ).not.toBeInTheDocument();
+    });
   });
 });
