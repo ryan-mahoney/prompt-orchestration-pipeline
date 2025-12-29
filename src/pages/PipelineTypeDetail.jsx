@@ -204,7 +204,7 @@ export default function PipelineTypeDetail() {
               {pipeline.tasks.length !== 1 ? "s" : ""} defined
             </Text>
 
-            <PipelineDAGGrid items={pipeline.tasks} />
+            <PipelineDAGGrid items={pipeline.tasks} pipelineSlug={slug} />
           </Box>
         ) : (
           <Box className="mb-4">
