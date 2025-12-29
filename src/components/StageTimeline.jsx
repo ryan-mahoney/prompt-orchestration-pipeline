@@ -2,7 +2,15 @@ import React from "react";
 import { Badge } from "./ui/badge.jsx";
 
 export const StageTimeline = React.memo(({ stages }) => {
-  const sortedStages = [...stages].sort((a, b) => a.order - b.order);
+  // Filter out stages without a name property (required for React key and display)
+  const validStages = stages?.filter((stage) => stage?.name) || [];
+  
+  // Sort by order, with defensive handling for missing order property
+  const sortedStages = [...validStages].sort((a, b) => {
+    const orderA = typeof a.order === 'number' ? a.order : Number.MAX_SAFE_INTEGER;
+    const orderB = typeof b.order === 'number' ? b.order : Number.MAX_SAFE_INTEGER;
+    return orderA - orderB;
+  });
 
   return (
     <ol
