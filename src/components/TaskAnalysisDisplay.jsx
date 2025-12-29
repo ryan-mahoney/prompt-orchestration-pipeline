@@ -126,7 +126,9 @@ export const TaskAnalysisDisplay = React.memo(
 
       try {
         const res = await fetch(
-          `/api/pipelines/${pipelineSlug}/schemas/${fileName}?type=${type}`
+          `/api/pipelines/${encodeURIComponent(
+            pipelineSlug
+          )}/schemas/${encodeURIComponent(fileName)}?type=${type}`
         );
         const data = await res.json();
         if (!res.ok) throw new Error(data.message || "Failed to load");
