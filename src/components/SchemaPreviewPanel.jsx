@@ -16,9 +16,13 @@ export const SchemaPreviewPanel = ({
 
   const handleCopy = async () => {
     if (content) {
-      await navigator.clipboard.writeText(content);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      try {
+        await navigator.clipboard.writeText(content);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      } catch (error) {
+        console.error("Failed to copy content to clipboard:", error);
+      }
     }
   };
 
