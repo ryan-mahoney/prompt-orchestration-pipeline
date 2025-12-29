@@ -87,6 +87,7 @@ export function PipelineTypeTaskSidebar({
         analysis={analysis}
         loading={analysisLoading}
         error={analysisError}
+        pipelineSlug={pipelineSlug}
       />
     </Sidebar>
   );
