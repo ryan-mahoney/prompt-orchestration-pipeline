@@ -4,11 +4,24 @@ import { Badge } from "./ui/badge.jsx";
 import { StageTimeline } from "./StageTimeline.jsx";
 
 const formatDate = (isoString) => {
-  const date = new Date(isoString);
-  return new Intl.DateTimeFormat("en-US", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(date);
+  if (!isoString || (typeof isoString !== "string" && !(isoString instanceof Date))) {
+    return "Unknown";
+  }
+
+  const date = isoString instanceof Date ? isoString : new Date(isoString);
+
+  if (Number.isNaN(date.getTime())) {
+    return "Unknown";
+  }
+
+  try {
+    return new Intl.DateTimeFormat("en-US", {
+      dateStyle: "medium",
+      timeStyle: "short",
+    }).format(date);
+  } catch {
+    return "Unknown";
+  }
 };
 
 const ArtifactList = ({ artifacts, showRequired }) => (
