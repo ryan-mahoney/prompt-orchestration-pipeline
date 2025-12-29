@@ -5,12 +5,16 @@ import { StageTimeline } from "./StageTimeline.jsx";
 
 const formatDate = (isoString) => {
   if (!isoString || typeof isoString !== "string") return "Unknown";
-  const date = new Date(isoString);
-  if (isNaN(date.getTime())) return "Unknown";
-  return new Intl.DateTimeFormat("en-US", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(date);
+  try {
+    const date = new Date(isoString);
+    if (isNaN(date.getTime())) return "Unknown";
+    return new Intl.DateTimeFormat("en-US", {
+      dateStyle: "medium",
+      timeStyle: "short",
+    }).format(date);
+  } catch (error) {
+    return "Unknown";
+  }
 };
 
 const ArtifactList = ({ artifacts, showRequired }) => (
