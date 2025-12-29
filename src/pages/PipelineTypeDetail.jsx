@@ -7,6 +7,8 @@ import { Button } from "../components/ui/button.jsx";
 
 import PipelineDAGGrid from "../components/PipelineDAGGrid.jsx";
 import TaskCreationSidebar from "../components/TaskCreationSidebar.jsx";
+import { AnalysisProgressTray } from "../components/AnalysisProgressTray.jsx";
+import { useAnalysisProgress } from "../ui/client/hooks/useAnalysisProgress.js";
 
 export default function PipelineTypeDetail() {
   const { slug } = useParams();
@@ -14,6 +16,15 @@ export default function PipelineTypeDetail() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [trayDismissed, setTrayDismissed] = useState(false);
+
+  const { status, startAnalysis, reset, ...progressState } =
+    useAnalysisProgress();
+
+  const handleAnalyze = () => {
+    setTrayDismissed(false);
+    startAnalysis(slug);
+  };
 
   useEffect(() => {
     const fetchPipeline = async () => {
@@ -160,6 +171,14 @@ export default function PipelineTypeDetail() {
           >
             Add Task
           </Button>
+          <Button
+            variant="outline"
+            size="md"
+            onClick={handleAnalyze}
+            disabled={status === "connecting" || status === "running"}
+          >
+            Analyze Pipeline
+          </Button>
         </Flex>
       </PageSubheader>
 
@@ -201,6 +220,15 @@ export default function PipelineTypeDetail() {
         onClose={() => setSidebarOpen(false)}
         pipelineSlug={slug}
       />
+
+      {!trayDismissed && (
+        <AnalysisProgressTray
+          {...progressState}
+          status={status}
+          pipelineSlug={slug}
+          onDismiss={() => setTrayDismissed(true)}
+        />
+      )}
     </Layout>
   );
 }
