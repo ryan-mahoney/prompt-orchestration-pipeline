@@ -1,0 +1,57 @@
+{
+  "taskFilePath": "/Users/ryanmahoney/Documents/prompt-orchestration-pipeline/demo/pipeline-config/content-generation/tasks/formatting.js",
+  "stages": [
+    {
+      "name": "preProcessing",
+      "order": 16,
+      "isAsync": true
+    },
+    {
+      "name": "promptTemplating",
+      "order": 30,
+      "isAsync": false
+    },
+    {
+      "name": "inference",
+      "order": 61,
+      "isAsync": true
+    },
+    {
+      "name": "validateStructure",
+      "order": 108,
+      "isAsync": true
+    }
+  ],
+  "artifacts": {
+    "reads": [
+      {
+        "fileName": "synthesis-output.json",
+        "stage": "preProcessing",
+        "required": true
+      },
+      {
+        "fileName": "formatting-output.json",
+        "stage": "validateStructure",
+        "required": true
+      }
+    ],
+    "writes": [
+      {
+        "fileName": "formatting-output.json",
+        "stage": "inference"
+      },
+      {
+        "fileName": "formatted-output.md",
+        "stage": "inference"
+      }
+    ]
+  },
+  "models": [
+    {
+      "provider": "deepseek",
+      "method": "chat",
+      "stage": "inference"
+    }
+  ],
+  "analyzedAt": "2025-12-29T06:19:20.397Z"
+}

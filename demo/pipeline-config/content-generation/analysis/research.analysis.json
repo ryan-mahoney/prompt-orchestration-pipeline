@@ -1,0 +1,110 @@
+{
+  "taskFilePath": "/Users/ryanmahoney/Documents/prompt-orchestration-pipeline/demo/pipeline-config/content-generation/tasks/research.js",
+  "stages": [
+    {
+      "name": "ingestion",
+      "order": 61,
+      "isAsync": false
+    },
+    {
+      "name": "preProcessing",
+      "order": 82,
+      "isAsync": false
+    },
+    {
+      "name": "promptTemplating",
+      "order": 98,
+      "isAsync": false
+    },
+    {
+      "name": "inference",
+      "order": 148,
+      "isAsync": true
+    },
+    {
+      "name": "parsing",
+      "order": 192,
+      "isAsync": false
+    },
+    {
+      "name": "validateStructure",
+      "order": 201,
+      "isAsync": true
+    },
+    {
+      "name": "validateQuality",
+      "order": 227,
+      "isAsync": false
+    },
+    {
+      "name": "critique",
+      "order": 240,
+      "isAsync": true
+    },
+    {
+      "name": "refine",
+      "order": 304,
+      "isAsync": true
+    },
+    {
+      "name": "finalValidation",
+      "order": 353,
+      "isAsync": true
+    },
+    {
+      "name": "integration",
+      "order": 382,
+      "isAsync": false
+    }
+  ],
+  "artifacts": {
+    "reads": [
+      {
+        "fileName": "research-output.json",
+        "stage": "validateStructure",
+        "required": true
+      },
+      {
+        "fileName": "research-output-2.json",
+        "stage": "finalValidation",
+        "required": true
+      }
+    ],
+    "writes": [
+      {
+        "fileName": "research-output.json",
+        "stage": "inference"
+      },
+      {
+        "fileName": "research-revisedPrompt.txt",
+        "stage": "refine"
+      },
+      {
+        "fileName": "research-output-2.json",
+        "stage": "refine"
+      },
+      {
+        "fileName": "research-output.json",
+        "stage": "finalValidation"
+      }
+    ]
+  },
+  "models": [
+    {
+      "provider": "deepseek",
+      "method": "chat",
+      "stage": "inference"
+    },
+    {
+      "provider": "anthropic",
+      "method": "sonnet45",
+      "stage": "critique"
+    },
+    {
+      "provider": "deepseek",
+      "method": "chat",
+      "stage": "refine"
+    }
+  ],
+  "analyzedAt": "2025-12-29T06:40:26.780Z"
+}

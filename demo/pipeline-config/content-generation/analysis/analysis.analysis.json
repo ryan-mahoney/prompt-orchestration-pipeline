@@ -1,0 +1,53 @@
+{
+  "taskFilePath": "/Users/ryanmahoney/Documents/prompt-orchestration-pipeline/demo/pipeline-config/content-generation/tasks/analysis.js",
+  "stages": [
+    {
+      "name": "ingestion",
+      "order": 40,
+      "isAsync": true
+    },
+    {
+      "name": "promptTemplating",
+      "order": 67,
+      "isAsync": false
+    },
+    {
+      "name": "inference",
+      "order": 127,
+      "isAsync": true
+    },
+    {
+      "name": "validateStructure",
+      "order": 159,
+      "isAsync": true
+    }
+  ],
+  "artifacts": {
+    "reads": [
+      {
+        "fileName": "research-output.json",
+        "stage": "ingestion",
+        "required": true
+      },
+      {
+        "fileName": "analysis-output.json",
+        "stage": "validateStructure",
+        "required": true
+      }
+    ],
+    "writes": [
+      {
+        "fileName": "analysis-output.json",
+        "stage": "inference"
+      }
+    ]
+  },
+  "models": [
+    {
+      "provider": "gemini",
+      "method": "flash25",
+      "stage": "inference"
+    }
+  ],
+  "analyzedAt": "2025-12-29T06:41:53.158Z"
+}

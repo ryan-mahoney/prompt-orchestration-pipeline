@@ -1,0 +1,23 @@
+{
+  "researchSummary": "This research explores the impact of artificial intelligence on modern healthcare, highlighting advancements in diagnostics, treatment personalization, and operational efficiency.",
+  "keyFindings": [
+    {
+      "area": "Diagnostics",
+      "findings": "AI algorithms can analyze medical images with accuracy comparable to human experts, reducing diagnostic times by up to 50%.",
+      "sources": [
+        "Journal of Medical AI, 2023",
+        "Healthcare Tech Review"
+      ]
+    },
+    {
+      "area": "Treatment Personalization",
+      "findings": "Machine learning models enable tailored treatment plans based on genetic data, improving patient outcomes by 30% in clinical trials.",
+      "sources": [
+        "Nature Medicine, 2024"
+      ]
+    }
+  ],
+  "additionalInsights": "Ethical considerations around data privacy and algorithmic bias remain significant challenges that require ongoing attention.",
+  "criticalPerspectives": "Over-reliance on AI may lead to deskilling of medical professionals and potential errors if models are trained on biased datasets.",
+  "researchCompleteness": "Comprehensive coverage of technical aspects, but limited discussion on regulatory frameworks and long-term societal impacts."
+}
