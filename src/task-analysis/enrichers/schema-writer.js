@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 
 /**
- * Write schema, example, and meta files for an artifact.
+ * Write schema, sample, and meta files for an artifact.
  *
  * Key design: Schema files are PURE JSON Schema with no extra keys.
  * Metadata is stored in a separate .meta.json file.
@@ -52,9 +52,9 @@ export async function writeSchemaFiles(
     JSON.stringify(deducedData.schema, null, 2)
   );
 
-  // 2. Write example data (plain JSON)
+  // 2. Write sample data (plain JSON)
   await fs.writeFile(
-    path.join(schemasDir, `${baseName}.example.json`),
+    path.join(schemasDir, `${baseName}.sample.json`),
     JSON.stringify(deducedData.example, null, 2)
   );
 

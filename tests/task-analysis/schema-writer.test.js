@@ -19,7 +19,7 @@ describe("writeSchemaFiles", () => {
   });
 
   describe("basic file writing", () => {
-    it("creates schema, example, and meta files", async () => {
+    it("creates schema, sample, and meta files", async () => {
       const artifactName = "output.json";
       const deducedData = {
         schema: {
@@ -36,25 +36,21 @@ describe("writeSchemaFiles", () => {
 
       const schemasDir = path.join(pipelinePath, "schemas");
       const schemaFile = path.join(schemasDir, "output.schema.json");
-      const exampleFile = path.join(schemasDir, "output.example.json");
+      const sampleFile = path.join(schemasDir, "output.sample.json");
       const metaFile = path.join(schemasDir, "output.meta.json");
 
       // Verify all files exist
       await expect(fs.stat(schemaFile)).resolves.toBeDefined();
-      await expect(fs.stat(exampleFile)).resolves.toBeDefined();
+      await expect(fs.stat(sampleFile)).resolves.toBeDefined();
       await expect(fs.stat(metaFile)).resolves.toBeDefined();
 
       // Verify schema content
-      const schemaContent = JSON.parse(
-        await fs.readFile(schemaFile, "utf-8")
-      );
+      const schemaContent = JSON.parse(await fs.readFile(schemaFile, "utf-8"));
       expect(schemaContent).toEqual(deducedData.schema);
 
-      // Verify example content
-      const exampleContent = JSON.parse(
-        await fs.readFile(exampleFile, "utf-8")
-      );
-      expect(exampleContent).toEqual(deducedData.example);
+      // Verify sample content
+      const sampleContent = JSON.parse(await fs.readFile(sampleFile, "utf-8"));
+      expect(sampleContent).toEqual(deducedData.example);
 
       // Verify meta content
       const metaContent = JSON.parse(await fs.readFile(metaFile, "utf-8"));
@@ -81,14 +77,8 @@ describe("writeSchemaFiles", () => {
 
       await writeSchemaFiles(pipelinePath, "user.json", deducedData);
 
-      const schemaFile = path.join(
-        pipelinePath,
-        "schemas",
-        "user.schema.json"
-      );
-      const schemaContent = JSON.parse(
-        await fs.readFile(schemaFile, "utf-8")
-      );
+      const schemaFile = path.join(pipelinePath, "schemas", "user.schema.json");
+      const schemaContent = JSON.parse(await fs.readFile(schemaFile, "utf-8"));
 
       // Verify only schema properties are present (no metadata mixed in)
       expect(schemaContent).toEqual(deducedData.schema);
@@ -105,11 +95,7 @@ describe("writeSchemaFiles", () => {
 
       await writeSchemaFiles(pipelinePath, "text.json", deducedData);
 
-      const schemaFile = path.join(
-        pipelinePath,
-        "schemas",
-        "text.schema.json"
-      );
+      const schemaFile = path.join(pipelinePath, "schemas", "text.schema.json");
       const content = await fs.readFile(schemaFile, "utf-8");
 
       // Verify proper JSON formatting with 2-space indentation
@@ -163,7 +149,7 @@ describe("writeSchemaFiles", () => {
     it("creates nested directory structure when parent directories don't exist", async () => {
       // Use a deeply nested pipeline path that doesn't exist
       const deepPath = path.join(tempDir, "a", "b", "c", "pipeline");
-      
+
       // Path doesn't exist yet
       await expect(fs.stat(deepPath)).rejects.toThrow();
 
@@ -345,9 +331,7 @@ describe("writeSchemaFiles", () => {
         "schemas",
         "empty.schema.json"
       );
-      const schemaContent = JSON.parse(
-        await fs.readFile(schemaFile, "utf-8")
-      );
+      const schemaContent = JSON.parse(await fs.readFile(schemaFile, "utf-8"));
       expect(schemaContent).toEqual({});
     });
 
@@ -404,9 +388,7 @@ describe("writeSchemaFiles", () => {
         "schemas",
         "complex.schema.json"
       );
-      const schemaContent = JSON.parse(
-        await fs.readFile(schemaFile, "utf-8")
-      );
+      const schemaContent = JSON.parse(await fs.readFile(schemaFile, "utf-8"));
 
       expect(schemaContent).toEqual(complexSchema);
     });
@@ -431,25 +413,13 @@ describe("writeSchemaFiles", () => {
       await writeSchemaFiles(pipelinePath, "test.json", secondData);
 
       // Verify files contain second version
-      const schemaFile = path.join(
-        pipelinePath,
-        "schemas",
-        "test.schema.json"
-      );
-      const schemaContent = JSON.parse(
-        await fs.readFile(schemaFile, "utf-8")
-      );
+      const schemaFile = path.join(pipelinePath, "schemas", "test.schema.json");
+      const schemaContent = JSON.parse(await fs.readFile(schemaFile, "utf-8"));
       expect(schemaContent).toEqual(secondData.schema);
 
-      const exampleFile = path.join(
-        pipelinePath,
-        "schemas",
-        "test.example.json"
-      );
-      const exampleContent = JSON.parse(
-        await fs.readFile(exampleFile, "utf-8")
-      );
-      expect(exampleContent).toEqual(secondData.example);
+      const sampleFile = path.join(pipelinePath, "schemas", "test.sample.json");
+      const sampleContent = JSON.parse(await fs.readFile(sampleFile, "utf-8"));
+      expect(sampleContent).toEqual(secondData.example);
     });
 
     it("can write multiple artifacts independently", async () => {
