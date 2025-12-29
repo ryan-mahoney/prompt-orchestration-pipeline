@@ -75,9 +75,9 @@ export const SchemaPreviewPanel = ({
       </div>
       <div className="flex-1 overflow-auto p-4">
         {loading ? (
-          <div className="text-sm text-muted-foreground">Loading...</div>
+          <div className="text-sm text-muted-foreground" aria-live="polite">Loading...</div>
         ) : error ? (
-          <div className="text-sm text-red-600">{error}</div>
+          <div className="text-sm text-red-600" role="alert">{error}</div>
         ) : content ? (
           <SyntaxHighlighter
             language="json"
