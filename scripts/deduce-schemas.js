@@ -17,7 +17,7 @@ program
   .requiredOption("-t, --task <path>", "Path to the task source file")
   .option(
     "-o, --output <path>",
-    "Output directory for schema files",
+    "Pipeline directory (schemas written to <path>/schemas/)",
     "."
   )
   .parse(process.argv);
@@ -39,7 +39,10 @@ async function main() {
   }
 
   // Validate analysis structure
-  if (!analysisData.artifacts || !Array.isArray(analysisData.artifacts.writes)) {
+  if (
+    !analysisData.artifacts ||
+    !Array.isArray(analysisData.artifacts.writes)
+  ) {
     console.error(
       "Error: Invalid analysis format. Expected 'artifacts.writes' array."
     );
@@ -72,7 +75,8 @@ async function main() {
 
   console.log(`Found ${jsonArtifacts.length} JSON artifacts to process\n`);
   console.log(`Task file: ${task}`);
-  console.log(`Output directory: ${output}\n`);
+  console.log(`Pipeline directory: ${output}`);
+  console.log(`Schema files will be written to: ${output}/schemas/\n`);
 
   let succeeded = 0;
   let failed = 0;
