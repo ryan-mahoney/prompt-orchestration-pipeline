@@ -5,9 +5,10 @@
  * @param {string} url - The URL to fetch
  * @param {RequestInit} options - Fetch options (method defaults to POST)
  * @param {function} onEvent - Callback for each SSE event: (eventName, parsedData) => void
+ * @param {function} onError - Callback for HTTP errors: (errorData) => void
  * @returns {{ cancel: () => void }} Object with cancel method to abort the fetch
  */
-export function fetchSSE(url, options = {}, onEvent) {
+export function fetchSSE(url, options = {}, onEvent, onError) {
   if (typeof onEvent !== "function") {
     throw new Error("onEvent callback is required");
   }
@@ -21,8 +22,26 @@ export function fetchSSE(url, options = {}, onEvent) {
 
   fetch(url, requestOptions)
     .then(async (response) => {
+      // Handle HTTP errors before attempting to read stream
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        let errorData = {};
+        try {
+          errorData = await response.json();
+        } catch {
+          // If response isn't JSON, just use status text
+          errorData = {
+            ok: false,
+            code: "http_error",
+            message: response.statusText,
+            status: response.status,
+          };
+        }
+        if (typeof onError === "function") {
+          onError(errorData);
+        } else {
+          console.error(`[sse-fetch] HTTP ${response.status}:`, errorData);
+        }
+        return;
       }
 
       const reader = response.body.getReader();

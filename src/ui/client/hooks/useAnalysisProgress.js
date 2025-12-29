@@ -117,31 +117,22 @@ export function useAnalysisProgress() {
 
       const url = `/api/pipelines/${encodeURIComponent(pipelineSlug)}/analyze`;
 
-      try {
-        // Check for HTTP errors before streaming
-        const response = await fetch(url, { method: "POST" });
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}));
+      const sse = fetchSSE(
+        url,
+        {},
+        handleEvent,
+        // Error handler for HTTP errors
+        (errorData) => {
           setState((prev) => ({
             ...prev,
             status: "error",
             error:
               errorData.message ||
-              `HTTP ${response.status}: ${response.statusText}`,
+              `HTTP ${errorData.status || "error"}: ${errorData.statusText || "Unknown error"}`,
           }));
-          return;
         }
-
-        // Start SSE stream for successful responses
-        const sse = fetchSSE(url, {}, handleEvent);
-        cancelRef.current = sse.cancel;
-      } catch (err) {
-        setState((prev) => ({
-          ...prev,
-          status: "error",
-          error: err.message || "Failed to start analysis",
-        }));
-      }
+      );
+      cancelRef.current = sse.cancel;
     },
     [handleEvent]
   );

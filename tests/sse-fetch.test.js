@@ -242,7 +242,45 @@ describe("fetchSSE", () => {
     );
   });
 
-  it("handles HTTP errors", async () => {
+  it("handles HTTP errors with JSON error response", async () => {
+    const mockStream = new ReadableStream({
+      start(controller) {
+        controller.close();
+      },
+    });
+
+    const errorResponse = {
+      ok: false,
+      code: "analysis_locked",
+      heldBy: "content-generation",
+    };
+
+    global.fetch = vi.fn(() =>
+      Promise.resolve({
+        ok: false,
+        status: 409,
+        statusText: "Conflict",
+        body: mockStream,
+        json: () => Promise.resolve(errorResponse),
+      })
+    );
+
+    const mockOnError = vi.fn();
+    const consoleErrorSpy = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => {});
+
+    fetchSSE("/api/test", {}, () => {}, mockOnError);
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(mockOnError).toHaveBeenCalledWith(errorResponse);
+    expect(consoleErrorSpy).not.toHaveBeenCalled();
+
+    consoleErrorSpy.mockRestore();
+  });
+
+  it("handles HTTP errors with non-JSON response", async () => {
     const mockStream = new ReadableStream({
       start(controller) {
         controller.close();
@@ -252,9 +290,47 @@ describe("fetchSSE", () => {
     global.fetch = vi.fn(() =>
       Promise.resolve({
         ok: false,
+        status: 500,
+        statusText: "Internal Server Error",
+        body: mockStream,
+        json: () => Promise.reject(new Error("Invalid JSON")),
+      })
+    );
+
+    const mockOnError = vi.fn();
+
+    fetchSSE("/api/test", {}, () => {}, mockOnError);
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(mockOnError).toHaveBeenCalledWith({
+      ok: false,
+      code: "http_error",
+      message: "Internal Server Error",
+      status: 500,
+    });
+  });
+
+  it("handles HTTP errors without onError callback", async () => {
+    const mockStream = new ReadableStream({
+      start(controller) {
+        controller.close();
+      },
+    });
+
+    const errorResponse = {
+      ok: false,
+      code: "not_found",
+      message: "Pipeline not found",
+    };
+
+    global.fetch = vi.fn(() =>
+      Promise.resolve({
+        ok: false,
         status: 404,
         statusText: "Not Found",
         body: mockStream,
+        json: () => Promise.resolve(errorResponse),
       })
     );
 
@@ -267,8 +343,8 @@ describe("fetchSSE", () => {
     await new Promise((resolve) => setTimeout(resolve, 50));
 
     expect(consoleErrorSpy).toHaveBeenCalledWith(
-      "[sse-fetch] Error:",
-      expect.objectContaining({ message: "HTTP 404: Not Found" })
+      "[sse-fetch] HTTP 404:",
+      errorResponse
     );
 
     consoleErrorSpy.mockRestore();
