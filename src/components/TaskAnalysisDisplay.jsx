@@ -69,14 +69,14 @@ export const TaskAnalysisDisplay = React.memo(
           <div className="space-y-4">
             <div>
               <h4 className="text-sm font-medium text-slate-700 mb-2">Reads</h4>
-              <ArtifactList artifacts={analysis.artifacts.reads} showRequired />
+              <ArtifactList artifacts={analysis.artifacts?.reads || []} showRequired />
             </div>
             <div>
               <h4 className="text-sm font-medium text-slate-700 mb-2">
                 Writes
               </h4>
               <ArtifactList
-                artifacts={analysis.artifacts.writes}
+                artifacts={analysis.artifacts?.writes || []}
                 showRequired={false}
               />
             </div>
@@ -84,16 +84,18 @@ export const TaskAnalysisDisplay = React.memo(
         </SidebarSection>
 
         <SidebarSection title="Stages">
-          <StageTimeline stages={analysis.stages} />
+          <StageTimeline stages={analysis.stages || []} />
         </SidebarSection>
 
         <SidebarSection title="Models">
-          <ModelList models={analysis.models} />
+          <ModelList models={analysis.models || []} />
         </SidebarSection>
 
-        <div className="px-6 pb-6 text-xs text-muted-foreground">
-          Analyzed at: {formatDate(analysis.analyzedAt)}
-        </div>
+        {analysis.analyzedAt && (
+          <div className="px-6 pb-6 text-xs text-muted-foreground">
+            Analyzed at: {formatDate(analysis.analyzedAt)}
+          </div>
+        )}
       </div>
     );
   }

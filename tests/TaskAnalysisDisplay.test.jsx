@@ -267,4 +267,130 @@ describe("TaskAnalysisDisplay", () => {
       .filter((b) => b.textContent === "required");
     expect(requiredBadges).toHaveLength(1);
   });
+
+  it("handles missing artifacts object gracefully", () => {
+    const analysis = {
+      stages: [{ name: "ingestion", order: 1, isAsync: false }],
+      models: [{ provider: "openai", method: "gpt-4", stage: "processing" }],
+      analyzedAt: "2025-01-01T12:00:00Z",
+    };
+
+    render(
+      <TaskAnalysisDisplay loading={false} analysis={analysis} error={null} />
+    );
+
+    // Should render without errors and show empty artifact sections
+    expect(screen.getByText("Artifacts")).toBeInTheDocument();
+    expect(screen.getByText(/Reads/)).toBeInTheDocument();
+    expect(screen.getByText(/Writes/)).toBeInTheDocument();
+  });
+
+  it("handles missing artifacts.reads property gracefully", () => {
+    const analysis = {
+      artifacts: {
+        writes: [{ fileName: "output.json", stage: "processing" }],
+      },
+      stages: [],
+      models: [],
+      analyzedAt: "2025-01-01T12:00:00Z",
+    };
+
+    render(
+      <TaskAnalysisDisplay loading={false} analysis={analysis} error={null} />
+    );
+
+    // Should render without errors
+    expect(screen.getByText(/Reads/)).toBeInTheDocument();
+    expect(screen.getByText("output.json")).toBeInTheDocument();
+  });
+
+  it("handles missing artifacts.writes property gracefully", () => {
+    const analysis = {
+      artifacts: {
+        reads: [{ fileName: "input.json", stage: "ingestion", required: true }],
+      },
+      stages: [],
+      models: [],
+      analyzedAt: "2025-01-01T12:00:00Z",
+    };
+
+    render(
+      <TaskAnalysisDisplay loading={false} analysis={analysis} error={null} />
+    );
+
+    // Should render without errors
+    expect(screen.getByText(/Writes/)).toBeInTheDocument();
+    expect(screen.getByText("input.json")).toBeInTheDocument();
+  });
+
+  it("handles missing stages property gracefully", () => {
+    const analysis = {
+      artifacts: {
+        reads: [],
+        writes: [],
+      },
+      models: [{ provider: "openai", method: "gpt-4", stage: "processing" }],
+      analyzedAt: "2025-01-01T12:00:00Z",
+    };
+
+    render(
+      <TaskAnalysisDisplay loading={false} analysis={analysis} error={null} />
+    );
+
+    // Should render without errors
+    expect(screen.getByText("Stages")).toBeInTheDocument();
+    expect(screen.getByText("openai.gpt-4 @ processing")).toBeInTheDocument();
+  });
+
+  it("handles missing models property gracefully", () => {
+    const analysis = {
+      artifacts: {
+        reads: [],
+        writes: [],
+      },
+      stages: [{ name: "ingestion", order: 1, isAsync: false }],
+      analyzedAt: "2025-01-01T12:00:00Z",
+    };
+
+    render(
+      <TaskAnalysisDisplay loading={false} analysis={analysis} error={null} />
+    );
+
+    // Should render without errors
+    expect(screen.getByText("Models")).toBeInTheDocument();
+    expect(screen.getByText("ingestion")).toBeInTheDocument();
+  });
+
+  it("handles missing analyzedAt property gracefully", () => {
+    const analysis = {
+      artifacts: {
+        reads: [],
+        writes: [],
+      },
+      stages: [],
+      models: [],
+    };
+
+    render(
+      <TaskAnalysisDisplay loading={false} analysis={analysis} error={null} />
+    );
+
+    // Should render without errors and not show analyzedAt section
+    expect(screen.queryByText(/Analyzed at:/)).not.toBeInTheDocument();
+    expect(screen.getByText("Artifacts")).toBeInTheDocument();
+  });
+
+  it("handles completely empty analysis object gracefully", () => {
+    const analysis = {};
+
+    render(
+      <TaskAnalysisDisplay loading={false} analysis={analysis} error={null} />
+    );
+
+    // Should render without errors with all sections empty
+    expect(screen.getByText("Artifacts")).toBeInTheDocument();
+    expect(screen.getByText("Stages")).toBeInTheDocument();
+    expect(screen.getByText("Models")).toBeInTheDocument();
+    expect(screen.queryByText(/Analyzed at:/)).not.toBeInTheDocument();
+  });
 });
