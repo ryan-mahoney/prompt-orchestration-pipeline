@@ -37,7 +37,15 @@ function getSeedSchema() {
           emphases: { type: "array", items: { type: "string" } },
           de_emphases: { type: "array", items: { type: "string" } },
           culturalMarkers: { type: "array", items: { type: "string" } },
-          practitionerBias: { type: "string" },
+          practitionerBias: {
+            type: "string",
+            enum: [
+              "builders_operators",
+              "strategic_thinkers",
+              "balanced",
+              "pastoral_bridge_builders",
+            ],
+          },
         },
         additionalProperties: true,
         description: "Optional context for pipeline execution",

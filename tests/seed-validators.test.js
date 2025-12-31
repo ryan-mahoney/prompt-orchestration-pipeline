@@ -385,7 +385,7 @@ describe("Seed Validation Utilities", () => {
           emphases: ["emphasis 1", "emphasis 2"],
           de_emphases: ["de-emphasis 1"],
           culturalMarkers: ["marker1", "marker2"],
-          practitionerBias: "test_bias",
+          practitionerBias: "balanced",
         },
       };
 
