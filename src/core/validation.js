@@ -30,6 +30,18 @@ function getSeedSchema() {
         type: "object",
         description: "Optional metadata",
       },
+      context: {
+        type: "object",
+        properties: {
+          framing: { type: "string" },
+          emphases: { type: "array", items: { type: "string" } },
+          de_emphases: { type: "array", items: { type: "string" } },
+          culturalMarkers: { type: "array", items: { type: "string" } },
+          practitionerBias: { type: "string" },
+        },
+        additionalProperties: true,
+        description: "Optional context for pipeline execution",
+      },
     },
     additionalProperties: false,
   };

@@ -1,0 +1,48 @@
+{
+  "name": "Full Time Imam",
+  "pipeline": "jobkit",
+  "data": {
+    "roleName": "Full Time Imam",
+    "roleId": "full-time-imam",
+    "slug": "full-time-imam",
+    "field": "Mosque / Nonprofit",
+    "context": {
+      "framing": "A full-time imam for an American mosque who pairs classical grounding with present-day fluency—guiding hearts to Allah, holding a community together across generations and cultures, and building a masjid that feels like a refuge, a school, and a home for Muslim life in the United States.",
+      "emphases": [
+        "spiritual leadership rooted in Qur’an and Sunnah with clarity and mercy",
+        "khutbahs and teaching that translate timeless guidance into modern Muslim-American life",
+        "pastoral presence: showing up for people in grief, crisis, and major life moments",
+        "youth connection and mentorship that builds belonging and resilience",
+        "convert care and integration into the social and spiritual fabric of the masjid",
+        "unity-building across cultures, backgrounds, and levels of practice",
+        "wise, calm leadership during controversy and community tension",
+        "healthy boundaries and accountability that protect people and the institution",
+        "community confidence: helping Muslims live with dignity, purpose, and hope",
+        "collaboration with boards, volunteers, and staff to strengthen masjid culture"
+      ],
+      "de_emphases": [
+        "performative controversy, outrage cycles, and social-media leadership",
+        "sectarian scoring, culture-war framing, and factionalism",
+        "leading primarily through fear, shame, or harshness rather than balance",
+        "importing overseas politics into local community life",
+        "personal branding over institution-building and service",
+        "detachment from youth realities and family pressures",
+        "avoiding hard conversations about integrity, safety, and governance",
+        "rigidity that ignores context or compassion that ignores principles"
+      ],
+      "culturalMarkers": [
+        "service-first",
+        "mercy-forward",
+        "youth-inclusive",
+        "bridge-builder",
+        "rooted and relevant",
+        "calm under pressure",
+        "trustworthy",
+        "community-minded",
+        "dignifying",
+        "steady"
+      ],
+      "practitionerBias": "pastoral_bridge_builders"
+    }
+  }
+}

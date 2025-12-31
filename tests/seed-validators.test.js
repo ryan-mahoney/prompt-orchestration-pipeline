@@ -375,6 +375,72 @@ describe("Seed Validation Utilities", () => {
       );
     });
 
+    it("should pass Ajv validation with optional context key", () => {
+      const seedWithContext = {
+        name: "test-job",
+        data: { key: "value" },
+        pipeline: "content",
+        context: {
+          framing: "Test framing description",
+          emphases: ["emphasis 1", "emphasis 2"],
+          de_emphases: ["de-emphasis 1"],
+          culturalMarkers: ["marker1", "marker2"],
+          practitionerBias: "test_bias",
+        },
+      };
+
+      const result = validateSeedAjv(seedWithContext);
+
+      expect(result.valid).toBe(true);
+      expect(result.errors).toBeUndefined();
+    });
+
+    it("should pass Ajv validation without context key", () => {
+      const seedWithoutContext = {
+        name: "test-job",
+        data: { key: "value" },
+        pipeline: "content",
+      };
+
+      const result = validateSeedAjv(seedWithoutContext);
+
+      expect(result.valid).toBe(true);
+      expect(result.errors).toBeUndefined();
+    });
+
+    it("should pass Ajv validation with partial context", () => {
+      const seedWithPartialContext = {
+        name: "test-job",
+        data: { key: "value" },
+        pipeline: "content",
+        context: {
+          framing: "Only framing provided",
+        },
+      };
+
+      const result = validateSeedAjv(seedWithPartialContext);
+
+      expect(result.valid).toBe(true);
+      expect(result.errors).toBeUndefined();
+    });
+
+    it("should pass Ajv validation with context containing additional properties", () => {
+      const seedWithExtendedContext = {
+        name: "test-job",
+        data: { key: "value" },
+        pipeline: "content",
+        context: {
+          framing: "Test framing",
+          customField: "custom value",
+        },
+      };
+
+      const result = validateSeedAjv(seedWithExtendedContext);
+
+      expect(result.valid).toBe(true);
+      expect(result.errors).toBeUndefined();
+    });
+
     it("should fail Ajv validation when pipeline is not in registry", () => {
       const seedWithUnknownPipeline = {
         name: "test-job",
