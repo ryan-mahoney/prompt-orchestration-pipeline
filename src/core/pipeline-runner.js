@@ -18,6 +18,8 @@ import { createJobLogger } from "./logger.js";
 import { LogEvent, LogFileExtension } from "../config/log-events.js";
 import { decideTransition } from "./lifecycle-policy.js";
 
+const getTaskName = (t) => (typeof t === "string" ? t : t.name);
+
 const ROOT = process.env.PO_ROOT || process.cwd();
 const DATA_DIR = path.join(ROOT, process.env.PO_DATA_DIR || "pipeline-data");
 const CURRENT_DIR =
@@ -104,6 +106,8 @@ const pipeline = JSON.parse(await fs.readFile(PIPELINE_DEF_PATH, "utf8"));
 // Validate pipeline format early with a friendly error message
 validatePipelineOrThrow(pipeline, PIPELINE_DEF_PATH);
 
+const taskNames = pipeline.tasks.map(getTaskName);
+
 const tasks = (await loadFreshModule(TASK_REGISTRY)).default;
 
 const status = JSON.parse(await fs.readFile(tasksStatusPath, "utf8"));
@@ -123,21 +127,21 @@ logger.group("Pipeline execution", {
 
 // Helper function to check if all upstream dependencies are completed
 function areDependenciesReady(taskName) {
-  const taskIndex = pipeline.tasks.indexOf(taskName);
+  const taskIndex = taskNames.indexOf(taskName);
   if (taskIndex === -1) return false;
 
-  const upstreamTasks = pipeline.tasks.slice(0, taskIndex);
+  const upstreamTasks = taskNames.slice(0, taskIndex);
   return upstreamTasks.every(
     (upstreamTask) => status.tasks[upstreamTask]?.state === TaskState.DONE
   );
 }
 
 try {
-  for (const taskName of pipeline.tasks) {
+  for (const taskName of taskNames) {
     // Skip tasks before startFromTask when targeting a specific restart point
     if (
       startFromTask &&
-      pipeline.tasks.indexOf(taskName) < pipeline.tasks.indexOf(startFromTask)
+      taskNames.indexOf(taskName) < taskNames.indexOf(startFromTask)
     ) {
       logger.log("Skipping task before restart point", {
         taskName,
@@ -158,30 +162,32 @@ try {
       continue;
     }
 
-    // Check lifecycle policy before starting task
-    const currentTaskState = status.tasks[taskName]?.state || "pending";
-    const dependenciesReady = areDependenciesReady(taskName);
+    // Check lifecycle policy before starting task (skip when startFromTask is set - user explicitly requested this task)
+    if (!startFromTask) {
+      const currentTaskState = status.tasks[taskName]?.state || "pending";
+      const dependenciesReady = areDependenciesReady(taskName);
 
-    const lifecycleDecision = decideTransition({
-      op: "start",
-      taskState: currentTaskState,
-      dependenciesReady,
-    });
-
-    if (!lifecycleDecision.ok) {
-      logger.warn("lifecycle_block", {
-        jobId,
-        taskId: taskName,
+      const lifecycleDecision = decideTransition({
         op: "start",
-        reason: lifecycleDecision.reason,
+        taskState: currentTaskState,
+        dependenciesReady,
       });
 
-      // Create typed error for endpoints to handle
-      const lifecycleError = new Error(lifecycleDecision.reason);
-      lifecycleError.httpStatus = 409;
-      lifecycleError.error = "unsupported_lifecycle";
-      lifecycleError.reason = lifecycleDecision.reason;
-      throw lifecycleError;
+      if (!lifecycleDecision.ok) {
+        logger.warn("lifecycle_block", {
+          jobId,
+          taskId: taskName,
+          op: "start",
+          reason: lifecycleDecision.reason,
+        });
+
+        // Create typed error for endpoints to handle
+        const lifecycleError = new Error(lifecycleDecision.reason);
+        lifecycleError.httpStatus = 409;
+        lifecycleError.error = "unsupported_lifecycle";
+        lifecycleError.reason = lifecycleDecision.reason;
+        throw lifecycleError;
+      }
     }
 
     logger.log("Starting task", { taskName });

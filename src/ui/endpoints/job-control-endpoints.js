@@ -462,7 +462,7 @@ export async function handleJobRestart(req, res, jobId, dataDir, sendJson) {
       if (fromTask && singleTask === true) {
         await resetSingleTask(jobDir, fromTask, { clearTokenUsage: true });
       } else if (fromTask) {
-        await resetJobFromTask(jobDir, fromTask, { clearTokenUsage: true });
+        await resetSingleTask(jobDir, fromTask, { clearTokenUsage: true });
       } else {
         await resetJobToCleanSlate(jobDir, { clearTokenUsage: true });
       }

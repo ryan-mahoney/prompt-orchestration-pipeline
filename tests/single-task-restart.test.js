@@ -115,4 +115,49 @@ describe("Single-Task Restart", () => {
       });
     });
   });
+
+  describe("Task name normalization", () => {
+    it("should correctly identify task position with object-format tasks", () => {
+      const getTaskName = (t) => (typeof t === "string" ? t : t.name);
+
+      const objectTasks = [
+        { name: "ingest" },
+        { name: "process" },
+        { name: "analyze" },
+        { name: "export" },
+      ];
+
+      const taskNames = objectTasks.map(getTaskName);
+      const startFromTask = "analyze";
+
+      // Verify indexOf works correctly with normalized names
+      expect(taskNames.indexOf("ingest")).toBe(0);
+      expect(taskNames.indexOf("analyze")).toBe(2);
+      expect(taskNames.indexOf(startFromTask)).toBe(2);
+
+      // Verify skip logic would work
+      const shouldSkip = (taskName) =>
+        taskNames.indexOf(taskName) < taskNames.indexOf(startFromTask);
+
+      expect(shouldSkip("ingest")).toBe(true);
+      expect(shouldSkip("process")).toBe(true);
+      expect(shouldSkip("analyze")).toBe(false);
+      expect(shouldSkip("export")).toBe(false);
+    });
+
+    it("should handle mixed string and object task formats", () => {
+      const getTaskName = (t) => (typeof t === "string" ? t : t.name);
+
+      const mixedTasks = [
+        "ingest",
+        { name: "process" },
+        "analyze",
+        { name: "export" },
+      ];
+
+      const taskNames = mixedTasks.map(getTaskName);
+
+      expect(taskNames).toEqual(["ingest", "process", "analyze", "export"]);
+    });
+  });
 });

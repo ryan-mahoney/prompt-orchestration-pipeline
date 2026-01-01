@@ -130,25 +130,35 @@ export function RestartJobModal({
                 Cancel
               </Button>
 
-              {taskId && (
+              {taskId ? (
+                <>
+                  <Button
+                    variant="outline"
+                    onClick={() => onConfirm({ singleTask: false })}
+                    disabled={isSubmitting}
+                    className="min-w-[120px]"
+                  >
+                    {isSubmitting ? "Restarting..." : "Restart entire pipeline"}
+                  </Button>
+                  <Button
+                    variant="default"
+                    onClick={() => onConfirm({ singleTask: true })}
+                    disabled={isSubmitting}
+                    className="min-w-[120px]"
+                  >
+                    {isSubmitting ? "Running..." : "Re-run this task"}
+                  </Button>
+                </>
+              ) : (
                 <Button
-                  variant="outline"
-                  onClick={() => onConfirm({ singleTask: true })}
+                  variant="destructive"
+                  onClick={() => onConfirm({ singleTask: false })}
                   disabled={isSubmitting}
-                  className="min-w-[120px]"
+                  className="min-w-[80px]"
                 >
-                  {isSubmitting ? "Running..." : "Just this task"}
+                  {isSubmitting ? "Restarting..." : "Restart"}
                 </Button>
               )}
-
-              <Button
-                variant="destructive"
-                onClick={() => onConfirm({ singleTask: false })}
-                disabled={isSubmitting}
-                className="min-w-[80px]"
-              >
-                {isSubmitting ? "Restarting..." : "Restart"}
-              </Button>
             </Flex>
           </div>
         </div>
