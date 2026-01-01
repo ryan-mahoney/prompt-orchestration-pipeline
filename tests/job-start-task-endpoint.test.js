@@ -400,7 +400,7 @@ describe("Job Start Task Endpoint", () => {
       });
     });
 
-    it("should return 400 when task not found", async () => {
+    it("should return 400 when task not found in either tasks-status.json or pipeline.json", async () => {
       const jobId = "test-job";
       const jobDir = getJobDirectoryPath(dataDir, jobId, "current");
       await fs.mkdir(jobDir, { recursive: true });
@@ -428,7 +428,7 @@ describe("Job Start Task Endpoint", () => {
         })
       );
 
-      // Create pipeline.json
+      // Create pipeline.json without the target task
       const pipelinePath = path.join(jobDir, "pipeline.json");
       await fs.writeFile(
         pipelinePath,
@@ -448,8 +448,132 @@ describe("Job Start Task Endpoint", () => {
       expect(body).toEqual({
         ok: false,
         code: "task_not_found",
-        message: "Task not found in job",
+        message: "Task not found in pipeline definition",
       });
+    });
+
+    it("should auto-add task from pipeline.json when missing from tasks-status.json", async () => {
+      const jobId = "auto-add-task-job";
+      const jobDir = getJobDirectoryPath(dataDir, jobId, "current");
+      await fs.mkdir(jobDir, { recursive: true });
+
+      // Create tasks-status.json WITHOUT the target task
+      const statusPath = path.join(jobDir, "tasks-status.json");
+      await fs.writeFile(
+        statusPath,
+        JSON.stringify({
+          id: jobId,
+          state: "idle",
+          current: null,
+          currentStage: null,
+          lastUpdated: new Date().toISOString(),
+          tasks: {
+            "upstream-task": {
+              state: "done",
+              attempts: 1,
+              refinementAttempts: 0,
+              currentStage: null,
+              files: { artifacts: [], logs: [], tmp: [] },
+            },
+            // Note: "missing-task" is NOT here but IS in pipeline.json
+          },
+          files: { artifacts: [], logs: [], tmp: [] },
+        })
+      );
+
+      // Create pipeline.json WITH the target task
+      const pipelinePath = path.join(jobDir, "pipeline.json");
+      await fs.writeFile(
+        pipelinePath,
+        JSON.stringify({ tasks: ["upstream-task", "missing-task"] })
+      );
+
+      const response = await fetch(
+        `${baseUrl}/api/jobs/${jobId}/tasks/missing-task/start`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+        }
+      );
+
+      expect(response.status).toBe(202);
+      const body = await response.json();
+      expect(body).toEqual({
+        ok: true,
+        jobId,
+        taskId: "missing-task",
+        mode: "single-task-start",
+        spawned: true,
+      });
+
+      // Verify the task was added to tasks-status.json
+      const updatedStatus = JSON.parse(await fs.readFile(statusPath, "utf8"));
+      expect(updatedStatus.tasks["missing-task"]).toBeDefined();
+      expect(updatedStatus.tasks["missing-task"].state).toBe("pending");
+      expect(updatedStatus.tasks["missing-task"].attempts).toBe(0);
+      expect(updatedStatus.tasks["missing-task"].refinementAttempts).toBe(0);
+      expect(updatedStatus.tasks["missing-task"].files).toEqual({
+        artifacts: [],
+        logs: [],
+        tmp: [],
+      });
+    });
+
+    it("should auto-add task and check dependencies correctly", async () => {
+      const jobId = "auto-add-with-deps-job";
+      const jobDir = getJobDirectoryPath(dataDir, jobId, "current");
+      await fs.mkdir(jobDir, { recursive: true });
+
+      // Create tasks-status.json WITHOUT the target task, upstream NOT done
+      const statusPath = path.join(jobDir, "tasks-status.json");
+      await fs.writeFile(
+        statusPath,
+        JSON.stringify({
+          id: jobId,
+          state: "idle",
+          current: null,
+          currentStage: null,
+          lastUpdated: new Date().toISOString(),
+          tasks: {
+            "upstream-task": {
+              state: "pending", // NOT done - should fail dependency check
+              attempts: 0,
+              refinementAttempts: 0,
+              currentStage: null,
+              files: { artifacts: [], logs: [], tmp: [] },
+            },
+          },
+          files: { artifacts: [], logs: [], tmp: [] },
+        })
+      );
+
+      // Create pipeline.json WITH the target task
+      const pipelinePath = path.join(jobDir, "pipeline.json");
+      await fs.writeFile(
+        pipelinePath,
+        JSON.stringify({ tasks: ["upstream-task", "missing-task"] })
+      );
+
+      const response = await fetch(
+        `${baseUrl}/api/jobs/${jobId}/tasks/missing-task/start`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+        }
+      );
+
+      // Should fail on dependency check, not task_not_found
+      expect(response.status).toBe(409);
+      const body = await response.json();
+      expect(body).toEqual({
+        ok: false,
+        code: "dependencies_not_satisfied",
+        message: "Dependencies not satisfied for task: upstream-task",
+      });
+
+      // Verify the task was still added to tasks-status.json (before dependency check)
+      const updatedStatus = JSON.parse(await fs.readFile(statusPath, "utf8"));
+      expect(updatedStatus.tasks["missing-task"]).toBeDefined();
     });
 
     it("should return 400 when task is not pending", async () => {

@@ -829,27 +829,7 @@ export async function handleTaskStart(
       return;
     }
 
-    // Validate task existence
-    if (!snapshot.tasks || !snapshot.tasks[taskId]) {
-      sendJson(res, 400, {
-        ok: false,
-        code: "task_not_found",
-        message: "Task not found in job",
-      });
-      return;
-    }
-
-    // Validate task state is Pending
-    if (snapshot.tasks[taskId].state !== "pending") {
-      sendJson(res, 400, {
-        ok: false,
-        code: "task_not_pending",
-        message: "Task is not in pending state",
-      });
-      return;
-    }
-
-    // Read job pipeline config
+    // Read job pipeline config (needed for both task validation and dependency checking)
     const jobPipelinePath = getJobPipelinePath(dataDir, jobId, "current");
     let jobPipeline;
     try {
@@ -860,6 +840,75 @@ export async function handleTaskStart(
         ok: false,
         code: "pipeline_config_not_found",
         message: "Pipeline configuration not found",
+      });
+      return;
+    }
+
+    // Helper function to extract task name from string or object
+    const getTaskName = (t) => (typeof t === "string" ? t : t.name);
+
+    // Check if task exists in pipeline.json
+    const pipelineTaskNames = (jobPipeline.tasks || []).map(getTaskName);
+    const taskExistsInPipeline = pipelineTaskNames.includes(taskId);
+
+    // Validate task existence - check both tasks-status.json and pipeline.json
+    if (!snapshot.tasks || !snapshot.tasks[taskId]) {
+      if (!taskExistsInPipeline) {
+        // Task not found in either file - true error case
+        sendJson(res, 400, {
+          ok: false,
+          code: "task_not_found",
+          message: "Task not found in pipeline definition",
+        });
+        return;
+      }
+
+      // Task exists in pipeline.json but not in tasks-status.json
+      // Auto-add it with default pending state
+      console.log(
+        `[handleTaskStart] Auto-adding missing task "${taskId}" to tasks-status.json for job ${jobId}`
+      );
+
+      await writeJobStatus(jobDir, (s) => {
+        if (!s.tasks) {
+          s.tasks = {};
+        }
+        if (!s.tasks[taskId]) {
+          s.tasks[taskId] = {
+            state: "pending",
+            currentStage: null,
+            attempts: 0,
+            refinementAttempts: 0,
+            files: {
+              artifacts: [],
+              logs: [],
+              tmp: [],
+            },
+          };
+        }
+        return s;
+      });
+
+      // Re-read the updated snapshot
+      try {
+        const content = await fs.promises.readFile(statusPath, "utf8");
+        snapshot = JSON.parse(content);
+      } catch (error) {
+        sendJson(res, 500, {
+          ok: false,
+          code: "internal_error",
+          message: "Failed to read updated job status",
+        });
+        return;
+      }
+    }
+
+    // Validate task state is Pending
+    if (snapshot.tasks[taskId].state !== "pending") {
+      sendJson(res, 400, {
+        ok: false,
+        code: "task_not_pending",
+        message: "Task is not in pending state",
       });
       return;
     }
