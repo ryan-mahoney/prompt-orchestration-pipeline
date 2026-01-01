@@ -873,17 +873,19 @@ export async function handleTaskStart(
         if (!s.tasks) {
           s.tasks = {};
         }
-        s.tasks[taskId] = {
-          state: "pending",
-          currentStage: null,
-          attempts: 0,
-          refinementAttempts: 0,
-          files: {
-            artifacts: [],
-            logs: [],
-            tmp: [],
-          },
-        };
+        if (!s.tasks[taskId]) {
+          s.tasks[taskId] = {
+            state: "pending",
+            currentStage: null,
+            attempts: 0,
+            refinementAttempts: 0,
+            files: {
+              artifacts: [],
+              logs: [],
+              tmp: [],
+            },
+          };
+        }
         return s;
       });
 
