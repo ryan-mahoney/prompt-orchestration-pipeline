@@ -2,6 +2,7 @@ import {
   extractMessages,
   isRetryableError,
   sleep,
+  stripMarkdownFences,
   tryParseJSON,
   ensureJsonResponseFormat,
   ProviderJsonParseError,
@@ -24,11 +25,12 @@ export async function deepseekChat({
     throw new Error("DeepSeek API key not configured");
   }
 
-  // Determine if JSON mode is requested
+  // Determine if JSON mode is requested (handle both object and string formats)
   const isJsonMode =
     responseFormat?.type === "json_object" ||
     responseFormat?.type === "json_schema" ||
-    responseFormat === "json";
+    responseFormat === "json" ||
+    responseFormat === "json_object";
 
   const { systemMsg, userMsg } = extractMessages(messages);
 
@@ -84,7 +86,10 @@ export async function deepseekChat({
       }
 
       const data = await response.json();
-      const content = data.choices[0].message.content;
+      const rawContent = data.choices[0].message.content;
+
+      // Always strip markdown fences first to prevent parse failures
+      const content = stripMarkdownFences(rawContent);
 
       // Parse JSON only in JSON mode; return raw string for text mode
       if (isJsonMode) {

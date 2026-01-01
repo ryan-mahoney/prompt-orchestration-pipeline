@@ -2,6 +2,7 @@ import {
   extractMessages,
   isRetryableError,
   sleep,
+  stripMarkdownFences,
   tryParseJSON,
   ensureJsonResponseFormat,
   ProviderJsonParseError,
@@ -32,7 +33,7 @@ export async function geminiChat(options) {
     frequencyPenalty,
     presencePenalty,
     stop,
-    maxRetries = 3
+    maxRetries = 3,
   } = options;
 
   // Validate response format (Gemini only supports JSON mode)
@@ -171,7 +172,9 @@ export async function geminiChat(options) {
         throw new Error("No content returned from Gemini API");
       }
 
-      const text = candidate.content.parts[0].text;
+      const rawText = candidate.content.parts[0].text;
+      // Always strip markdown fences first to prevent parse failures
+      const text = stripMarkdownFences(rawText);
       console.log(`[Gemini] Text length: ${text.length}`);
 
       // Parse JSON if required

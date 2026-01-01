@@ -2,6 +2,7 @@ import {
   extractMessages,
   isRetryableError,
   sleep,
+  stripMarkdownFences,
   tryParseJSON,
   ensureJsonResponseFormat,
   ProviderJsonParseError,
@@ -77,10 +78,12 @@ export async function anthropicChat({
 
       // Extract text from response.content blocks
       const blocks = Array.isArray(data?.content) ? data.content : [];
-      const text = blocks
+      const rawText = blocks
         .filter((b) => b?.type === "text" && typeof b.text === "string")
         .map((b) => b.text)
         .join("");
+      // Always strip markdown fences first to prevent parse failures
+      const text = stripMarkdownFences(rawText);
       console.log("[Anthropic] Response text length:", text.length);
 
       // Parse JSON - this is required for all calls

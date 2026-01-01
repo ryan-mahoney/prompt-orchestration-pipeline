@@ -18,7 +18,6 @@ import {
   getJobMetadataPath,
   getJobPipelinePath,
 } from "../../config/paths.js";
-import { readRawBody } from "../utils/http-utils.js";
 
 // Get __dirname equivalent in ES modules
 const __filename = fileURLToPath(import.meta.url);
@@ -436,21 +435,8 @@ export async function handleJobRestart(req, res, jobId, dataDir, sendJson) {
     }
 
     // Parse optional fromTask from request body for targeted restart
-    let body = {};
-    try {
-      const rawBody = await readRawBody(req);
-      if (rawBody && rawBody.length > 0) {
-        const bodyString = rawBody.toString("utf8");
-        body = JSON.parse(bodyString);
-      }
-    } catch (error) {
-      sendJson(res, 400, {
-        ok: false,
-        error: "bad_request",
-        message: "Invalid JSON in request body",
-      });
-      return;
-    }
+    // Note: Express's json() middleware already parsed the body into req.body
+    const body = req.body || {};
 
     const { fromTask, singleTask } = body;
 

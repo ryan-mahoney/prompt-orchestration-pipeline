@@ -33,6 +33,25 @@ export async function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
+/**
+ * Strip markdown code fences from text unconditionally.
+ * Handles ```json, ```JSON, and plain ``` with or without newlines.
+ * @param {string} text - The text to strip fences from
+ * @returns {string} The cleaned text, or original if not a string
+ */
+export function stripMarkdownFences(text) {
+  if (typeof text !== "string") return text;
+  const trimmed = text.trim();
+  if (trimmed.startsWith("```")) {
+    // Remove opening fence (```json, ```JSON, or just ```)
+    let cleaned = trimmed.replace(/^```(?:json|JSON)?\s*\n?/, "");
+    // Remove closing fence
+    cleaned = cleaned.replace(/\n?```\s*$/, "");
+    return cleaned.trim();
+  }
+  return text;
+}
+
 export function tryParseJSON(text) {
   try {
     return JSON.parse(text);
@@ -85,7 +104,12 @@ export class ProviderJsonModeError extends Error {
  * Error thrown when JSON parsing fails and should not be retried
  */
 export class ProviderJsonParseError extends Error {
-  constructor(provider, model, sample, message = "Failed to parse JSON response") {
+  constructor(
+    provider,
+    model,
+    sample,
+    message = "Failed to parse JSON response"
+  ) {
     super(message);
     this.name = "ProviderJsonParseError";
     this.provider = provider;
@@ -109,8 +133,9 @@ export function ensureJsonResponseFormat(responseFormat, providerName) {
   }
 
   // Check for valid JSON format types
-  const isValidJsonFormat = 
+  const isValidJsonFormat =
     responseFormat === "json" ||
+    responseFormat === "json_object" ||
     responseFormat?.type === "json_object" ||
     responseFormat?.type === "json_schema";
 

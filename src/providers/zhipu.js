@@ -2,6 +2,7 @@ import {
   extractMessages,
   isRetryableError,
   sleep,
+  stripMarkdownFences,
   tryParseJSON,
   ensureJsonResponseFormat,
   ProviderJsonParseError,
@@ -104,7 +105,9 @@ export async function zhipuChat({
       console.log("[Zhipu] Response received from Zhipu API");
 
       // Extract text from response
-      const text = data?.choices?.[0]?.message?.content || "";
+      const rawText = data?.choices?.[0]?.message?.content || "";
+      // Always strip markdown fences first to prevent parse failures
+      const text = stripMarkdownFences(rawText);
       console.log("[Zhipu] Response text length:", text.length);
 
       // Parse JSON - this is required for all calls

@@ -3,6 +3,7 @@ import {
   extractMessages,
   isRetryableError,
   sleep,
+  stripMarkdownFences,
   tryParseJSON,
   ensureJsonResponseFormat,
   ProviderJsonParseError,
@@ -53,11 +54,12 @@ export async function openaiChat({
   console.log("[OpenAI] System message length:", systemMsg.length);
   console.log("[OpenAI] User message length:", userMsg.length);
 
-  // Determine if JSON mode is requested
+  // Determine if JSON mode is requested (handle both object and string formats)
   const isJsonMode =
     responseFormat?.json_schema ||
     responseFormat?.type === "json_object" ||
-    responseFormat === "json";
+    responseFormat === "json" ||
+    responseFormat === "json_object";
 
   let lastError;
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
@@ -100,7 +102,9 @@ export async function openaiChat({
 
         console.log("[OpenAI] Calling responses.create...");
         const resp = await openai.responses.create(responsesReq);
-        const text = resp.output_text ?? "";
+        const rawText = resp.output_text ?? "";
+        // Always strip markdown fences first to prevent parse failures
+        const text = stripMarkdownFences(rawText);
         console.log("[OpenAI] Response received, text length:", text.length);
 
         // Approximate usage (tests don't assert exact values)
@@ -161,7 +165,9 @@ export async function openaiChat({
 
       console.log("[OpenAI] Calling chat.completions.create...");
       const classicRes = await openai.chat.completions.create(classicReq);
-      const classicText = classicRes?.choices?.[0]?.message?.content ?? "";
+      const rawClassicText = classicRes?.choices?.[0]?.message?.content ?? "";
+      // Always strip markdown fences first to prevent parse failures
+      const classicText = stripMarkdownFences(rawClassicText);
       console.log(
         "[OpenAI] Response received, text length:",
         classicText.length
@@ -228,7 +234,9 @@ export async function openaiChat({
         }
 
         const classicRes = await openai.chat.completions.create(classicReq);
-        const text = classicRes?.choices?.[0]?.message?.content ?? "";
+        const rawText = classicRes?.choices?.[0]?.message?.content ?? "";
+        // Always strip markdown fences first to prevent parse failures
+        const text = stripMarkdownFences(rawText);
 
         // Parse JSON only in JSON mode; return raw string for text mode
         if (isJsonMode) {
