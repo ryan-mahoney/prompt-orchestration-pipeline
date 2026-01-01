@@ -407,6 +407,17 @@ export async function chat(options) {
       }
     } else if (provider === "gemini") {
       console.log("[llm] Using Gemini provider");
+
+      // Infer JSON format if not explicitly provided
+      const effectiveResponseFormat =
+        responseFormat === undefined ||
+        responseFormat === null ||
+        responseFormat === ""
+          ? shouldInferJsonFormat(messages)
+            ? "json_object"
+            : undefined
+          : responseFormat;
+
       const geminiArgs = {
         messages,
         model: model || "gemini-2.5-flash",
@@ -421,8 +432,8 @@ export async function chat(options) {
       });
       if (topP !== undefined) geminiArgs.topP = topP;
       if (stop !== undefined) geminiArgs.stop = stop;
-      if (responseFormat !== undefined) {
-        geminiArgs.responseFormat = responseFormat;
+      if (effectiveResponseFormat !== undefined) {
+        geminiArgs.responseFormat = effectiveResponseFormat;
       }
 
       console.log("[llm] Calling geminiChat()...");
