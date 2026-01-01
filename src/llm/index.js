@@ -89,6 +89,18 @@ export function calculateCost(provider, model, usage) {
   return promptCost + completionCost;
 }
 
+// Helper function to detect if messages indicate JSON response is needed
+function shouldInferJsonFormat(messages) {
+  // Check first two messages for JSON keyword (case-insensitive)
+  const messagesToCheck = messages.slice(0, 2);
+  for (const msg of messagesToCheck) {
+    if (typeof msg?.content === "string" && /json/i.test(msg.content)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 // Core chat function - no metrics handling needed!
 export async function chat(options) {
   console.log("[llm] chat() called with options:", {
@@ -199,6 +211,17 @@ export async function chat(options) {
       };
     } else if (provider === "openai") {
       console.log("[llm] Using OpenAI provider");
+
+      // Infer JSON format if not explicitly provided
+      const effectiveResponseFormat =
+        responseFormat === undefined ||
+        responseFormat === null ||
+        responseFormat === ""
+          ? shouldInferJsonFormat(messages)
+            ? "json_object"
+            : undefined
+          : responseFormat;
+
       const openaiArgs = {
         messages,
         model: model || "gpt-5-chat-latest",
@@ -211,8 +234,8 @@ export async function chat(options) {
         hasMessages: !!openaiArgs.messages,
         messageCount: openaiArgs.messages?.length,
       });
-      if (responseFormat !== undefined) {
-        openaiArgs.responseFormat = responseFormat;
+      if (effectiveResponseFormat !== undefined) {
+        openaiArgs.responseFormat = effectiveResponseFormat;
       }
       if (topP !== undefined) openaiArgs.topP = topP;
       if (frequencyPenalty !== undefined)
@@ -255,6 +278,17 @@ export async function chat(options) {
       }
     } else if (provider === "deepseek") {
       console.log("[llm] Using DeepSeek provider");
+
+      // Infer JSON format if not explicitly provided
+      const effectiveResponseFormat =
+        responseFormat === undefined ||
+        responseFormat === null ||
+        responseFormat === ""
+          ? shouldInferJsonFormat(messages)
+            ? "json_object"
+            : undefined
+          : responseFormat;
+
       const deepseekArgs = {
         messages,
         model: model || MODEL_CONFIG[DEFAULT_MODEL_BY_PROVIDER.deepseek].model,
@@ -274,8 +308,8 @@ export async function chat(options) {
       if (presencePenalty !== undefined)
         deepseekArgs.presencePenalty = presencePenalty;
       if (stop !== undefined) deepseekArgs.stop = stop;
-      if (responseFormat !== undefined) {
-        deepseekArgs.responseFormat = responseFormat;
+      if (effectiveResponseFormat !== undefined) {
+        deepseekArgs.responseFormat = effectiveResponseFormat;
       }
 
       console.log("[llm] Calling deepseekChat()...");

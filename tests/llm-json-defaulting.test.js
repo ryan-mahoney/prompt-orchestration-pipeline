@@ -17,7 +17,7 @@ describe("LLM JSON defaulting", () => {
   });
 
   describe("chat() defaulting", () => {
-    it("defaults responseFormat to 'json' when omitted for OpenAI", async () => {
+    it("defaults responseFormat to 'json_object' when message contains JSON keyword for OpenAI", async () => {
       const mockOpenaiChat = vi
         .spyOn(openaiProvider, "openaiChat")
         .mockResolvedValue({
@@ -28,19 +28,19 @@ describe("LLM JSON defaulting", () => {
       await chat({
         provider: "openai",
         model: "gpt-4",
-        messages: [{ role: "user", content: "test" }],
+        messages: [{ role: "user", content: "Return JSON output" }],
       });
 
       expect(mockOpenaiChat).toHaveBeenCalledWith(
         expect.objectContaining({
-          responseFormat: "json",
-          messages: [{ role: "user", content: "test" }],
+          responseFormat: "json_object",
+          messages: [{ role: "user", content: "Return JSON output" }],
           model: "gpt-4",
         })
       );
     });
 
-    it("defaults responseFormat to 'json' when omitted for DeepSeek", async () => {
+    it("defaults responseFormat to 'json_object' when message contains JSON keyword for DeepSeek", async () => {
       const mockDeepseekChat = vi
         .spyOn(deepseekProvider, "deepseekChat")
         .mockResolvedValue({
@@ -51,16 +51,34 @@ describe("LLM JSON defaulting", () => {
       await chat({
         provider: "deepseek",
         model: "deepseek-chat",
-        messages: [{ role: "user", content: "test" }],
+        messages: [{ role: "user", content: "Provide json response" }],
       });
 
       expect(mockDeepseekChat).toHaveBeenCalledWith(
         expect.objectContaining({
-          responseFormat: "json",
-          messages: [{ role: "user", content: "test" }],
+          responseFormat: "json_object",
+          messages: [{ role: "user", content: "Provide json response" }],
           model: "deepseek-chat",
         })
       );
+    });
+
+    it("does not set responseFormat when message doesn't contain JSON keyword", async () => {
+      const mockOpenaiChat = vi
+        .spyOn(openaiProvider, "openaiChat")
+        .mockResolvedValue({
+          content: "Plain text response",
+          usage: { prompt_tokens: 10, completion_tokens: 20, total_tokens: 30 },
+        });
+
+      await chat({
+        provider: "openai",
+        model: "gpt-4",
+        messages: [{ role: "user", content: "test" }],
+      });
+
+      const callArgs = mockOpenaiChat.mock.calls[0][0];
+      expect(callArgs.responseFormat).toBeUndefined();
     });
 
     it("preserves explicit responseFormat when provided", async () => {
@@ -96,7 +114,7 @@ describe("LLM JSON defaulting", () => {
   });
 
   describe("createHighLevelLLM integration", () => {
-    it("applies JSON default via high-level interface", async () => {
+    it("applies JSON default via high-level interface when message contains JSON keyword", async () => {
       const mockOpenaiChat = vi
         .spyOn(openaiProvider, "openaiChat")
         .mockResolvedValue({
@@ -105,12 +123,12 @@ describe("LLM JSON defaulting", () => {
         });
 
       const llm = createHighLevelLLM({ defaultProvider: "openai" });
-      await llm.chat({ messages: [{ role: "user", content: "test" }] });
+      await llm.chat({ messages: [{ role: "user", content: "Return JSON" }] });
 
       expect(mockOpenaiChat).toHaveBeenCalledWith(
         expect.objectContaining({
-          responseFormat: "json",
-          messages: [{ role: "user", content: "test" }],
+          responseFormat: "json_object",
+          messages: [{ role: "user", content: "Return JSON" }],
         })
       );
     });
