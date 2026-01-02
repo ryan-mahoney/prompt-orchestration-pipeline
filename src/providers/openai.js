@@ -8,6 +8,9 @@ import {
   ensureJsonResponseFormat,
   ProviderJsonParseError,
 } from "./base.js";
+import { createLogger } from "../core/logger.js";
+
+const logger = createLogger("OpenAI");
 
 let client = null;
 
@@ -43,16 +46,16 @@ export async function openaiChat({
   maxRetries = 3,
   ...rest
 }) {
-  console.log("\n[OpenAI] Starting openaiChat call");
-  console.log("[OpenAI] Model:", model);
-  console.log("[OpenAI] Response format:", responseFormat);
+  logger.log("\nStarting openaiChat call");
+  logger.log("Model:", model);
+  logger.log("Response format:", responseFormat);
 
   const openai = getClient();
   if (!openai) throw new Error("OpenAI API key not configured");
 
   const { systemMsg, userMsg } = extractMessages(messages);
-  console.log("[OpenAI] System message length:", systemMsg.length);
-  console.log("[OpenAI] User message length:", userMsg.length);
+  logger.log("System message length:", systemMsg.length);
+  logger.log("User message length:", userMsg.length);
 
   // Determine if JSON mode is requested (handle both object and string formats)
   const isJsonMode =
@@ -68,11 +71,11 @@ export async function openaiChat({
     const useResponsesAPI = /^gpt-5/i.test(model);
 
     try {
-      console.log(`[OpenAI] Attempt ${attempt + 1}/${maxRetries + 1}`);
+      logger.log(`Attempt ${attempt + 1}/${maxRetries + 1}`);
 
       // ---------- RESPONSES API path (GPT-5 models) ----------
       if (useResponsesAPI) {
-        console.log("[OpenAI] Using Responses API for GPT-5 model");
+        logger.log("Using Responses API for GPT-5 model");
         const responsesReq = {
           model,
           instructions: systemMsg,
@@ -100,12 +103,12 @@ export async function openaiChat({
           responsesReq.text = { format: { type: "json_object" } };
         }
 
-        console.log("[OpenAI] Calling responses.create...");
+        logger.log("Calling responses.create...");
         const resp = await openai.responses.create(responsesReq);
         const rawText = resp.output_text ?? "";
         // Always strip markdown fences first to prevent parse failures
         const text = stripMarkdownFences(rawText);
-        console.log("[OpenAI] Response received, text length:", text.length);
+        logger.log("Response received, text length:", text.length);
 
         // Approximate usage (tests don't assert exact values)
         const promptTokens = Math.ceil((systemMsg + userMsg).length / 4);
@@ -127,20 +130,16 @@ export async function openaiChat({
               "Failed to parse JSON response from Responses API"
             );
           }
-          console.log(
-            "[OpenAI] Returning response from Responses API (JSON mode)"
-          );
+          logger.log("Returning response from Responses API (JSON mode)");
           return { content: parsed, text, usage, raw: resp };
         }
 
-        console.log(
-          "[OpenAI] Returning response from Responses API (text mode)"
-        );
+        logger.log("Returning response from Responses API (text mode)");
         return { content: text, text, usage, raw: resp };
       }
 
       // ---------- CLASSIC CHAT COMPLETIONS path (non-GPT-5) ----------
-      console.log("[OpenAI] Using Classic Chat Completions API");
+      logger.log("Using Classic Chat Completions API");
       const classicReq = {
         model,
         messages,
@@ -163,15 +162,12 @@ export async function openaiChat({
         classicReq.response_format = { type: "json_object" };
       }
 
-      console.log("[OpenAI] Calling chat.completions.create...");
+      logger.log("Calling chat.completions.create...");
       const classicRes = await openai.chat.completions.create(classicReq);
       const rawClassicText = classicRes?.choices?.[0]?.message?.content ?? "";
       // Always strip markdown fences first to prevent parse failures
       const classicText = stripMarkdownFences(rawClassicText);
-      console.log(
-        "[OpenAI] Response received, text length:",
-        classicText.length
-      );
+      logger.log("Response received, text length:", classicText.length);
 
       // Parse JSON only in JSON mode; return raw string for text mode
       if (isJsonMode) {
@@ -201,16 +197,16 @@ export async function openaiChat({
     } catch (error) {
       lastError = error;
       const msg = error?.error?.message || error?.message || "";
-      console.error("[OpenAI] Error occurred:", msg);
-      console.error("[OpenAI] Error status:", error?.status);
+      logger.error("Error occurred:", msg);
+      logger.error("Error status:", error?.status);
 
       // Only fall back when RESPONSES path failed due to lack of support
       if (
         useResponsesAPI &&
         (/not supported/i.test(msg) || /unsupported/i.test(msg))
       ) {
-        console.log(
-          "[OpenAI] Falling back to Classic API due to unsupported Responses API"
+        logger.log(
+          "Falling back to Classic API due to unsupported Responses API"
         );
         const classicReq = {
           model,

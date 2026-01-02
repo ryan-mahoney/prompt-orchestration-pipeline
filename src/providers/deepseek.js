@@ -7,6 +7,9 @@ import {
   ensureJsonResponseFormat,
   ProviderJsonParseError,
 } from "./base.js";
+import { createLogger } from "../core/logger.js";
+
+const logger = createLogger("DeepSeek");
 
 export async function deepseekChat({
   messages,
@@ -163,7 +166,7 @@ async function* createStreamGenerator(stream) {
             }
           } catch (e) {
             // Skip malformed JSON
-            console.warn("[deepseek] Failed to parse stream chunk:", e);
+            logger.warn("Failed to parse stream chunk:", e);
           }
         }
       }
