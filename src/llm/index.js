@@ -11,6 +11,9 @@ import {
   aliasToFunctionName,
 } from "../config/models.js";
 import fs from "node:fs";
+import { createLogger } from "../core/logger.js";
+
+const logger = createLogger("LLM");
 
 // Global mock provider instance (for demo/testing)
 let mockProviderInstance = null;
@@ -103,7 +106,7 @@ function shouldInferJsonFormat(messages) {
 
 // Core chat function - no metrics handling needed!
 export async function chat(options) {
-  console.log("[llm] chat() called with options:", {
+  logger.log("chat() called with options:", {
     provider: options.provider,
     model: options.model,
     messageCount: options.messages?.length || 0,
@@ -133,11 +136,11 @@ export async function chat(options) {
 
   const available = getAvailableProviders();
 
-  console.log("[llm] Available providers:", available);
-  console.log("[llm] Requested provider:", provider);
+  logger.log("Available providers:", available);
+  logger.log("Requested provider:", provider);
 
   if (!available[provider]) {
-    console.error("[llm] Provider not available:", provider);
+    logger.error("Provider not available:", provider);
     throw new Error(`Provider ${provider} not available. Check API keys.`);
   }
 
@@ -149,7 +152,7 @@ export async function chat(options) {
   const userMessages = messages.filter((m) => m.role === "user");
   const userMsg = userMessages.map((m) => m.content).join("\n");
 
-  console.log("[llm] Message analysis:", {
+  logger.log("Message analysis:", {
     hasSystemMessage: !!systemMsg,
     systemMessageLength: systemMsg.length,
     userMessageCount: userMessages.length,
@@ -163,10 +166,7 @@ export async function chat(options) {
     JSON.stringify({ messages, systemMsg, userMsg, provider, model }, null, 2)
   );
 
-  console.log(
-    "[llm] Emitting llm:request:start event for requestId:",
-    requestId
-  );
+  logger.log("Emitting llm:request:start event for requestId:", requestId);
 
   // Emit request start event
   llmEvents.emit("llm:request:start", {
@@ -178,12 +178,12 @@ export async function chat(options) {
   });
 
   try {
-    console.log("[llm] Starting provider call for:", provider);
+    logger.log("Starting provider call for:", provider);
     let response;
     let usage;
 
     if (provider === "mock") {
-      console.log("[llm] Using mock provider");
+      logger.log("Using mock provider");
       if (!mockProviderInstance) {
         throw new Error(
           "Mock provider not registered. Call registerMockProvider() first."
@@ -197,7 +197,7 @@ export async function chat(options) {
         maxTokens,
         ...rest,
       });
-      console.log("[llm] Mock provider returned result");
+      logger.log("Mock provider returned result");
 
       response = {
         content: result.content,
@@ -210,7 +210,7 @@ export async function chat(options) {
         totalTokens: result.usage.total_tokens,
       };
     } else if (provider === "openai") {
-      console.log("[llm] Using OpenAI provider");
+      logger.log("Using OpenAI provider");
 
       // Infer JSON format if not explicitly provided
       const effectiveResponseFormat =
@@ -229,7 +229,7 @@ export async function chat(options) {
         maxTokens,
         ...rest,
       };
-      console.log("[llm] OpenAI call parameters:", {
+      logger.log("OpenAI call parameters:", {
         model: openaiArgs.model,
         hasMessages: !!openaiArgs.messages,
         messageCount: openaiArgs.messages?.length,
@@ -244,9 +244,9 @@ export async function chat(options) {
         openaiArgs.presencePenalty = presencePenalty;
       if (stop !== undefined) openaiArgs.stop = stop;
 
-      console.log("[llm] Calling openaiChat()...");
+      logger.log("Calling openaiChat()...");
       const result = await openaiChat(openaiArgs);
-      console.log("[llm] openaiChat() returned:", {
+      logger.log("openaiChat() returned:", {
         hasResult: !!result,
         hasContent: !!result?.content,
         hasUsage: !!result?.usage,
@@ -277,7 +277,7 @@ export async function chat(options) {
         };
       }
     } else if (provider === "deepseek") {
-      console.log("[llm] Using DeepSeek provider");
+      logger.log("Using DeepSeek provider");
 
       // Infer JSON format if not explicitly provided
       const effectiveResponseFormat =
@@ -296,7 +296,7 @@ export async function chat(options) {
         maxTokens,
         ...rest,
       };
-      console.log("[llm] DeepSeek call parameters:", {
+      logger.log("DeepSeek call parameters:", {
         model: deepseekArgs.model,
         hasMessages: !!deepseekArgs.messages,
         messageCount: deepseekArgs.messages?.length,
@@ -312,9 +312,9 @@ export async function chat(options) {
         deepseekArgs.responseFormat = effectiveResponseFormat;
       }
 
-      console.log("[llm] Calling deepseekChat()...");
+      logger.log("Calling deepseekChat()...");
       const result = await deepseekChat(deepseekArgs);
-      console.log("[llm] deepseekChat() returned:", {
+      logger.log("deepseekChat() returned:", {
         hasResult: !!result,
         isStream: typeof result?.[Symbol.asyncIterator] !== "undefined",
         hasContent: !!result?.content,
@@ -350,7 +350,7 @@ export async function chat(options) {
         };
       }
     } else if (provider === "anthropic") {
-      console.log("[llm] Using Anthropic provider");
+      logger.log("Using Anthropic provider");
       const defaultAlias = DEFAULT_MODEL_BY_PROVIDER.anthropic;
       const defaultModelConfig = MODEL_CONFIG[defaultAlias];
       const defaultModel = defaultModelConfig?.model;
@@ -362,7 +362,7 @@ export async function chat(options) {
         maxTokens,
         ...rest,
       };
-      console.log("[llm] Anthropic call parameters:", {
+      logger.log("Anthropic call parameters:", {
         model: anthropicArgs.model,
         hasMessages: !!anthropicArgs.messages,
         messageCount: anthropicArgs.messages?.length,
@@ -373,9 +373,9 @@ export async function chat(options) {
         anthropicArgs.responseFormat = responseFormat;
       }
 
-      console.log("[llm] Calling anthropicChat()...");
+      logger.log("Calling anthropicChat()...");
       const result = await anthropicChat(anthropicArgs);
-      console.log("[llm] anthropicChat() returned:", {
+      logger.log("anthropicChat() returned:", {
         hasResult: !!result,
         hasContent: !!result?.content,
         hasUsage: !!result?.usage,
@@ -406,7 +406,7 @@ export async function chat(options) {
         };
       }
     } else if (provider === "gemini") {
-      console.log("[llm] Using Gemini provider");
+      logger.log("Using Gemini provider");
 
       // Infer JSON format if not explicitly provided
       const effectiveResponseFormat =
@@ -425,7 +425,7 @@ export async function chat(options) {
         maxTokens,
         ...rest,
       };
-      console.log("[llm] Gemini call parameters:", {
+      logger.log("Gemini call parameters:", {
         model: geminiArgs.model,
         hasMessages: !!geminiArgs.messages,
         messageCount: geminiArgs.messages?.length,
@@ -436,9 +436,9 @@ export async function chat(options) {
         geminiArgs.responseFormat = effectiveResponseFormat;
       }
 
-      console.log("[llm] Calling geminiChat()...");
+      logger.log("Calling geminiChat()...");
       const result = await geminiChat(geminiArgs);
-      console.log("[llm] geminiChat() returned:", {
+      logger.log("geminiChat() returned:", {
         hasResult: !!result,
         hasContent: !!result?.content,
         hasUsage: !!result?.usage,
@@ -469,7 +469,7 @@ export async function chat(options) {
         };
       }
     } else if (provider === "zhipu") {
-      console.log("[llm] Using Zhipu provider");
+      logger.log("Using Zhipu provider");
       const defaultAlias = DEFAULT_MODEL_BY_PROVIDER.zhipu;
       const defaultModelConfig = MODEL_CONFIG[defaultAlias];
       const defaultModel = defaultModelConfig?.model;
@@ -481,7 +481,7 @@ export async function chat(options) {
         maxTokens,
         ...rest,
       };
-      console.log("[llm] Zhipu call parameters:", {
+      logger.log("Zhipu call parameters:", {
         model: zhipuArgs.model,
         hasMessages: !!zhipuArgs.messages,
         messageCount: zhipuArgs.messages?.length,
@@ -492,9 +492,9 @@ export async function chat(options) {
         zhipuArgs.responseFormat = responseFormat;
       }
 
-      console.log("[llm] Calling zhipuChat()...");
+      logger.log("Calling zhipuChat()...");
       const result = await zhipuChat(zhipuArgs);
-      console.log("[llm] zhipuChat() returned:", {
+      logger.log("zhipuChat() returned:", {
         hasResult: !!result,
         hasContent: !!result?.content,
         hasUsage: !!result?.usage,
@@ -525,16 +525,16 @@ export async function chat(options) {
         };
       }
     } else {
-      console.error("[llm] Unknown provider:", provider);
+      logger.error("Unknown provider:", provider);
       throw new Error(`Provider ${provider} not yet implemented`);
     }
 
-    console.log("[llm] Processing response from provider:", provider);
+    logger.log("Processing response from provider:", provider);
 
     const duration = Date.now() - startTime;
     const cost = calculateCost(provider, model, usage);
 
-    console.log("[llm] Request completed:", {
+    logger.log("Request completed:", {
       duration: `${duration}ms`,
       cost,
       usage,
@@ -560,7 +560,7 @@ export async function chat(options) {
   } catch (error) {
     const duration = Date.now() - startTime;
 
-    console.error("[llm] Error in chat():", {
+    logger.error("Error in chat():", {
       error: error.message,
       name: error.name,
       stack: error.stack,

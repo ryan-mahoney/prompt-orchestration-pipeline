@@ -7,6 +7,9 @@ import {
   ensureJsonResponseFormat,
   ProviderJsonParseError,
 } from "./base.js";
+import { createLogger } from "../core/logger.js";
+
+const logger = createLogger("Zhipu");
 
 export async function zhipuChat({
   messages,
@@ -18,9 +21,9 @@ export async function zhipuChat({
   stop,
   maxRetries = 3,
 }) {
-  console.log("\n[Zhipu] Starting zhipuChat call");
-  console.log("[Zhipu] Model:", model);
-  console.log("[Zhipu] Response format:", responseFormat);
+  logger.log("\nStarting zhipuChat call");
+  logger.log("Model:", model);
+  logger.log("Response format:", responseFormat);
 
   // Enforce JSON mode - reject calls without proper JSON responseFormat
   ensureJsonResponseFormat(responseFormat, "Zhipu");
@@ -30,8 +33,8 @@ export async function zhipuChat({
   }
 
   const { systemMsg, userMsg } = extractMessages(messages);
-  console.log("[Zhipu] System message length:", systemMsg.length);
-  console.log("[Zhipu] User message length:", userMsg.length);
+  logger.log("System message length:", systemMsg.length);
+  logger.log("User message length:", userMsg.length);
 
   // Build system guard for JSON enforcement
   let system = systemMsg;
@@ -51,7 +54,7 @@ export async function zhipuChat({
     }
 
     try {
-      console.log(`[Zhipu] Attempt ${attempt + 1}/${maxRetries + 1}`);
+      logger.log(`Attempt ${attempt + 1}/${maxRetries + 1}`);
 
       const requestBody = {
         model,
@@ -65,7 +68,7 @@ export async function zhipuChat({
         ...(stop !== undefined ? { stop: stop } : {}),
       };
 
-      console.log("[Zhipu] Calling Zhipu API...");
+      logger.log("Calling Zhipu API...");
       const response = await fetch(
         "https://api.z.ai/api/paas/v4/chat/completions",
         {
@@ -102,13 +105,13 @@ export async function zhipuChat({
       }
 
       const data = await response.json();
-      console.log("[Zhipu] Response received from Zhipu API");
+      logger.log("Response received from Zhipu API");
 
       // Extract text from response
       const rawText = data?.choices?.[0]?.message?.content || "";
       // Always strip markdown fences first to prevent parse failures
       const text = stripMarkdownFences(rawText);
-      console.log("[Zhipu] Response text length:", text.length);
+      logger.log("Response text length:", text.length);
 
       // Parse JSON - this is required for all calls
       const parsed = tryParseJSON(text);
@@ -130,7 +133,7 @@ export async function zhipuChat({
           ? { prompt_tokens, completion_tokens, total_tokens }
           : undefined;
 
-      console.log("[Zhipu] Returning response from Zhipu API");
+      logger.log("Returning response from Zhipu API");
       return {
         content: parsed,
         text,
@@ -140,13 +143,13 @@ export async function zhipuChat({
     } catch (error) {
       lastError = error;
       const msg = error?.message || error?.toString() || "Unknown error";
-      console.error("[Zhipu] Error occurred:", msg);
-      console.error("[Zhipu] Error status:", error?.status);
+      logger.error("Error occurred:", msg);
+      logger.error("Error status:", error?.status);
 
       if (error.status === 401) throw error;
 
       if (isRetryableError(error) && attempt < maxRetries) {
-        console.log("[Zhipu] Retrying due to retryable error");
+        logger.log("Retrying due to retryable error");
         continue;
       }
 
