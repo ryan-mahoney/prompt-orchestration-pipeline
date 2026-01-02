@@ -7,6 +7,9 @@ import {
   ensureJsonResponseFormat,
   ProviderJsonParseError,
 } from "./base.js";
+import { createLogger } from "../core/logger.js";
+
+const logger = createLogger("Anthropic");
 
 export async function anthropicChat({
   messages,
@@ -18,16 +21,16 @@ export async function anthropicChat({
   stop,
   maxRetries = 3,
 }) {
-  console.log("\n[Anthropic] Starting anthropicChat call");
-  console.log("[Anthropic] Model:", model);
-  console.log("[Anthropic] Response format:", responseFormat);
+  logger.log("\nStarting anthropicChat call");
+  logger.log("Model:", model);
+  logger.log("Response format:", responseFormat);
 
   // Enforce JSON mode - reject calls without proper JSON responseFormat
   ensureJsonResponseFormat(responseFormat, "Anthropic");
 
   const { systemMsg, userMsg } = extractMessages(messages);
-  console.log("[Anthropic] System message length:", systemMsg.length);
-  console.log("[Anthropic] User message length:", userMsg.length);
+  logger.log("System message length:", systemMsg.length);
+  logger.log("User message length:", userMsg.length);
 
   // Build system guard for JSON enforcement
   let system = systemMsg;
@@ -43,7 +46,7 @@ export async function anthropicChat({
     }
 
     try {
-      console.log(`[Anthropic] Attempt ${attempt + 1}/${maxRetries + 1}`);
+      logger.log(`Attempt ${attempt + 1}/${maxRetries + 1}`);
 
       const requestBody = {
         model,
@@ -55,7 +58,7 @@ export async function anthropicChat({
         ...(stop !== undefined ? { stop_sequences: stop } : {}),
       };
 
-      console.log("[Anthropic] Calling Anthropic API...");
+      logger.log("Calling Anthropic API...");
       const response = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
         headers: {
@@ -74,7 +77,7 @@ export async function anthropicChat({
       }
 
       const data = await response.json();
-      console.log("[Anthropic] Response received from Anthropic API");
+      logger.log("Response received from Anthropic API");
 
       // Extract text from response.content blocks
       const blocks = Array.isArray(data?.content) ? data.content : [];
@@ -84,7 +87,7 @@ export async function anthropicChat({
         .join("");
       // Always strip markdown fences first to prevent parse failures
       const text = stripMarkdownFences(rawText);
-      console.log("[Anthropic] Response text length:", text.length);
+      logger.log("Response text length:", text.length);
 
       // Parse JSON - this is required for all calls
       const parsed = tryParseJSON(text);
@@ -106,7 +109,7 @@ export async function anthropicChat({
           ? { prompt_tokens, completion_tokens, total_tokens }
           : undefined;
 
-      console.log("[Anthropic] Returning response from Anthropic API");
+      logger.log("Returning response from Anthropic API");
       return {
         content: parsed,
         text,
@@ -116,13 +119,13 @@ export async function anthropicChat({
     } catch (error) {
       lastError = error;
       const msg = error?.error?.message || error?.message || "";
-      console.error("[Anthropic] Error occurred:", msg);
-      console.error("[Anthropic] Error status:", error?.status);
+      logger.error("Error occurred:", msg);
+      logger.error("Error status:", error?.status);
 
       if (error.status === 401) throw error;
 
       if (isRetryableError(error) && attempt < maxRetries) {
-        console.log("[Anthropic] Retrying due to retryable error");
+        logger.log("Retrying due to retryable error");
         continue;
       }
 

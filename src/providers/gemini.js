@@ -7,6 +7,9 @@ import {
   ensureJsonResponseFormat,
   ProviderJsonParseError,
 } from "./base.js";
+import { createLogger } from "../core/logger.js";
+
+const logger = createLogger("Gemini");
 
 /**
  * Google Gemini provider implementation
@@ -120,15 +123,13 @@ export async function geminiChat(options) {
     }
 
     try {
-      console.log(
-        `[Gemini] Starting geminiChat call (attempt ${attempt + 1}/${maxRetries + 1})`
+      logger.log(
+        `Starting geminiChat call (attempt ${attempt + 1}/${maxRetries + 1})`
       );
-      console.log(`[Gemini] Model: ${model}`);
-      console.log(`[Gemini] Response format:`, responseFormat);
-      console.log(
-        `[Gemini] System instruction length: ${systemInstruction.length}`
-      );
-      console.log(`[Gemini] User message length: ${userMsg.length}`);
+      logger.log(`Model: ${model}`);
+      logger.log(`Response format:`, responseFormat);
+      logger.log(`System instruction length: ${systemInstruction.length}`);
+      logger.log(`User message length: ${userMsg.length}`);
 
       const response = await fetch(url, {
         method: "POST",
@@ -153,7 +154,7 @@ export async function geminiChat(options) {
 
         // Retry on retryable errors
         if (isRetryableError(error) && attempt < maxRetries) {
-          console.log(`[Gemini] Retryable error, retrying...`);
+          logger.log(`Retryable error, retrying...`);
           lastError = error;
           continue;
         }
@@ -162,8 +163,8 @@ export async function geminiChat(options) {
       }
 
       const data = await response.json();
-      console.log(
-        `[Gemini] Response received, candidates length: ${data.candidates?.length || 0}`
+      logger.log(
+        `Response received, candidates length: ${data.candidates?.length || 0}`
       );
 
       // Extract text from response
@@ -175,7 +176,7 @@ export async function geminiChat(options) {
       const rawText = candidate.content.parts[0].text;
       // Always strip markdown fences first to prevent parse failures
       const text = stripMarkdownFences(rawText);
-      console.log(`[Gemini] Text length: ${text.length}`);
+      logger.log(`Text length: ${text.length}`);
 
       // Parse JSON if required
       const parsed = tryParseJSON(text);
@@ -197,7 +198,7 @@ export async function geminiChat(options) {
           }
         : undefined;
 
-      console.log(`[Gemini] Usage:`, usage);
+      logger.log(`Usage:`, usage);
 
       return {
         content: parsed || text,
@@ -206,8 +207,8 @@ export async function geminiChat(options) {
         raw: data,
       };
     } catch (error) {
-      console.error(`[Gemini] Error occurred: ${error.message}`);
-      console.error(`[Gemini] Error status: ${error.status}`);
+      logger.error(`Error occurred: ${error.message}`);
+      logger.error(`Error status: ${error.status}`);
 
       lastError = error;
 
