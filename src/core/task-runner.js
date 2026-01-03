@@ -484,10 +484,6 @@ export async function runPipeline(modulePath, initialContext = {}) {
 
     // Skip stages when skipIf predicate returns true
     if (stageConfig.skipIf && stageConfig.skipIf(context.flags)) {
-      logger.log("Skipping stage", {
-        stage: stageName,
-        reason: "skipIf predicate returned true",
-      });
       context.logs.push({
         stage: stageName,
         action: "skipped",
@@ -499,7 +495,6 @@ export async function runPipeline(modulePath, initialContext = {}) {
 
     // Skip if handler is not available (not implemented)
     if (typeof stageHandler !== "function") {
-      logger.log("Stage not available, skipping", { stage: stageName });
       logs.push({
         stage: stageName,
         skipped: true,
@@ -525,11 +520,6 @@ export async function runPipeline(modulePath, initialContext = {}) {
 
     // Set current stage before execution
     context.currentStage = stageName;
-
-    logger.log("Starting stage execution", {
-      stage: stageName,
-      taskName: context.meta.taskName,
-    });
 
     // Write stage start status using writeJobStatus
     if (context.meta.workDir && context.meta.taskName) {
@@ -719,12 +709,6 @@ export async function runPipeline(modulePath, initialContext = {}) {
       );
 
       const ms = +(performance.now() - start).toFixed(2);
-      logger.log("Stage completed successfully", {
-        stage: stageName,
-        executionTimeMs: ms,
-        outputType: typeof stageResult.output,
-        flagKeys: Object.keys(stageResult.flags),
-      });
       logs.push({
         stage: stageName,
         ok: true,
@@ -818,13 +802,6 @@ export async function runPipeline(modulePath, initialContext = {}) {
   await tokenWriteQueue.catch(() => {}); // absorb last error to not mask pipeline result
 
   llmEvents.off("llm:request:complete", onLLMComplete);
-
-  logger.log("Pipeline completed successfully", {
-    taskName: context.meta.taskName,
-    totalStages: PIPELINE_STAGES.length,
-    executedStages: logs.filter((l) => l.ok).length,
-    llmMetricsCount: llmMetrics.length,
-  });
 
   // Write final status with currentStage: null to indicate completion
   if (context.meta.workDir && context.meta.taskName) {

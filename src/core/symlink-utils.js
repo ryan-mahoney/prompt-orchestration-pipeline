@@ -196,12 +196,6 @@ export async function repairTaskSymlinks(taskDir, poRoot, taskModulePath) {
   const startTime = Date.now();
 
   try {
-    logger.log("Repairing task symlinks", {
-      taskDir,
-      poRoot,
-      taskModulePath,
-    });
-
     // Use existing ensureTaskSymlinkBridge for repairs
     const relocatedEntry = await ensureTaskSymlinkBridge({
       taskDir,
@@ -210,12 +204,6 @@ export async function repairTaskSymlinks(taskDir, poRoot, taskModulePath) {
     });
 
     const duration = Date.now() - startTime;
-
-    logger.log("Task symlinks repaired successfully", {
-      taskDir,
-      duration,
-      relocatedEntry,
-    });
 
     return {
       success: true,

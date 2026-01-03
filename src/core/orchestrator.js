@@ -123,10 +123,8 @@ export async function startOrchestrator(opts) {
     } catch {}
 
     // Move seed to current/{jobId}/seed.json
-    logger.log("Moving file", { from: filePath, to: dest });
     try {
       await moveFile(filePath, dest);
-      logger.log("Successfully moved file", { destination: dest });
     } catch (error) {
       logger.error("Failed to move file", {
         from: filePath,
@@ -173,12 +171,6 @@ export async function startOrchestrator(opts) {
         // Apply artifact initialization to the status
         const updatedStatus = applyArtifacts(status);
         await fs.writeFile(statusPath, JSON.stringify(updatedStatus, null, 2));
-
-        logger.log("Initialized status from upload artifacts", {
-          jobId,
-          pipeline: seed?.pipeline,
-          artifactsCount: updatedStatus.files?.artifacts?.length || 0,
-        });
       } catch (artifactError) {
         // Don't fail job startup if artifact initialization fails, just log
         logger.warn("Failed to initialize status from artifacts", {
@@ -233,7 +225,6 @@ export async function startOrchestrator(opts) {
 
   // Watch pending directory for seeds
   const watchPattern = path.join(dirs.pending, "*.json");
-  logger.log("Watching pattern", { pattern: watchPattern });
   const watcher = watcherFactory(watchPattern, {
     ignoreInitial: false,
     awaitWriteFinish: false, // Disable awaitWriteFinish for faster detection
@@ -243,7 +234,6 @@ export async function startOrchestrator(opts) {
   // Wait for watcher to be ready before resolving
   await new Promise((resolve, reject) => {
     watcher.on("ready", () => {
-      logger.log("Watcher is ready");
       resolve();
     });
 
@@ -254,7 +244,6 @@ export async function startOrchestrator(opts) {
   });
 
   watcher.on("add", (file) => {
-    logger.log("Detected file add", { file });
     // Return promise so tests awaiting the add handler block until processing completes
     return handleSeedAdd(file);
   });
@@ -329,13 +318,6 @@ function spawnRunner(
     const configSnapshot = getConfig();
     const availablePipelines = Object.keys(configSnapshot?.pipelines ?? {});
     const pipelineSlug = seed?.pipeline;
-
-    logger.log("spawnRunner invoked", {
-      jobId,
-      pipelineSlug: pipelineSlug ?? null,
-      availablePipelines,
-      seedKeys: seed ? Object.keys(seed) : null,
-    });
 
     if (!availablePipelines.length) {
       logger.warn(
