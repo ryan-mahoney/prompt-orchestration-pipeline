@@ -100,6 +100,13 @@ export function start(paths, onChange, options = {}) {
     // Always use relative path for consistency with tests
     const normalizedPath = rel;
 
+    // Skip "modified" events for files under pipeline-data/.../files/
+    // (logs etc. are frequently updated but frontend only cares about creation)
+    if (/pipeline-data\/[^/]+\/[^/]+\/files\//.test(normalizedPath)) {
+      console.debug("[Watcher] Skipping files/ modification:", normalizedPath);
+      return;
+    }
+
     console.debug("[Watcher] File changed:", normalizedPath);
 
     // Detect registry.json changes and reload config
