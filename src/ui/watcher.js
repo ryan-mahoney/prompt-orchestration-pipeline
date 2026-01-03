@@ -7,6 +7,9 @@ import chokidar from "chokidar";
 import path from "node:path";
 import { detectJobChange } from "./job-change-detector.js";
 import { sseEnhancer } from "./sse-enhancer.js";
+import { createLogger } from "../core/logger.js";
+
+const logger = createLogger("Watcher");
 
 /**
  * Normalize path separators to forward slash and trim
@@ -69,17 +72,17 @@ export function start(paths, onChange, options = {}) {
     // Always use relative path for consistency with tests
     const normalizedPath = rel;
 
-    console.debug("[Watcher] File added:", normalizedPath);
+    logger.debug("File added:", normalizedPath);
 
     // Detect registry.json changes and reload config
     if (normalizedPath === "pipeline-config/registry.json") {
-      console.log("[Watcher] registry.json added, reloading config...");
+      logger.log("registry.json added, reloading config...");
       try {
         const { resetConfig } = await import("../core/config.js");
         resetConfig();
-        console.log("[Watcher] Config cache invalidated successfully");
+        logger.log("Config cache invalidated successfully");
       } catch (error) {
-        console.error("[Watcher] Failed to reload config:", error);
+        logger.error("Failed to reload config:", error);
       }
     }
 
@@ -89,7 +92,7 @@ export function start(paths, onChange, options = {}) {
     // Check for job-specific changes with normalized path
     const jobChange = detectJobChange(normalizedPath);
     if (jobChange) {
-      console.debug("[Watcher] Job change detected:", jobChange);
+      logger.debug("Job change detected:", jobChange);
       sseEnhancer.handleJobChange(jobChange);
     }
   });
@@ -103,21 +106,21 @@ export function start(paths, onChange, options = {}) {
     // Skip "modified" events for files under pipeline-data/.../files/
     // (logs etc. are frequently updated but frontend only cares about creation)
     if (/pipeline-data\/[^/]+\/[^/]+\/files\//.test(normalizedPath)) {
-      console.debug("[Watcher] Skipping files/ modification:", normalizedPath);
+      logger.debug("Skipping files/ modification:", normalizedPath);
       return;
     }
 
-    console.debug("[Watcher] File changed:", normalizedPath);
+    logger.debug("File changed:", normalizedPath);
 
     // Detect registry.json changes and reload config
     if (normalizedPath === "pipeline-config/registry.json") {
-      console.log("[Watcher] registry.json modified, reloading config...");
+      logger.log("registry.json modified, reloading config...");
       try {
         const { resetConfig } = await import("../core/config.js");
         resetConfig();
-        console.log("[Watcher] Config cache invalidated successfully");
+        logger.log("Config cache invalidated successfully");
       } catch (error) {
-        console.error("[Watcher] Failed to reload config:", error);
+        logger.error("Failed to reload config:", error);
       }
     }
 
@@ -127,7 +130,7 @@ export function start(paths, onChange, options = {}) {
     // Check for job-specific changes with normalized path
     const jobChange = detectJobChange(normalizedPath);
     if (jobChange) {
-      console.debug("[Watcher] Job change detected:", jobChange);
+      logger.debug("Job change detected:", jobChange);
       sseEnhancer.handleJobChange(jobChange);
     }
   });

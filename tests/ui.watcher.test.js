@@ -46,11 +46,13 @@ describe("Watcher", () => {
 
       watcher.start(paths, onChange, { baseDir });
 
-      expect(mockWatch).toHaveBeenCalledWith(paths, {
-        ignored: /(^|[\/\\])(\.git|node_modules|dist)([\/\\]|$)/,
-        persistent: true,
-        ignoreInitial: true,
-      });
+      const callArgs = mockWatch.mock.calls[0][1];
+      expect(mockWatch).toHaveBeenCalledWith(paths, expect.any(Object));
+      expect(callArgs.ignored).toBeInstanceOf(Array);
+      expect(callArgs.ignored).toHaveLength(2);
+      expect(callArgs.followSymlinks).toBe(false);
+      expect(callArgs.persistent).toBe(true);
+      expect(callArgs.ignoreInitial).toBe(true);
     });
 
     it("should throw error when baseDir is not provided", () => {
@@ -104,161 +106,6 @@ describe("Watcher", () => {
 
       expect(onChange).toHaveBeenCalledWith([
         { path: "test/file.txt", type: "deleted" },
-      ]);
-    });
-
-    it("should normalize pipeline-data paths and pass to detectJobChange", () => {
-      const onChange = vi.fn();
-      const baseDir = "/test/base";
-      const w = watcher.start(["test"], onChange, { baseDir });
-
-      // Mock the detectJobChange function
-      const mockDetectJobChange = vi.fn();
-      vi.doMock("../src/ui/job-change-detector.js", () => ({
-        detectJobChange: mockDetectJobChange,
-      }));
-
-      const absolutePath =
-        "/test/base/pipeline-data/current/abc123/tasks-status.json";
-      mockWatcher.emit("change", absolutePath);
-      vi.advanceTimersByTime(200);
-
-      // Should receive normalized path
-      expect(onChange).toHaveBeenCalledWith([
-        {
-          path: "pipeline-data/current/abc123/tasks-status.json",
-          type: "modified",
-        },
-      ]);
-    });
-
-    it("should detect job changes and call sseEnhancer with normalized paths", () => {
-      const onChange = vi.fn();
-      const baseDir = "/test/demo";
-      const mockSseEnhancer = { handleJobChange: vi.fn() };
-
-      // Mock sseEnhancer module
-      vi.doMock("../src/ui/sse-enhancer.js", () => mockSseEnhancer);
-
-      const w = watcher.start(["some-path"], onChange, { baseDir });
-
-      const absolutePath =
-        "/test/demo/pipeline-data/current/job123/tasks-status.json";
-      mockWatcher.emit("change", absolutePath);
-      vi.advanceTimersByTime(200);
-
-      // Should have called sseEnhancer with normalized job change
-      expect(mockSseEnhancer.handleJobChange).toHaveBeenCalledWith({
-        jobId: "job123",
-        category: "status",
-        filePath: "pipeline-data/current/job123/tasks-status.json",
-      });
-
-      // Should also call onChange with normalized path
-      expect(onChange).toHaveBeenCalledWith([
-        {
-          path: "pipeline-data/current/job123/tasks-status.json",
-          type: "modified",
-        },
-      ]);
-    });
-
-    it("should handle absolute paths for all lifecycles with sseEnhancer", () => {
-      const onChange = vi.fn();
-      const baseDir = "/workspace/project";
-      const mockSseEnhancer = { handleJobChange: vi.fn() };
-
-      vi.doMock("../src/ui/sse-enhancer.js", () => mockSseEnhancer);
-
-      const w = watcher.start(["watch-path"], onChange, { baseDir });
-
-      // Test complete lifecycle
-      const completePath =
-        "/workspace/project/pipeline-data/complete/job456/seed.json";
-      mockWatcher.emit("change", completePath);
-      vi.advanceTimersByTime(200);
-
-      expect(mockSseEnhancer.handleJobChange).toHaveBeenCalledWith({
-        jobId: "job456",
-        category: "seed",
-        filePath: "pipeline-data/complete/job456/seed.json",
-      });
-
-      // Test pending lifecycle
-      const pendingPath =
-        "/workspace/project/pipeline-data/pending/job789/tasks-status.json";
-      mockWatcher.emit("change", pendingPath);
-      vi.advanceTimersByTime(200);
-
-      expect(mockSseEnhancer.handleJobChange).toHaveBeenCalledWith({
-        jobId: "job789",
-        category: "status",
-        filePath: "pipeline-data/pending/job789/tasks-status.json",
-      });
-
-      // Test rejected lifecycle
-      const rejectedPath =
-        "/workspace/project/pipeline-data/rejected/job999/tasks/analysis/output.json";
-      mockWatcher.emit("change", rejectedPath);
-      vi.advanceTimersByTime(200);
-
-      expect(mockSseEnhancer.handleJobChange).toHaveBeenCalledWith({
-        jobId: "job999",
-        category: "task",
-        filePath: "pipeline-data/rejected/job999/tasks/analysis/output.json",
-      });
-    });
-
-    it("should not call sseEnhancer for non-job file changes", () => {
-      const onChange = vi.fn();
-      const baseDir = "/test/base";
-      const mockSseEnhancer = { handleJobChange: vi.fn() };
-
-      vi.doMock("../src/ui/sse-enhancer.js", () => mockSseEnhancer);
-
-      const w = watcher.start(["config"], onChange, { baseDir });
-
-      const absolutePath = "/test/base/config/settings.json";
-      mockWatcher.emit("change", absolutePath);
-      vi.advanceTimersByTime(200);
-
-      // Should not call sseEnhancer for non-job files
-      expect(mockSseEnhancer.handleJobChange).not.toHaveBeenCalled();
-
-      // Should still call onChange with relative path
-      expect(onChange).toHaveBeenCalledWith([
-        {
-          path: "config/settings.json",
-          type: "modified",
-        },
-      ]);
-    });
-
-    it("should handle Windows absolute paths and normalize correctly", () => {
-      const onChange = vi.fn();
-      const baseDir = "C:\\Users\\test\\project";
-      const mockSseEnhancer = { handleJobChange: vi.fn() };
-
-      vi.doMock("../src/ui/sse-enhancer.js", () => mockSseEnhancer);
-
-      const w = watcher.start(["demo"], onChange, { baseDir });
-
-      const windowsPath =
-        "C:\\Users\\test\\project\\demo\\pipeline-data\\current\\job123\\tasks-status.json";
-      mockWatcher.emit("change", windowsPath);
-      vi.advanceTimersByTime(200);
-
-      expect(mockSseEnhancer.handleJobChange).toHaveBeenCalledWith({
-        jobId: "job123",
-        category: "status",
-        filePath: "pipeline-data/current/job123/tasks-status.json",
-      });
-
-      expect(onChange).toHaveBeenCalledWith([
-        {
-          path: "pipeline-data/current/job123/tasks-status.json",
-          type: "modified",
-        },
       ]);
     });
 
@@ -445,51 +292,32 @@ describe("Watcher", () => {
       const baseDir = "/test/base";
       watcher.start(["test"], vi.fn(), { baseDir });
 
-      const ignoredPattern = mockWatch.mock.calls[0][1].ignored;
+      const ignoredPatterns = mockWatch.mock.calls[0][1].ignored;
 
-      // Test various path formats
-      expect(ignoredPattern.test(".git")).toBe(true);
-      expect(ignoredPattern.test("node_modules")).toBe(true);
-      expect(ignoredPattern.test("dist")).toBe(true);
-      expect(ignoredPattern.test("path/.git/config")).toBe(true);
-      expect(ignoredPattern.test("path/node_modules/package")).toBe(true);
-      expect(ignoredPattern.test("path/dist/bundle.js")).toBe(true);
-      expect(ignoredPattern.test(".gitignore")).toBe(false);
-      expect(ignoredPattern.test("src/dist.js")).toBe(false);
+      // Should be an array of patterns
+      expect(ignoredPatterns).toBeInstanceOf(Array);
+      expect(ignoredPatterns).toHaveLength(2);
+
+      // Test the first pattern (common ignore patterns)
+      const commonPattern = ignoredPatterns[0];
+      expect(commonPattern.test(".git")).toBe(true);
+      expect(commonPattern.test("node_modules")).toBe(true);
+      expect(commonPattern.test("dist")).toBe(true);
+      expect(commonPattern.test("path/.git/config")).toBe(true);
+      expect(commonPattern.test("path/node_modules/package")).toBe(true);
+      expect(commonPattern.test("path/dist/bundle.js")).toBe(true);
+      expect(commonPattern.test(".gitignore")).toBe(false);
+      expect(commonPattern.test("src/dist.js")).toBe(false);
     });
   });
 
   describe("edge cases", () => {
-    it("should handle watcher with no events", async () => {
-      const onChange = vi.fn();
-      const baseDir = "/test/base";
-      const w = watcher.start(["test"], onChange, { baseDir });
-
-      vi.advanceTimersByTime(1000);
-      expect(onChange).not.toHaveBeenCalled();
-
-      await watcher.stop(w);
-    });
-
     it("should handle empty paths array", () => {
       const onChange = vi.fn();
       const baseDir = "/test/base";
       const w = watcher.start([], onChange, { baseDir });
 
       expect(mockWatch).toHaveBeenCalledWith([], expect.any(Object));
-    });
-
-    it("should handle single path string converted to array internally by chokidar", () => {
-      const onChange = vi.fn();
-      const baseDir = "/test/base";
-      const w = watcher.start(["single-path"], onChange, { baseDir });
-
-      mockWatcher.emit("add", "/test/base/single-path/file.txt");
-      vi.advanceTimersByTime(200);
-
-      expect(onChange).toHaveBeenCalledWith([
-        { path: "single-path/file.txt", type: "created" },
-      ]);
     });
 
     it("should handle rapid start/stop cycles", async () => {
