@@ -143,10 +143,6 @@ try {
       startFromTask &&
       taskNames.indexOf(taskName) < taskNames.indexOf(startFromTask)
     ) {
-      logger.log("Skipping task before restart point", {
-        taskName,
-        startFromTask,
-      });
       continue;
     }
 
@@ -155,7 +151,6 @@ try {
         const outputPath = path.join(workDir, "tasks", taskName, "output.json");
         const output = JSON.parse(await fs.readFile(outputPath, "utf8"));
         pipelineArtifacts[taskName] = output;
-        logger.log("Task already completed", { taskName });
       } catch {
         logger.warn("Failed to read completed task output", { taskName });
       }
@@ -190,7 +185,6 @@ try {
       }
     }
 
-    logger.log("Starting task", { taskName });
     await updateStatus(taskName, {
       state: TaskState.RUNNING,
       startedAt: now(),
@@ -265,13 +259,6 @@ try {
           process.exitCode = 1;
           process.exit(1);
         }
-
-        logger.log("Task symlinks repaired successfully", {
-          taskName,
-          taskDir,
-          repairDuration: repairResult.duration,
-          relocatedEntry: repairResult.relocatedEntry,
-        });
       } else {
         logger.debug("Task symlinks validation passed", {
           taskName,
@@ -295,7 +282,6 @@ try {
         statusPath: tasksStatusPath,
       });
 
-      logger.log("Running task", { taskName, modulePath: absoluteModulePath });
       const result = await runPipeline(relocatedEntry, ctx);
 
       if (!result.ok) {
@@ -363,13 +349,6 @@ try {
         process.exit(1);
       }
 
-      logger.log("Task completed successfully", {
-        taskName,
-        executionTimeMs:
-          result.logs?.reduce((total, log) => total + (log.ms || 0), 0) || 0,
-        refinementAttempts: result.refinementAttempts || 0,
-      });
-
       // The file I/O system automatically handles writing outputs and updating tasks-status.json
       // No need to manually write output.json or enumerate artifacts
 
@@ -396,7 +375,6 @@ try {
 
       // Check if this is a single task run and we've completed the target task
       if (runSingleTask && taskName === startFromTask) {
-        logger.log("Stopping after single task execution", { taskName });
         break;
       }
     } catch (err) {
@@ -414,19 +392,6 @@ try {
   if (!runSingleTask) {
     await fs.mkdir(COMPLETE_DIR, { recursive: true });
     const dest = path.join(COMPLETE_DIR, jobId);
-
-    logger.log("Pipeline completed", {
-      jobId,
-      totalExecutionTime: Object.values(status.tasks).reduce(
-        (total, t) => total + (t.executionTimeMs || 0),
-        0
-      ),
-      totalRefinementAttempts: Object.values(status.tasks).reduce(
-        (total, t) => total + (t.refinementAttempts || 0),
-        0
-      ),
-      finalArtifacts: Object.keys(pipelineArtifacts),
-    });
 
     await fs.rename(workDir, dest);
     await appendLine(
@@ -449,8 +414,6 @@ try {
 
     // Clean up task symlinks to avoid dangling links in archives
     await cleanupTaskSymlinks(dest);
-  } else {
-    logger.log("Single task run completed, job remains in current", { jobId });
   }
 } catch (error) {
   throw error;

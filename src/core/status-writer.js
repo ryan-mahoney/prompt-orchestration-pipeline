@@ -164,13 +164,8 @@ export async function writeJobStatus(jobDir, updateFn) {
 
   const next = prev
     .then(async () => {
-      logger.group("Status Write Operation");
-      logger.log(`Updating status for job: ${jobId}`);
-      logger.log(`Status file path: ${statusPath}`);
-
       // Read existing status or create default
       const current = await readStatusFile(statusPath, jobId);
-      logger.log("Current status snapshot:", current);
 
       // Validate basic structure
       const validated = validateStatusSnapshot(current);
@@ -188,11 +183,9 @@ export async function writeJobStatus(jobDir, updateFn) {
       );
 
       snapshot.lastUpdated = new Date().toISOString();
-      logger.log("Status after update function:", snapshot);
 
       // Atomic write
       await atomicWrite(statusPath, snapshot);
-      logger.log("Status file written successfully");
 
       // Emit SSE event for tasks-status.json change using logger
       try {
@@ -202,7 +195,6 @@ export async function writeJobStatus(jobDir, updateFn) {
           jobId,
         };
         await logger.sse("state:change", eventData);
-        logger.log("SSE event broadcasted successfully");
       } catch (error) {
         // Don't fail the write if SSE emission fails
         logger.error("Failed to emit SSE event:", error);
@@ -218,10 +210,6 @@ export async function writeJobStatus(jobDir, updateFn) {
             reason: snapshot.lifecycleBlockReason,
           };
           await logger.sse("lifecycle_block", lifecycleEventData);
-          logger.log(
-            "lifecycle_block SSE event broadcasted successfully",
-            lifecycleEventData
-          );
         } catch (error) {
           // Don't fail the write if SSE emission fails
           logger.error("Failed to emit lifecycle_block SSE event:", error);
@@ -310,9 +298,6 @@ export async function updateTaskStatus(jobDir, taskId, taskUpdateFn) {
 
   const next = prev
     .then(async () => {
-      logger.group("Task Status Update Operation");
-      logger.log(`Updating task ${taskId} for job: ${jobId}`);
-
       const statusPath = path.join(jobDir, "tasks-status.json");
 
       // Read existing status or create default
@@ -336,7 +321,6 @@ export async function updateTaskStatus(jobDir, taskId, taskUpdateFn) {
 
       // Atomic write
       await atomicWrite(statusPath, validated);
-      logger.log("Task status file written successfully");
 
       // Emit task:updated SSE event after successful write
       try {
@@ -346,13 +330,11 @@ export async function updateTaskStatus(jobDir, taskId, taskUpdateFn) {
           task: validated.tasks[taskId],
         };
         await logger.sse("task:updated", eventData);
-        logger.log("task:updated SSE event broadcasted successfully");
       } catch (error) {
         // Don't fail the write if SSE emission fails
         logger.error("Failed to emit task:updated SSE event:", error);
       }
 
-      logger.groupEnd();
       resultSnapshot = validated;
     })
     .catch((e) => {
