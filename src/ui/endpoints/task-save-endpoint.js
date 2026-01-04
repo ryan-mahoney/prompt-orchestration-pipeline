@@ -117,12 +117,12 @@ export async function handleTaskSave(req, res) {
     // For nested CommonJS, check if we need to add newline to expand single-line format
     let newEntry;
     if (isNestedCjs) {
-      // Check if there's already a newline (multi-line format)
-      // Skip any whitespace before checking for newline
+      // Check if the tasks object already spans multiple lines
+      // (i.e., has whitespace and a newline after "tasks: {")
       const remainingContent = indexContent.slice(insertPosition);
-      if (/^\s*\n/.test(remainingContent)) {
+      const whitespaceMatch = remainingContent.match(/^\s*\n/);
+      if (whitespaceMatch) {
         // Multi-line format: skip whitespace and newline, insert at next position
-        const whitespaceMatch = remainingContent.match(/^\s*\n/);
         insertPosition += whitespaceMatch[0].length;
         newEntry = `  ${taskName}: "./${filename}",\n`;
       } else {
