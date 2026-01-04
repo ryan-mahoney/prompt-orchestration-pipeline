@@ -34,8 +34,11 @@ export function ensureBatchSchema(db) {
  * @returns {string[]} Array of job IDs inserted
  */
 export function insertJobs(db, batchId, jobs) {
-  const stmt = db.prepare(
+  const insertStmt = db.prepare(
     `INSERT OR IGNORE INTO batch_jobs (id, batch_id, status, input) VALUES (?, ?, 'pending', ?)`
+  );
+  const selectStatusStmt = db.prepare(
+    `SELECT status FROM batch_jobs WHERE id = ? AND batch_id = ?`
   );
 
   const insertMany = db.transaction((jobList) => {
@@ -43,7 +46,17 @@ export function insertJobs(db, batchId, jobs) {
     for (const job of jobList) {
       const id = job.id ?? crypto.randomUUID();
       const input = JSON.stringify(job);
-      stmt.run(id, batchId, input);
+      const result = insertStmt.run(id, batchId, input);
+
+      // If no row was inserted, the job already exists. Validate its state.
+      if (result.changes === 0) {
+        const existing = selectStatusStmt.get(id, batchId);
+        if (existing && (existing.status === "complete" || existing.status === "permanently_failed")) {
+          throw new Error(
+            `Cannot re-insert job "${id}" for batch "${batchId}": existing job is in terminal state "${existing.status}".`
+          );
+        }
+      }
       ids.push(id);
     }
     return ids;
