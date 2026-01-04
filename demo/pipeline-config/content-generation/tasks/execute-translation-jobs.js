@@ -389,7 +389,6 @@ export const inference = async ({ io, llm, flags }) => {
     const passCompleted = results.filter(
       (r) => r.status === "fulfilled"
     ).length;
-    const passFailed = results.filter((r) => r.status === "rejected").length;
 
     totalCompleted += passCompleted;
 
