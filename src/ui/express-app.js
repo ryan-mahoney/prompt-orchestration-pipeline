@@ -24,6 +24,7 @@ import { handlePipelineTypeDetailRequest } from "./endpoints/pipeline-type-detai
 import { handlePipelineAnalysis } from "./endpoints/pipeline-analysis-endpoint.js";
 import { handleTaskAnalysisRequest } from "./endpoints/task-analysis-endpoint.js";
 import { handleSchemaFileRequest } from "./endpoints/schema-file-endpoint.js";
+import { handlePipelineArtifacts } from "./endpoints/pipeline-artifacts-endpoint.js";
 import { handleTaskPlan } from "./endpoints/task-creation-endpoint.js";
 import { handleTaskSave } from "./endpoints/task-save-endpoint.js";
 import { sendJson } from "./utils/http-utils.js";
@@ -129,6 +130,9 @@ export function buildExpressApp({ dataDir, viteServer }) {
   app.get("/api/pipelines/:slug", async (req, res) => {
     await handlePipelineTypeDetailRequest(req, res);
   });
+
+  // GET /api/pipelines/:slug/artifacts
+  app.get("/api/pipelines/:slug/artifacts", handlePipelineArtifacts);
 
   // POST /api/pipelines/:slug/analyze
   app.post("/api/pipelines/:slug/analyze", handlePipelineAnalysis);
