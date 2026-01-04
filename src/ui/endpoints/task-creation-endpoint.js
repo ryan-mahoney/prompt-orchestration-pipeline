@@ -43,13 +43,15 @@ export async function handleTaskPlan(req, res) {
 
   // Parse @mentions and load schema contexts for enrichment
   const mentionedFiles = parseMentions(messages);
-  const schemaContexts = (
-    await Promise.all(
-      mentionedFiles.map((fileName) =>
-        loadSchemaContext(pipelineSlug, fileName)
-      )
-    )
-  ).filter(Boolean);
+  const schemaContexts = [];
+  // Load schema contexts sequentially to avoid unbounded concurrent file I/O
+  for (const fileName of mentionedFiles) {
+    // eslint-disable-next-line no-await-in-loop
+    const context = await loadSchemaContext(pipelineSlug, fileName);
+    if (context) {
+      schemaContexts.push(context);
+    }
+  }
   const schemaEnrichment = buildSchemaPromptSection(schemaContexts);
 
   if (schemaEnrichment) {
