@@ -120,7 +120,7 @@ export const inference = async ({
   data: { promptTemplating: { system, prompt } },
   flags,
 }) => {
-  const response = await provider.model({ messages: [...] });
+  const response = await provider.chat({ messages: [...] });
   const parsed = response.parsed;
   await io.writeArtifact("output.json", JSON.stringify(parsed, null, 2));
   return { output: {}, flags };
