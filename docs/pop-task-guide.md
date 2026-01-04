@@ -135,6 +135,8 @@ export const validateStructure = async ({
   validators: { validateWithSchema },
 }) => {
   const content = await io.readArtifact("output.json");
+  // Provide your JSON schema here, for example the `outputSchema` from the "JSON Schema Export" section.
+  const mySchema = /* your JSON schema object */ {};
   const result = validateWithSchema(mySchema, content);
   if (!result.valid) {
     return { output: {}, flags: { ...flags, validationFailed: true } };
