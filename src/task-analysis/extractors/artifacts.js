@@ -8,14 +8,38 @@ import * as t from "@babel/types";
 import { isInsideTryCatch, getStageName } from "../utils/ast.js";
 
 /**
+ * Extract surrounding code context for a node.
+ *
+ * @param {import("@babel/traverse").NodePath} path - The Babel path
+ * @param {string} sourceCode - The original source code
+ * @returns {string} Up to 5 lines of surrounding context (2 lines before and 2 lines after the target line)
+ */
+export function extractCodeContext(path, sourceCode) {
+  if (!sourceCode || !path.node.loc) {
+    return "";
+  }
+
+  const lines = sourceCode.split("\n");
+  const nodeLine = path.node.loc.start.line;
+
+  // Get 2 lines before and 2 lines after (5 lines total, 1-indexed)
+  const startLine = Math.max(1, nodeLine - 2);
+  const endLine = Math.min(lines.length, nodeLine + 2);
+
+  return lines.slice(startLine - 1, endLine).join("\n");
+}
+
+/**
  * Extract io.readArtifact calls from the AST.
  *
  * @param {import("@babel/types").File} ast - The AST to analyze
- * @returns {Array<{fileName: string, stage: string, required: boolean}>} Array of artifact read references
+ * @param {string} [sourceCode] - The original source code (for extracting context)
+ * @returns {{reads: Array<{fileName: string, stage: string, required: boolean}>, unresolvedReads: Array<{expression: string, codeContext: string, stage: string, required: boolean, location: {line: number, column: number}}>}} Artifact read references
  * @throws {Error} If io.readArtifact call is found outside an exported function
  */
-export function extractArtifactReads(ast) {
+export function extractArtifactReads(ast, sourceCode) {
   const reads = [];
+  const unresolvedReads = [];
 
   traverse(ast, {
     CallExpression(path) {
@@ -27,15 +51,6 @@ export function extractArtifactReads(ast) {
         t.isIdentifier(callee.object, { name: "io" }) &&
         t.isIdentifier(callee.property, { name: "readArtifact" })
       ) {
-        // Extract fileName from first argument
-        const fileName = extractFileName(path.node.arguments[0]);
-
-        if (!fileName) {
-          throw new Error(
-            `io.readArtifact requires a string literal or template literal argument at ${path.node.loc?.start?.line}:${path.node.loc?.start?.column}`
-          );
-        }
-
         // Get the stage name (must be in an exported function)
         const stage = getStageName(path);
 
@@ -48,23 +63,46 @@ export function extractArtifactReads(ast) {
         // Check if inside try/catch to determine if required
         const required = !isInsideTryCatch(path);
 
-        reads.push({ fileName, stage, required });
+        // Extract fileName from first argument
+        const fileName = extractFileName(path.node.arguments[0]);
+
+        if (fileName) {
+          reads.push({ fileName, stage, required });
+        } else if (path.node.arguments[0]) {
+          // Capture unresolved reference
+          const argNode = path.node.arguments[0];
+          const expression = generate(argNode, { concise: true }).code;
+          const codeContext = extractCodeContext(path, sourceCode);
+          const location = {
+            line: argNode.loc?.start?.line ?? 0,
+            column: argNode.loc?.start?.column ?? 0,
+          };
+          unresolvedReads.push({
+            expression,
+            codeContext,
+            stage,
+            required,
+            location,
+          });
+        }
       }
     },
   });
 
-  return reads;
+  return { reads, unresolvedReads };
 }
 
 /**
  * Extract io.writeArtifact calls from the AST.
  *
  * @param {import("@babel/types").File} ast - The AST to analyze
- * @returns {Array<{fileName: string, stage: string}>} Array of artifact write references
+ * @param {string} [sourceCode] - The original source code (for extracting context)
+ * @returns {{writes: Array<{fileName: string, stage: string}>, unresolvedWrites: Array<{expression: string, codeContext: string, stage: string, location: {line: number, column: number}}>}} Artifact write references
  * @throws {Error} If io.writeArtifact call is found outside an exported function
  */
-export function extractArtifactWrites(ast) {
+export function extractArtifactWrites(ast, sourceCode) {
   const writes = [];
+  const unresolvedWrites = [];
 
   traverse(ast, {
     CallExpression(path) {
@@ -76,15 +114,6 @@ export function extractArtifactWrites(ast) {
         t.isIdentifier(callee.object, { name: "io" }) &&
         t.isIdentifier(callee.property, { name: "writeArtifact" })
       ) {
-        // Extract fileName from first argument
-        const fileName = extractFileName(path.node.arguments[0]);
-
-        if (!fileName) {
-          throw new Error(
-            `io.writeArtifact requires a string literal or template literal argument at ${path.node.loc?.start?.line}:${path.node.loc?.start?.column}`
-          );
-        }
-
         // Get the stage name (must be in an exported function)
         const stage = getStageName(path);
 
@@ -94,12 +123,27 @@ export function extractArtifactWrites(ast) {
           );
         }
 
-        writes.push({ fileName, stage });
+        // Extract fileName from first argument
+        const fileName = extractFileName(path.node.arguments[0]);
+
+        if (fileName) {
+          writes.push({ fileName, stage });
+        } else if (path.node.arguments[0]) {
+          // Capture unresolved reference
+          const argNode = path.node.arguments[0];
+          const expression = generate(argNode, { concise: true }).code;
+          const codeContext = extractCodeContext(path, sourceCode);
+          const location = {
+            line: argNode.loc?.start?.line ?? 0,
+            column: argNode.loc?.start?.column ?? 0,
+          };
+          unresolvedWrites.push({ expression, codeContext, stage, location });
+        }
       }
     },
   });
 
-  return writes;
+  return { writes, unresolvedWrites };
 }
 
 /**

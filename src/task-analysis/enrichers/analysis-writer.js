@@ -41,6 +41,38 @@ export async function writeAnalysisFile(pipelinePath, taskName, analysisData) {
     );
   }
 
+  // Validate artifacts.reads and artifacts.writes are arrays
+  if (!Array.isArray(analysisData.artifacts.reads)) {
+    throw new Error(
+      `Invalid analysisData.artifacts.reads: expected an array but got ${typeof analysisData.artifacts.reads}`
+    );
+  }
+
+  if (!Array.isArray(analysisData.artifacts.writes)) {
+    throw new Error(
+      `Invalid analysisData.artifacts.writes: expected an array but got ${typeof analysisData.artifacts.writes}`
+    );
+  }
+
+  // Validate unresolvedReads and unresolvedWrites if present (must be arrays)
+  if (
+    analysisData.artifacts.unresolvedReads !== undefined &&
+    !Array.isArray(analysisData.artifacts.unresolvedReads)
+  ) {
+    throw new Error(
+      `Invalid analysisData.artifacts.unresolvedReads: expected an array but got ${typeof analysisData.artifacts.unresolvedReads}`
+    );
+  }
+
+  if (
+    analysisData.artifacts.unresolvedWrites !== undefined &&
+    !Array.isArray(analysisData.artifacts.unresolvedWrites)
+  ) {
+    throw new Error(
+      `Invalid analysisData.artifacts.unresolvedWrites: expected an array but got ${typeof analysisData.artifacts.unresolvedWrites}`
+    );
+  }
+
   if (!Array.isArray(analysisData.models)) {
     throw new Error(
       `Invalid analysisData.models: expected an array but got ${typeof analysisData.models}`

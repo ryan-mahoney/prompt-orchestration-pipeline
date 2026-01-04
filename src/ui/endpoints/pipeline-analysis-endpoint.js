@@ -7,6 +7,7 @@ import { analyzeTask } from "../../task-analysis/index.js";
 import { writeAnalysisFile } from "../../task-analysis/enrichers/analysis-writer.js";
 import { deduceArtifactSchema } from "../../task-analysis/enrichers/schema-deducer.js";
 import { writeSchemaFiles } from "../../task-analysis/enrichers/schema-writer.js";
+import { resolveArtifactReference } from "../../task-analysis/enrichers/artifact-resolver.js";
 
 /**
  * Handle pipeline analysis endpoint.
@@ -134,6 +135,11 @@ export async function handlePipelineAnalysis(req, res) {
       }
     }
 
+    // Collect all known artifact filenames from writes for LLM resolution
+    const allKnownArtifacts = taskAnalyses.flatMap((t) =>
+      t.analysis.artifacts.writes.map((w) => w.fileName)
+    );
+
     // Send started event
     stream.send("started", {
       pipelineSlug: slug,
@@ -165,6 +171,59 @@ export async function handlePipelineAnalysis(req, res) {
         stream.end();
         releaseLockSafely();
         return;
+      }
+
+      // Resolve unresolved artifact references using LLM
+      const unresolvedReads = analysis.artifacts.unresolvedReads || [];
+      const unresolvedWrites = analysis.artifacts.unresolvedWrites || [];
+
+      for (const unresolved of unresolvedReads) {
+        try {
+          const resolution = await resolveArtifactReference(
+            taskCode,
+            unresolved,
+            allKnownArtifacts
+          );
+          if (resolution.confidence >= 0.7 && resolution.resolvedFileName) {
+            // Check if this fileName already exists in reads array
+            const alreadyExists = analysis.artifacts.reads.some(
+              (artifact) => artifact.fileName === resolution.resolvedFileName
+            );
+            if (!alreadyExists) {
+              analysis.artifacts.reads.push({
+                fileName: resolution.resolvedFileName,
+                stage: unresolved.stage,
+                required: unresolved.required,
+              });
+            }
+          }
+        } catch {
+          // Silently skip failed resolutions
+        }
+      }
+
+      for (const unresolved of unresolvedWrites) {
+        try {
+          const resolution = await resolveArtifactReference(
+            taskCode,
+            unresolved,
+            allKnownArtifacts
+          );
+          if (resolution.confidence >= 0.7 && resolution.resolvedFileName) {
+            // Check if this fileName already exists in writes array
+            const alreadyExists = analysis.artifacts.writes.some(
+              (artifact) => artifact.fileName === resolution.resolvedFileName
+            );
+            if (!alreadyExists) {
+              analysis.artifacts.writes.push({
+                fileName: resolution.resolvedFileName,
+                stage: unresolved.stage,
+              });
+            }
+          }
+        } catch {
+          // Silently skip failed resolutions
+        }
       }
 
       // Process each artifact write

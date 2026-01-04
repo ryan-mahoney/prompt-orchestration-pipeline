@@ -9,6 +9,7 @@ import * as taskAnalysis from "../src/task-analysis/index.js";
 import * as analysisWriter from "../src/task-analysis/enrichers/analysis-writer.js";
 import * as schemaDeducer from "../src/task-analysis/enrichers/schema-deducer.js";
 import * as schemaWriter from "../src/task-analysis/enrichers/schema-writer.js";
+import * as artifactResolver from "../src/task-analysis/enrichers/artifact-resolver.js";
 
 describe("handlePipelineAnalysis", () => {
   let tempDir;
@@ -63,6 +64,7 @@ describe("handlePipelineAnalysis", () => {
     vi.spyOn(analysisWriter, "writeAnalysisFile");
     vi.spyOn(schemaDeducer, "deduceArtifactSchema");
     vi.spyOn(schemaWriter, "writeSchemaFiles");
+    vi.spyOn(artifactResolver, "resolveArtifactReference");
   });
 
   afterEach(async () => {
@@ -470,6 +472,176 @@ describe("handlePipelineAnalysis", () => {
     expect(artifactNames).toContain("output.json");
     expect(artifactNames).toContain("data.json");
     expect(artifactNames).not.toContain("prompt.txt");
+  });
+
+  it("resolves unresolved artifact reads with high-confidence LLM match", async () => {
+    const pipelineDir = await setupTestPipeline(tempDir, ["task1", "task2"]);
+
+    analysisLock.acquireLock.mockReturnValue({ acquired: true });
+    config.getPipelineConfig.mockReturnValue({
+      pipelineJsonPath: path.join(pipelineDir, "pipeline.json"),
+    });
+
+    // task1 writes an artifact that task2 reads dynamically
+    taskAnalysis.analyzeTask
+      .mockReturnValueOnce({
+        taskFilePath: "tasks/task1.js",
+        stages: [],
+        artifacts: {
+          reads: [],
+          writes: [{ fileName: "stage-1-output.json", stage: "ingestion" }],
+          unresolvedReads: [],
+          unresolvedWrites: [],
+        },
+        models: [],
+      })
+      .mockReturnValueOnce({
+        taskFilePath: "tasks/task2.js",
+        stages: [],
+        artifacts: {
+          reads: [],
+          writes: [],
+          unresolvedReads: [
+            {
+              expression: "inputFile",
+              codeContext: "const inputFile = getInputFileName();",
+              stage: "processing",
+              required: true,
+              location: { line: 10, column: 5 },
+            },
+          ],
+          unresolvedWrites: [],
+        },
+        models: [],
+      });
+
+    analysisWriter.writeAnalysisFile.mockResolvedValue();
+    schemaDeducer.deduceArtifactSchema.mockResolvedValue({
+      schema: { type: "object" },
+      example: {},
+      reasoning: "test",
+    });
+    schemaWriter.writeSchemaFiles.mockResolvedValue();
+
+    // Mock high-confidence resolution
+    artifactResolver.resolveArtifactReference.mockResolvedValue({
+      resolvedFileName: "stage-1-output.json",
+      confidence: 0.85,
+      reasoning:
+        "Variable name 'inputFile' and stage context suggest this reads the output from stage 1",
+    });
+
+    await handlePipelineAnalysis(mockReq, mockRes);
+
+    // Verify resolver was called with correct arguments
+    expect(artifactResolver.resolveArtifactReference).toHaveBeenCalledWith(
+      expect.any(String), // taskCode
+      {
+        expression: "inputFile",
+        codeContext: "const inputFile = getInputFileName();",
+        stage: "processing",
+        required: true,
+        location: { line: 10, column: 5 },
+      },
+      ["stage-1-output.json"] // allKnownArtifacts from task1's writes
+    );
+
+    // Verify complete event was sent (analysis succeeded)
+    const completeEvent = sseEvents.find((e) => e.type === "complete");
+    expect(completeEvent).toBeDefined();
+    expect(completeEvent.data.tasksAnalyzed).toBe(2);
+  });
+
+  it("skips unresolved artifacts with low confidence", async () => {
+    const pipelineDir = await setupTestPipeline(tempDir, ["task1"]);
+
+    analysisLock.acquireLock.mockReturnValue({ acquired: true });
+    config.getPipelineConfig.mockReturnValue({
+      pipelineJsonPath: path.join(pipelineDir, "pipeline.json"),
+    });
+
+    taskAnalysis.analyzeTask.mockReturnValue({
+      taskFilePath: "tasks/task1.js",
+      stages: [],
+      artifacts: {
+        reads: [],
+        writes: [],
+        unresolvedReads: [
+          {
+            expression: "dynamicName",
+            codeContext: "const dynamicName = compute();",
+            stage: "ingestion",
+            required: true,
+            location: { line: 5, column: 3 },
+          },
+        ],
+        unresolvedWrites: [],
+      },
+      models: [],
+    });
+
+    analysisWriter.writeAnalysisFile.mockResolvedValue();
+
+    // Mock low-confidence resolution (below 0.7 threshold)
+    artifactResolver.resolveArtifactReference.mockResolvedValue({
+      resolvedFileName: "maybe-this.json",
+      confidence: 0.5,
+      reasoning: "Uncertain match",
+    });
+
+    await handlePipelineAnalysis(mockReq, mockRes);
+
+    // Verify resolver was called
+    expect(artifactResolver.resolveArtifactReference).toHaveBeenCalled();
+
+    // Verify analysis completed without errors
+    const completeEvent = sseEvents.find((e) => e.type === "complete");
+    expect(completeEvent).toBeDefined();
+  });
+
+  it("silently handles resolver failures", async () => {
+    const pipelineDir = await setupTestPipeline(tempDir, ["task1"]);
+
+    analysisLock.acquireLock.mockReturnValue({ acquired: true });
+    config.getPipelineConfig.mockReturnValue({
+      pipelineJsonPath: path.join(pipelineDir, "pipeline.json"),
+    });
+
+    taskAnalysis.analyzeTask.mockReturnValue({
+      taskFilePath: "tasks/task1.js",
+      stages: [],
+      artifacts: {
+        reads: [],
+        writes: [],
+        unresolvedReads: [
+          {
+            expression: "badRef",
+            codeContext: "io.readArtifact(badRef);",
+            stage: "ingestion",
+            required: true,
+            location: { line: 1, column: 1 },
+          },
+        ],
+        unresolvedWrites: [],
+      },
+      models: [],
+    });
+
+    analysisWriter.writeAnalysisFile.mockResolvedValue();
+
+    // Mock resolver throwing an error
+    artifactResolver.resolveArtifactReference.mockRejectedValue(
+      new Error("LLM API failure")
+    );
+
+    await handlePipelineAnalysis(mockReq, mockRes);
+
+    // Should complete without error event for resolver failure
+    const errorEvents = sseEvents.filter((e) => e.type === "error");
+    expect(errorEvents).toHaveLength(0);
+
+    const completeEvent = sseEvents.find((e) => e.type === "complete");
+    expect(completeEvent).toBeDefined();
   });
 });
 
