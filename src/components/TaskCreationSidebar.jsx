@@ -522,7 +522,7 @@ export default function TaskCreationSidebar({ isOpen, onClose, pipelineSlug }) {
           </>
         )}
 
-        {activeTab === "conversation" && error && (
+        {error && (
           <div className="mt-4 p-4 bg-destructive/10 border border-destructive/20 rounded-lg">
             <p className="text-destructive font-medium mb-2">{error}</p>
             <Button
