@@ -72,9 +72,20 @@ Analyze the code and determine which artifact this expression likely refers to.`
 
     const parsed = JSON.parse(response.content);
 
+    const rawResolvedFileName =
+      typeof parsed.resolvedFileName === "string" ? parsed.resolvedFileName : null;
+    const resolvedFileName =
+      rawResolvedFileName && availableArtifacts.includes(rawResolvedFileName)
+        ? rawResolvedFileName
+        : null;
+
+    const rawConfidence =
+      typeof parsed.confidence === "number" ? parsed.confidence : 0;
+    const confidence = resolvedFileName === null ? 0 : rawConfidence;
+
     return {
-      resolvedFileName: parsed.resolvedFileName ?? null,
-      confidence: typeof parsed.confidence === "number" ? parsed.confidence : 0,
+      resolvedFileName,
+      confidence,
       reasoning: parsed.reasoning ?? "",
     };
   } catch {
