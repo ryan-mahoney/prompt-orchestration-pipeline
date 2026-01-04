@@ -38,11 +38,13 @@ vi.mock("react-mentions", () => ({
       // Simulate mention insertion in react-mentions format
       const mentionMarkup = `@[${suggestion.display}](${suggestion.id})`;
       const atIndex = value.lastIndexOf("@");
+      const query = value.slice(atIndex + 1);
+      const afterQueryIndex = atIndex + 1 + query.length;
       const newValue =
         value.slice(0, atIndex) +
         mentionMarkup +
         " " +
-        value.slice(atIndex + 1);
+        value.slice(afterQueryIndex);
       onChange({ target: { value: newValue } }, newValue);
       mockMentionsInputState.showSuggestions = false;
       mockMentionsInputState.suggestions = [];
