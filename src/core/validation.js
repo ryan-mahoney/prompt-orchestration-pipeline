@@ -1,7 +1,9 @@
 import Ajv from "ajv";
+import addFormats from "ajv-formats";
 import { getConfig } from "./config.js";
 
-const ajv = new Ajv({ allErrors: true });
+const ajv = new Ajv({ allErrors: true, strictFormats: false });
+addFormats(ajv);
 
 // JSON schema for seed file structure - uses config for validation rules
 function getSeedSchema() {

@@ -1,7 +1,9 @@
 import { chat } from "../../llm/index.js";
 import Ajv from "ajv";
+import addFormats from "ajv-formats";
 
-const ajv = new Ajv();
+const ajv = new Ajv({ strictFormats: false });
+addFormats(ajv);
 
 /**
  * Deduce JSON schema for an artifact using LLM with structured output.
