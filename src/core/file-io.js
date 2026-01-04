@@ -8,6 +8,7 @@ import {
   isValidLogEvent,
   isValidLogFileExtension,
 } from "../config/log-events.js";
+import Database from "better-sqlite3";
 
 /**
  * Creates a task-scoped file I/O interface that manages file operations
@@ -26,7 +27,7 @@ async function ensureDir(dir) {
 }
 
 function ensureDirSync(dir) {
-  fsSync.mkdir(dir, { recursive: true });
+  fsSync.mkdirSync(dir, { recursive: true });
 }
 
 export function createTaskFileIO({
@@ -292,6 +293,20 @@ export function createTaskFileIO({
      */
     getCurrentStage() {
       return getStage();
+    },
+
+    /**
+     * Get a SQLite database instance for this job run
+     * @param {Object} options - better-sqlite3 options
+     * @returns {Database} better-sqlite3 Database instance
+     */
+    getDB(options = {}) {
+      ensureDirSync(artifactsDir);
+      const dbPath = path.join(artifactsDir, "run.db");
+      const db = new Database(dbPath, options);
+      db.pragma("journal_mode = WAL");
+      updateStatusWithFilesSync("artifacts", "run.db");
+      return db;
     },
   };
 }
