@@ -9,6 +9,7 @@ import {
   isValidLogFileExtension,
 } from "../config/log-events.js";
 import Database from "better-sqlite3";
+import { executeBatch, validateBatchOptions } from "./batch-runner.js";
 
 /**
  * Creates a task-scoped file I/O interface that manages file operations
@@ -307,6 +308,26 @@ export function createTaskFileIO({
       db.pragma("journal_mode = WAL");
       updateStatusWithFilesSync("artifacts", "run.db");
       return db;
+    },
+
+    /**
+     * Execute a batch of jobs concurrently with SQLite state management
+     * @param {Object} options - Batch options
+     * @param {Array<Object>} options.jobs - Array of job objects
+     * @param {Function} options.processor - async (input, ctx) => result
+     * @param {number} [options.concurrency=10] - Max concurrent jobs
+     * @param {number} [options.maxRetries=3] - Max retry attempts per job
+     * @param {string} [options.batchId] - Unique batch identifier (auto-generated if omitted)
+     * @returns {Promise<{completed: Array, failed: Array}>} Batch results
+     */
+    async runBatch(options) {
+      validateBatchOptions(options);
+      const db = this.getDB();
+      try {
+        return await executeBatch(db, options);
+      } finally {
+        db.close();
+      }
     },
   };
 }
