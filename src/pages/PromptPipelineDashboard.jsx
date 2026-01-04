@@ -105,21 +105,36 @@ export default function PromptPipelineDashboard() {
     }
   };
 
-  // Header actions for Layout
-  const headerActions = runningJobs.length > 0 && (
-    <Flex align="center" gap="2" className="text-gray-11">
-      <Text size="1" weight="medium">
-        Overall Progress
-      </Text>
-      <Progress value={aggregateProgress} className="w-20" />
-      <Text size="1" className="text-gray-9">
-        {aggregateProgress}%
-      </Text>
-    </Flex>
-  );
+  const progressBanner =
+    runningJobs.length > 0 ? (
+      <Box
+        role="status"
+        aria-live="polite"
+        className="bg-blue-50 border-b border-blue-200"
+      >
+        <Flex
+          align="center"
+          gap="4"
+          className="mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8 py-3"
+        >
+          <Text size="2">
+            {runningJobs.length} job{runningJobs.length !== 1 ? "s" : ""}{" "}
+            running
+          </Text>
+          <Progress
+            value={aggregateProgress}
+            variant="running"
+            className="flex-1"
+          />
+          <Text size="2" weight="medium">
+            {aggregateProgress}%
+          </Text>
+        </Flex>
+      </Box>
+    ) : null;
 
   return (
-    <Layout title="Prompt Pipeline" actions={headerActions}>
+    <Layout title="Prompt Pipeline" subheader={progressBanner}>
       {error && (
         <Box className="mb-4 rounded-md bg-yellow-50 p-3 border border-yellow-200">
           <Text size="2" className="text-yellow-800">
