@@ -1,6 +1,11 @@
 import fs from "node:fs";
 import { streamSSE } from "../lib/sse.js";
 import { createHighLevelLLM } from "../../llm/index.js";
+import { parseMentions } from "../lib/mention-parser.js";
+import {
+  loadSchemaContext,
+  buildSchemaPromptSection,
+} from "../lib/schema-loader.js";
 
 export async function handleTaskPlan(req, res) {
   console.log("[task-creation-endpoint] Request received");
@@ -36,10 +41,29 @@ export async function handleTaskPlan(req, res) {
     guidelines.length
   );
 
+  // Parse @mentions and load schema contexts for enrichment
+  const mentionedFiles = parseMentions(messages);
+  const schemaContexts = (
+    await Promise.all(
+      mentionedFiles.map((fileName) =>
+        loadSchemaContext(pipelineSlug, fileName)
+      )
+    )
+  ).filter(Boolean);
+  const schemaEnrichment = buildSchemaPromptSection(schemaContexts);
+
+  if (schemaEnrichment) {
+    console.log(
+      "[task-creation-endpoint] Schema enrichment added for:",
+      mentionedFiles
+    );
+  }
+
   // Build LLM messages array
   const systemPrompt = `You are a pipeline task assistant. Help users create task definitions following these guidelines:
 
 ${guidelines}
+${schemaEnrichment ? `\n${schemaEnrichment}\n` : ""}
 
 Provide complete, working code. Use markdown code blocks.
 

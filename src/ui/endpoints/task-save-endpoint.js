@@ -2,6 +2,7 @@ import path from "node:path";
 import { promises as fs } from "node:fs";
 import { getConfig } from "../../core/config.js";
 import { sendJson } from "../utils/http-utils.js";
+import { reviewAndCorrectTask } from "../lib/task-reviewer.js";
 
 /**
  * Handle task creation requests
@@ -52,7 +53,24 @@ export async function handleTaskSave(req, res) {
     if (!taskFilePath.startsWith(tasksDir)) {
       return sendJson(res, 400, { error: "Invalid filename" });
     }
-    await fs.writeFile(taskFilePath, code, "utf8");
+
+    // Self-correct code before saving
+    let finalCode = code;
+    try {
+      const guidelinesPath = path.join(
+        rootDir,
+        "docs/pipeline-task-guidelines.md"
+      );
+      const guidelines = await fs.readFile(guidelinesPath, "utf8");
+      finalCode = await reviewAndCorrectTask(code, guidelines);
+    } catch (reviewError) {
+      console.warn(
+        "Task review failed, using original code:",
+        reviewError.message
+      );
+    }
+
+    await fs.writeFile(taskFilePath, finalCode, "utf8");
 
     // Update index.js to export new task
     const indexPath = taskRegistryPath;
