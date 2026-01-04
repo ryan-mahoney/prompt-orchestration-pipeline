@@ -37,10 +37,15 @@ ${code}
 
   const response = await llm.chat({ messages, responseFormat: "text" });
   const content = response.content || "";
+  const trimmedContent = content.trim();
 
-  if (content.includes("NO_CHANGES_NEEDED")) {
+  // If the LLM returned no usable content, keep the original code
+  if (!trimmedContent) {
     return code;
   }
 
+  if (trimmedContent.includes("NO_CHANGES_NEEDED")) {
+    return code;
+  }
   return stripMarkdownFences(content);
 }
