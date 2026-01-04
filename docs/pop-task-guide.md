@@ -121,6 +121,7 @@ export const inference = async ({
   flags,
 }) => {
   const response = await provider.model({ messages: [...] });
+  const parsed = response.parsed;
   await io.writeArtifact("output.json", JSON.stringify(parsed, null, 2));
   return { output: {}, flags };
 };
