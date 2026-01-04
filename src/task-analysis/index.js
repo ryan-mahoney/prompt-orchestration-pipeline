@@ -49,8 +49,8 @@ export function analyzeTask(code, taskFilePath = null) {
 
   // Extract all metadata from the AST
   const stages = extractStages(ast);
-  const reads = extractArtifactReads(ast);
-  const writes = extractArtifactWrites(ast);
+  const { reads, unresolvedReads } = extractArtifactReads(ast, code);
+  const { writes, unresolvedWrites } = extractArtifactWrites(ast, code);
   const models = extractLLMCalls(ast);
 
   // Compose into the TaskAnalysis object
@@ -60,6 +60,8 @@ export function analyzeTask(code, taskFilePath = null) {
     artifacts: {
       reads,
       writes,
+      unresolvedReads,
+      unresolvedWrites,
     },
     models,
   };

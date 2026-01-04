@@ -15,7 +15,7 @@ describe("extractArtifactReads", () => {
     `;
 
     const ast = parseTaskSource(code);
-    const reads = extractArtifactReads(ast);
+    const { reads, unresolvedReads } = extractArtifactReads(ast);
 
     expect(reads).toHaveLength(1);
     expect(reads[0]).toEqual({
@@ -23,6 +23,7 @@ describe("extractArtifactReads", () => {
       stage: "stageOne",
       required: true,
     });
+    expect(unresolvedReads).toHaveLength(0);
   });
 
   it("sets required: true for non-wrapped calls", () => {
@@ -39,7 +40,7 @@ describe("extractArtifactReads", () => {
     `;
 
     const ast = parseTaskSource(code);
-    const reads = extractArtifactReads(ast);
+    const { reads } = extractArtifactReads(ast);
 
     expect(reads).toHaveLength(2);
     expect(reads.every((r) => r.required)).toBe(true);
@@ -58,7 +59,7 @@ describe("extractArtifactReads", () => {
     `;
 
     const ast = parseTaskSource(code);
-    const reads = extractArtifactReads(ast);
+    const { reads } = extractArtifactReads(ast);
 
     expect(reads).toHaveLength(1);
     expect(reads[0].required).toBe(false);
@@ -73,7 +74,7 @@ describe("extractArtifactReads", () => {
     `;
 
     const ast = parseTaskSource(code);
-    const reads = extractArtifactReads(ast);
+    const { reads } = extractArtifactReads(ast);
 
     expect(reads).toHaveLength(1);
     expect(reads[0].fileName).toBe("file-${name}.json");
@@ -88,13 +89,13 @@ describe("extractArtifactReads", () => {
     `;
 
     const ast = parseTaskSource(code);
-    const reads = extractArtifactReads(ast);
+    const { reads } = extractArtifactReads(ast);
 
     expect(reads).toHaveLength(1);
     expect(reads[0].fileName).toBe("file.json");
   });
 
-  it("throws error for non-string literal argument", () => {
+  it("captures unresolved references for non-literal arguments", () => {
     const code = `
       export function stageOne({ io }) {
         const filename = "file.json";
@@ -104,10 +105,76 @@ describe("extractArtifactReads", () => {
     `;
 
     const ast = parseTaskSource(code);
+    const { reads, unresolvedReads } = extractArtifactReads(ast, code);
 
-    expect(() => extractArtifactReads(ast)).toThrow(
-      "requires a string literal or template literal"
+    expect(reads).toHaveLength(0);
+    expect(unresolvedReads).toHaveLength(1);
+    expect(unresolvedReads[0]).toMatchObject({
+      expression: "filename",
+      stage: "stageOne",
+      required: true,
+    });
+    expect(unresolvedReads[0].location).toMatchObject({
+      line: expect.any(Number),
+      column: expect.any(Number),
+    });
+  });
+
+  it("captures function call arguments as unresolved", () => {
+    const code = `
+      export function stageOne({ io }) {
+        const data = io.readArtifact(getInputFile());
+        return data;
+      }
+    `;
+
+    const ast = parseTaskSource(code);
+    const { reads, unresolvedReads } = extractArtifactReads(ast, code);
+
+    expect(reads).toHaveLength(0);
+    expect(unresolvedReads).toHaveLength(1);
+    expect(unresolvedReads[0]).toMatchObject({
+      expression: "getInputFile()",
+      stage: "stageOne",
+      required: true,
+    });
+  });
+
+  it("captures code context when sourceCode is provided", () => {
+    const code = `export function stageOne({ io }) {
+  const filename = "file.json";
+  const data = io.readArtifact(filename);
+  return data;
+}`;
+
+    const ast = parseTaskSource(code);
+    const { unresolvedReads } = extractArtifactReads(ast, code);
+
+    expect(unresolvedReads).toHaveLength(1);
+    expect(unresolvedReads[0].codeContext).toContain(
+      "io.readArtifact(filename)"
     );
+    expect(unresolvedReads[0].codeContext).toContain("const filename");
+  });
+
+  it("handles mixed static and dynamic references", () => {
+    const code = `
+      export function stageOne({ io }) {
+        const static1 = io.readArtifact("file1.json");
+        const dynamic = io.readArtifact(dynamicName);
+        const static2 = io.readArtifact("file2.json");
+        return [static1, dynamic, static2];
+      }
+    `;
+
+    const ast = parseTaskSource(code);
+    const { reads, unresolvedReads } = extractArtifactReads(ast, code);
+
+    expect(reads).toHaveLength(2);
+    expect(reads.map((r) => r.fileName)).toEqual(["file1.json", "file2.json"]);
+
+    expect(unresolvedReads).toHaveLength(1);
+    expect(unresolvedReads[0].expression).toBe("dynamicName");
   });
 
   it("throws error for call outside exported function", () => {
@@ -122,7 +189,7 @@ describe("extractArtifactReads", () => {
     );
   });
 
-  it("returns empty array for code without artifact reads", () => {
+  it("returns empty reads for code without artifact reads", () => {
     const code = `
       export function stageOne() {
         return "data";
@@ -130,9 +197,10 @@ describe("extractArtifactReads", () => {
     `;
 
     const ast = parseTaskSource(code);
-    const reads = extractArtifactReads(ast);
+    const { reads, unresolvedReads } = extractArtifactReads(ast);
 
-    expect(reads).toEqual([]);
+    expect(reads).toHaveLength(0);
+    expect(unresolvedReads).toHaveLength(0);
   });
 
   it("handles multiple reads in same stage", () => {
@@ -146,7 +214,7 @@ describe("extractArtifactReads", () => {
     `;
 
     const ast = parseTaskSource(code);
-    const reads = extractArtifactReads(ast);
+    const { reads } = extractArtifactReads(ast);
 
     expect(reads).toHaveLength(3);
     expect(reads.map((r) => r.fileName)).toEqual([
@@ -171,7 +239,7 @@ describe("extractArtifactReads", () => {
     `;
 
     const ast = parseTaskSource(code);
-    const reads = extractArtifactReads(ast);
+    const { reads } = extractArtifactReads(ast);
 
     expect(reads).toHaveLength(1);
     expect(reads[0].required).toBe(false);
@@ -189,13 +257,14 @@ describe("extractArtifactWrites", () => {
     `;
 
     const ast = parseTaskSource(code);
-    const writes = extractArtifactWrites(ast);
+    const { writes, unresolvedWrites } = extractArtifactWrites(ast);
 
     expect(writes).toHaveLength(1);
     expect(writes[0]).toEqual({
       fileName: "output.json",
       stage: "stageOne",
     });
+    expect(unresolvedWrites).toHaveLength(0);
   });
 
   it("extracts filename only, ignores second argument", () => {
@@ -208,7 +277,7 @@ describe("extractArtifactWrites", () => {
     `;
 
     const ast = parseTaskSource(code);
-    const writes = extractArtifactWrites(ast);
+    const { writes } = extractArtifactWrites(ast);
 
     expect(writes).toHaveLength(1);
     expect(writes[0].fileName).toBe("output.json");
@@ -225,13 +294,13 @@ describe("extractArtifactWrites", () => {
     `;
 
     const ast = parseTaskSource(code);
-    const writes = extractArtifactWrites(ast);
+    const { writes } = extractArtifactWrites(ast);
 
     expect(writes).toHaveLength(1);
     expect(writes[0].fileName).toBe("output-${timestamp}.json");
   });
 
-  it("throws error for non-string literal argument", () => {
+  it("captures unresolved references for non-literal arguments", () => {
     const code = `
       export function stageOne({ io }) {
         const filename = "output.json";
@@ -242,10 +311,79 @@ describe("extractArtifactWrites", () => {
     `;
 
     const ast = parseTaskSource(code);
+    const { writes, unresolvedWrites } = extractArtifactWrites(ast, code);
 
-    expect(() => extractArtifactWrites(ast)).toThrow(
-      "requires a string literal or template literal"
+    expect(writes).toHaveLength(0);
+    expect(unresolvedWrites).toHaveLength(1);
+    expect(unresolvedWrites[0]).toMatchObject({
+      expression: "filename",
+      stage: "stageOne",
+    });
+    expect(unresolvedWrites[0].location).toMatchObject({
+      line: expect.any(Number),
+      column: expect.any(Number),
+    });
+  });
+
+  it("captures function call arguments as unresolved", () => {
+    const code = `
+      export function stageOne({ io }) {
+        const data = { result: "success" };
+        io.writeArtifact(getOutputFile(), data);
+        return data;
+      }
+    `;
+
+    const ast = parseTaskSource(code);
+    const { writes, unresolvedWrites } = extractArtifactWrites(ast, code);
+
+    expect(writes).toHaveLength(0);
+    expect(unresolvedWrites).toHaveLength(1);
+    expect(unresolvedWrites[0]).toMatchObject({
+      expression: "getOutputFile()",
+      stage: "stageOne",
+    });
+  });
+
+  it("captures code context when sourceCode is provided", () => {
+    const code = `export function stageOne({ io }) {
+  const filename = "output.json";
+  const data = { result: "success" };
+  io.writeArtifact(filename, data);
+  return data;
+}`;
+
+    const ast = parseTaskSource(code);
+    const { unresolvedWrites } = extractArtifactWrites(ast, code);
+
+    expect(unresolvedWrites).toHaveLength(1);
+    expect(unresolvedWrites[0].codeContext).toContain(
+      "io.writeArtifact(filename, data)"
     );
+    expect(unresolvedWrites[0].codeContext).toContain("const filename");
+  });
+
+  it("handles mixed static and dynamic references", () => {
+    const code = `
+      export function stageOne({ io }) {
+        io.writeArtifact("output1.json", { a: 1 });
+        io.writeArtifact(dynamicName, { b: 2 });
+        io.writeArtifact("output2.json", { c: 3 });
+        return "done";
+      }
+    `;
+
+    const ast = parseTaskSource(code);
+    const { writes, unresolvedWrites } = extractArtifactWrites(ast, code);
+
+    expect(writes).toHaveLength(2);
+    expect(writes.map((w) => w.fileName)).toEqual([
+      "output1.json",
+      "output2.json",
+    ]);
+
+    expect(unresolvedWrites).toHaveLength(1);
+    expect(unresolvedWrites[0].expression).toBe("dynamicName");
   });
 
   it("throws error for call outside exported function", () => {
@@ -260,7 +398,7 @@ describe("extractArtifactWrites", () => {
     );
   });
 
-  it("returns empty array for code without artifact writes", () => {
+  it("returns empty arrays for code without artifact writes", () => {
     const code = `
       export function stageOne() {
         return "data";
@@ -268,9 +406,10 @@ describe("extractArtifactWrites", () => {
     `;
 
     const ast = parseTaskSource(code);
-    const writes = extractArtifactWrites(ast);
+    const { writes, unresolvedWrites } = extractArtifactWrites(ast);
 
-    expect(writes).toEqual([]);
+    expect(writes).toHaveLength(0);
+    expect(unresolvedWrites).toHaveLength(0);
   });
 
   it("handles multiple writes in same stage", () => {
@@ -284,7 +423,7 @@ describe("extractArtifactWrites", () => {
     `;
 
     const ast = parseTaskSource(code);
-    const writes = extractArtifactWrites(ast);
+    const { writes } = extractArtifactWrites(ast);
 
     expect(writes).toHaveLength(3);
     expect(writes.map((w) => w.fileName)).toEqual([
@@ -308,8 +447,8 @@ describe("extractArtifactWrites", () => {
     `;
 
     const ast = parseTaskSource(code);
-    const reads = extractArtifactReads(ast);
-    const writes = extractArtifactWrites(ast);
+    const { reads } = extractArtifactReads(ast);
+    const { writes } = extractArtifactWrites(ast);
 
     expect(reads).toHaveLength(1);
     expect(reads[0]).toEqual({
