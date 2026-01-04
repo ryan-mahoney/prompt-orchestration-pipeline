@@ -118,9 +118,12 @@ export async function handleTaskSave(req, res) {
     let newEntry;
     if (isNestedCjs) {
       // Check if there's already a newline (multi-line format)
-      if (indexContent[insertPosition] === "\n") {
-        // Multi-line format: skip the newline and insert at next position
-        insertPosition += 1;
+      // Skip any whitespace before checking for newline
+      const remainingContent = indexContent.slice(insertPosition);
+      if (/^\s*\n/.test(remainingContent)) {
+        // Multi-line format: skip whitespace and newline, insert at next position
+        const whitespaceMatch = remainingContent.match(/^\s*\n/);
+        insertPosition += whitespaceMatch[0].length;
         newEntry = `  ${taskName}: "./${filename}",\n`;
       } else {
         // Single-line format: add newline to expand it
