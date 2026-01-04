@@ -77,7 +77,30 @@ export default function TaskCreationSidebar({ isOpen, onClose, pipelineSlug }) {
   const [error, setError] = useState(null);
   const [taskProposals, setTaskProposals] = useState({});
   const [creatingTask, setCreatingTask] = useState({});
+  const [artifacts, setArtifacts] = useState([]);
+  const [activeTab, setActiveTab] = useState("conversation");
   const messagesEndRef = useRef(null);
+
+  // Fetch artifacts on mount
+  useEffect(() => {
+    if (!pipelineSlug) return;
+
+    const fetchArtifacts = async () => {
+      try {
+        const response = await fetch(
+          `/api/pipelines/${pipelineSlug}/artifacts`
+        );
+        if (response.ok) {
+          const data = await response.json();
+          setArtifacts(data.artifacts || []);
+        }
+      } catch (err) {
+        console.error("[TaskCreationSidebar] Failed to fetch artifacts:", err);
+      }
+    };
+
+    fetchArtifacts();
+  }, [pipelineSlug]);
 
   // Auto-scroll to bottom when messages change
   useEffect(() => {
