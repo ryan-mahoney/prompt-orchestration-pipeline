@@ -100,6 +100,13 @@ const utilityFunctions = [
     returns: "Database",
     notes: "WAL mode enabled; caller must close",
   },
+  {
+    name: "runBatch",
+    description: "Execute batch jobs concurrently with retry support",
+    params: "{ jobs, processor, concurrency?, maxRetries?, batchId? }",
+    returns: "Promise<{ completed, failed }>",
+    notes: "Auto-retries failures; state persisted in SQLite",
+  },
 ];
 
 const sampleSeed = {
