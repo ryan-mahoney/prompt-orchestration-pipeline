@@ -48,11 +48,11 @@ export async function handleTaskPlan(req, res) {
 
 When users ask questions, identify which topic area applies and reference the relevant section of knowledge below:
 
-- **LLM/Provider questions** ’ See "Available LLM Providers" section
-- **Stage/Function questions** ’ See "Valid Stage Names" and "Stage Function Signatures" sections  
-- **IO/Database questions** ’ See "IO API" section
-- **Validation questions** ’ See "Validation API" and "JSON Schema Export" sections
-- **Task creation requests** ’ Use all sections to build a complete task
+- **LLM/Provider questions** â†’ See "Available LLM Providers" section
+- **Stage/Function questions** â†’ See "Valid Stage Names" and "Stage Function Signatures" sections  
+- **IO/Database questions** â†’ See "IO API" section
+- **Validation questions** â†’ See "Validation API" and "JSON Schema Export" sections
+- **Task creation requests** â†’ Use all sections to build a complete task
 
 Be concise and direct. Use code examples when helpful. Reference specific API signatures.
 
