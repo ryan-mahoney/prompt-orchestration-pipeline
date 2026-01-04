@@ -5,7 +5,10 @@ import { stripMarkdownFences } from "../../providers/base.js";
  * Review and correct task code using LLM
  * @param {string} code - The task code to review
  * @param {string} guidelines - Pipeline task guidelines
- * @returns {Promise<string>} - Corrected code or original if no changes needed
+ * @returns {Promise<string>} - Returns the original code if the LLM responds with
+ * NO_CHANGES_NEEDED; otherwise returns the LLM's corrected code output (after
+ * markdown fence stripping), which may be empty or invalid if the LLM response
+ * or formatting is unexpected.
  */
 export async function reviewAndCorrectTask(code, guidelines) {
   const llm = createHighLevelLLM();
