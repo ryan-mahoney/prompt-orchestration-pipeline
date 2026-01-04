@@ -18,6 +18,7 @@ export default function Layout({
   pageTitle,
   breadcrumbs,
   actions,
+  subheader,
   backTo = "/",
   maxWidth = "max-w-7xl",
 }) {
@@ -226,6 +227,9 @@ export default function Layout({
           </Flex>
         </Box>
       )}
+
+      {/* Subheader slot */}
+      {subheader}
 
       {/* Main content */}
       <main
