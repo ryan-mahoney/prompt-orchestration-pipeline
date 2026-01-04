@@ -366,7 +366,6 @@ export const inference = async ({ io, llm, flags }) => {
   const limit = pLimit(CONCURRENCY);
 
   let totalCompleted = 0;
-  let totalFailed = 0;
   let totalRetries = 0;
   const MAX_PASSES = 5;
 
