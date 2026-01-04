@@ -12,7 +12,7 @@ import { isInsideTryCatch, getStageName } from "../utils/ast.js";
  *
  * @param {import("@babel/traverse").NodePath} path - The Babel path
  * @param {string} sourceCode - The original source code
- * @returns {string} 3-5 lines of surrounding context
+ * @returns {string} Up to 5 lines of surrounding context (2 lines before and 2 lines after the target line)
  */
 export function extractCodeContext(path, sourceCode) {
   if (!sourceCode || !path.node.loc) {
