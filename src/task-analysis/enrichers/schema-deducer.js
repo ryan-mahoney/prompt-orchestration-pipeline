@@ -54,6 +54,10 @@ export async function deduceArtifactSchema(taskCode, artifact) {
   }
 
   // Validate the generated example against the generated schema
+  // Remove any existing schema with the same $id to avoid "schema already exists" error
+  if (schema.$id && ajv.getSchema(schema.$id)) {
+    ajv.removeSchema(schema.$id);
+  }
   const validate = ajv.compile(schema);
   if (!validate(example)) {
     throw new Error(

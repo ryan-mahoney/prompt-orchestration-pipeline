@@ -35,7 +35,7 @@ export async function sleep(ms) {
 
 /**
  * Strip markdown code fences from text unconditionally.
- * Handles ```json, ```JSON, and plain ``` with or without newlines.
+ * Handles any language identifier (```json, ```javascript, etc.) or plain ```.
  * @param {string} text - The text to strip fences from
  * @returns {string} The cleaned text, or original if not a string
  */
@@ -43,8 +43,8 @@ export function stripMarkdownFences(text) {
   if (typeof text !== "string") return text;
   const trimmed = text.trim();
   if (trimmed.startsWith("```")) {
-    // Remove opening fence (```json, ```JSON, or just ```)
-    let cleaned = trimmed.replace(/^```(?:json|JSON)?\s*\n?/, "");
+    // Remove opening fence with any language identifier
+    let cleaned = trimmed.replace(/^```[a-zA-Z]*\s*\n?/, "");
     // Remove closing fence
     cleaned = cleaned.replace(/\n?```\s*$/, "");
     return cleaned.trim();
