@@ -1,4 +1,6 @@
 import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { streamSSE } from "../lib/sse.js";
 import { createHighLevelLLM } from "../../llm/index.js";
 import { parseMentions } from "../lib/mention-parser.js";
@@ -6,40 +8,25 @@ import {
   loadSchemaContext,
   buildSchemaPromptSection,
 } from "../lib/schema-loader.js";
+import { createLogger } from "../../core/logger.js";
+
+const logger = createLogger("TaskCreationEndpoint");
+
+// Resolve path relative to this module for NPM distribution
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const guidelinesPath = path.resolve(__dirname, "../../docs/pop-task-guide.md");
 
 export async function handleTaskPlan(req, res) {
-  console.log("[task-creation-endpoint] Request received");
-
   const { messages, pipelineSlug } = req.body;
-
-  console.log("[task-creation-endpoint] Request details:", {
-    hasMessages: !!messages,
-    messageCount: Array.isArray(messages) ? messages.length : 0,
-    pipelineSlug,
-    bodyKeys: Object.keys(req.body),
-  });
 
   // Validate input
   if (!Array.isArray(messages)) {
-    console.error(
-      "[task-creation-endpoint] Validation failed: messages is not an array"
-    );
     res.status(400).json({ error: "messages must be an array" });
     return;
   }
 
-  console.log(
-    "[task-creation-endpoint] Loading guidelines from docs/pipeline-task-guidelines.md..."
-  );
-
   // Load guidelines - let it throw if missing
-  const guidelinesPath = "docs/pipeline-task-guidelines.md";
   const guidelines = fs.readFileSync(guidelinesPath, "utf-8");
-
-  console.log(
-    "[task-creation-endpoint] Guidelines loaded, length:",
-    guidelines.length
-  );
 
   // Parse @mentions and load schema contexts for enrichment
   const mentionedFiles = parseMentions(messages);
@@ -54,22 +41,76 @@ export async function handleTaskPlan(req, res) {
   }
   const schemaEnrichment = buildSchemaPromptSection(schemaContexts);
 
-  if (schemaEnrichment) {
-    console.log(
-      "[task-creation-endpoint] Schema enrichment added for:",
-      mentionedFiles
-    );
-  }
-
   // Build LLM messages array
-  const systemPrompt = `You are a pipeline task assistant. Help users create task definitions following these guidelines:
+  const systemPrompt = `You are a pipeline task assistant. You help users understand the POP (Prompt Orchestration Pipeline) system and create task definitions.
+
+## How to Answer Questions
+
+When users ask questions, identify which topic area applies and reference the relevant section of knowledge below:
+
+- **LLM/Provider questions** ’ See "Available LLM Providers" section
+- **Stage/Function questions** ’ See "Valid Stage Names" and "Stage Function Signatures" sections  
+- **IO/Database questions** ’ See "IO API" section
+- **Validation questions** ’ See "Validation API" and "JSON Schema Export" sections
+- **Task creation requests** ’ Use all sections to build a complete task
+
+Be concise and direct. Use code examples when helpful. Reference specific API signatures.
+
+---
+
+# KNOWLEDGE BASE
 
 ${guidelines}
 ${schemaEnrichment ? `\n${schemaEnrichment}\n` : ""}
 
+---
+
+## Quick Reference: Common Questions
+
+**Q: What LLM models/providers are available?**
+Available providers via the \`llm\` object:
+- \`llm.deepseek.chat()\` - DeepSeek model
+- \`llm.anthropic.sonnet45()\` - Anthropic Claude Sonnet 4.5
+- \`llm.openai.gpt5Mini()\` - OpenAI GPT-5 Mini
+- \`llm.gemini.flash25()\` - Google Gemini Flash 2.5
+
+**Q: What functions/stages do I need to define?**
+Minimum required: \`ingestion\`, \`promptTemplating\`, \`inference\`
+Optional: \`preProcessing\`, \`parsing\`, \`validateStructure\`, \`validateQuality\`, \`critique\`, \`refine\`, \`finalValidation\`, \`integration\`
+
+**Q: How do I use the database?**
+Use \`io.getDB()\` to get a SQLite database instance (WAL mode):
+\`\`\`js
+const db = io.getDB();
+db.exec('CREATE TABLE IF NOT EXISTS results (id INTEGER PRIMARY KEY, data TEXT)');
+db.prepare('INSERT INTO results (data) VALUES (?)').run(JSON.stringify(myData));
+\`\`\`
+
+**Q: How do I read/write files?**
+Use the \`io\` object:
+- \`io.writeArtifact(name, content)\` - Persist output files
+- \`io.readArtifact(name)\` - Load artifact
+- \`io.writeTmp(name, content)\` - Scratch data
+- \`io.writeLog(name, content)\` - Debug/progress logs
+
+---
+
+## Task Proposal Guidelines
+
 Provide complete, working code. Use markdown code blocks.
 
-When you have completed a task definition that the user wants to create, wrap it in this format:
+ONLY use the [TASK_PROPOSAL] wrapper when ALL of these conditions are met:
+1. The user has explicitly requested you create/build/write a task for them
+2. You have a complete, production-ready task definition (not an example or illustration)
+3. The user has confirmed their requirements or iterated to a final version
+
+DO NOT use [TASK_PROPOSAL] for:
+- Answering questions about capabilities or how tasks work
+- Showing illustrative examples or code snippets
+- Explaining concepts with sample code
+- Incomplete or draft task definitions still being discussed
+
+When you DO output a [TASK_PROPOSAL], use this format:
 [TASK_PROPOSAL]
 FILENAME: <filename.js>
 TASKNAME: <task-name>
@@ -81,21 +122,13 @@ CODE:
 
   const llmMessages = [{ role: "system", content: systemPrompt }, ...messages];
 
-  console.log("[task-creation-endpoint] LLM messages array created:", {
-    totalMessages: llmMessages.length,
-    systemPromptLength: systemPrompt.length,
-  });
-
   // Create SSE stream
-  console.log("[task-creation-endpoint] Creating SSE stream...");
   const sse = streamSSE(res);
 
   try {
-    console.log("[task-creation-endpoint] Creating LLM instance...");
     // Get LLM instance (uses default provider from config)
     const llm = createHighLevelLLM();
 
-    console.log("[task-creation-endpoint] Calling LLM chat with streaming...");
     // Call LLM with streaming enabled
     const response = await llm.chat({
       messages: llmMessages,
@@ -103,38 +136,20 @@ CODE:
       stream: true,
     });
 
-    console.log("[task-creation-endpoint] LLM response received:", {
-      isStream: typeof response[Symbol.asyncIterator] !== "undefined",
-    });
-
     // Stream is an async generator
-    let chunkCount = 0;
     for await (const chunk of response) {
       if (chunk?.content) {
         sse.send("chunk", { content: chunk.content });
-        chunkCount++;
       }
     }
 
-    console.log("[task-creation-endpoint] Sent", chunkCount, "chunks via SSE");
-
     // Send done event
-    console.log("[task-creation-endpoint] Sending 'done' event...");
     sse.send("done", {});
-    console.log("[task-creation-endpoint] Ending SSE stream...");
     sse.end();
-    console.log("[task-creation-endpoint] Request completed successfully");
   } catch (error) {
-    console.error("[task-creation-endpoint] Error occurred:", {
-      message: error.message,
-      stack: error.stack,
-      name: error.name,
-    });
+    logger.error("LLM streaming failed", error);
     // Send error event
     sse.send("error", { message: error.message });
-    console.log(
-      "[task-creation-endpoint] Error sent via SSE, ending stream..."
-    );
     sse.end();
   }
 }
