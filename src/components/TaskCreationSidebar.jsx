@@ -1,10 +1,64 @@
 import { useState, useEffect, useRef } from "react";
+import { MentionsInput, Mention } from "react-mentions";
 import { Button } from "./ui/button.jsx";
 import { Sidebar, SidebarFooter } from "./ui/sidebar.jsx";
 import { MarkdownRenderer } from "./MarkdownRenderer.jsx";
 
 const TASK_PROPOSAL_REGEX =
   /\[TASK_PROPOSAL\]\r?\nFILENAME:\s*(\S+)\r?\nTASKNAME:\s*(\S+)\r?\nCODE:\s*```javascript\s*([\s\S]*?)\s*```\s*\[\/TASK_PROPOSAL\]/;
+
+const MENTION_REGEX = /@\[([^\]]+)\]\([^)]+\)/g;
+
+function renderWithMentions(content) {
+  const parts = [];
+  let lastIndex = 0;
+  let match;
+  const regex = new RegExp(MENTION_REGEX.source, "g");
+
+  while ((match = regex.exec(content)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push(content.slice(lastIndex, match.index));
+    }
+    parts.push(
+      <span
+        key={match.index}
+        className="bg-primary/20 text-primary rounded-md px-1"
+      >
+        @{match[1]}
+      </span>
+    );
+    lastIndex = regex.lastIndex;
+  }
+
+  if (lastIndex < content.length) {
+    parts.push(content.slice(lastIndex));
+  }
+
+  return parts.length > 0 ? parts : content;
+}
+
+const mentionsInputStyle = {
+  control: {
+    backgroundColor: "var(--background)",
+    border: "1px solid var(--border)",
+  },
+  highlighter: {
+    overflow: "hidden",
+  },
+  input: {
+    padding: "0.5rem 0.75rem",
+  },
+  suggestions: {
+    marginTop: "1.5rem",
+    list: {
+      backgroundColor: "var(--card)",
+      border: "1px solid var(--border)",
+    },
+    item: {
+      padding: "0.5rem",
+    },
+  },
+};
 
 function parseTaskProposal(content) {
   const match = content.match(TASK_PROPOSAL_REGEX);
@@ -77,7 +131,30 @@ export default function TaskCreationSidebar({ isOpen, onClose, pipelineSlug }) {
   const [error, setError] = useState(null);
   const [taskProposals, setTaskProposals] = useState({});
   const [creatingTask, setCreatingTask] = useState({});
+  const [artifacts, setArtifacts] = useState([]);
+  const [activeTab, setActiveTab] = useState("conversation");
   const messagesEndRef = useRef(null);
+
+  // Fetch artifacts on mount
+  useEffect(() => {
+    if (!pipelineSlug) return;
+
+    const fetchArtifacts = async () => {
+      try {
+        const response = await fetch(
+          `/api/pipelines/${pipelineSlug}/artifacts`
+        );
+        if (response.ok) {
+          const data = await response.json();
+          setArtifacts(data.artifacts || []);
+        }
+      } catch (err) {
+        console.error("[TaskCreationSidebar] Failed to fetch artifacts:", err);
+      }
+    };
+
+    fetchArtifacts();
+  }, [pipelineSlug]);
 
   // Auto-scroll to bottom when messages change
   useEffect(() => {
@@ -123,6 +200,11 @@ export default function TaskCreationSidebar({ isOpen, onClose, pipelineSlug }) {
     setTaskProposals({});
     setCreatingTask({});
     onClose();
+  };
+
+  const insertMention = (fileName) => {
+    setInput((prev) => prev + "@" + fileName + " ");
+    setActiveTab("conversation");
   };
 
   const handleSend = (e) => {
@@ -333,55 +415,112 @@ export default function TaskCreationSidebar({ isOpen, onClose, pipelineSlug }) {
       description="Describe the task you want to create"
       contentClassName="flex flex-col max-h-screen"
     >
-      {/* Messages area */}
+      {/* Tab Header */}
+      <div className="flex border-b border-border">
+        <button
+          type="button"
+          onClick={() => setActiveTab("conversation")}
+          className={`flex-1 px-4 py-2 text-sm font-medium ${
+            activeTab === "conversation"
+              ? "bg-primary text-primary-foreground"
+              : "bg-muted text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          Conversation
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab("files")}
+          className={`flex-1 px-4 py-2 text-sm font-medium ${
+            activeTab === "files"
+              ? "bg-primary text-primary-foreground"
+              : "bg-muted text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          Files ({artifacts.length})
+        </button>
+      </div>
+
+      {/* Content area */}
       <div className="flex-1 overflow-y-auto p-6 space-y-4">
-        {messages.map((msg, i) => (
-          <div key={i}>
-            <div
-              className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
-            >
-              <div
-                className={`rounded-lg p-3 max-w-full ${
-                  msg.role === "user"
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-muted text-muted-foreground"
-                }`}
+        {activeTab === "files" ? (
+          /* File List */
+          artifacts.length === 0 ? (
+            <p className="text-muted-foreground text-sm">
+              No artifact files available.
+            </p>
+          ) : (
+            artifacts.map((artifact, i) => (
+              <button
+                key={i}
+                type="button"
+                onClick={() => insertMention(artifact.fileName)}
+                className="w-full text-left p-3 rounded-lg border border-border hover:bg-muted transition-colors"
               >
-                {msg.role === "assistant" ? (
-                  <>
-                    <MarkdownRenderer
-                      content={msg.content.replace(TASK_PROPOSAL_REGEX, "")}
-                    />
-                    {isWaiting && !msg.content && (
-                      <div className="flex items-center gap-1 text-muted-foreground mt-2">
-                        {Array.from({ length: 5 }).map((_, idx) => (
-                          <span
-                            key={idx}
-                            className="animate-bounce-wave"
-                            style={{ animationDelay: `${idx * 0.1}s` }}
-                          >
-                            •
-                          </span>
-                        ))}
-                      </div>
+                <p className="font-medium text-foreground">
+                  {artifact.fileName}
+                </p>
+                {artifact.sources && artifact.sources.length > 0 && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {artifact.sources.map((s) => s.taskName).join(", ")}
+                  </p>
+                )}
+              </button>
+            ))
+          )
+        ) : (
+          /* Conversation Messages */
+          <>
+            {messages.map((msg, i) => (
+              <div key={i}>
+                <div
+                  className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
+                >
+                  <div
+                    className={`rounded-lg p-3 max-w-full ${
+                      msg.role === "user"
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-muted text-muted-foreground"
+                    }`}
+                  >
+                    {msg.role === "assistant" ? (
+                      <>
+                        <MarkdownRenderer
+                          content={msg.content.replace(TASK_PROPOSAL_REGEX, "")}
+                        />
+                        {isWaiting && !msg.content && (
+                          <div className="flex items-center gap-1 text-muted-foreground mt-2">
+                            {Array.from({ length: 5 }).map((_, idx) => (
+                              <span
+                                key={idx}
+                                className="animate-bounce-wave"
+                                style={{ animationDelay: `${idx * 0.1}s` }}
+                              >
+                                •
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <p className="whitespace-pre-wrap">
+                        {renderWithMentions(msg.content)}
+                      </p>
                     )}
-                  </>
-                ) : (
-                  <p className="whitespace-pre-wrap">{msg.content}</p>
+                  </div>
+                </div>
+                {taskProposals[i] && (
+                  <TaskProposalCard
+                    proposal={taskProposals[i]}
+                    isCreating={creatingTask[i]}
+                    onCreate={() => handleCreateTask(i, taskProposals[i])}
+                  />
                 )}
               </div>
-            </div>
-            {taskProposals[i] && (
-              <TaskProposalCard
-                proposal={taskProposals[i]}
-                isCreating={creatingTask[i]}
-                onCreate={() => handleCreateTask(i, taskProposals[i])}
-              />
-            )}
-          </div>
-        ))}
-
-        <div ref={messagesEndRef} />
+            ))}
+            <div ref={messagesEndRef} />
+          </>
+        )}
 
         {error && (
           <div className="mt-4 p-4 bg-destructive/10 border border-destructive/20 rounded-lg">
@@ -418,15 +557,27 @@ export default function TaskCreationSidebar({ isOpen, onClose, pipelineSlug }) {
       {/* Input area */}
       <SidebarFooter className="bg-card">
         <form onSubmit={handleSend} className="w-full">
-          <textarea
+          <MentionsInput
             value={input}
-            onChange={(e) => setInput(e.target.value)}
+            onChange={(e, newValue) => setInput(newValue)}
             disabled={isSending || isWaiting || isReceiving}
             placeholder="Describe the task you want to create..."
             rows={3}
             className="w-full border rounded-md px-3 py-2 resize-none disabled:bg-muted disabled:cursor-not-allowed mb-3 focus:outline-none focus:ring-2 focus:ring-ring bg-background"
             aria-label="Task description input"
-          />
+            style={mentionsInputStyle}
+          >
+            <Mention
+              trigger="@"
+              markup="@[__display__](__id__)"
+              data={artifacts.map((a) => ({
+                id: a.fileName,
+                display: a.fileName,
+              }))}
+              displayTransform={(id, display) => `@${display}`}
+              className="bg-primary/20 text-primary rounded-md px-1"
+            />
+          </MentionsInput>
           <div className="flex justify-end">
             <Button
               variant="solid"
