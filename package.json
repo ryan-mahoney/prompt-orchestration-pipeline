@@ -45,6 +45,7 @@
     "@radix-ui/react-tooltip": "^1.2.8",
     "@radix-ui/themes": "^3.2.1",
     "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1",
     "better-sqlite3": "^11.7.0",
     "chokidar": "^3.5.3",
     "commander": "^14.0.2",
