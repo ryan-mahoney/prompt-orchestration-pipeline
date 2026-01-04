@@ -14,7 +14,7 @@ const logger = createLogger("TaskCreationEndpoint");
 
 // Resolve path relative to this module for NPM distribution
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const guidelinesPath = path.resolve(__dirname, "../../docs/pop-task-guide.md");
+const guidelinesPath = path.resolve(__dirname, "../../../docs/pop-task-guide.md");
 
 export async function handleTaskPlan(req, res) {
   const { messages, pipelineSlug } = req.body;
