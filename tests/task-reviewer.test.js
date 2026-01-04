@@ -72,7 +72,7 @@ describe("reviewAndCorrectTask", () => {
 
     const result = await reviewAndCorrectTask(originalCode, guidelines);
 
-    expect(result).toBe("");
+    expect(result).toBe(originalCode);
   });
 
   it("includes guidelines in the prompt", async () => {
