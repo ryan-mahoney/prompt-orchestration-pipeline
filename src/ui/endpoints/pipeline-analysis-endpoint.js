@@ -185,11 +185,17 @@ export async function handlePipelineAnalysis(req, res) {
             allKnownArtifacts
           );
           if (resolution.confidence >= 0.7 && resolution.resolvedFileName) {
-            analysis.artifacts.reads.push({
-              fileName: resolution.resolvedFileName,
-              stage: unresolved.stage,
-              required: unresolved.required,
-            });
+            // Check if this fileName already exists in reads array
+            const alreadyExists = analysis.artifacts.reads.some(
+              (artifact) => artifact.fileName === resolution.resolvedFileName
+            );
+            if (!alreadyExists) {
+              analysis.artifacts.reads.push({
+                fileName: resolution.resolvedFileName,
+                stage: unresolved.stage,
+                required: unresolved.required,
+              });
+            }
           }
         } catch {
           // Silently skip failed resolutions
@@ -204,10 +210,16 @@ export async function handlePipelineAnalysis(req, res) {
             allKnownArtifacts
           );
           if (resolution.confidence >= 0.7 && resolution.resolvedFileName) {
-            analysis.artifacts.writes.push({
-              fileName: resolution.resolvedFileName,
-              stage: unresolved.stage,
-            });
+            // Check if this fileName already exists in writes array
+            const alreadyExists = analysis.artifacts.writes.some(
+              (artifact) => artifact.fileName === resolution.resolvedFileName
+            );
+            if (!alreadyExists) {
+              analysis.artifacts.writes.push({
+                fileName: resolution.resolvedFileName,
+                stage: unresolved.stage,
+              });
+            }
           }
         } catch {
           // Silently skip failed resolutions
