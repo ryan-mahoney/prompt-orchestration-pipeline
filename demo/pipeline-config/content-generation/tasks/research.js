@@ -239,7 +239,7 @@ export const validateQuality = ({ io, llm, data, meta, flags, output }) => {
 // Contract: runs when not explicitly skipped; should set critiqueComplete when implemented
 export const critique = async ({
   io,
-  llm: { anthropic },
+  llm: { claudecode },
   data: {
     validateQuality: { feedback },
     promptTemplating: { prompt },
@@ -269,7 +269,7 @@ OUTPUT FORMAT:
 }`,
   };
 
-  const response = await anthropic.sonnet45({
+  const response = await claudecode.sonnet({
     messages: [
       { role: "system", content: template.system },
       { role: "user", content: JSON.stringify(template) },

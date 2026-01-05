@@ -3,6 +3,10 @@ import { deepseekChat } from "../providers/deepseek.js";
 import { anthropicChat } from "../providers/anthropic.js";
 import { geminiChat } from "../providers/gemini.js";
 import { zhipuChat } from "../providers/zhipu.js";
+import {
+  claudeCodeChat,
+  isClaudeCodeAvailable,
+} from "../providers/claude-code.js";
 import { EventEmitter } from "node:events";
 import { getConfig } from "../core/config.js";
 import {
@@ -57,6 +61,7 @@ export function getAvailableProviders() {
     anthropic: !!process.env.ANTHROPIC_API_KEY,
     gemini: !!process.env.GEMINI_API_KEY,
     zhipu: !!process.env.ZHIPU_API_KEY,
+    claudecode: isClaudeCodeAvailable(),
     mock: !!mockProviderInstance,
   };
 }
@@ -506,6 +511,59 @@ export async function chat(options) {
       };
 
       // Use actual usage from zhipu API if available; otherwise estimate
+      if (result?.usage) {
+        const { prompt_tokens, completion_tokens, total_tokens } = result.usage;
+        usage = {
+          promptTokens: prompt_tokens,
+          completionTokens: completion_tokens,
+          totalTokens: total_tokens,
+        };
+      } else {
+        const promptTokens = estimateTokens(systemMsg + userMsg);
+        const completionTokens = estimateTokens(
+          typeof result === "string" ? result : JSON.stringify(result)
+        );
+        usage = {
+          promptTokens,
+          completionTokens,
+          totalTokens: promptTokens + completionTokens,
+        };
+      }
+    } else if (provider === "claudecode") {
+      logger.log("Using Claude Code provider");
+      const defaultAlias = DEFAULT_MODEL_BY_PROVIDER["claudecode"];
+      const defaultModelConfig = MODEL_CONFIG[defaultAlias];
+      const defaultModel = defaultModelConfig?.model;
+
+      const claudeCodeArgs = {
+        messages,
+        model: model || defaultModel,
+        maxTokens,
+        ...rest,
+      };
+      logger.log("Claude Code call parameters:", {
+        model: claudeCodeArgs.model,
+        hasMessages: !!claudeCodeArgs.messages,
+        messageCount: claudeCodeArgs.messages?.length,
+      });
+      if (responseFormat !== undefined) {
+        claudeCodeArgs.responseFormat = responseFormat;
+      }
+
+      logger.log("Calling claudeCodeChat()...");
+      const result = await claudeCodeChat(claudeCodeArgs);
+      logger.log("claudeCodeChat() returned:", {
+        hasResult: !!result,
+        hasContent: !!result?.content,
+        hasUsage: !!result?.usage,
+      });
+
+      response = {
+        content: result.content,
+        raw: result.raw,
+      };
+
+      // Claude Code returns $0 for subscription users
       if (result?.usage) {
         const { prompt_tokens, completion_tokens, total_tokens } = result.usage;
         usage = {
