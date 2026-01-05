@@ -91,6 +91,7 @@ export async function handleTaskSave(req, res) {
 
     let insertPosition;
     let exportMatch;
+    let isNestedCjs = false;
 
     if (esmPattern.test(indexContent)) {
       // ESM format: export default { ... }
@@ -99,7 +100,8 @@ export async function handleTaskSave(req, res) {
     } else if (cjsTasksPattern.test(indexContent)) {
       // CommonJS with nested tasks: module.exports = { tasks: { ... } }
       exportMatch = indexContent.match(cjsTasksPattern);
-      insertPosition = indexContent.indexOf("\n", exportMatch.index) + 1;
+      insertPosition = exportMatch.index + exportMatch[0].length;
+      isNestedCjs = true;
     } else if (cjsPattern.test(indexContent)) {
       // CommonJS flat: module.exports = { ... }
       exportMatch = indexContent.match(cjsPattern);
@@ -112,7 +114,24 @@ export async function handleTaskSave(req, res) {
     }
 
     // Insert new task entry after the opening brace line
-    const newEntry = `  ${taskName}: "./${filename}",\n`;
+    // For nested CommonJS, check if we need to add newline to expand single-line format
+    let newEntry;
+    if (isNestedCjs) {
+      // Check if the tasks object already spans multiple lines
+      // (i.e., has whitespace and a newline after "tasks: {")
+      const remainingContent = indexContent.slice(insertPosition);
+      const whitespaceMatch = remainingContent.match(/^\s*\n/);
+      if (whitespaceMatch) {
+        // Multi-line format: skip whitespace and newline, insert at next position
+        insertPosition += whitespaceMatch[0].length;
+        newEntry = `  ${taskName}: "./${filename}",\n`;
+      } else {
+        // Single-line format: add newline to expand it
+        newEntry = `\n  ${taskName}: "./${filename}",\n`;
+      }
+    } else {
+      newEntry = `  ${taskName}: "./${filename}",\n`;
+    }
 
     indexContent =
       indexContent.slice(0, insertPosition) +
