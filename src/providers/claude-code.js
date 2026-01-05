@@ -135,7 +135,7 @@ function parseClaudeResponse(stdout, model) {
   const jsonResponse = tryParseJSON(stdout);
   if (!jsonResponse) {
     throw new ProviderJsonParseError(
-      "claude-code",
+      "claude",
       model,
       stdout.slice(0, 200),
       "Failed to parse Claude CLI JSON response"

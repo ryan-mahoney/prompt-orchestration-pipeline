@@ -61,7 +61,7 @@ export function getAvailableProviders() {
     anthropic: !!process.env.ANTHROPIC_API_KEY,
     gemini: !!process.env.GEMINI_API_KEY,
     zhipu: !!process.env.ZHIPU_API_KEY,
-    "claude-code": isClaudeCodeAvailable(),
+    claudecode: isClaudeCodeAvailable(),
     mock: !!mockProviderInstance,
   };
 }
@@ -529,9 +529,9 @@ export async function chat(options) {
           totalTokens: promptTokens + completionTokens,
         };
       }
-    } else if (provider === "claude-code") {
+    } else if (provider === "claudecode") {
       logger.log("Using Claude Code provider");
-      const defaultAlias = DEFAULT_MODEL_BY_PROVIDER["claude-code"];
+      const defaultAlias = DEFAULT_MODEL_BY_PROVIDER["claudecode"];
       const defaultModelConfig = MODEL_CONFIG[defaultAlias];
       const defaultModel = defaultModelConfig?.model;
 

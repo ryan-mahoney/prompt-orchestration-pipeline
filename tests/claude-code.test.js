@@ -13,7 +13,10 @@ vi.mock("child_process", () => ({
 }));
 
 // Import after mocks are set up
-import { claudeCodeChat, isClaudeCodeAvailable } from "../src/providers/claude-code.js";
+import {
+  claudeCodeChat,
+  isClaudeCodeAvailable,
+} from "../src/providers/claude-code.js";
 
 describe("claude-code provider", () => {
   beforeEach(() => {

@@ -43,9 +43,9 @@ export const ModelAlias = Object.freeze({
   ANTHROPIC_OPUS_4_1: "anthropic:opus-4-1", // Legacy, still available
 
   // Claude Code (subscription-based, uses CLI)
-  CLAUDE_CODE_SONNET: "claude-code:sonnet",
-  CLAUDE_CODE_OPUS: "claude-code:opus",
-  CLAUDE_CODE_HAIKU: "claude-code:haiku",
+  CLAUDE_CODE_SONNET: "claude:sonnet",
+  CLAUDE_CODE_OPUS: "claude:opus",
+  CLAUDE_CODE_HAIKU: "claude:haiku",
 });
 
 // Consolidated model configuration with pricing metadata
@@ -208,19 +208,19 @@ export const MODEL_CONFIG = Object.freeze({
   // ─── Claude Code (Subscription) ───
   // Uses existing Claude subscription via CLI, costs show $0.00
   [ModelAlias.CLAUDE_CODE_SONNET]: {
-    provider: "claude-code",
+    provider: "claudecode",
     model: "sonnet",
     tokenCostInPerMillion: 0,
     tokenCostOutPerMillion: 0,
   },
   [ModelAlias.CLAUDE_CODE_OPUS]: {
-    provider: "claude-code",
+    provider: "claudecode",
     model: "opus",
     tokenCostInPerMillion: 0,
     tokenCostOutPerMillion: 0,
   },
   [ModelAlias.CLAUDE_CODE_HAIKU]: {
-    provider: "claude-code",
+    provider: "claudecode",
     model: "haiku",
     tokenCostInPerMillion: 0,
     tokenCostOutPerMillion: 0,
@@ -237,7 +237,7 @@ export const DEFAULT_MODEL_BY_PROVIDER = Object.freeze({
   gemini: ModelAlias.GEMINI_3_FLASH, // Updated: Gemini 3 Flash is new default
   zhipu: ModelAlias.ZAI_GLM_4_6,
   anthropic: ModelAlias.ANTHROPIC_OPUS_4_5, // Updated: Opus 4.5 available at better price
-  "claude-code": ModelAlias.CLAUDE_CODE_SONNET,
+  claudecode: ModelAlias.CLAUDE_CODE_SONNET,
 });
 
 /**
