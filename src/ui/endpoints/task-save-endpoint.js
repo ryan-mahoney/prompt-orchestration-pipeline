@@ -76,27 +76,62 @@ export async function handleTaskSave(req, res) {
     const indexPath = taskRegistryPath;
     let indexContent = await fs.readFile(indexPath, "utf8");
 
-    // Check if task name already exists in the index
-    const taskNamePattern = new RegExp(`^\\s*${taskName}\\s*:`, "m");
+    // Check if task name already exists in the index (handles both quoted and unquoted)
+    const taskNamePattern = new RegExp(`^\\s*"?${taskName}"?\\s*:`, "m");
     if (taskNamePattern.test(indexContent)) {
       return sendJson(res, 400, {
         error: `Task "${taskName}" already exists in the registry`,
       });
     }
 
-    // Find the line containing "export default {"
-    const exportLine = "export default {";
-    const exportLineIndex = indexContent.indexOf(exportLine);
+    // Detect module format: ESM (export default {) or CommonJS (module.exports = {)
+    const esmPattern = /export\s+default\s+\{/;
+    const cjsPattern = /module\.exports\s*=\s*\{/;
+    const cjsTasksPattern = /module\.exports\s*=\s*\{\s*tasks\s*:\s*\{/;
 
-    if (exportLineIndex === -1) {
+    let insertPosition;
+    let exportMatch;
+    let isNestedCjs = false;
+
+    if (esmPattern.test(indexContent)) {
+      // ESM format: export default { ... }
+      exportMatch = indexContent.match(esmPattern);
+      insertPosition = indexContent.indexOf("\n", exportMatch.index) + 1;
+    } else if (cjsTasksPattern.test(indexContent)) {
+      // CommonJS with nested tasks: module.exports = { tasks: { ... } }
+      exportMatch = indexContent.match(cjsTasksPattern);
+      insertPosition = exportMatch.index + exportMatch[0].length;
+      isNestedCjs = true;
+    } else if (cjsPattern.test(indexContent)) {
+      // CommonJS flat: module.exports = { ... }
+      exportMatch = indexContent.match(cjsPattern);
+      insertPosition = indexContent.indexOf("\n", exportMatch.index) + 1;
+    } else {
       return sendJson(res, 500, {
-        error: "Failed to find export default line in index.js",
+        error:
+          "Failed to find export pattern in index.js (expected 'export default {' or 'module.exports = {')",
       });
     }
 
-    // Insert new task entry after the export line
-    const insertPosition = indexContent.indexOf("\n", exportLineIndex) + 1;
-    const newEntry = `  ${taskName}: "./${filename}",\n`;
+    // Insert new task entry after the opening brace line
+    // For nested CommonJS, check if we need to add newline to expand single-line format
+    let newEntry;
+    if (isNestedCjs) {
+      // Check if the tasks object already spans multiple lines
+      // (i.e., has whitespace and a newline after "tasks: {")
+      const remainingContent = indexContent.slice(insertPosition);
+      const whitespaceMatch = remainingContent.match(/^\s*\n/);
+      if (whitespaceMatch) {
+        // Multi-line format: skip whitespace and newline, insert at next position
+        insertPosition += whitespaceMatch[0].length;
+        newEntry = `  ${taskName}: "./${filename}",\n`;
+      } else {
+        // Single-line format: add newline to expand it
+        newEntry = `\n  ${taskName}: "./${filename}",\n`;
+      }
+    } else {
+      newEntry = `  ${taskName}: "./${filename}",\n`;
+    }
 
     indexContent =
       indexContent.slice(0, insertPosition) +
