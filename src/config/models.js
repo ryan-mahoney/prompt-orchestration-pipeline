@@ -43,9 +43,9 @@ export const ModelAlias = Object.freeze({
   ANTHROPIC_OPUS_4_1: "anthropic:opus-4-1", // Legacy, still available
 
   // Claude Code (subscription-based, uses CLI)
-  CLAUDE_CODE_SONNET: "claude:sonnet",
-  CLAUDE_CODE_OPUS: "claude:opus",
-  CLAUDE_CODE_HAIKU: "claude:haiku",
+  CLAUDE_CODE_SONNET: "claudecode:sonnet",
+  CLAUDE_CODE_OPUS: "claudecode:opus",
+  CLAUDE_CODE_HAIKU: "claudecode:haiku",
 });
 
 // Consolidated model configuration with pricing metadata
