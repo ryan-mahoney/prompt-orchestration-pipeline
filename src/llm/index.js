@@ -3,6 +3,10 @@ import { deepseekChat } from "../providers/deepseek.js";
 import { anthropicChat } from "../providers/anthropic.js";
 import { geminiChat } from "../providers/gemini.js";
 import { zhipuChat } from "../providers/zhipu.js";
+import {
+  claudeCodeChat,
+  isClaudeCodeAvailable,
+} from "../providers/claude-code.js";
 import { EventEmitter } from "node:events";
 import { getConfig } from "../core/config.js";
 import {
