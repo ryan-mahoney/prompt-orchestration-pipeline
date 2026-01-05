@@ -61,6 +61,7 @@ export function getAvailableProviders() {
     anthropic: !!process.env.ANTHROPIC_API_KEY,
     gemini: !!process.env.GEMINI_API_KEY,
     zhipu: !!process.env.ZHIPU_API_KEY,
+    "claude-code": isClaudeCodeAvailable(),
     mock: !!mockProviderInstance,
   };
 }
