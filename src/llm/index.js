@@ -529,6 +529,59 @@ export async function chat(options) {
           totalTokens: promptTokens + completionTokens,
         };
       }
+    } else if (provider === "claude-code") {
+      logger.log("Using Claude Code provider");
+      const defaultAlias = DEFAULT_MODEL_BY_PROVIDER["claude-code"];
+      const defaultModelConfig = MODEL_CONFIG[defaultAlias];
+      const defaultModel = defaultModelConfig?.model;
+
+      const claudeCodeArgs = {
+        messages,
+        model: model || defaultModel,
+        maxTokens,
+        ...rest,
+      };
+      logger.log("Claude Code call parameters:", {
+        model: claudeCodeArgs.model,
+        hasMessages: !!claudeCodeArgs.messages,
+        messageCount: claudeCodeArgs.messages?.length,
+      });
+      if (responseFormat !== undefined) {
+        claudeCodeArgs.responseFormat = responseFormat;
+      }
+
+      logger.log("Calling claudeCodeChat()...");
+      const result = await claudeCodeChat(claudeCodeArgs);
+      logger.log("claudeCodeChat() returned:", {
+        hasResult: !!result,
+        hasContent: !!result?.content,
+        hasUsage: !!result?.usage,
+      });
+
+      response = {
+        content: result.content,
+        raw: result.raw,
+      };
+
+      // Claude Code returns $0 for subscription users
+      if (result?.usage) {
+        const { prompt_tokens, completion_tokens, total_tokens } = result.usage;
+        usage = {
+          promptTokens: prompt_tokens,
+          completionTokens: completion_tokens,
+          totalTokens: total_tokens,
+        };
+      } else {
+        const promptTokens = estimateTokens(systemMsg + userMsg);
+        const completionTokens = estimateTokens(
+          typeof result === "string" ? result : JSON.stringify(result)
+        );
+        usage = {
+          promptTokens,
+          completionTokens,
+          totalTokens: promptTokens + completionTokens,
+        };
+      }
     } else {
       logger.error("Unknown provider:", provider);
       throw new Error(`Provider ${provider} not yet implemented`);
