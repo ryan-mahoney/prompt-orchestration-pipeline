@@ -2,7 +2,7 @@
  * Canonical model configuration for prompt orchestration pipeline.
  * This module serves as single source of truth for all model metadata.
  *
- * Last updated: December 2025
+ * Last updated: January 2026
  */
 
 // Model alias constants grouped by provider
@@ -46,6 +46,16 @@ export const ModelAlias = Object.freeze({
   CLAUDE_CODE_SONNET: "claudecode:sonnet",
   CLAUDE_CODE_OPUS: "claudecode:opus",
   CLAUDE_CODE_HAIKU: "claudecode:haiku",
+
+  // Moonshot/Kimi (K2/K2.5 series as of Jan 2026)
+  MOONSHOT_K2: "moonshot:kimi-k2",
+  MOONSHOT_K2_TURBO: "moonshot:kimi-k2-turbo",
+  MOONSHOT_K2_THINKING: "moonshot:kimi-k2-thinking",
+  MOONSHOT_K2_THINKING_TURBO: "moonshot:kimi-k2-thinking-turbo",
+  MOONSHOT_K2_5: "moonshot:kimi-k2.5",
+  MOONSHOT_LATEST_8K: "moonshot:kimi-latest-8k",
+  MOONSHOT_LATEST_32K: "moonshot:kimi-latest-32k",
+  MOONSHOT_LATEST_128K: "moonshot:kimi-latest-128k",
 });
 
 // Consolidated model configuration with pricing metadata
@@ -224,6 +234,57 @@ export const MODEL_CONFIG = Object.freeze({
     model: "haiku",
     tokenCostInPerMillion: 0,
     tokenCostOutPerMillion: 0,
+  },
+
+  // ─── Moonshot/Kimi (Jan 2026) ───
+  // K2 and K2.5 series with built-in context caching
+  [ModelAlias.MOONSHOT_K2]: {
+    provider: "moonshot",
+    model: "kimi-k2",
+    tokenCostInPerMillion: 0.6,
+    tokenCostOutPerMillion: 2.5,
+  },
+  [ModelAlias.MOONSHOT_K2_TURBO]: {
+    provider: "moonshot",
+    model: "kimi-k2-turbo",
+    tokenCostInPerMillion: 1.15,
+    tokenCostOutPerMillion: 8.0,
+  },
+  [ModelAlias.MOONSHOT_K2_THINKING]: {
+    provider: "moonshot",
+    model: "kimi-k2-thinking",
+    tokenCostInPerMillion: 1.15,
+    tokenCostOutPerMillion: 8.0,
+  },
+  [ModelAlias.MOONSHOT_K2_THINKING_TURBO]: {
+    provider: "moonshot",
+    model: "kimi-k2-thinking-turbo",
+    tokenCostInPerMillion: 1.15,
+    tokenCostOutPerMillion: 8.0,
+  },
+  [ModelAlias.MOONSHOT_K2_5]: {
+    provider: "moonshot",
+    model: "kimi-k2.5", // Latest model (Jan 2026)
+    tokenCostInPerMillion: 0.6,
+    tokenCostOutPerMillion: 3.0,
+  },
+  [ModelAlias.MOONSHOT_LATEST_8K]: {
+    provider: "moonshot",
+    model: "kimi-latest", // Auto-tiered: 8K context
+    tokenCostInPerMillion: 0.2,
+    tokenCostOutPerMillion: 2.0,
+  },
+  [ModelAlias.MOONSHOT_LATEST_32K]: {
+    provider: "moonshot",
+    model: "kimi-latest", // Auto-tiered: 32K context
+    tokenCostInPerMillion: 1.0,
+    tokenCostOutPerMillion: 3.0,
+  },
+  [ModelAlias.MOONSHOT_LATEST_128K]: {
+    provider: "moonshot",
+    model: "kimi-latest", // Auto-tiered: 128K context
+    tokenCostInPerMillion: 2.0,
+    tokenCostOutPerMillion: 5.0,
   },
 });
 
