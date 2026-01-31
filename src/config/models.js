@@ -270,19 +270,19 @@ export const MODEL_CONFIG = Object.freeze({
   },
   [ModelAlias.MOONSHOT_LATEST_8K]: {
     provider: "moonshot",
-    model: "kimi-latest", // Auto-tiered: 8K context
+    model: "kimi-latest-8k", // 8K context tier
     tokenCostInPerMillion: 0.2,
     tokenCostOutPerMillion: 2.0,
   },
   [ModelAlias.MOONSHOT_LATEST_32K]: {
     provider: "moonshot",
-    model: "kimi-latest", // Auto-tiered: 32K context
+    model: "kimi-latest-32k", // 32K context tier
     tokenCostInPerMillion: 1.0,
     tokenCostOutPerMillion: 3.0,
   },
   [ModelAlias.MOONSHOT_LATEST_128K]: {
     provider: "moonshot",
-    model: "kimi-latest", // Auto-tiered: 128K context
+    model: "kimi-latest-128k", // 128K context tier
     tokenCostInPerMillion: 2.0,
     tokenCostOutPerMillion: 5.0,
   },
