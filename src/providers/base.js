@@ -90,6 +90,25 @@ export function tryParseJSON(text) {
 }
 
 /**
+ * Creates a proper Error instance from an HTTP error response.
+ * This ensures errors have proper stack traces and don't cause
+ * "UnhandledPromiseRejection: #<Object>" crashes.
+ * 
+ * @param {number} status - HTTP status code
+ * @param {Object} errorBody - Parsed error response body
+ * @param {string} fallbackMessage - Fallback message if none in errorBody
+ * @returns {Error} Error instance with status and details attached
+ */
+export function createProviderError(status, errorBody, fallbackMessage = "Request failed") {
+  const message = errorBody?.error?.message || errorBody?.message || fallbackMessage;
+  const err = new Error(`[${status}] ${message}`);
+  err.status = status;
+  err.code = errorBody?.error?.code || errorBody?.code;
+  err.details = errorBody;
+  return err;
+}
+
+/**
  * Error thrown when JSON response format is required but not provided
  */
 export class ProviderJsonModeError extends Error {

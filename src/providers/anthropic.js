@@ -6,6 +6,7 @@ import {
   tryParseJSON,
   ensureJsonResponseFormat,
   ProviderJsonParseError,
+  createProviderError,
 } from "./base.js";
 import { createLogger } from "../core/logger.js";
 
@@ -70,10 +71,10 @@ export async function anthropicChat({
       });
 
       if (!response.ok) {
-        const error = await response
+        const errorBody = await response
           .json()
           .catch(() => ({ error: response.statusText }));
-        throw { status: response.status, ...error };
+        throw createProviderError(response.status, errorBody, response.statusText);
       }
 
       const data = await response.json();

@@ -2,6 +2,27 @@ import fs from "node:fs/promises";
 import fsSync from "node:fs";
 import path from "node:path";
 import { runPipeline } from "./task-runner.js";
+
+// Global unhandled rejection handler to prevent hanging on unexpected errors
+// This must be registered early before any async operations
+process.on("unhandledRejection", (reason, promise) => {
+  console.error("[PipelineRunner] Unhandled promise rejection:", reason);
+  console.error("[PipelineRunner] Promise:", promise);
+  // Force exit after a brief delay to allow logs to flush
+  setTimeout(() => {
+    console.error("[PipelineRunner] Forcing exit due to unhandled rejection");
+    process.exit(1);
+  }, 100);
+});
+
+process.on("uncaughtException", (error) => {
+  console.error("[PipelineRunner] Uncaught exception:", error);
+  // Force exit after a brief delay to allow logs to flush
+  setTimeout(() => {
+    console.error("[PipelineRunner] Forcing exit due to uncaught exception");
+    process.exit(1);
+  }, 100);
+});
 import { loadFreshModule } from "./module-loader.js";
 import { validatePipelineOrThrow } from "./validation.js";
 import { getPipelineConfig } from "./config.js";
@@ -420,7 +441,32 @@ try {
     await cleanupTaskSymlinks(dest);
   }
 } catch (error) {
-  throw error;
+  // Log the error with full context instead of re-throwing
+  // Re-throwing at top-level causes unhandled promise rejection and hanging
+  logger.error("Pipeline execution failed with unhandled error", {
+    jobId,
+    pipelineSlug,
+    error: normalizeError(error),
+  });
+  
+  console.error("[PipelineRunner] Fatal error:", error);
+  
+  // Ensure we exit with failure code
+  process.exitCode = 1;
+  
+  // Set a forced exit timeout to prevent indefinite hanging
+  // This catches cases where cleanup or logging doesn't complete
+  const forceExitTimeout = setTimeout(() => {
+    console.error("[PipelineRunner] Force exit timeout reached, terminating process");
+    process.exit(1);
+  }, 5000);
+  
+  // Make the timeout non-blocking so it doesn't keep the event loop alive
+  forceExitTimeout.unref();
+  
+  // Clean up and exit
+  await cleanupRunnerPid();
+  process.exit(1);
 } finally {
   // Always ensure PID cleanup at the end of execution
   await cleanupRunnerPid();

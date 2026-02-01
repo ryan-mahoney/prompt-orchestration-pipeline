@@ -53,13 +53,15 @@ const pipelineFields = [
     name: "name",
     required: true,
     type: "string",
-    description: "Unique identifier for the pipeline. Used to reference this pipeline from seed files.",
+    description:
+      "Unique identifier for the pipeline. Used to reference this pipeline from seed files.",
   },
   {
     name: "version",
     required: false,
     type: "string",
-    description: "Semantic version of the pipeline (e.g., \"1.0.0\"). Useful for tracking changes.",
+    description:
+      'Semantic version of the pipeline (e.g., "1.0.0"). Useful for tracking changes.',
   },
   {
     name: "description",
@@ -71,19 +73,22 @@ const pipelineFields = [
     name: "tasks",
     required: true,
     type: "string[]",
-    description: "Ordered array of task names to execute. Each task must be registered in the task index.",
+    description:
+      "Ordered array of task names to execute. Each task must be registered in the task index.",
   },
   {
     name: "taskConfig",
     required: false,
     type: "object",
-    description: "Per-task configuration overrides. Keys are task names, values are config objects passed to stages.",
+    description:
+      "Per-task configuration overrides. Keys are task names, values are config objects passed to stages.",
   },
   {
     name: "llm",
     required: false,
     type: "{ provider, model }",
-    description: "Pipeline-level LLM override. When set, ALL task LLM calls are routed to this provider/model.",
+    description:
+      "Pipeline-level LLM override. When set, ALL task LLM calls are routed to this provider/model.",
     isNew: true,
   },
 ];
@@ -184,6 +189,7 @@ const envVars = [
   { name: "GEMINI_API_KEY", provider: "Google Gemini" },
   { name: "DEEPSEEK_API_KEY", provider: "DeepSeek" },
   { name: "ZHIPU_API_KEY", provider: "Zhipu" },
+  { name: "MOONSHOT_API_KEY", provider: "Moonshot" },
 ];
 
 // Collapsible Section Component
@@ -290,7 +296,7 @@ export default function CodePage() {
           }
         });
       },
-      { rootMargin: "-100px 0px -66% 0px" }
+      { rootMargin: "-100px 0px -66% 0px" },
     );
 
     sections.forEach(({ id }) => {
@@ -472,9 +478,9 @@ export default function CodePage() {
             defaultOpen={true}
           >
             <Text as="p" size="3" className="text-gray-600 mb-4">
-              Each pipeline is defined by a <Code size="2">pipeline.json</Code> file
-              in its directory. This file specifies which tasks to run and optional
-              configuration overrides.
+              Each pipeline is defined by a <Code size="2">pipeline.json</Code>{" "}
+              file in its directory. This file specifies which tasks to run and
+              optional configuration overrides.
             </Text>
 
             <div className="space-y-6">
@@ -487,10 +493,18 @@ export default function CodePage() {
                   <Table.Root>
                     <Table.Header>
                       <Table.Row>
-                        <Table.ColumnHeaderCell className="bg-gray-50">Field</Table.ColumnHeaderCell>
-                        <Table.ColumnHeaderCell className="bg-gray-50">Type</Table.ColumnHeaderCell>
-                        <Table.ColumnHeaderCell className="bg-gray-50">Required</Table.ColumnHeaderCell>
-                        <Table.ColumnHeaderCell className="bg-gray-50">Description</Table.ColumnHeaderCell>
+                        <Table.ColumnHeaderCell className="bg-gray-50">
+                          Field
+                        </Table.ColumnHeaderCell>
+                        <Table.ColumnHeaderCell className="bg-gray-50">
+                          Type
+                        </Table.ColumnHeaderCell>
+                        <Table.ColumnHeaderCell className="bg-gray-50">
+                          Required
+                        </Table.ColumnHeaderCell>
+                        <Table.ColumnHeaderCell className="bg-gray-50">
+                          Description
+                        </Table.ColumnHeaderCell>
                       </Table.Row>
                     </Table.Header>
                     <Table.Body>
@@ -507,11 +521,15 @@ export default function CodePage() {
                             </Flex>
                           </Table.RowHeaderCell>
                           <Table.Cell>
-                            <Code size="1" className="text-gray-600">{field.type}</Code>
+                            <Code size="1" className="text-gray-600">
+                              {field.type}
+                            </Code>
                           </Table.Cell>
                           <Table.Cell>
                             {field.required ? (
-                              <span className="text-red-600 font-medium">Yes</span>
+                              <span className="text-red-600 font-medium">
+                                Yes
+                              </span>
                             ) : (
                               <span className="text-gray-400">No</span>
                             )}
@@ -548,22 +566,32 @@ export default function CodePage() {
                   </span>
                 </Flex>
                 <Text as="p" size="2" className="text-blue-700 mb-3">
-                  When the <Code size="2">llm</Code> field is set in pipeline.json, 
-                  ALL LLM calls from task stages are automatically routed to the 
-                  specified provider and model — regardless of what the task code requests.
+                  When the <Code size="2">llm</Code> field is set in
+                  pipeline.json, ALL LLM calls from task stages are
+                  automatically routed to the specified provider and model —
+                  regardless of what the task code requests.
                 </Text>
                 <ul className="space-y-1 text-sm text-blue-700">
                   <li className="flex items-start gap-2">
                     <span className="text-blue-500 mt-0.5">•</span>
-                    <span>Tasks calling <Code size="1">llm.deepseek.chat()</Code> will use the override provider/model</span>
+                    <span>
+                      Tasks calling <Code size="1">llm.deepseek.chat()</Code>{" "}
+                      will use the override provider/model
+                    </span>
                   </li>
                   <li className="flex items-start gap-2">
                     <span className="text-blue-500 mt-0.5">•</span>
-                    <span>Original provider/model is preserved in <Code size="1">metadata.originalProvider</Code></span>
+                    <span>
+                      Original provider/model is preserved in{" "}
+                      <Code size="1">metadata.originalProvider</Code>
+                    </span>
                   </li>
                   <li className="flex items-start gap-2">
                     <span className="text-blue-500 mt-0.5">•</span>
-                    <span>Useful for A/B testing, cost control, or switching providers during outages</span>
+                    <span>
+                      Useful for A/B testing, cost control, or switching
+                      providers during outages
+                    </span>
                   </li>
                 </ul>
               </div>
@@ -700,7 +728,7 @@ export default function CodePage() {
                                   </Code>
                                 </Table.Cell>
                               </Table.Row>
-                            ))
+                            )),
                         )}
                       </Table.Body>
                     </Table.Root>

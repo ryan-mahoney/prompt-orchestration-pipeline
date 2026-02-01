@@ -403,10 +403,16 @@ export async function runPipeline(modulePath, initialContext = {}) {
     }
   };
 
+  const onLLMError = (m) => llmMetrics.push({ ...m, failed: true });
+
   llmEvents.on("llm:request:complete", onLLMComplete);
-  llmEvents.on("llm:request:error", (m) =>
-    llmMetrics.push({ ...m, failed: true })
-  );
+  llmEvents.on("llm:request:error", onLLMError);
+  
+  // Helper to clean up all LLM event listeners
+  const cleanupLLMListeners = () => {
+    llmEvents.off("llm:request:complete", onLLMComplete);
+    llmEvents.off("llm:request:error", onLLMError);
+  };
 
   const abs = toAbsFileURL(modulePath);
   const mod = await loadFreshModule(abs);
@@ -786,7 +792,7 @@ export async function runPipeline(modulePath, initialContext = {}) {
       }
 
       await tokenWriteQueue.catch(() => {});
-      llmEvents.off("llm:request:complete", onLLMComplete);
+      cleanupLLMListeners();
 
       // Fail immediately on any stage error
       return {
@@ -805,7 +811,7 @@ export async function runPipeline(modulePath, initialContext = {}) {
   // Flush any trailing token usage appends before cleanup
   await tokenWriteQueue.catch(() => {}); // absorb last error to not mask pipeline result
 
-  llmEvents.off("llm:request:complete", onLLMComplete);
+  cleanupLLMListeners();
 
   // Write final status with currentStage: null to indicate completion
   if (context.meta.workDir && context.meta.taskName) {

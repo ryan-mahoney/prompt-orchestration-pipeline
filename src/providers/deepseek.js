@@ -6,6 +6,7 @@ import {
   tryParseJSON,
   ensureJsonResponseFormat,
   ProviderJsonParseError,
+  createProviderError,
 } from "./base.js";
 import { createLogger } from "../core/logger.js";
 
@@ -77,10 +78,10 @@ export async function deepseekChat({
       );
 
       if (!response.ok) {
-        const error = await response
+        const errorBody = await response
           .json()
           .catch(() => ({ error: response.statusText }));
-        throw { status: response.status, ...error };
+        throw createProviderError(response.status, errorBody, response.statusText);
       }
 
       // Streaming mode - return async generator for real-time chunks

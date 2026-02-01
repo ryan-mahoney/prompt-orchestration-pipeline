@@ -499,10 +499,10 @@ describe("orchestrator", () => {
       const add = getAddHandler();
       await add(seedPath);
 
-      // Verify warning logged
+      // Verify warning logged (logger format includes prefix and JSON data)
       expect(consoleSpy).toHaveBeenCalledWith(
-        "Rejecting non-id seed file:",
-        "invalid-filename.json"
+        "[Orchestrator] Rejecting non-id seed file:",
+        expect.stringContaining("invalid-filename.json")
       );
 
       // Verify no directory created
@@ -542,10 +542,10 @@ describe("orchestrator", () => {
       const add = getAddHandler();
       await add(seedPath);
 
-      // Verify warning logged
+      // Verify warning logged (logger format includes prefix and JSON data)
       expect(consoleSpy).toHaveBeenCalledWith(
-        "Rejecting non-id seed file:",
-        "content generation-seed.json"
+        "[Orchestrator] Rejecting non-id seed file:",
+        expect.stringContaining("content generation-seed.json")
       );
 
       // Verify no directory created under current/
@@ -761,7 +761,11 @@ describe("orchestrator", () => {
       );
     });
 
-    it("spawnRunner throws error when seed lacks pipeline field", async () => {
+    it("spawnRunner logs error when seed lacks pipeline field", async () => {
+      const consoleSpy = vi
+        .spyOn(console, "error")
+        .mockImplementation(() => {});
+
       const seedPath = path.join(
         tmpDir,
         "pipeline-data",
@@ -781,16 +785,24 @@ describe("orchestrator", () => {
 
       const add = getAddHandler();
 
-      // Should throw error due to missing pipeline slug
-      await expect(add(seedPath)).rejects.toThrow(
-        "Pipeline slug is required in seed data. Include a 'pipeline' field in your seed."
-      );
+      // Error is now caught and logged instead of rejecting
+      // This prevents unhandled promise rejection crashes
+      await add(seedPath);
+
+      // Verify error was logged (the .catch handler logs the error)
+      expect(consoleSpy).toHaveBeenCalled();
 
       // Verify no runner was spawned
       expect(spawnMock).not.toHaveBeenCalled();
+
+      consoleSpy.mockRestore();
     });
 
     it("spawnRunner validates pipeline slug against registry", async () => {
+      const consoleSpy = vi
+        .spyOn(console, "error")
+        .mockImplementation(() => {});
+
       const seedPath = path.join(
         tmpDir,
         "pipeline-data",
@@ -810,11 +822,17 @@ describe("orchestrator", () => {
 
       const add = getAddHandler();
 
-      // Should throw error due to invalid pipeline slug
-      await expect(add(seedPath)).rejects.toThrow();
+      // Error is now caught and logged instead of rejecting
+      // This prevents unhandled promise rejection crashes
+      await add(seedPath);
+
+      // Verify error was logged (the .catch handler logs the error)
+      expect(consoleSpy).toHaveBeenCalled();
 
       // Verify no runner was spawned
       expect(spawnMock).not.toHaveBeenCalled();
+
+      consoleSpy.mockRestore();
     });
 
     it("spawnRunner propagates different pipeline slugs correctly", async () => {
