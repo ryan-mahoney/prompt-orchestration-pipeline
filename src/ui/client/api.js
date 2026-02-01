@@ -9,6 +9,7 @@
  * @param {Object} opts - Options object
  * @param {string} [opts.fromTask] - Task ID to restart from (inclusive)
  * @param {boolean} [opts.singleTask] - Whether to run only the target task and then stop
+ * @param {boolean} [opts.continueAfter] - Whether to continue pipeline after the single task completes
  * @param {Object} [opts.options] - Additional options for the restart
  * @param {boolean} [opts.options.clearTokenUsage=true] - Whether to clear token usage
  * @returns {Promise<Object>} Parsed JSON response from the server
@@ -25,11 +26,13 @@ export async function restartJob(jobId, opts = {}) {
         fromTask: opts.fromTask,
         options,
         ...(opts.singleTask !== undefined && { singleTask: opts.singleTask }),
+        ...(opts.continueAfter !== undefined && { continueAfter: opts.continueAfter }),
       }
     : {
         mode: "clean-slate",
         options,
         ...(opts.singleTask !== undefined && { singleTask: opts.singleTask }),
+        ...(opts.continueAfter !== undefined && { continueAfter: opts.continueAfter }),
       };
 
   try {

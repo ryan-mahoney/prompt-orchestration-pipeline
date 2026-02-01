@@ -204,4 +204,38 @@ describe("API Client - restartJob", () => {
       status: 409,
     });
   });
+
+  it("should include continueAfter flag in request body", async () => {
+    const mockResponse = {
+      ok: true,
+      json: vi.fn().mockResolvedValue({
+        ok: true,
+        jobId: "test-job-123",
+        mode: "single-task-continue",
+        spawned: true,
+      }),
+    };
+    fetchMock.mockResolvedValue(mockResponse);
+
+    await restartJob("test-job-123", {
+      fromTask: "task1",
+      singleTask: true,
+      continueAfter: true,
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith("/api/jobs/test-job-123/restart", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        fromTask: "task1",
+        options: {
+          clearTokenUsage: true,
+        },
+        singleTask: true,
+        continueAfter: true,
+      }),
+    });
+  });
 });

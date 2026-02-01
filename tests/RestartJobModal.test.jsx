@@ -32,10 +32,10 @@ describe("RestartJobModal", () => {
 
     expect(screen.getByRole("dialog")).toBeInTheDocument();
     expect(
-      screen.getByText("Restart job (reset progress)")
+      screen.getByText("Restart from test-task-456")
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/This will clear the job’s progress and active stage/)
+      screen.getByText(/This will restart the job from the/)
     ).toBeInTheDocument();
   });
 
@@ -59,22 +59,22 @@ describe("RestartJobModal", () => {
     expect(screen.queryByText(/Triggered from task:/)).not.toBeInTheDocument();
   });
 
-  it("calls onClose when Cancel button is clicked", () => {
+  it("calls onClose when close button is clicked", () => {
     render(<RestartJobModal {...defaultProps} />);
 
-    const cancelButton = screen.getByText("Cancel");
-    fireEvent.click(cancelButton);
+    const closeButton = screen.getByLabelText("Close");
+    fireEvent.click(closeButton);
 
     expect(defaultProps.onClose).toHaveBeenCalledTimes(1);
   });
 
-  it("calls onConfirm when Restart button is clicked", () => {
+  it("calls onConfirm when Re-run this task button is clicked", () => {
     render(<RestartJobModal {...defaultProps} />);
 
-    const restartButton = screen.getByText("Restart");
+    const restartButton = screen.getByText("Re-run this task");
     fireEvent.click(restartButton);
 
-    expect(defaultProps.onConfirm).toHaveBeenCalledTimes(1);
+    expect(defaultProps.onConfirm).toHaveBeenCalledWith({ singleTask: true });
   });
 
   it("calls onClose when backdrop is clicked", () => {
@@ -92,12 +92,15 @@ describe("RestartJobModal", () => {
   it("disables buttons and shows loading state when isSubmitting is true", () => {
     render(<RestartJobModal {...defaultProps} isSubmitting={true} />);
 
-    const cancelButton = screen.getByText("Cancel");
-    const restartButton = screen.getByText("Restarting...");
+    const restartEntireButton = screen.getByText("Restarting...");
+    const rerunButtons = screen.getAllByText("Running...");
 
-    expect(cancelButton).toBeDisabled();
-    expect(restartButton).toBeDisabled();
-    expect(restartButton).toHaveTextContent("Restarting...");
+    expect(restartEntireButton).toBeDisabled();
+    expect(restartEntireButton).toHaveTextContent("Restarting...");
+    expect(rerunButtons).toHaveLength(2);
+    rerunButtons.forEach(button => {
+      expect(button).toBeDisabled();
+    });
   });
 
   it("closes modal when Escape key is pressed", () => {
@@ -108,13 +111,14 @@ describe("RestartJobModal", () => {
     expect(defaultProps.onClose).toHaveBeenCalledTimes(1);
   });
 
-  it("confirms when Enter key is pressed", () => {
-    render(<RestartJobModal {...defaultProps} />);
+  it("confirms when Enter key is pressed (without taskId)", () => {
+    const propsWithoutTaskId = { ...defaultProps, taskId: null };
+    render(<RestartJobModal {...propsWithoutTaskId} />);
 
     const dialog = screen.getByRole("dialog");
     fireEvent.keyDown(dialog, { key: "Enter" });
 
-    expect(defaultProps.onConfirm).toHaveBeenCalledTimes(1);
+    expect(defaultProps.onConfirm).toHaveBeenCalledWith({ singleTask: false });
   });
 
   it("does not confirm when Enter key is pressed during submission", () => {
@@ -138,13 +142,37 @@ describe("RestartJobModal", () => {
     );
 
     const title = screen.getByRole("heading", {
-      name: "Restart job (reset progress)",
+      name: "Restart from test-task-456",
     });
     expect(title).toHaveAttribute("id", "restart-modal-title");
 
     const description = screen.getByText(
-      /This will clear the job’s progress and active stage/
+      /This will restart the job from the/
     ).parentElement;
     expect(description).toHaveAttribute("id", "restart-modal-description");
+  });
+
+  it("renders three buttons when taskId is provided", () => {
+    render(<RestartJobModal {...defaultProps} />);
+
+    const restartEntireButton = screen.getByText("Restart entire pipeline");
+    const rerunContinueButton = screen.getByText("Re-run task and continue pipeline");
+    const rerunTaskButton = screen.getByText("Re-run this task");
+
+    expect(restartEntireButton).toBeInTheDocument();
+    expect(rerunContinueButton).toBeInTheDocument();
+    expect(rerunTaskButton).toBeInTheDocument();
+  });
+
+  it("calls onConfirm with continueAfter flag when middle button is clicked", () => {
+    render(<RestartJobModal {...defaultProps} />);
+
+    const rerunContinueButton = screen.getByText("Re-run task and continue pipeline");
+    fireEvent.click(rerunContinueButton);
+
+    expect(defaultProps.onConfirm).toHaveBeenCalledWith({
+      singleTask: true,
+      continueAfter: true,
+    });
   });
 });
