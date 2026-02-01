@@ -105,7 +105,7 @@ describe("Job Restart Endpoint", () => {
     expect(await fs.access(sourceJobDir).catch(() => false)).toBe(false);
 
     // Verify the job directory now exists in current
-    expect(await fs.access(targetJobDir).catch(() => false)).toBe(true);
+    expect(await fs.access(targetJobDir).then(() => true).catch(() => false)).toBe(true);
 
     // Verify status was reset in the new location
     const updatedStatusPath = path.join(targetJobDir, "tasks-status.json");
@@ -397,5 +397,92 @@ describe("Job Restart Endpoint", () => {
     expect(updatedStatus.files.artifacts).toEqual(["file1.txt"]);
     expect(updatedStatus.files.logs).toEqual(["log1.txt"]);
     expect(updatedStatus.files.tmp).toEqual([]);
+  });
+
+  it("should return single-task-continue mode when continueAfter is true", async () => {
+    // Create a job in current lifecycle with multiple tasks
+    const jobId = "continue-after-test-999";
+    const jobDir = getJobDirectoryPath(dataDir, jobId, "current");
+    await fs.mkdir(jobDir, { recursive: true });
+
+    // Create tasks-status.json with mixed task states
+    const statusPath = path.join(jobDir, "tasks-status.json");
+    const initialStatus = {
+      id: jobId,
+      state: "failed",
+      current: null,
+      currentStage: null,
+      lastUpdated: new Date().toISOString(),
+      tasks: {
+        research: {
+          state: "done",
+          currentStage: null,
+          attempts: 1,
+          refinementAttempts: 0,
+          tokenUsage: [{ model: "gpt-4", tokens: 1000 }],
+        },
+        analysis: {
+          state: "failed",
+          currentStage: "processing",
+          attempts: 2,
+          refinementAttempts: 1,
+          failedStage: "processing",
+          error: "Processing failed",
+          tokenUsage: [{ model: "gpt-4", tokens: 2000 }],
+        },
+        compose: {
+          state: "pending",
+          currentStage: null,
+          attempts: 0,
+          refinementAttempts: 0,
+          tokenUsage: [],
+        },
+      },
+      files: {
+        artifacts: ["research-output.txt"],
+        logs: ["research.log"],
+        tmp: [],
+      },
+    };
+    await fs.writeFile(statusPath, JSON.stringify(initialStatus, null, 2));
+
+    // POST to restart endpoint with singleTask=true and continueAfter=true
+    const response = await fetch(`${baseUrl}/api/jobs/${jobId}/restart`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ 
+        fromTask: "analysis", 
+        singleTask: true, 
+        continueAfter: true 
+      }),
+    });
+
+    expect(response.status).toBe(202);
+    const body = await response.json();
+    expect(body).toEqual({
+      ok: true,
+      jobId,
+      mode: "single-task-continue",
+      spawned: true,
+    });
+
+    // Verify only analysis task was reset (same behavior as singleTask without continueAfter)
+    const updatedStatus = JSON.parse(await fs.readFile(statusPath, "utf8"));
+
+    // Verify only analysis task was reset
+    expect(updatedStatus.tasks.analysis.state).toBe("pending");
+    expect(updatedStatus.tasks.analysis.currentStage).toBeNull();
+    expect(updatedStatus.tasks.analysis.attempts).toBe(0);
+    expect(updatedStatus.tasks.analysis.refinementAttempts).toBe(0);
+    expect(updatedStatus.tasks.analysis.tokenUsage).toEqual([]);
+    expect(updatedStatus.tasks.analysis.failedStage).toBeUndefined();
+    expect(updatedStatus.tasks.analysis.error).toBeUndefined();
+
+    // Verify other tasks remain unchanged
+    expect(updatedStatus.tasks.research.state).toBe("done");
+    expect(updatedStatus.tasks.research.attempts).toBe(1);
+
+    expect(updatedStatus.tasks.compose.state).toBe("pending");
+    expect(updatedStatus.tasks.compose.attempts).toBe(0);
   });
 });

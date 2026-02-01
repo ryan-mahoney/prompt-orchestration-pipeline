@@ -81,6 +81,15 @@ export function RestartJobModal({
           tabIndex={-1}
           onKeyDown={handleKeyDown}
         >
+          {/* Close button */}
+          <button
+            onClick={onClose}
+            disabled={isSubmitting}
+            className="absolute top-4 right-4 text-gray-500 hover:text-gray-700 text-xl font-light"
+            aria-label="Close"
+          >
+            ×
+          </button>
           <div className="p-6">
             {/* Header */}
             <Heading
@@ -107,10 +116,6 @@ export function RestartJobModal({
                   <Text as="p" className="text-sm text-gray-600 mb-3">
                     <strong>Triggered from task:</strong> {taskId}
                   </Text>
-                  <Text as="p" className="text-sm text-blue-600 mb-3">
-                    <strong>Just this task:</strong> Only the selected task will
-                    be reset and re-run. Other tasks remain unchanged.
-                  </Text>
                 </>
               )}
 
@@ -120,31 +125,30 @@ export function RestartJobModal({
             </Box>
 
             {/* Actions */}
-            <Flex gap="3" justify="end">
-              <Button
-                variant="outline"
-                onClick={onClose}
-                disabled={isSubmitting}
-                className="min-w-[80px]"
-              >
-                Cancel
-              </Button>
-
+            <Flex direction="column" gap="2" justify="end" align="end">
               {taskId ? (
                 <>
                   <Button
                     variant="outline"
                     onClick={() => onConfirm({ singleTask: false })}
                     disabled={isSubmitting}
-                    className="min-w-[120px]"
+                    className="w-full sm:w-auto"
                   >
                     {isSubmitting ? "Restarting..." : "Restart entire pipeline"}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => onConfirm({ singleTask: true, continueAfter: true })}
+                    disabled={isSubmitting}
+                    className="w-full sm:w-auto"
+                  >
+                    {isSubmitting ? "Running..." : "Re-run task and continue pipeline"}
                   </Button>
                   <Button
                     variant="default"
                     onClick={() => onConfirm({ singleTask: true })}
                     disabled={isSubmitting}
-                    className="min-w-[120px]"
+                    className="w-full sm:w-auto"
                   >
                     {isSubmitting ? "Running..." : "Re-run this task"}
                   </Button>
@@ -154,7 +158,7 @@ export function RestartJobModal({
                   variant="destructive"
                   onClick={() => onConfirm({ singleTask: false })}
                   disabled={isSubmitting}
-                  className="min-w-[80px]"
+                  className="w-full sm:w-auto"
                 >
                   {isSubmitting ? "Restarting..." : "Restart"}
                 </Button>

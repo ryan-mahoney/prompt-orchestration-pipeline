@@ -438,7 +438,7 @@ export async function handleJobRestart(req, res, jobId, dataDir, sendJson) {
     // Note: Express's json() middleware already parsed the body into req.body
     const body = req.body || {};
 
-    const { fromTask, singleTask } = body;
+    const { fromTask, singleTask, continueAfter } = body;
 
     // Begin restart guard
     beginRestart(jobId);
@@ -468,7 +468,7 @@ export async function handleJobRestart(req, res, jobId, dataDir, sendJson) {
       PO_CURRENT_DIR: path.join(base, "pipeline-data", "current"),
       PO_COMPLETE_DIR: path.join(base, "pipeline-data", "complete"),
       ...(fromTask && { PO_START_FROM_TASK: fromTask }),
-      ...(singleTask && { PO_RUN_SINGLE_TASK: "true" }),
+      ...(singleTask && !continueAfter && { PO_RUN_SINGLE_TASK: "true" }),
     };
 
     const child = spawn(process.execPath, [runnerPath, jobId], {
@@ -482,11 +482,13 @@ export async function handleJobRestart(req, res, jobId, dataDir, sendJson) {
 
     // Send success response
     const mode =
-      fromTask && singleTask === true
-        ? "single-task"
-        : fromTask
-          ? "partial"
-          : "clean-slate";
+      fromTask && singleTask && continueAfter
+        ? "single-task-continue"
+        : fromTask && singleTask
+          ? "single-task"
+          : fromTask
+            ? "partial"
+            : "clean-slate";
     sendJson(res, 202, {
       ok: true,
       jobId,

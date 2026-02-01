@@ -71,14 +71,10 @@ function initializeWatcher() {
   if (!base) {
     if (process.env.NODE_ENV !== "test") {
       console.error(
-        "ERROR: PO_ROOT environment variable is required for non-test runs"
+        "ERROR: PO_ROOT environment variable is required for non-test runs",
       );
       throw new Error(
-        "PO_ROOT environment variable is required for non-test runs"
-      );
-    } else {
-      console.warn(
-        "WARNING: PO_ROOT not set, using process.cwd() in test mode"
+        "PO_ROOT environment variable is required for non-test runs",
       );
     }
   }
@@ -123,7 +119,7 @@ function initializeWatcher() {
       // Broadcast updated state: prefer the result returned by recordChange when available
       broadcastStateUpdate(lastState || state.getState());
     },
-    { baseDir: effectiveBase, debounceMs: 200 }
+    { baseDir: effectiveBase, debounceMs: 200 },
   );
 }
 
@@ -147,14 +143,10 @@ async function startServer({ dataDir, port: customPort }) {
     // Require PO_ROOT for non-test runs
     if (!process.env.PO_ROOT && process.env.NODE_ENV !== "test") {
       console.error(
-        "ERROR: PO_ROOT environment variable is required for non-test runs"
+        "ERROR: PO_ROOT environment variable is required for non-test runs",
       );
       throw new Error(
-        "PO_ROOT environment variable is required for non-test runs"
-      );
-    } else if (!process.env.PO_ROOT) {
-      console.warn(
-        "WARNING: PO_ROOT not set, using process.cwd() in test mode"
+        "PO_ROOT environment variable is required for non-test runs",
       );
     }
 
