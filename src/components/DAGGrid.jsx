@@ -588,6 +588,9 @@ function DAGGrid({
       if (options?.singleTask) {
         restartOptions.singleTask = options.singleTask;
       }
+      if (options?.continueAfter) {
+        restartOptions.continueAfter = options.continueAfter;
+      }
 
       await restartJob(jobId, restartOptions);
 

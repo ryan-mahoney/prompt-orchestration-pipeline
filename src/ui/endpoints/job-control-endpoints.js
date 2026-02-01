@@ -964,7 +964,7 @@ export async function handleTaskStart(
         PO_CURRENT_DIR: path.join(base, "pipeline-data", "current"),
         PO_COMPLETE_DIR: path.join(base, "pipeline-data", "complete"),
         PO_START_FROM_TASK: taskId,
-        PO_RUN_SINGLE_TASK: "true",
+        // Note: PO_RUN_SINGLE_TASK is NOT set here so pipeline continues after this task
       };
 
       const child = spawn(process.execPath, [runnerPath, jobId], {
