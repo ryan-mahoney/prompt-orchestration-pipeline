@@ -27,7 +27,12 @@ export const validateWithSchema = (schema, data) => {
     }
   }
 
-  const validateFunction = ajv.compile(schema);
+  // Check if schema already exists, otherwise compile and cache it
+  let validateFunction = schema.$id ? ajv.getSchema(schema.$id) : null;
+  if (!validateFunction) {
+    validateFunction = ajv.compile(schema);
+  }
+
   const isValid = validateFunction(parsedData);
 
   if (isValid) {
