@@ -71,12 +71,6 @@ describe("Moonshot Provider", () => {
 
   describe("isContentFilterError helper", () => {
     it("should return true for 400 status with 'high risk' message", async () => {
-      // Arrange
-      const error = {
-        status: 400,
-        message: "[400] The request was rejected because it was considered high risk",
-      };
-
       // Act
       const { moonshotChat } = await import("../src/providers/moonshot.js");
       const mockResponse = {
