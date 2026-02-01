@@ -245,7 +245,14 @@ export async function startOrchestrator(opts) {
 
   watcher.on("add", (file) => {
     // Return promise so tests awaiting the add handler block until processing completes
-    return handleSeedAdd(file);
+    // Catch rejections to prevent unhandled promise rejection crashes
+    return handleSeedAdd(file).catch((error) => {
+      logger.error("Failed to handle seed file", {
+        file,
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      });
+    });
   });
 
   async function stop() {
@@ -380,65 +387,30 @@ function spawnRunner(
 
     child.on("exit", (code, signal) => {
       running.delete(jobId);
-
-      // Write job completion log synchronously
-      if (fileIO) {
-        try {
-          fileIO.writeLogSync(
-            generateLogName(jobId, "orchestrator", LogEvent.COMPLETE),
-            JSON.stringify(
-              {
-                jobId,
-                exitCode: code,
-                signal: signal,
-                timestamp: new Date().toISOString(),
-                completionType: code === 0 ? "success" : "failure",
-              },
-              null,
-              2
-            ),
-            { mode: "replace" }
-          );
-        } catch (error) {
-          logger.error("Failed to write job completion log", {
-            jobId,
-            error: error.message,
-          });
-        }
-      }
+      // Note: We intentionally don't write completion logs here because
+      // the pipeline-runner moves the job directory from current/ to complete/
+      // before exiting. Writing here would create a ghost directory under current/
+      // due to the race condition between fs.rename() and this exit handler.
+      // The pipeline-runner already writes its own execution logs and runs.jsonl.
+      logger.log("Pipeline runner exited", {
+        jobId,
+        exitCode: code,
+        signal: signal,
+        completionType: code === 0 ? "success" : "failure",
+      });
     });
 
     child.on("error", (error) => {
       running.delete(jobId);
-
-      // Write job error log synchronously
-      if (fileIO) {
-        try {
-          fileIO.writeLogSync(
-            generateLogName(jobId, "orchestrator", LogEvent.ERROR),
-            JSON.stringify(
-              {
-                jobId,
-                error: {
-                  message: error.message,
-                  name: error.name,
-                  code: error.code,
-                },
-                timestamp: new Date().toISOString(),
-                completionType: "error",
-              },
-              null,
-              2
-            ),
-            { mode: "replace" }
-          );
-        } catch (logError) {
-          logger.error("Failed to write job error log", {
-            jobId,
-            error: logError.message,
-          });
-        }
-      }
+      // Log spawn errors but don't write to filesystem to avoid race conditions
+      logger.error("Pipeline runner spawn error", {
+        jobId,
+        error: {
+          message: error.message,
+          name: error.name,
+          code: error.code,
+        },
+      });
     });
 
     // In test mode: return immediately; in real mode you might await readiness
