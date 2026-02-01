@@ -24,9 +24,68 @@ import {
 const sections = [
   { id: "environment", label: "Environment", icon: Key },
   { id: "getting-started", label: "Getting Started", icon: FileText },
+  { id: "pipeline-config", label: "Pipeline Config", icon: Folder },
   { id: "io-api", label: "IO API", icon: Database },
   { id: "llm-api", label: "LLM API", icon: Cpu },
   { id: "validation", label: "Validation", icon: Shield },
+];
+
+// Sample pipeline.json for documentation
+const samplePipelineJson = {
+  name: "content-generation",
+  version: "1.0.0",
+  description: "Demo pipeline showcasing multi-stage LLM workflows",
+  tasks: ["research", "analysis", "synthesis", "formatting"],
+  taskConfig: {
+    research: {
+      maxRetries: 3,
+    },
+  },
+  llm: {
+    provider: "anthropic",
+    model: "claude-sonnet-4-20250514",
+  },
+};
+
+// Pipeline.json field definitions
+const pipelineFields = [
+  {
+    name: "name",
+    required: true,
+    type: "string",
+    description: "Unique identifier for the pipeline. Used to reference this pipeline from seed files.",
+  },
+  {
+    name: "version",
+    required: false,
+    type: "string",
+    description: "Semantic version of the pipeline (e.g., \"1.0.0\"). Useful for tracking changes.",
+  },
+  {
+    name: "description",
+    required: false,
+    type: "string",
+    description: "Human-readable description of what this pipeline does.",
+  },
+  {
+    name: "tasks",
+    required: true,
+    type: "string[]",
+    description: "Ordered array of task names to execute. Each task must be registered in the task index.",
+  },
+  {
+    name: "taskConfig",
+    required: false,
+    type: "object",
+    description: "Per-task configuration overrides. Keys are task names, values are config objects passed to stages.",
+  },
+  {
+    name: "llm",
+    required: false,
+    type: "{ provider, model }",
+    description: "Pipeline-level LLM override. When set, ALL task LLM calls are routed to this provider/model.",
+    isNew: true,
+  },
 ];
 
 // IO Functions organized by category
@@ -401,6 +460,118 @@ export default function CodePage() {
                 <CopyableCodeBlock maxHeight="200px">
                   {JSON.stringify(sampleSeed, null, 2)}
                 </CopyableCodeBlock>
+              </div>
+            </div>
+          </CollapsibleSection>
+
+          {/* Pipeline Config Section */}
+          <CollapsibleSection
+            id="pipeline-config"
+            title="Pipeline Configuration (pipeline.json)"
+            icon={Folder}
+            defaultOpen={true}
+          >
+            <Text as="p" size="3" className="text-gray-600 mb-4">
+              Each pipeline is defined by a <Code size="2">pipeline.json</Code> file
+              in its directory. This file specifies which tasks to run and optional
+              configuration overrides.
+            </Text>
+
+            <div className="space-y-6">
+              {/* Fields Table */}
+              <div>
+                <Text size="2" weight="medium" className="mb-3 block">
+                  Fields
+                </Text>
+                <div className="border border-gray-200 rounded-lg overflow-hidden">
+                  <Table.Root>
+                    <Table.Header>
+                      <Table.Row>
+                        <Table.ColumnHeaderCell className="bg-gray-50">Field</Table.ColumnHeaderCell>
+                        <Table.ColumnHeaderCell className="bg-gray-50">Type</Table.ColumnHeaderCell>
+                        <Table.ColumnHeaderCell className="bg-gray-50">Required</Table.ColumnHeaderCell>
+                        <Table.ColumnHeaderCell className="bg-gray-50">Description</Table.ColumnHeaderCell>
+                      </Table.Row>
+                    </Table.Header>
+                    <Table.Body>
+                      {pipelineFields.map((field) => (
+                        <Table.Row key={field.name}>
+                          <Table.RowHeaderCell>
+                            <Flex align="center" gap="2">
+                              <Code size="2">{field.name}</Code>
+                              {field.isNew && (
+                                <span className="px-1.5 py-0.5 text-xs font-medium bg-green-100 text-green-700 rounded">
+                                  NEW
+                                </span>
+                              )}
+                            </Flex>
+                          </Table.RowHeaderCell>
+                          <Table.Cell>
+                            <Code size="1" className="text-gray-600">{field.type}</Code>
+                          </Table.Cell>
+                          <Table.Cell>
+                            {field.required ? (
+                              <span className="text-red-600 font-medium">Yes</span>
+                            ) : (
+                              <span className="text-gray-400">No</span>
+                            )}
+                          </Table.Cell>
+                          <Table.Cell className="text-gray-600 text-sm">
+                            {field.description}
+                          </Table.Cell>
+                        </Table.Row>
+                      ))}
+                    </Table.Body>
+                  </Table.Root>
+                </div>
+              </div>
+
+              {/* Example */}
+              <div>
+                <Text size="2" weight="medium" className="mb-2 block">
+                  Example
+                </Text>
+                <CopyableCodeBlock maxHeight="280px">
+                  {JSON.stringify(samplePipelineJson, null, 2)}
+                </CopyableCodeBlock>
+              </div>
+
+              {/* LLM Override Details */}
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <Flex align="center" gap="2" className="mb-2">
+                  <Cpu className="h-4 w-4 text-blue-600" />
+                  <Text size="2" weight="medium" className="text-blue-800">
+                    Pipeline-Level LLM Override
+                  </Text>
+                  <span className="px-1.5 py-0.5 text-xs font-medium bg-green-100 text-green-700 rounded">
+                    NEW
+                  </span>
+                </Flex>
+                <Text as="p" size="2" className="text-blue-700 mb-3">
+                  When the <Code size="2">llm</Code> field is set in pipeline.json, 
+                  ALL LLM calls from task stages are automatically routed to the 
+                  specified provider and model — regardless of what the task code requests.
+                </Text>
+                <ul className="space-y-1 text-sm text-blue-700">
+                  <li className="flex items-start gap-2">
+                    <span className="text-blue-500 mt-0.5">•</span>
+                    <span>Tasks calling <Code size="1">llm.deepseek.chat()</Code> will use the override provider/model</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="text-blue-500 mt-0.5">•</span>
+                    <span>Original provider/model is preserved in <Code size="1">metadata.originalProvider</Code></span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="text-blue-500 mt-0.5">•</span>
+                    <span>Useful for A/B testing, cost control, or switching providers during outages</span>
+                  </li>
+                </ul>
+              </div>
+
+              {/* File Location */}
+              <div className="text-sm text-gray-500">
+                <span>Location: </span>
+                <Code size="2">{"{pipelineDir}"}/pipeline.json</Code>
               </div>
             </div>
           </CollapsibleSection>

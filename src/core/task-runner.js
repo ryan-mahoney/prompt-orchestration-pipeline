@@ -1,7 +1,7 @@
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import fs from "fs";
-import { createLLM, getLLMEvents } from "../llm/index.js";
+import { createLLM, createLLMWithOverride, getLLMEvents } from "../llm/index.js";
 import { loadFreshModule } from "./module-loader.js";
 import { loadEnvironment } from "./environment.js";
 import { createTaskFileIO, generateLogName } from "./file-io.js";
@@ -353,7 +353,11 @@ export async function runPipeline(modulePath, initialContext = {}) {
     initialContext.envLoaded = true;
   }
 
-  if (!initialContext.llm) initialContext.llm = createLLM();
+  if (!initialContext.llm) {
+    initialContext.llm = initialContext.llmOverride
+      ? createLLMWithOverride(initialContext.llmOverride)
+      : createLLM();
+  }
 
   const llmMetrics = [];
   const llmEvents = getLLMEvents();

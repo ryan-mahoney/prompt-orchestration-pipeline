@@ -889,6 +889,72 @@ describe("LLM Module", () => {
     });
   });
 
+  describe("createLLMWithOverride", () => {
+    it("should return normal LLM when override is null", () => {
+      // Arrange
+      const { createLLMWithOverride } = llmModule;
+
+      // Act
+      const llm = createLLMWithOverride(null);
+
+      // Assert - should have same structure as createLLM()
+      expect(llm).toHaveProperty("openai");
+      expect(llm).toHaveProperty("deepseek");
+    });
+
+    it("should return normal LLM when override is undefined", () => {
+      // Arrange
+      const { createLLMWithOverride } = llmModule;
+
+      // Act
+      const llm = createLLMWithOverride(undefined);
+
+      // Assert
+      expect(llm).toHaveProperty("openai");
+      expect(llm).toHaveProperty("deepseek");
+    });
+
+    it("should return normal LLM when override lacks provider", () => {
+      // Arrange
+      const { createLLMWithOverride } = llmModule;
+
+      // Act
+      const llm = createLLMWithOverride({ model: "some-model" });
+
+      // Assert
+      expect(llm).toHaveProperty("openai");
+      expect(llm).toHaveProperty("deepseek");
+    });
+
+    it("should create proxied LLM when override has provider", () => {
+      // Arrange
+      const { createLLMWithOverride } = llmModule;
+      const override = { provider: "openai", model: "gpt-4" };
+
+      // Act
+      const llm = createLLMWithOverride(override);
+
+      // Assert - should have provider objects that are proxied
+      expect(llm).toHaveProperty("openai");
+      expect(llm).toHaveProperty("deepseek");
+      expect(typeof llm.deepseek).toBe("object");
+      expect(typeof llm.deepseek.chat).toBe("function");
+    });
+
+    it("should have proxied methods that return functions", () => {
+      // Arrange
+      const { createLLMWithOverride } = llmModule;
+      const override = { provider: "openai", model: "gpt-4" };
+
+      // Act
+      const llm = createLLMWithOverride(override);
+
+      // Assert - provider methods should be functions
+      expect(typeof llm.deepseek.chat).toBe("function");
+      expect(typeof llm.openai.gpt35Turbo).toBe("function");
+    });
+  });
+
   describe("content shape consistency across providers", () => {
     it("should return objects for JSON mode and strings for text mode", async () => {
       // Test both providers return objects when JSON is requested
