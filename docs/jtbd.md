@@ -1,76 +1,94 @@
-Looking at this through a Jobs-to-be-Done lens, here are the key jobs a creative prompt engineer needs to accomplish when building and orchestrating LLM pipelines on their local machine:
+# Jobs to be Done (JTBD)
 
-## Core Functional Jobs
+This document outlines the core "Jobs to be Done" for the Prompt Orchestration Pipeline. It maps the system's specific architectural features to the user's underlying motivations and desired outcomes, focusing on the persona of an **AI Engineer** or **Systems Integrator** building autonomous workflows.
 
-**Pipeline Creation & Design**
+## Primary Job: Orchestrate Reliable, Multi-Stage AI Workflows
+**"When I am running complex, long-duration AI tasks locally, I want to ensure they complete successfully even if individual components fail, so that I don't waste time or money monitoring fragile scripts."**
 
-- Rapidly prototype new pipeline architectures without writing extensive code
-- Visually map the flow of context and data through multiple processing stages
-- Test different prompt combinations and sequences to find optimal configurations
-- Clone and modify successful pipelines as templates for new challenges
-- Version control pipeline configurations to track what worked and what didn't
+### Functional Jobs
 
-**Context Management**
+#### 1. Ensure Execution Resilience
+*   **Situation**: Running experimental or unstable task code that might crash the Node.js process.
+*   **Motivation**: Prevent a single task failure from bringing down the entire orchestration system or affecting other running jobs.
+*   **Solution Mapping**:
+    *   **Process Isolation**: Each pipeline runs in a dedicated child process.
+    *   **Symlink Bridge**: Ensures deterministic dependency resolution (`node_modules`) for every run, regardless of the environment state.
+    *   **Outcome**: "I can run volatile, experimental code with confidence, knowing the orchestrator will survive crashes."
 
-- Accumulate and layer contextual knowledge from multiple sources in the right order
-- Selectively filter and prune context to stay within token limits while preserving essential information
-- Transform raw data into LLM-optimized formats (structured prompts, examples, constraints)
-- Create reusable context modules that can be mixed and matched across pipelines
-- Debug which context elements are helping vs. hurting model performance
+#### 2. Recover from Interruption
+*   **Situation**: An API timeout, network error, or logic bug causes a pipeline to fail halfway through a 10-step process.
+*   **Motivation**: Resume execution from the point of failure without re-running expensive upstream tasks (and paying for tokens again).
+*   **Solution Mapping**:
+    *   **Atomic State Persistence**: Status is saved to `tasks-status.json` after every stage.
+    *   **Resumability (`resetJobFromTask`)**: Built-in capability to restart a job from a specific task while preserving previous artifacts.
+    *   **Outcome**: "I can fix a bug in step 5 and resume exactly where I left off, saving time and API costs."
 
-**Pipeline Orchestration & Execution**
+#### 3. Enforce Output Quality Automomously
+*   **Situation**: LLMs produce variable output that sometimes fails strict schema or quality requirements.
+*   **Motivation**: Automatically correct errors without human intervention.
+*   **Solution Mapping**:
+    *   **Standardized 11-Stage Lifecycle**: Every task follows a rigid flow including `validateStructure`, `validateQuality`, `critique`, and `refine`.
+    *   **Refinement Loops**: Configurable loops that feed errors back to the model to self-correct.
+    *   **Outcome**: "I can trust the system to catch and fix malformed JSON or poor responses before I ever see them."
 
-- Schedule and queue multiple pipeline runs with different parameters
-- Monitor pipeline execution in real-time to identify bottlenecks or failures
-- Pause, resume, or abort pipelines based on intermediate results
-- Parallelize independent pipeline branches to reduce total execution time
-- Set up conditional routing based on LLM outputs or confidence scores
+---
 
-**Performance Optimization**
+## Secondary Job: Gain Radical Observability
+**"When I have multiple agents running in the background, I want to see exactly what they are doing and how much they are costing in real-time, so that I can optimize performance and debug logic errors."**
 
-- Profile token usage and costs across different pipeline configurations
-- A/B test alternative prompt strategies against the same problem set
-- Identify and eliminate redundant processing steps
-- Cache intermediate results to avoid re-processing
-- Balance response quality against speed and cost constraints
+### Functional Jobs
 
-## Emotional/Social Jobs
+#### 1. Monitor Real-Time State
+*   **Situation**: Waiting for a "black box" script to finish without knowing if it's hung or working.
+*   **Motivation**: See the exact stage, progress, and logs of every active job instantly.
+*   **Solution Mapping**:
+    *   **Server-Sent Events (SSE)**: State changes push updates to the UI immediately.
+    *   **Dashboard**: Centralized view of all jobs (Current, Errors, Complete).
+    *   **Outcome**: "I know instantly if a job is stuck or progressing without refreshing the page."
 
-**Professional Identity**
+#### 2. Track & Control Costs
+*   **Situation**: Running expensive models (e.g., GPT-4, Opus) across iterating loops.
+*   **Motivation**: Understand the cost impact of pipeline changes and spot runaway loops.
+*   **Solution Mapping**:
+    *   **Token Breakdown**: Detailed input/output token counts per task.
+    *   **Cost Calculation**: Real-time cost estimation based on provider pricing.
+    *   **Outcome**: "I can make informed decisions about which model to use for which task based on actual cost data."
 
-- Demonstrate expertise through sophisticated pipeline architectures
-- Build a portfolio of solved "impossible" problems
-- Share and discuss pipeline patterns with a community of practitioners
-- Establish reputation as someone who can make LLMs do things others can't
+#### 3. Debug Execution Logic
+*   **Situation**: A pipeline fails or produces weird output.
+*   **Motivation**: Trace the exact inputs, outputs, and internal "thought process" of the agent.
+*   **Solution Mapping**:
+    *   **Artifact Management**: dedicated storage for every input (seed), output, and execution log.
+    *   **Stage-Level Logging**: Granular logs for every step of the 11-stage lifecycle.
+    *   **Outcome**: "I can surgically inspect the context and response at any specific stage of execution."
 
-**Cognitive Load Management**
+---
 
-- Offload mental complexity of managing multiple prompts and contexts
-- Focus on creative problem-solving rather than implementation details
-- Maintain flow state while iterating on pipeline designs
-- Reduce anxiety about forgetting crucial context elements
+## Tertiary Job: Integrate & Scale
+**"When I am satisfied with a pipeline design, I want to integrate it easily with other systems and scale its usage, so that it becomes a reliable part of my wider infrastructure."**
 
-## Supporting Jobs
+### Functional Jobs
 
-**Knowledge Management**
+#### 1. Integrate via Files (The "Drop-Box" Pattern)
+*   **Situation**: Connecting the pipeline to a legacy system, a script, or a human workflow.
+*   **Motivation**: Trigger jobs without writing complex API integrations or webhooks.
+*   **Solution Mapping**:
+    *   **Watch Folder Trigger**: Simply drop a JSON file into `pending/` to start a job.
+    *   **Atomic State Transitions**: File moves (`pending` -> `current` -> `complete`) signal status changes reliably to external watchers.
+    *   **Outcome**: "I can integrate this system with *anything* that can write a JSON file."
 
-- Document why specific pipeline architectures work for certain problem types
-- Build a searchable library of prompt patterns and techniques
-- Tag and categorize pipelines by problem domain, difficulty, and approach
-- Export pipeline configurations for sharing or backup
+#### 2. Avoid Vendor Lock-In
+*   **Situation**: A provider changes pricing, or a new, better model is released.
+*   **Motivation**: Switch backend models without rewriting task logic.
+*   **Solution Mapping**:
+    *   **Unified LLM API**: Support for OpenAI, Anthropic, DeepSeek, Gemini, Moonshot, Zhipu, and Claude Code via a single interface.
+    *   **Configuration Registry**: Switch providers globally or per-pipeline via config.
+    *   **Outcome**: "I can migrate from GPT-4 to DeepSeek-V3 in minutes by changing a config string."
 
-**Collaboration & Scaling**
-
-- Share successful pipelines with team members
-- Standardize pipeline patterns across an organization
-- Train others on effective pipeline design principles
-- Integrate pipelines with existing workflows and tools
-
-**Experimentation & Learning**
-
-- Safely test risky or expensive prompts in isolated environments
-- Compare how different models handle the same pipeline
-- Discover emergent capabilities through systematic exploration
-- Learn from failed attempts through detailed execution logs
-
-These jobs suggest the UX should prioritize visual pipeline building, real-time monitoring, easy experimentation, and strong organization/sharing capabilities. The interface should make complex orchestrations feel manageable while providing power users with fine-grained control when needed.
+#### 3. Manage Complexity via Registry
+*   **Situation**: Managing dozens of different pipeline types (e.g., "Content Gen", "Data Analysis", "Code Review").
+*   **Motivation**: Keep definitions organized and modular.
+*   **Solution Mapping**:
+    *   **Registry-Based Loading**: Decoupled `registry.json` allows dynamic loading of pipeline definitions.
+    *   **Task Mapping**: Reuse specific task logic (e.g., "Generic Research") across multiple different pipelines.
+    *   **Outcome**: "I can compose new complex workflows from a library of existing, tested task modules."
