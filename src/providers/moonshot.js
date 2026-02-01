@@ -103,7 +103,7 @@ export async function moonshotChat({
           const enhancedError = createProviderError(
             response.status,
             errorBody,
-            "Invalid Moonshot API key. Please verify your MOONSHOT_API_KEY environment variable is correct and has not expired. Get your API key at https://platform.moonshot.cn/",
+            "Invalid Moonshot API key. Please verify your MOONSHOT_API_KEY environment variable is correct and has not expired. Get your API key at https://platform.moonshot.ai/",
           );
           throw enhancedError;
         }
