@@ -16,12 +16,16 @@
   - `maxRetries` - Number (default 3)
   - Additional provider-specific parameters via rest spread
 
-### 2. **JSON Mode Enforcement**
+### 2. **Response Format Handling**
 
-- **MUST** call `ensureJsonResponseFormat(responseFormat, "ProviderName")` at the start
-- **MUST** enforce JSON response format - reject calls without proper JSON responseFormat
-- **MUST** parse all responses as JSON using `tryParseJSON()`
-- **MUST** throw `ProviderJsonParseError` if JSON parsing fails
+- **JSON Mode**: If `responseFormat` indicates JSON (e.g., `"json"`, `"json_object"`, or `json_schema`):
+    - **MUST** configure the provider API to output JSON (if supported).
+    - **MUST** parse the response using `tryParseJSON()`.
+    - **MUST** throw `ProviderJsonParseError` if parsing fails.
+    - **MUST** return the parsed object in the `content` field.
+- **Text Mode**: If `responseFormat` is not JSON:
+    - **MUST** return the raw string in the `content` field.
+- **Markdown Cleanup**: ALWAYS use `stripMarkdownFences()` on the raw text before parsing or returning, to handle providers that wrap output in code blocks.
 
 ### 3. **API Key Management**
 
@@ -46,14 +50,14 @@ Return an object with this structure:
 
 ```javascript
 {
-  content: parsed,      // The parsed JSON object (required)
-  text: rawText,       // Optional: raw text response before parsing
-  usage: {             // Token usage statistics
+  content: parsed | string, // Parsed JSON object OR raw string
+  text: rawText,           // Raw text response before parsing
+  usage: {                 // Token usage statistics
     prompt_tokens: number,
     completion_tokens: number,
     total_tokens: number
   },
-  raw: response        // Optional: complete API response
+  raw: response            // Optional: complete API response
 }
 ```
 
@@ -108,8 +112,8 @@ import {
   extractMessages,
   isRetryableError,
   sleep,
+  stripMarkdownFences,
   tryParseJSON,
-  ensureJsonResponseFormat,
   ProviderJsonParseError,
 } from "./base.js";
 
@@ -122,16 +126,19 @@ export async function providerChat({
   // ... other parameters
   maxRetries = 3,
 }) {
-  // 1. Enforce JSON mode
-  ensureJsonResponseFormat(responseFormat, "ProviderName");
-
-  // 2. Check API key
+  // 1. Check API key
   if (!process.env.PROVIDER_API_KEY) {
     throw new Error("Provider API key not configured");
   }
 
-  // 3. Extract messages
+  // 2. Extract messages
   const { systemMsg, userMsg } = extractMessages(messages);
+
+  // 3. Determine JSON mode
+  const isJsonMode =
+    responseFormat?.json_schema ||
+    responseFormat?.type === "json_object" ||
+    responseFormat === "json";
 
   // 4. Retry loop
   let lastError;
@@ -142,10 +149,32 @@ export async function providerChat({
 
     try {
       // 5. Make API call
-      // 6. Parse JSON response
-      // 7. Return formatted response
+      const rawText = await callProviderApi(...);
+      
+      // 6. Strip fences
+      const text = stripMarkdownFences(rawText);
+
+      // 7. Parse JSON if requested
+      if (isJsonMode) {
+        const parsed = tryParseJSON(text);
+        if (!parsed) {
+          throw new ProviderJsonParseError(
+            "ProviderName",
+            model,
+            text.substring(0, 200),
+            "Failed to parse JSON response"
+          );
+        }
+        return { content: parsed, text, usage: ... };
+      }
+
+      // 8. Return text response
+      return { content: text, text, usage: ... };
+
     } catch (error) {
-      // 8. Handle errors and retries
+      // 9. Handle errors and retries
+      lastError = error;
+      if (!isRetryableError(error)) throw error;
     }
   }
 

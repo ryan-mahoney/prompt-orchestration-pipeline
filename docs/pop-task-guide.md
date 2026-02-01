@@ -253,16 +253,67 @@ Each stage receives:
     preProcessing,       // Output from preProcessing
     promptTemplating,    // Output from promptTemplating
     // ... other stage outputs
-  },
-  output,                // Previous non-validation stage output
-}
-```
-
----
-
-## Summary
-
-1. Export only valid stage names: `ingestion`, `preProcessing`, `promptTemplating`, `inference`, `parsing`, `validateStructure`, `validateQuality`, `critique`, `refine`, `finalValidation`, `integration`
-2. Return `{ output, flags }` from every stage
-3. Custom helper functions are valid JavaScript but will not be called by the pipeline—only use them if called from within a valid stage
-4. Most simple tasks need only: `ingestion` → `promptTemplating` → `inference`
+    },
+    output,                // Previous non-validation stage output
+  }
+  ```
+  
+  ---
+  
+  ## Detailed Stage Reference
+  
+  This reference describes the intent and responsibility of each standard phase. All phases execute sequentially.
+  
+  ### 1. Ingestion
+  **Purpose**: Load and extract raw input data from the seed.
+  **Responsibility**: Read input parameters, extract required fields, and pass data forward.
+  
+  ### 2. PreProcessing
+  **Purpose**: Normalize and prepare input data.
+  **Responsibility**: Clean input formats, deduplicate arrays, set defaults, and sanitize data.
+  
+  ### 3. PromptTemplating
+  **Purpose**: Build structured prompts for the LLM.
+  **Responsibility**: Create system and user prompts, including output format specifications.
+  
+  ### 4. Inference
+  **Purpose**: Execute the LLM call.
+  **Responsibility**: Call the LLM API, handle raw responses, and write initial output artifacts.
+  
+  ### 5. Parsing
+  **Purpose**: Transform raw output into typed structure.
+  **Responsibility**: specific parsing logic if not handled during inference (e.g. complex regex extraction).
+  
+  ### 6. ValidateStructure
+  **Purpose**: Validate response against JSON schema.
+  **Responsibility**: programmatic validation using Ajv or similar. Sets `needsRefinement: true` if invalid.
+  
+  ### 7. ValidateQuality
+  **Purpose**: LLM-based content quality assessment.
+  **Responsibility**: Check for factual consistency, completeness, and specific requirements. Sets `needsRefinement: true` if issues found.
+  
+  ### 8. Critique
+  **Purpose**: Generate improvement instructions.
+  **Responsibility**: If validation failed, analyze errors and generate actionable feedback.
+  
+  ### 9. Refine
+  **Purpose**: Re-run the core task with improvements.
+  **Responsibility**: If `needsRefinement` is true, call LLM again with original prompt + critique.
+  
+  ### 10. FinalValidation
+  **Purpose**: Safety gate for refined output.
+  **Responsibility**: Re-validate structure to ensure refinement didn't break the JSON schema.
+  
+  ### 11. Integration
+  **Purpose**: Persist and organize final results.
+  **Responsibility**: Save final artifacts to databases, files, or trigger downstream workflows.
+  
+  ---
+  
+  ## Summary
+  
+  1. Export only valid stage names: `ingestion`, `preProcessing`, `promptTemplating`, `inference`, `parsing`, `validateStructure`, `validateQuality`, `critique`, `refine`, `finalValidation`, `integration`
+  2. Return `{ output, flags }` from every stage
+  3. Custom helper functions are valid JavaScript but will not be called by the pipeline—only use them if called from within a valid stage
+  4. Most simple tasks need only: `ingestion` → `promptTemplating` → `inference`
+  
