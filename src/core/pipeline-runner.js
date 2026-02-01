@@ -106,6 +106,9 @@ const pipeline = JSON.parse(await fs.readFile(PIPELINE_DEF_PATH, "utf8"));
 // Validate pipeline format early with a friendly error message
 validatePipelineOrThrow(pipeline, PIPELINE_DEF_PATH);
 
+// Extract optional LLM override from pipeline config
+const llmOverride = pipeline.llm || null;
+
 const taskNames = pipeline.tasks.map(getTaskName);
 
 const tasks = (await loadFreshModule(TASK_REGISTRY)).default;
@@ -203,6 +206,7 @@ try {
         taskConfig: pipeline.taskConfig?.[taskName] || {},
         statusPath: tasksStatusPath,
         jobId,
+        llmOverride,
         meta: {
           pipelineTasks: [...pipeline.tasks],
         },

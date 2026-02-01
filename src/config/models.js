@@ -299,6 +299,7 @@ export const DEFAULT_MODEL_BY_PROVIDER = Object.freeze({
   zhipu: ModelAlias.ZAI_GLM_4_6,
   anthropic: ModelAlias.ANTHROPIC_OPUS_4_5, // Updated: Opus 4.5 available at better price
   claudecode: ModelAlias.CLAUDE_CODE_SONNET,
+  moonshot: ModelAlias.MOONSHOT_K2_5, // Latest K2.5 model (Jan 2026)
 });
 
 /**

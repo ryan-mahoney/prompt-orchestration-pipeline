@@ -7,6 +7,7 @@ import {
   claudeCodeChat,
   isClaudeCodeAvailable,
 } from "../providers/claude-code.js";
+import { moonshotChat } from "../providers/moonshot.js";
 import { EventEmitter } from "node:events";
 import { getConfig } from "../core/config.js";
 import {
@@ -62,6 +63,7 @@ export function getAvailableProviders() {
     gemini: !!process.env.GEMINI_API_KEY,
     zhipu: !!process.env.ZHIPU_API_KEY,
     claudecode: isClaudeCodeAvailable(),
+    moonshot: !!process.env.MOONSHOT_API_KEY,
     mock: !!mockProviderInstance,
   };
 }
@@ -582,6 +584,83 @@ export async function chat(options) {
           totalTokens: promptTokens + completionTokens,
         };
       }
+    } else if (provider === "moonshot") {
+      logger.log("Using Moonshot provider");
+      const defaultAlias = DEFAULT_MODEL_BY_PROVIDER["moonshot"];
+      const defaultModelConfig = MODEL_CONFIG[defaultAlias];
+      const defaultModel = defaultModelConfig?.model;
+
+      // Infer JSON format if not explicitly provided
+      const effectiveResponseFormat =
+        responseFormat === undefined ||
+        responseFormat === null ||
+        responseFormat === ""
+          ? shouldInferJsonFormat(messages)
+            ? "json_object"
+            : undefined
+          : responseFormat;
+
+      const moonshotArgs = {
+        messages,
+        model: model || defaultModel,
+        temperature,
+        maxTokens,
+        ...rest,
+      };
+      logger.log("Moonshot call parameters:", {
+        model: moonshotArgs.model,
+        hasMessages: !!moonshotArgs.messages,
+        messageCount: moonshotArgs.messages?.length,
+      });
+      if (stream !== undefined) moonshotArgs.stream = stream;
+      if (topP !== undefined) moonshotArgs.topP = topP;
+      if (frequencyPenalty !== undefined)
+        moonshotArgs.frequencyPenalty = frequencyPenalty;
+      if (presencePenalty !== undefined)
+        moonshotArgs.presencePenalty = presencePenalty;
+      if (stop !== undefined) moonshotArgs.stop = stop;
+      if (effectiveResponseFormat !== undefined) {
+        moonshotArgs.responseFormat = effectiveResponseFormat;
+      }
+
+      logger.log("Calling moonshotChat()...");
+      const result = await moonshotChat(moonshotArgs);
+      logger.log("moonshotChat() returned:", {
+        hasResult: !!result,
+        isStream: typeof result?.[Symbol.asyncIterator] !== "undefined",
+        hasContent: !!result?.content,
+        hasUsage: !!result?.usage,
+      });
+
+      // Streaming mode - return async generator directly
+      if (stream && typeof result?.[Symbol.asyncIterator] !== "undefined") {
+        return result;
+      }
+
+      response = {
+        content: result.content,
+        raw: result.raw,
+      };
+
+      // Use actual usage from moonshot API if available; otherwise estimate
+      if (result?.usage) {
+        const { prompt_tokens, completion_tokens, total_tokens } = result.usage;
+        usage = {
+          promptTokens: prompt_tokens,
+          completionTokens: completion_tokens,
+          totalTokens: total_tokens,
+        };
+      } else {
+        const promptTokens = estimateTokens(systemMsg + userMsg);
+        const completionTokens = estimateTokens(
+          typeof result === "string" ? result : JSON.stringify(result)
+        );
+        usage = {
+          promptTokens,
+          completionTokens,
+          totalTokens: promptTokens + completionTokens,
+        };
+      }
     } else {
       logger.error("Unknown provider:", provider);
       throw new Error(`Provider ${provider} not yet implemented`);
@@ -804,6 +883,48 @@ export function createLLM() {
 // Create named models API (explicit function for clarity)
 export function createNamedModelsAPI() {
   return buildProviderFunctions(MODEL_CONFIG);
+}
+
+// Create LLM with pipeline-level override
+// When override is set, all provider method calls are intercepted and routed to the override provider/model
+export function createLLMWithOverride(override) {
+  if (!override?.provider) {
+    return createLLM();
+  }
+
+  const baseLLM = createLLM();
+
+  return new Proxy(baseLLM, {
+    get(target, providerKey) {
+      const providerObj = target[providerKey];
+      if (typeof providerObj !== "object" || providerObj === null) {
+        return providerObj;
+      }
+
+      return new Proxy(providerObj, {
+        get(providerTarget, methodKey) {
+          // Skip non-string keys (symbols, etc.)
+          if (typeof methodKey !== "string") {
+            return providerTarget[methodKey];
+          }
+
+          // When override is active, return a function for ANY method key
+          // This routes all method calls to the override provider/model
+          return (options = {}) =>
+            chat({
+              ...options,
+              provider: override.provider,
+              model: override.model,
+              metadata: {
+                ...options.metadata,
+                originalProvider: providerKey,
+                originalModel: options.model,
+              },
+            });
+        },
+      });
+    },
+  });
 }
 
 // Separate function for high-level LLM interface (used by llm.test.js)
