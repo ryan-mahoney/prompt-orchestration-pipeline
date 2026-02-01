@@ -7,9 +7,48 @@ import {
   ProviderJsonParseError,
   createProviderError,
 } from "./base.js";
+import { deepseekChat } from "./deepseek.js";
 import { createLogger } from "../core/logger.js";
 
 const logger = createLogger("Moonshot");
+
+function isContentFilterError(error) {
+  return (
+    error.status === 400 &&
+    /high risk|rejected/i.test(error.message)
+  );
+}
+
+async function fallbackToDeepSeek({
+  messages,
+  temperature,
+  maxTokens,
+  responseFormat,
+  topP,
+  frequencyPenalty,
+  presencePenalty,
+  stop,
+  stream,
+  thinking,
+}) {
+  const fallbackModel = thinking === "enabled" ? "deepseek-reasoner" : "deepseek-chat";
+  logger.warn("Moonshot content filter triggered, falling back to DeepSeek", {
+    fallbackModel,
+    thinking,
+  });
+  return deepseekChat({
+    messages,
+    model: fallbackModel,
+    temperature,
+    maxTokens,
+    responseFormat,
+    topP,
+    frequencyPenalty,
+    presencePenalty,
+    stop,
+    stream,
+  });
+}
 
 export async function moonshotChat({
   messages,
@@ -22,6 +61,7 @@ export async function moonshotChat({
   presencePenalty,
   stop,
   stream = false,
+  thinking = "enabled",
   maxRetries = 3,
 }) {
   const isJsonMode =
@@ -161,6 +201,22 @@ export async function moonshotChat({
         errorMessage: error.message || error,
         errorStatus: error.status,
       });
+
+      // Check for content filter error and attempt DeepSeek fallback
+      if (isContentFilterError(error) && process.env.DEEPSEEK_API_KEY) {
+        return fallbackToDeepSeek({
+          messages,
+          temperature,
+          maxTokens,
+          responseFormat,
+          topP,
+          frequencyPenalty,
+          presencePenalty,
+          stop,
+          stream,
+          thinking,
+        });
+      }
 
       if (error.status === 401) throw error;
 
