@@ -5,6 +5,7 @@ import {
   stripMarkdownFences,
   tryParseJSON,
   ProviderJsonParseError,
+  createProviderError,
 } from "./base.js";
 import { createLogger } from "../core/logger.js";
 
@@ -23,32 +24,46 @@ export async function moonshotChat({
   stream = false,
   maxRetries = 3,
 }) {
-  if (!process.env.MOONSHOT_API_KEY) {
-    throw new Error("Moonshot API key not configured");
-  }
-
-  const { systemMsg, userMsg } = extractMessages(messages);
-
   const isJsonMode =
     responseFormat?.type === "json_object" ||
     responseFormat?.type === "json_schema" ||
     responseFormat === "json" ||
     responseFormat === "json_object";
 
+  logger.log("moonshotChat called", { model, stream, maxRetries, isJsonMode });
+
+  if (!process.env.MOONSHOT_API_KEY) {
+    throw new Error("Moonshot API key not configured");
+  }
+
+  const { systemMsg, userMsg } = extractMessages(messages);
+
+  logger.log("Messages extracted", {
+    systemMsgLength: systemMsg?.length,
+    userMsgLength: userMsg?.length,
+  });
+
   let lastError;
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     if (attempt > 0) {
-      await sleep(Math.pow(2, attempt) * 1000);
+      const sleepMs = Math.pow(2, attempt) * 1000;
+      logger.log("Retry attempt", { attempt, sleepMs });
+      await sleep(sleepMs);
     }
 
     try {
+      logger.log("Sending request to Moonshot API", { attempt, model });
+      // Thinking models only accept temperature=1
+      //const isThinkingModel = model.includes("thinking");
+      //const effectiveTemperature = isThinkingModel ? 1 : temperature;
+
       const requestBody = {
         model,
         messages: [
           { role: "system", content: systemMsg },
           { role: "user", content: userMsg },
         ],
-        temperature,
+        temperature: 1,
         max_tokens: maxTokens,
         top_p: topP,
         frequency_penalty: frequencyPenalty,
@@ -61,8 +76,9 @@ export async function moonshotChat({
         requestBody.response_format = { type: "json_object" };
       }
 
+      logger.log("About to call fetch...");
       const response = await fetch(
-        "https://api.moonshot.cn/v1/chat/completions",
+        "https://api.moonshot.ai/v1/chat/completions",
         {
           method: "POST",
           headers: {
@@ -70,23 +86,48 @@ export async function moonshotChat({
             Authorization: `Bearer ${process.env.MOONSHOT_API_KEY}`,
           },
           body: JSON.stringify(requestBody),
-        }
+        },
       );
+      logger.log("Fetch returned", {
+        status: response.status,
+        ok: response.ok,
+      });
 
       if (!response.ok) {
-        const error = await response
+        const errorBody = await response
           .json()
           .catch(() => ({ error: response.statusText }));
-        throw { status: response.status, ...error };
+
+        // Provide more helpful error message for authentication failures
+        if (response.status === 401) {
+          const enhancedError = createProviderError(
+            response.status,
+            errorBody,
+            "Invalid Moonshot API key. Please verify your MOONSHOT_API_KEY environment variable is correct and has not expired. Get your API key at https://platform.moonshot.ai/",
+          );
+          throw enhancedError;
+        }
+
+        throw createProviderError(
+          response.status,
+          errorBody,
+          response.statusText,
+        );
       }
 
       // Step 6: Handle streaming response path
       if (stream) {
+        logger.log("Handling streaming response");
         return createStreamGenerator(response.body);
       }
 
       // Step 7: Handle non-streaming response parsing
+      logger.log("Parsing JSON response...");
       const data = await response.json();
+      logger.log("JSON parsed successfully", {
+        hasChoices: !!data.choices,
+        choicesCount: data.choices?.length,
+      });
       const rawContent = data.choices[0].message.content;
 
       const content = stripMarkdownFences(rawContent);
@@ -98,7 +139,7 @@ export async function moonshotChat({
             "Moonshot",
             model,
             content.substring(0, 200),
-            "Failed to parse JSON response from Moonshot API"
+            "Failed to parse JSON response from Moonshot API",
           );
         }
         return {
@@ -115,6 +156,11 @@ export async function moonshotChat({
       };
     } catch (error) {
       lastError = error;
+      logger.warn("Attempt failed", {
+        attempt,
+        errorMessage: error.message || error,
+        errorStatus: error.status,
+      });
 
       if (error.status === 401) throw error;
 

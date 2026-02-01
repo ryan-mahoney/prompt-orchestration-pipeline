@@ -2,5 +2,9 @@
   "name": "content-generation",
   "version": "1.0.0",
   "description": "Demo pipeline showcasing multi-stage LLM workflows",
-  "tasks": ["research", "analysis", "reanalyze", "synthesis", "formatting"]
+  "tasks": ["research", "analysis", "reanalyze", "synthesis", "formatting"],
+  "llm": {
+    "provider": "moonshot",
+    "model": "kimi-k2.5"
+  }
 }

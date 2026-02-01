@@ -888,9 +888,21 @@ export function createNamedModelsAPI() {
 // Create LLM with pipeline-level override
 // When override is set, all provider method calls are intercepted and routed to the override provider/model
 export function createLLMWithOverride(override) {
+  logger.log("createLLMWithOverride called", {
+    hasOverride: !!override,
+    overrideProvider: override?.provider,
+    overrideModel: override?.model,
+  });
+
   if (!override?.provider) {
+    logger.log("No override provider, returning standard LLM");
     return createLLM();
   }
+
+  logger.log("Creating LLM with override proxy", {
+    provider: override.provider,
+    model: override.model,
+  });
 
   const baseLLM = createLLM();
 
@@ -907,6 +919,21 @@ export function createLLMWithOverride(override) {
           if (typeof methodKey !== "string") {
             return providerTarget[methodKey];
           }
+
+          // Skip built-in/serialization methods to prevent spurious API calls
+          // when the LLM object is serialized (e.g., JSON.stringify, logging)
+          const builtInMethods = ['toJSON', 'toString', 'valueOf', 'then', 'catch', 'finally', 'constructor'];
+          if (builtInMethods.includes(methodKey)) {
+            return providerTarget[methodKey];
+          }
+
+          // Log interception
+          logger.log("LLM call intercepted by override", {
+            originalProvider: providerKey,
+            originalMethod: methodKey,
+            overrideProvider: override.provider,
+            overrideModel: override.model,
+          });
 
           // When override is active, return a function for ANY method key
           // This routes all method calls to the override provider/model
