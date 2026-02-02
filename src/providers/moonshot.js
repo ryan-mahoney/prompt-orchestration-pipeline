@@ -13,25 +13,17 @@ import { createLogger } from "../core/logger.js";
 const logger = createLogger("Moonshot");
 
 function isContentFilterError(error) {
-  return (
-    error.status === 400 &&
-    /high risk|rejected/i.test(error.message)
-  );
+  return error.status === 400 && /high risk|rejected/i.test(error.message);
 }
 
 async function fallbackToDeepSeek({
   messages,
-  temperature,
   maxTokens,
-  responseFormat,
-  topP,
-  frequencyPenalty,
-  presencePenalty,
   stop,
-  stream,
   thinking,
 }) {
-  const fallbackModel = thinking === "enabled" ? "deepseek-reasoner" : "deepseek-chat";
+  const fallbackModel =
+    thinking === "enabled" ? "deepseek-reasoner" : "deepseek-chat";
   logger.warn("Moonshot content filter triggered, falling back to DeepSeek", {
     fallbackModel,
     thinking,
@@ -39,38 +31,36 @@ async function fallbackToDeepSeek({
   return deepseekChat({
     messages,
     model: fallbackModel,
-    temperature,
     maxTokens,
-    responseFormat,
-    topP,
-    frequencyPenalty,
-    presencePenalty,
+    responseFormat: "json_object",
     stop,
-    stream,
+    stream: false,
   });
 }
 
+/**
+ * Moonshot chat completion for kimi-k2.5 model with JSON mode.
+ * 
+ * Note: kimi-k2.5 does not allow modifying temperature, top_p, 
+ * presence_penalty, frequency_penalty, or n parameters.
+ * 
+ * @param {Object} options
+ * @param {Array} options.messages - Chat messages
+ * @param {string} options.model - Model ID (default: kimi-k2.5)
+ * @param {number} options.maxTokens - Max tokens to generate
+ * @param {string|Array} options.stop - Stop sequences
+ * @param {string} options.thinking - "enabled" or "disabled"
+ * @param {number} options.maxRetries - Number of retries on failure
+ */
 export async function moonshotChat({
   messages,
-  model = "moonshot-v1-128k",
-  temperature = 0.7,
-  maxTokens,
-  responseFormat = "json_object",
-  topP,
-  frequencyPenalty,
-  presencePenalty,
+  model = "kimi-k2.5",
+  maxTokens = 10000,
   stop,
-  stream = false,
   thinking = "enabled",
   maxRetries = 3,
 }) {
-  const isJsonMode =
-    responseFormat?.type === "json_object" ||
-    responseFormat?.type === "json_schema" ||
-    responseFormat === "json" ||
-    responseFormat === "json_object";
-
-  logger.log("moonshotChat called", { model, stream, maxRetries, isJsonMode });
+  logger.log("moonshotChat called", { model, thinking, maxRetries });
 
   if (!process.env.MOONSHOT_API_KEY) {
     throw new Error("Moonshot API key not configured");
@@ -93,30 +83,32 @@ export async function moonshotChat({
 
     try {
       logger.log("Sending request to Moonshot API", { attempt, model });
-      // Thinking models only accept temperature=1
-      //const isThinkingModel = model.includes("thinking");
-      //const effectiveTemperature = isThinkingModel ? 1 : temperature;
 
+      // Build request body for kimi-k2.5
+      // Note: temperature, top_p, presence_penalty, frequency_penalty cannot be modified for kimi-k2.5
       const requestBody = {
         model,
         messages: [
           { role: "system", content: systemMsg },
           { role: "user", content: userMsg },
         ],
-        temperature: 1,
         max_tokens: maxTokens,
-        top_p: topP,
-        frequency_penalty: frequencyPenalty,
-        presence_penalty: presencePenalty,
-        stop,
-        stream,
+        response_format: { type: "json_object" },
+        thinking: { type: thinking },
+        stream: false,
       };
 
-      if (isJsonMode && !stream) {
-        requestBody.response_format = { type: "json_object" };
+      // Only add stop if provided
+      if (stop) {
+        requestBody.stop = stop;
       }
 
-      logger.log("About to call fetch...");
+      logger.log("Request body", { 
+        model: requestBody.model,
+        thinking: requestBody.thinking,
+        max_tokens: requestBody.max_tokens,
+      });
+
       const response = await fetch(
         "https://api.moonshot.ai/v1/chat/completions",
         {
@@ -128,6 +120,7 @@ export async function moonshotChat({
           body: JSON.stringify(requestBody),
         },
       );
+
       logger.log("Fetch returned", {
         status: response.status,
         ok: response.ok,
@@ -138,7 +131,6 @@ export async function moonshotChat({
           .json()
           .catch(() => ({ error: response.statusText }));
 
-        // Provide more helpful error message for authentication failures
         if (response.status === 401) {
           const enhancedError = createProviderError(
             response.status,
@@ -155,42 +147,33 @@ export async function moonshotChat({
         );
       }
 
-      // Step 6: Handle streaming response path
-      if (stream) {
-        logger.log("Handling streaming response");
-        return createStreamGenerator(response.body);
-      }
-
-      // Step 7: Handle non-streaming response parsing
-      logger.log("Parsing JSON response...");
+      // Parse response
       const data = await response.json();
-      logger.log("JSON parsed successfully", {
+      logger.log("Response parsed", {
         hasChoices: !!data.choices,
         choicesCount: data.choices?.length,
       });
-      const rawContent = data.choices[0].message.content;
 
+      const rawContent = data.choices[0].message.content;
       const content = stripMarkdownFences(rawContent);
 
-      if (isJsonMode) {
-        const parsed = tryParseJSON(content);
-        if (!parsed) {
-          throw new ProviderJsonParseError(
-            "Moonshot",
-            model,
-            content.substring(0, 200),
-            "Failed to parse JSON response from Moonshot API",
-          );
-        }
-        return {
-          content: parsed,
-          usage: data.usage,
-          raw: data,
-        };
+      // Always parse as JSON (we always use json_object response format)
+      const parsed = tryParseJSON(content);
+      if (!parsed) {
+        logger.warn("JSON parse failed", { 
+          rawContentPreview: rawContent?.substring(0, 500),
+          strippedContentPreview: content?.substring(0, 500),
+        });
+        throw new ProviderJsonParseError(
+          "Moonshot",
+          model,
+          content?.substring(0, 200),
+          "Failed to parse JSON response from Moonshot API",
+        );
       }
 
       return {
-        content,
+        content: parsed,
         usage: data.usage,
         raw: data,
       };
@@ -206,19 +189,17 @@ export async function moonshotChat({
       if (isContentFilterError(error) && process.env.DEEPSEEK_API_KEY) {
         return fallbackToDeepSeek({
           messages,
-          temperature,
           maxTokens,
-          responseFormat,
-          topP,
-          frequencyPenalty,
-          presencePenalty,
           stop,
-          stream,
           thinking,
         });
       }
 
+      // Don't retry auth errors
       if (error.status === 401) throw error;
+
+      // Don't retry JSON parse errors
+      if (error instanceof ProviderJsonParseError) throw error;
 
       if (isRetryableError(error) && attempt < maxRetries) {
         continue;
@@ -229,46 +210,4 @@ export async function moonshotChat({
   }
 
   throw lastError || new Error(`Failed after ${maxRetries + 1} attempts`);
-}
-
-/**
- * Create async generator for streaming Moonshot responses.
- * Moonshot uses Server-Sent Events format with "data:" prefix.
- */
-async function* createStreamGenerator(stream) {
-  const decoder = new TextDecoder();
-  const reader = stream.getReader();
-  let buffer = "";
-
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split("\n");
-      buffer = lines.pop(); // Keep incomplete line
-
-      for (const line of lines) {
-        if (line.startsWith("data: ")) {
-          const data = line.slice(6);
-          if (data === "[DONE]") continue;
-
-          try {
-            const parsed = JSON.parse(data);
-            const content = parsed.choices?.[0]?.delta?.content;
-            // Skip only truly empty chunks; preserve whitespace-only content
-            if (content !== undefined && content !== null && content !== "") {
-              yield { content };
-            }
-          } catch (e) {
-            // Skip malformed JSON
-            logger.warn("Failed to parse stream chunk:", e);
-          }
-        }
-      }
-    }
-  } finally {
-    reader.releaseLock();
-  }
 }

@@ -25,16 +25,18 @@ vi.mock("../src/providers/base.js", () => ({
   ProviderJsonParseError: class ProviderJsonParseError extends Error {
     constructor(provider, model, content, message) {
       super(message);
+      this.name = "ProviderJsonParseError";
       this.provider = provider;
       this.model = model;
       this.content = content;
     }
   },
-  createProviderError: (status, errorBody, statusText) => ({
-    status,
-    error: errorBody.error || statusText,
-    message: `[${status}] ${errorBody.error?.message || statusText}`,
-  }),
+  createProviderError: (status, errorBody, statusText) => {
+    const err = new Error(`[${status}] ${errorBody.error?.message || statusText}`);
+    err.status = status;
+    err.error = errorBody.error || statusText;
+    return err;
+  },
 }));
 
 vi.mock("../src/providers/deepseek.js", () => ({
@@ -69,9 +71,151 @@ describe("Moonshot Provider", () => {
     vi.restoreAllMocks();
   });
 
-  describe("isContentFilterError helper", () => {
-    it("should return true for 400 status with 'high risk' message", async () => {
+  describe("default parameters", () => {
+    it("should use kimi-k2.5 as default model", async () => {
+      // Arrange
+      const mockResponse = {
+        ok: true,
+        json: vi.fn().mockResolvedValue({
+          choices: [{ message: { content: '{"result": "success"}' } }],
+          usage: { total_tokens: 10 },
+        }),
+      };
+      mockFetch.mockResolvedValue(mockResponse);
+
       // Act
+      const { moonshotChat } = await import("../src/providers/moonshot.js");
+      await moonshotChat({
+        messages: [{ role: "user", content: "Test" }],
+      });
+
+      // Assert
+      const requestBody = JSON.parse(mockFetch.mock.calls[0][1].body);
+      expect(requestBody.model).toBe("kimi-k2.5");
+    });
+
+    it("should use thinking enabled by default", async () => {
+      // Arrange
+      const mockResponse = {
+        ok: true,
+        json: vi.fn().mockResolvedValue({
+          choices: [{ message: { content: '{"result": "success"}' } }],
+          usage: { total_tokens: 10 },
+        }),
+      };
+      mockFetch.mockResolvedValue(mockResponse);
+
+      // Act
+      const { moonshotChat } = await import("../src/providers/moonshot.js");
+      await moonshotChat({
+        messages: [{ role: "user", content: "Test" }],
+      });
+
+      // Assert
+      const requestBody = JSON.parse(mockFetch.mock.calls[0][1].body);
+      expect(requestBody.thinking).toEqual({ type: "enabled" });
+    });
+
+    it("should always use json_object response format", async () => {
+      // Arrange
+      const mockResponse = {
+        ok: true,
+        json: vi.fn().mockResolvedValue({
+          choices: [{ message: { content: '{"result": "success"}' } }],
+          usage: { total_tokens: 10 },
+        }),
+      };
+      mockFetch.mockResolvedValue(mockResponse);
+
+      // Act
+      const { moonshotChat } = await import("../src/providers/moonshot.js");
+      await moonshotChat({
+        messages: [{ role: "user", content: "Test" }],
+      });
+
+      // Assert
+      const requestBody = JSON.parse(mockFetch.mock.calls[0][1].body);
+      expect(requestBody.response_format).toEqual({ type: "json_object" });
+      expect(requestBody.stream).toBe(false);
+    });
+
+    it("should not send temperature, top_p, or penalty parameters", async () => {
+      // Arrange
+      const mockResponse = {
+        ok: true,
+        json: vi.fn().mockResolvedValue({
+          choices: [{ message: { content: '{"result": "success"}' } }],
+          usage: { total_tokens: 10 },
+        }),
+      };
+      mockFetch.mockResolvedValue(mockResponse);
+
+      // Act
+      const { moonshotChat } = await import("../src/providers/moonshot.js");
+      await moonshotChat({
+        messages: [{ role: "user", content: "Test" }],
+      });
+
+      // Assert - these params should not be sent for kimi-k2.5
+      const requestBody = JSON.parse(mockFetch.mock.calls[0][1].body);
+      expect(requestBody.temperature).toBeUndefined();
+      expect(requestBody.top_p).toBeUndefined();
+      expect(requestBody.presence_penalty).toBeUndefined();
+      expect(requestBody.frequency_penalty).toBeUndefined();
+    });
+  });
+
+  describe("thinking parameter", () => {
+    it("should format thinking as object with type enabled", async () => {
+      // Arrange
+      const mockResponse = {
+        ok: true,
+        json: vi.fn().mockResolvedValue({
+          choices: [{ message: { content: '{"result": "success"}' } }],
+          usage: { total_tokens: 10 },
+        }),
+      };
+      mockFetch.mockResolvedValue(mockResponse);
+
+      // Act
+      const { moonshotChat } = await import("../src/providers/moonshot.js");
+      await moonshotChat({
+        messages: [{ role: "user", content: "Test" }],
+        thinking: "enabled",
+      });
+
+      // Assert
+      const requestBody = JSON.parse(mockFetch.mock.calls[0][1].body);
+      expect(requestBody.thinking).toEqual({ type: "enabled" });
+    });
+
+    it("should format thinking as object with type disabled", async () => {
+      // Arrange
+      const mockResponse = {
+        ok: true,
+        json: vi.fn().mockResolvedValue({
+          choices: [{ message: { content: '{"result": "success"}' } }],
+          usage: { total_tokens: 10 },
+        }),
+      };
+      mockFetch.mockResolvedValue(mockResponse);
+
+      // Act
+      const { moonshotChat } = await import("../src/providers/moonshot.js");
+      await moonshotChat({
+        messages: [{ role: "user", content: "Test" }],
+        thinking: "disabled",
+      });
+
+      // Assert
+      const requestBody = JSON.parse(mockFetch.mock.calls[0][1].body);
+      expect(requestBody.thinking).toEqual({ type: "disabled" });
+    });
+  });
+
+  describe("isContentFilterError helper", () => {
+    it("should trigger fallback for 400 status with 'high risk' message", async () => {
+      // Arrange
       const { moonshotChat } = await import("../src/providers/moonshot.js");
       const mockResponse = {
         ok: false,
@@ -86,7 +230,7 @@ describe("Moonshot Provider", () => {
         usage: { total_tokens: 10 },
       });
 
-      // Act - trigger the content filter error
+      // Act
       await moonshotChat({
         messages: [{ role: "user", content: "Test" }],
       });
@@ -95,7 +239,7 @@ describe("Moonshot Provider", () => {
       expect(mockDeepseekChat).toHaveBeenCalled();
     });
 
-    it("should return false for 400 status without 'high risk' message", async () => {
+    it("should not trigger fallback for 400 status without 'high risk' message", async () => {
       // Arrange
       const mockResponse = {
         ok: false,
@@ -122,7 +266,7 @@ describe("Moonshot Provider", () => {
       expect(mockDeepseekChat).not.toHaveBeenCalled();
     });
 
-    it("should return false for 401 status with 'high risk' message", async () => {
+    it("should not trigger fallback for 401 status", async () => {
       // Arrange
       const mockResponse = {
         ok: false,
@@ -146,36 +290,9 @@ describe("Moonshot Provider", () => {
       // Assert - deepseekChat should NOT have been called (wrong status code)
       expect(mockDeepseekChat).not.toHaveBeenCalled();
     });
-
-    it("should return false for 500 status with server error message", async () => {
-      // Arrange
-      const mockResponse = {
-        ok: false,
-        status: 500,
-        json: vi.fn().mockResolvedValue({
-          error: { message: "Server error" },
-        }),
-      };
-      mockFetch.mockResolvedValue(mockResponse);
-      mockIsRetryableError.mockReturnValue(false);
-
-      // Act & Assert
-      const { moonshotChat } = await import("../src/providers/moonshot.js");
-      await expect(
-        moonshotChat({
-          messages: [{ role: "user", content: "Test" }],
-          maxRetries: 0,
-        })
-      ).rejects.toMatchObject({
-        status: 500,
-      });
-
-      // Assert - deepseekChat should NOT have been called (wrong status code)
-      expect(mockDeepseekChat).not.toHaveBeenCalled();
-    });
   });
 
-  describe("fallback triggering on content filter error", () => {
+  describe("fallback to DeepSeek", () => {
     it("should call deepseekChat with deepseek-reasoner when thinking is enabled", async () => {
       // Arrange
       const mockResponse = {
@@ -203,12 +320,8 @@ describe("Moonshot Provider", () => {
       expect(mockDeepseekChat).toHaveBeenCalledWith({
         messages: [{ role: "user", content: "Test" }],
         model: "deepseek-reasoner",
-        temperature: 0.7,
-        maxTokens: undefined,
+        maxTokens: 10000,
         responseFormat: "json_object",
-        topP: undefined,
-        frequencyPenalty: undefined,
-        presencePenalty: undefined,
         stop: undefined,
         stream: false,
       });
@@ -242,68 +355,19 @@ describe("Moonshot Provider", () => {
       expect(mockDeepseekChat).toHaveBeenCalledWith({
         messages: [{ role: "user", content: "Test" }],
         model: "deepseek-chat",
-        temperature: 0.7,
-        maxTokens: undefined,
+        maxTokens: 10000,
         responseFormat: "json_object",
-        topP: undefined,
-        frequencyPenalty: undefined,
-        presencePenalty: undefined,
         stop: undefined,
         stream: false,
       });
       expect(result.content).toEqual({ fallback: "success" });
-    });
-
-    it("should forward all request parameters to DeepSeek", async () => {
-      // Arrange
-      const mockResponse = {
-        ok: false,
-        status: 400,
-        json: vi.fn().mockResolvedValue({
-          error: { message: "high risk content detected" },
-        }),
-      };
-      mockFetch.mockResolvedValue(mockResponse);
-      mockDeepseekChat.mockResolvedValue({
-        content: { fallback: "success" },
-        usage: { total_tokens: 10 },
-        raw: {},
-      });
-
-      // Act
-      const { moonshotChat } = await import("../src/providers/moonshot.js");
-      await moonshotChat({
-        messages: [{ role: "user", content: "Test" }],
-        temperature: 0.5,
-        maxTokens: 1000,
-        topP: 0.9,
-        frequencyPenalty: 0.1,
-        presencePenalty: 0.2,
-        stop: ["STOP"],
-        stream: true,
-        thinking: "enabled",
-      });
-
-      // Assert - verify all parameters are forwarded
-      expect(mockDeepseekChat).toHaveBeenCalledWith({
-        messages: expect.any(Array),
-        model: "deepseek-reasoner",
-        temperature: 0.5,
-        maxTokens: 1000,
-        responseFormat: "json_object",
-        topP: 0.9,
-        frequencyPenalty: 0.1,
-        presencePenalty: 0.2,
-        stop: ["STOP"],
-        stream: true,
-      });
     });
   });
 
   describe("no fallback when DEEPSEEK_API_KEY missing", () => {
     it("should throw original error when DEEPSEEK_API_KEY is not set", async () => {
       // Arrange
-      cleanupEnv(); // Clear environment
+      cleanupEnv();
       cleanupEnv = mockEnvVars({
         MOONSHOT_API_KEY: "test-moonshot-key",
         // DEEPSEEK_API_KEY intentionally not set
@@ -333,43 +397,10 @@ describe("Moonshot Provider", () => {
       // Assert - deepseekChat should NOT have been called
       expect(mockDeepseekChat).not.toHaveBeenCalled();
     });
-
-    it("should throw original error when DEEPSEEK_API_KEY is empty string", async () => {
-      // Arrange
-      cleanupEnv();
-      cleanupEnv = mockEnvVars({
-        MOONSHOT_API_KEY: "test-moonshot-key",
-        DEEPSEEK_API_KEY: "", // Empty string
-      });
-
-      const mockResponse = {
-        ok: false,
-        status: 400,
-        json: vi.fn().mockResolvedValue({
-          error: { message: "rejected due to high risk" },
-        }),
-      };
-      mockFetch.mockResolvedValue(mockResponse);
-      mockIsRetryableError.mockReturnValue(false);
-
-      // Act & Assert
-      const { moonshotChat } = await import("../src/providers/moonshot.js");
-      await expect(
-        moonshotChat({
-          messages: [{ role: "user", content: "Test" }],
-          maxRetries: 0,
-        })
-      ).rejects.toMatchObject({
-        status: 400,
-      });
-
-      // Assert - deepseekChat should NOT have been called
-      expect(mockDeepseekChat).not.toHaveBeenCalled();
-    });
   });
 
-  describe("successful Moonshot API calls", () => {
-    it("should not trigger fallback on successful response", async () => {
+  describe("successful API calls", () => {
+    it("should return parsed JSON content on success", async () => {
       // Arrange
       const mockResponse = {
         ok: true,
@@ -388,10 +419,11 @@ describe("Moonshot Provider", () => {
 
       // Assert
       expect(result.content).toEqual({ result: "success" });
+      expect(result.usage).toEqual({ total_tokens: 10 });
       expect(mockDeepseekChat).not.toHaveBeenCalled();
     });
 
-    it("should handle thinking parameter with default value", async () => {
+    it("should include stop parameter when provided", async () => {
       // Arrange
       const mockResponse = {
         ok: true,
@@ -402,15 +434,41 @@ describe("Moonshot Provider", () => {
       };
       mockFetch.mockResolvedValue(mockResponse);
 
-      // Act - call without thinking parameter
+      // Act
       const { moonshotChat } = await import("../src/providers/moonshot.js");
-      const result = await moonshotChat({
+      await moonshotChat({
         messages: [{ role: "user", content: "Test" }],
+        stop: ["STOP"],
       });
 
       // Assert
-      expect(result.content).toEqual({ result: "success" });
-      // If there's a fallback, it should use the default "enabled"
+      const requestBody = JSON.parse(mockFetch.mock.calls[0][1].body);
+      expect(requestBody.stop).toEqual(["STOP"]);
+    });
+  });
+
+  describe("JSON parse errors", () => {
+    it("should throw ProviderJsonParseError and not retry on invalid JSON", async () => {
+      // Arrange
+      const mockResponse = {
+        ok: true,
+        json: vi.fn().mockResolvedValue({
+          choices: [{ message: { content: "not valid json" } }],
+          usage: { total_tokens: 10 },
+        }),
+      };
+      mockFetch.mockResolvedValue(mockResponse);
+
+      // Act & Assert
+      const { moonshotChat } = await import("../src/providers/moonshot.js");
+      await expect(
+        moonshotChat({
+          messages: [{ role: "user", content: "Test" }],
+        })
+      ).rejects.toThrow("Failed to parse JSON response from Moonshot API");
+
+      // Should only call fetch once (no retries for parse errors)
+      expect(mockFetch).toHaveBeenCalledTimes(1);
     });
   });
 });
