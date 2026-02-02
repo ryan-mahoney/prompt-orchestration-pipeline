@@ -16,12 +16,7 @@ function isContentFilterError(error) {
   return error.status === 400 && /high risk|rejected/i.test(error.message);
 }
 
-async function fallbackToDeepSeek({
-  messages,
-  maxTokens,
-  stop,
-  thinking,
-}) {
+async function fallbackToDeepSeek({ messages, thinking }) {
   const fallbackModel =
     thinking === "enabled" ? "deepseek-reasoner" : "deepseek-chat";
   logger.warn("Moonshot content filter triggered, falling back to DeepSeek", {
@@ -31,32 +26,28 @@ async function fallbackToDeepSeek({
   return deepseekChat({
     messages,
     model: fallbackModel,
-    maxTokens,
     responseFormat: "json_object",
-    stop,
     stream: false,
   });
 }
 
 /**
  * Moonshot chat completion for kimi-k2.5 model with JSON mode.
- * 
- * Note: kimi-k2.5 does not allow modifying temperature, top_p, 
+ *
+ * Note: kimi-k2.5 does not allow modifying temperature, top_p,
  * presence_penalty, frequency_penalty, or n parameters.
- * 
+ *
  * @param {Object} options
  * @param {Array} options.messages - Chat messages
  * @param {string} options.model - Model ID (default: kimi-k2.5)
  * @param {number} options.maxTokens - Max tokens to generate
- * @param {string|Array} options.stop - Stop sequences
  * @param {string} options.thinking - "enabled" or "disabled"
  * @param {number} options.maxRetries - Number of retries on failure
  */
 export async function moonshotChat({
   messages,
   model = "kimi-k2.5",
-  maxTokens = 10000,
-  stop,
+  maxTokens,
   thinking = "enabled",
   maxRetries = 3,
 }) {
@@ -92,18 +83,13 @@ export async function moonshotChat({
           { role: "system", content: systemMsg },
           { role: "user", content: userMsg },
         ],
-        max_tokens: maxTokens,
+        max_tokens: maxTokens || 32768,
         response_format: { type: "json_object" },
         thinking: { type: thinking },
         stream: false,
       };
 
-      // Only add stop if provided
-      if (stop) {
-        requestBody.stop = stop;
-      }
-
-      logger.log("Request body", { 
+      logger.log("Request body", {
         model: requestBody.model,
         thinking: requestBody.thinking,
         max_tokens: requestBody.max_tokens,
@@ -160,7 +146,7 @@ export async function moonshotChat({
       // Always parse as JSON (we always use json_object response format)
       const parsed = tryParseJSON(content);
       if (!parsed) {
-        logger.warn("JSON parse failed", { 
+        logger.warn("JSON parse failed", {
           rawContentPreview: rawContent?.substring(0, 500),
           strippedContentPreview: content?.substring(0, 500),
         });
@@ -190,7 +176,6 @@ export async function moonshotChat({
         return fallbackToDeepSeek({
           messages,
           maxTokens,
-          stop,
           thinking,
         });
       }
