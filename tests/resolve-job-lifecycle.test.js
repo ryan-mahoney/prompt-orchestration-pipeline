@@ -193,7 +193,7 @@ describe("decideTransition", () => {
       // Arrange
       const params = {
         op: "restart",
-        taskState: "completed",
+        taskState: "done",
         dependenciesReady: false,
       };
 

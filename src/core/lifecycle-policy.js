@@ -5,6 +5,8 @@
  * or runtime toggles, following the principle of explicit failure.
  */
 
+import { TaskState } from "../config/statuses.js";
+
 /**
  * Decide if a task transition is allowed based on static lifecycle rules
  * @param {Object} params - Decision parameters
@@ -43,7 +45,7 @@ export function decideTransition({ op, taskState, dependenciesReady }) {
 
   // Handle restart operation
   if (op === "restart") {
-    if (taskState === "completed") {
+    if (taskState === TaskState.DONE) {
       return Object.freeze({ ok: true });
     }
     return Object.freeze({
