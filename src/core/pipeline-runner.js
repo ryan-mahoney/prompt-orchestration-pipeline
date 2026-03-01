@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import fsSync from "node:fs";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { runPipeline } from "./task-runner.js";
 import { loadFreshModule } from "./module-loader.js";
 import { validatePipelineOrThrow } from "./validation.js";
@@ -451,11 +452,21 @@ export async function runPipelineJob(jobId) {
   logger.groupEnd();
 }
 
+function isDirectSourceExecution() {
+  if (!process.argv[1] || process.argv[1] === process.execPath) {
+    return false;
+  }
+
+  const argvHref = pathToFileURL(process.argv[1]).href;
+  return (
+    import.meta.url === argvHref ||
+    path.basename(process.argv[1]) === "pipeline-runner.js"
+  );
+}
+
 // Direct execution: thin wrapper for source-mode only (compiled binary uses _run-job subcommand)
 if (
-  process.argv[1] &&
-  process.argv[1] !== process.execPath &&
-  (import.meta.url === `file://${process.argv[1]}` || process.argv[1]?.endsWith("/pipeline-runner.js"))
+  isDirectSourceExecution()
 ) {
   process.on("unhandledRejection", (reason, promise) => {
     console.error("[PipelineRunner] Unhandled promise rejection:", reason);
@@ -480,5 +491,8 @@ if (
     process.exit(1);
   }
 
-  runPipelineJob(jobId);
+  runPipelineJob(jobId).catch((error) => {
+    console.error("[PipelineRunner] Job failed:", error);
+    process.exit(1);
+  });
 }

@@ -40,7 +40,7 @@ const __dirname = path.dirname(__filename);
  * @param {Object} params - Configuration parameters
  * @param {string} params.dataDir - Base data directory
  * @param {Object} [params.viteServer] - Vite dev server instance (optional)
- * @returns {express.Application} Configured Express app
+ * @returns {Promise<express.Application>} Configured Express app
  */
 export async function buildExpressApp({ dataDir, viteServer }) {
   const app = express();

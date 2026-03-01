@@ -83,14 +83,11 @@ describe("compiled binary smoke tests", () => {
     expect(pipelineJson).toBe(true);
   }, 15000);
 
-  it("internal child-process spawning works via self-reexec", () => {
-    // Verify that the compiled binary can re-invoke itself with hidden commands
-    // This validates the self-reexec pattern used for _start-ui, _start-orchestrator, _run-job
+  it("keeps internal self-reexec commands hidden from help output", () => {
     const result = execSync(`${BINARY_PATH} --help`, {
       encoding: "utf8",
       timeout: 10000,
     });
-    // Hidden commands should NOT appear in help output
     expect(result).not.toContain("_start-ui");
     expect(result).not.toContain("_run-job");
   }, 15000);

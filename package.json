@@ -28,7 +28,7 @@
     "backend": "NODE_ENV=development bun --watch src/ui/server.js",
     "ui": "NODE_ENV=development bun --watch src/ui/server.js",
     "ui:dev": "vite",
-    "ui:build": "vite build",
+    "ui:build": "vite build && bun run generate:embedded-assets",
     "prepack": "bun run ui:build",
     "ui:prod": "bun src/ui/server.js",
     "demo:ui": "NODE_ENV=production PO_ROOT=demo bun src/ui/server.js",

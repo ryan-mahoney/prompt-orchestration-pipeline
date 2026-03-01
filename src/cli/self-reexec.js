@@ -8,9 +8,10 @@ const CLI_ENTRY = path.resolve(path.dirname(currentFile), "index.js");
  * Detect whether we are running from a compiled Bun binary.
  * In compiled binaries, import.meta.url resolves to Bun's virtual
  * filesystem (/$bunfs/), which doesn't exist on disk.
+ * Normalize separators so compiled-binary detection also works on Windows.
  */
 function isCompiledBinary() {
-  return currentFile.startsWith("/$bunfs/");
+  return currentFile.replace(/\\/g, "/").includes("/$bunfs/");
 }
 
 /**

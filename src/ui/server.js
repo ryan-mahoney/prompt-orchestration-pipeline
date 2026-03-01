@@ -5,7 +5,7 @@
 
 import http from "http";
 import path from "path";
-import { fileURLToPath } from "url";
+import { fileURLToPath, pathToFileURL } from "url";
 import { loadEnvironment } from "../core/environment.js";
 import { start as startWatcher, stop as stopWatcher } from "./watcher.js";
 import * as state from "./state.js";
@@ -299,7 +299,11 @@ export {
 };
 
 // Start server if run directly (source-mode only — compiled binary uses _start-ui subcommand)
-if (process.argv[1] && process.argv[1] !== process.execPath && import.meta.url === `file://${process.argv[1]}`) {
+if (
+  process.argv[1] &&
+  process.argv[1] !== process.execPath &&
+  import.meta.url === pathToFileURL(process.argv[1]).href
+) {
   startServer({ dataDir: DATA_DIR }).catch((err) => {
     console.error("Failed to start server:", err);
     process.exit(1);
