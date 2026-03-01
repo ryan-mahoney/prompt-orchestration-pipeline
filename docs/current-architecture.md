@@ -97,7 +97,7 @@ Pipelines are defined using a registry-based system that separates configuration
 
 1.  **Submission**: User/System drops `job-123-seed.json` into `pending/`.
 2.  **Pickup**: Orchestrator detects file, moves it to `current/job-123/`.
-3.  **Execution**: Orchestrator spawns `node pipeline-runner.js job-123`.
+3.  **Execution**: Orchestrator spawns a Bun runtime process for the pipeline runner and passes the job ID.
 4.  **Processing**: Runner executes tasks. Task Runner executes stages.
 5.  **Output**: Artifacts and logs are written to `current/job-123/files/`. Status is updated in `current/job-123/tasks-status.json`.
 6.  **Completion**: Directory moved to `complete/job-123/`.

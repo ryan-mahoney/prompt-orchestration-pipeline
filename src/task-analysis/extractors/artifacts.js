@@ -1,9 +1,7 @@
-import { createRequire } from "node:module";
-const require = createRequire(import.meta.url);
-const traverse =
-  require("@babel/traverse").default ?? require("@babel/traverse");
-const generate =
-  require("@babel/generator").default ?? require("@babel/generator");
+import _traverse from "@babel/traverse";
+const traverse = _traverse.default ?? _traverse;
+import _generate from "@babel/generator";
+const generate = _generate.default ?? _generate;
 import * as t from "@babel/types";
 import { isInsideTryCatch, getStageName } from "../utils/ast.js";
 

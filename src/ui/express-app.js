@@ -1,5 +1,6 @@
 import express from "express";
 import path from "path";
+import fs from "node:fs/promises";
 import { fileURLToPath } from "url";
 import { sseRegistry } from "./sse.js";
 import { handleApiState } from "./endpoints/state-endpoint.js";
@@ -39,9 +40,9 @@ const __dirname = path.dirname(__filename);
  * @param {Object} params - Configuration parameters
  * @param {string} params.dataDir - Base data directory
  * @param {Object} [params.viteServer] - Vite dev server instance (optional)
- * @returns {express.Application} Configured Express app
+ * @returns {Promise<express.Application>} Configured Express app
  */
-export function buildExpressApp({ dataDir, viteServer }) {
+export async function buildExpressApp({ dataDir, viteServer }) {
   const app = express();
 
   // Parse JSON request bodies
@@ -215,16 +216,64 @@ export function buildExpressApp({ dataDir, viteServer }) {
   // Dev middleware (mount after all API routes)
   if (viteServer && viteServer.middlewares) {
     app.use(viteServer.middlewares);
-  } else {
-    // Production static serving
-    app.use("/public", express.static(path.join(__dirname, "public")));
-    app.use("/assets", express.static(path.join(__dirname, "dist", "assets")));
-    app.use(express.static(path.join(__dirname, "dist")));
 
-    // SPA fallback
-    app.get("*", (_, res) => {
-      res.sendFile(path.join(__dirname, "dist", "index.html"));
+    app.get("*", async (req, res, next) => {
+      try {
+        const indexHtml = await fs.readFile(
+          path.join(__dirname, "client", "index.html"),
+          "utf8"
+        );
+        const html = await viteServer.transformIndexHtml(
+          req.originalUrl,
+          indexHtml
+        );
+        res.status(200).set({ "Content-Type": "text/html" }).end(html);
+      } catch (error) {
+        viteServer.ssrFixStacktrace(error);
+        next(error);
+      }
     });
+  } else {
+    // Try loading embedded assets (available in compiled binary)
+    let embeddedAssets = null;
+    try {
+      const mod = await import("./embedded-assets.js");
+      embeddedAssets = mod.embeddedAssets;
+    } catch {
+      // Not available — running from source
+    }
+
+    if (embeddedAssets) {
+      // Compiled binary: serve from embedded asset map
+      app.use((req, res, next) => {
+        const asset = embeddedAssets[req.path];
+        if (asset) {
+          res.type(asset.mime);
+          return res.sendFile(asset.path);
+        }
+        next();
+      });
+
+      // SPA fallback from embedded index.html
+      app.get("*", (_, res) => {
+        const index = embeddedAssets["/index.html"];
+        if (index) {
+          res.type(index.mime);
+          return res.sendFile(index.path);
+        }
+        res.status(404).send("Not found");
+      });
+    } else {
+      // Source mode: serve from filesystem dist directory
+      app.use("/public", express.static(path.join(__dirname, "public")));
+      app.use("/assets", express.static(path.join(__dirname, "dist", "assets")));
+      app.use(express.static(path.join(__dirname, "dist")));
+
+      // SPA fallback
+      app.get("*", (_, res) => {
+        res.sendFile(path.join(__dirname, "dist", "index.html"));
+      });
+    }
   }
 
   return app;

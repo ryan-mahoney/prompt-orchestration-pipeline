@@ -8,7 +8,7 @@ This document outlines the core "Jobs to be Done" for the Prompt Orchestration P
 ### Functional Jobs
 
 #### 1. Ensure Execution Resilience
-*   **Situation**: Running experimental or unstable task code that might crash the Node.js process.
+*   **Situation**: Running experimental or unstable task code that might crash a runtime process.
 *   **Motivation**: Prevent a single task failure from bringing down the entire orchestration system or affecting other running jobs.
 *   **Solution Mapping**:
     *   **Process Isolation**: Each pipeline runs in a dedicated child process.

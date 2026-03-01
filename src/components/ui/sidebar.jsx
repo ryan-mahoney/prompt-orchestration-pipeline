@@ -1,6 +1,6 @@
 import * as Dialog from "@radix-ui/react-dialog";
 import { X } from "lucide-react";
-import { forwardRef } from "react";
+import React, { forwardRef } from "react";
 
 /**
  * Unified Sidebar Component

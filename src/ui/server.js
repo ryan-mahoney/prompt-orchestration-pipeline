@@ -5,7 +5,7 @@
 
 import http from "http";
 import path from "path";
-import { fileURLToPath } from "url";
+import { fileURLToPath, pathToFileURL } from "url";
 import { loadEnvironment } from "../core/environment.js";
 import { start as startWatcher, stop as stopWatcher } from "./watcher.js";
 import * as state from "./state.js";
@@ -54,8 +54,8 @@ function startHeartbeat() {
  * Create and start an HTTP server
  * @param {string} serverDataDir - Base data directory for pipeline data
  */
-function createServer(serverDataDir = DATA_DIR) {
-  const app = buildExpressApp({ dataDir: serverDataDir, viteServer });
+async function createServer(serverDataDir = DATA_DIR) {
+  const app = await buildExpressApp({ dataDir: serverDataDir, viteServer });
   const server = http.createServer(app);
   return server;
 }
@@ -170,8 +170,15 @@ async function startServer({ dataDir, port: customPort }) {
       try {
         // Import createServer under an alias to avoid collision with our createServer()
         const { createServer: createViteServer } = await import("vite");
+        const uiRoot = path.join(__dirname, "client");
         viteServer = await createViteServer({
-          root: path.join(__dirname, "client"),
+          root: uiRoot,
+          publicDir: path.join(__dirname, "public"),
+          resolve: {
+            alias: {
+              "@": path.resolve(__dirname, ".."),
+            },
+          },
           server: { middlewareMode: true },
           appType: "custom",
         });
@@ -181,7 +188,7 @@ async function startServer({ dataDir, port: customPort }) {
       }
     }
 
-    const server = createServer(dataDir);
+    const server = await createServer(dataDir);
 
     // Robust promise with proper error handling and race condition prevention
     await new Promise((resolve, reject) => {
@@ -291,8 +298,12 @@ export {
   state,
 };
 
-// Start server if run directly
-if (import.meta.url === `file://${process.argv[1]}`) {
+// Start server if run directly (source-mode only — compiled binary uses _start-ui subcommand)
+if (
+  process.argv[1] &&
+  process.argv[1] !== process.execPath &&
+  import.meta.url === pathToFileURL(process.argv[1]).href
+) {
   startServer({ dataDir: DATA_DIR }).catch((err) => {
     console.error("Failed to start server:", err);
     process.exit(1);

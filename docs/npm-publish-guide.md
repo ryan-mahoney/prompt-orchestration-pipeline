@@ -1,5 +1,7 @@
 # NPM Publishing Guide
 
+This project uses Bun for development and runtime, and npm for versioning and publishing to the npm registry.
+
 Choose the appropriate version bump based on [Semantic Versioning](https://semver.org/):
 
 ## Patch Release (bug fixes, backward compatible):

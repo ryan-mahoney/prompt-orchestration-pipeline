@@ -21,20 +21,21 @@
     "access": "public"
   },
   "scripts": {
-    "analyze": "node src/cli/index.js analyze",
-    "deduce-schemas": "node scripts/deduce-schemas.js",
+    "analyze": "bun src/cli/index.js analyze",
+    "deduce-schemas": "bun scripts/deduce-schemas.js",
     "test": "vitest run --config ./vite.config.js --root .",
     "lint": "eslint . --ext .js,.jsx",
-    "backend": "NODE_ENV=development nodemon src/ui/server.js",
-    "ui": "NODE_ENV=development nodemon src/ui/server.js",
+    "backend": "NODE_ENV=development bun --watch src/ui/server.js",
+    "ui": "NODE_ENV=development bun --watch src/ui/server.js",
     "ui:dev": "vite",
-    "ui:build": "vite build",
-    "prepack": "npm run ui:build",
-    "ui:prod": "node src/ui/server.js",
-    "demo:ui": "NODE_ENV=production PO_ROOT=demo node src/ui/server.js",
-    "demo:orchestrator": "PO_ROOT=demo NODE_ENV=production node -e \"import('./src/core/orchestrator.js').then(m => m.startOrchestrator({ dataDir: process.env.PO_ROOT || 'demo' })).catch(err => { console.error(err); process.exit(1) })\"",
-    "demo:all": "NODE_ENV=development PO_ROOT=demo npm run ui:build && concurrently \"npm:demo:ui\" \"npm:demo:orchestrator\" --kill-others-on-fail",
-    "demo:prod": "npm run ui:build && NODE_ENV=production PO_ROOT=demo node src/ui/server.js"
+    "ui:build": "vite build && bun run generate:embedded-assets",
+    "prepack": "bun run ui:build",
+    "ui:prod": "bun src/ui/server.js",
+    "demo:ui": "NODE_ENV=production PO_ROOT=demo bun src/ui/server.js",
+    "demo:orchestrator": "PO_ROOT=demo NODE_ENV=production bun -e \"import('./src/core/orchestrator.js').then(m => m.startOrchestrator({ dataDir: process.env.PO_ROOT || 'demo' })).catch(err => { console.error(err); process.exit(1) })\"",
+    "demo:all": "NODE_ENV=development PO_ROOT=demo bun run ui:build && concurrently \"bun:demo:ui\" \"bun:demo:orchestrator\" --kill-others-on-fail",
+    "demo:prod": "bun run ui:build && NODE_ENV=production PO_ROOT=demo bun src/ui/server.js",
+    "generate:embedded-assets": "bun scripts/generate-embedded-assets.js"
   },
   "dependencies": {
     "@babel/parser": "^7.28.5",
@@ -47,12 +48,12 @@
     "@radix-ui/themes": "^3.2.1",
     "ajv": "^8.17.1",
     "ajv-formats": "^3.0.1",
-    "better-sqlite3": "^11.7.0",
     "chokidar": "^3.5.3",
     "commander": "^14.0.2",
     "dotenv": "^17.2.3",
     "express": "^4.19.2",
     "fflate": "^0.8.2",
+    "highlight.js": "^11.11.1",
     "lucide-react": "^0.544.0",
     "openai": "^5.23.1",
     "p-limit": "^6.1.0",
@@ -80,14 +81,13 @@
     "eslint-plugin-react-hooks": "^6.1.1",
     "eslint-plugin-react-refresh": "^0.4.23",
     "jsdom": "^27.0.0",
-    "nodemon": "^3.1.10",
     "prettier": "^3.6.2",
     "tailwindcss": "^4.1.14",
     "vite": "^7.1.9",
     "vitest": "^3.2.4"
   },
   "engines": {
-    "node": ">=20.0.0"
+    "bun": ">=1.1.0"
   },
   "keywords": [
     "llm",

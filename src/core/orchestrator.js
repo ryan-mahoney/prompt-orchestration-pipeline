@@ -7,6 +7,7 @@ import { getConfig, getPipelineConfig } from "./config.js";
 import { createLogger } from "./logger.js";
 import { createTaskFileIO, generateLogName } from "./file-io.js";
 import { LogEvent } from "../config/log-events.js";
+import { buildReexecArgs } from "../cli/self-reexec.js";
 
 /**
  * Resolve canonical pipeline directories for the given data root.
@@ -312,10 +313,6 @@ function spawnRunner(
   seed,
   fileIO
 ) {
-  // Use path relative to this file to avoid process.cwd() issues
-  const orchestratorDir = path.dirname(new URL(import.meta.url).pathname);
-  const runnerPath = path.join(orchestratorDir, "pipeline-runner.js");
-
   // Set PO_ROOT for the orchestrator process to match what the runner will use
   const originalPoRoot = process.env.PO_ROOT;
   const poRoot = path.resolve(dirs.dataDir, "..");
@@ -376,8 +373,9 @@ function spawnRunner(
       PO_DEFAULT_PROVIDER: "mock",
     };
 
-    // Always call spawn so tests can capture it
-    const child = spawn(process.execPath, [runnerPath, jobId], {
+    // Self-reexec: use hidden CLI command instead of file path
+    const reexec = buildReexecArgs(["_run-job", jobId]);
+    const child = spawn(reexec.execPath, reexec.args, {
       stdio: ["ignore", "inherit", "inherit"],
       env,
       cwd: process.cwd(),

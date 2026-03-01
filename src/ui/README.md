@@ -6,19 +6,22 @@ A development tool that watches pipeline files and provides a live-updating web 
 
 ```bash
 # Install dependencies
-npm install
+bun install
 
-# Start the UI server with auto-restart
-npm run ui
+# Start the UI server with Bun watch mode
+PO_ROOT=demo bun run ui
 
 # Or start without auto-restart
-npm run ui:prod
+PO_ROOT=demo bun run ui:prod
 ```
 
 Open your browser to http://localhost:4000
 
+Both `ui` and `ui:prod` require `PO_ROOT` to point at a pipeline root when run directly.
+
 ## Environment Variables
 
+- `PO_ROOT` - Pipeline root to serve and watch (required for non-test runs)
 - `PORT` - Server port (default: 4000)
 - `WATCHED_PATHS` - Comma-separated directories to watch (default: "pipeline-config,runs")
 
@@ -26,18 +29,18 @@ Open your browser to http://localhost:4000
 
 ```bash
 # Use a different port
-PORT=3000 npm run ui
+PO_ROOT=demo PORT=3000 bun run ui
 
 # Watch different directories
-WATCHED_PATHS="pipeline-config,pipeline-data,demo" npm run ui
+PO_ROOT=demo WATCHED_PATHS="pipeline-config,pipeline-data,demo" bun run ui
 
 # Combine both
-PORT=3000 WATCHED_PATHS="pipeline-config,demo" npm run ui
+PO_ROOT=demo PORT=3000 WATCHED_PATHS="pipeline-config,demo" bun run ui
 ```
 
 ## Architecture
 
-- **Single server process** - Node.js HTTP server handles everything
+- **Single server process** - Bun runs the HTTP server and API endpoints
 - **File watching** - Chokidar monitors specified directories for changes
 - **Live updates** - Server-Sent Events (SSE) push changes to browser
 - **No build step** - Plain HTML/CSS/JS served directly
@@ -77,10 +80,10 @@ The UI server automatically:
 
 ## Requirements
 
-- Node.js 20+
+- Bun 1.1+
 - Dependencies:
   - chokidar (file watching)
   - yaml (YAML file parsing)
   - commander (CLI argument parsing)
 - Dev dependencies:
-  - nodemon (auto-restart)
+  - Bun watch mode for auto-restart during development

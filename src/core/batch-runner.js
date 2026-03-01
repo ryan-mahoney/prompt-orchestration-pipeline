@@ -7,7 +7,7 @@ import pLimit from "p-limit";
 
 /**
  * Creates the batch_jobs table and index if they don't exist
- * @param {import('better-sqlite3').Database} db - SQLite database instance
+ * @param {import('bun:sqlite').Database} db - SQLite database instance
  */
 export function ensureBatchSchema(db) {
   db.exec(`
@@ -28,7 +28,7 @@ export function ensureBatchSchema(db) {
 
 /**
  * Inserts jobs into the batch_jobs table
- * @param {import('better-sqlite3').Database} db - SQLite database instance
+ * @param {import('bun:sqlite').Database} db - SQLite database instance
  * @param {string} batchId - Unique batch identifier
  * @param {Array<Object>} jobs - Array of job objects
  * @returns {string[]} Array of job IDs inserted
@@ -67,7 +67,7 @@ export function insertJobs(db, batchId, jobs) {
 
 /**
  * Marks a job as processing
- * @param {import('better-sqlite3').Database} db - SQLite database instance
+ * @param {import('bun:sqlite').Database} db - SQLite database instance
  * @param {string} jobId - Job identifier
  */
 export function markProcessing(db, jobId) {
@@ -79,7 +79,7 @@ export function markProcessing(db, jobId) {
 
 /**
  * Marks a job as complete with output
- * @param {import('better-sqlite3').Database} db - SQLite database instance
+ * @param {import('bun:sqlite').Database} db - SQLite database instance
  * @param {string} jobId - Job identifier
  * @param {*} output - Job output (will be JSON serialized)
  */
@@ -92,7 +92,7 @@ export function markComplete(db, jobId, output) {
 
 /**
  * Marks a job as failed and increments retry count
- * @param {import('better-sqlite3').Database} db - SQLite database instance
+ * @param {import('bun:sqlite').Database} db - SQLite database instance
  * @param {string} jobId - Job identifier
  * @param {string} error - Error message
  */
@@ -105,7 +105,7 @@ export function markFailed(db, jobId, error) {
 
 /**
  * Gets pending and failed jobs that are under the retry limit
- * @param {import('better-sqlite3').Database} db - SQLite database instance
+ * @param {import('bun:sqlite').Database} db - SQLite database instance
  * @param {string} batchId - Unique batch identifier
  * @param {number} maxRetries - Maximum retry attempts
  * @returns {Array<{id: string, input: Object, retryCount: number}>} Array of pending jobs
@@ -124,7 +124,7 @@ export function getPendingJobs(db, batchId, maxRetries) {
 
 /**
  * Recovers jobs stuck in 'processing' state (from process crash)
- * @param {import('better-sqlite3').Database} db - SQLite database instance
+ * @param {import('bun:sqlite').Database} db - SQLite database instance
  * @param {string} batchId - Unique batch identifier
  * @returns {number} Number of jobs recovered
  */
@@ -138,7 +138,7 @@ export function recoverStaleJobs(db, batchId) {
 
 /**
  * Gets completed jobs for a batch
- * @param {import('better-sqlite3').Database} db - SQLite database instance
+ * @param {import('bun:sqlite').Database} db - SQLite database instance
  * @param {string} batchId - Unique batch identifier
  * @returns {Array<{id: string, input: Object, output: *}>} Array of completed jobs
  */
@@ -156,7 +156,7 @@ function getCompletedJobs(db, batchId) {
 
 /**
  * Gets failed jobs for a batch (those that exhausted retries)
- * @param {import('better-sqlite3').Database} db - SQLite database instance
+ * @param {import('bun:sqlite').Database} db - SQLite database instance
  * @param {string} batchId - Unique batch identifier
  * @param {number} maxRetries - Maximum retry attempts
  * @returns {Array<{id: string, input: Object, error: string, retryCount: number}>} Array of failed jobs
@@ -176,7 +176,7 @@ function getFailedJobs(db, batchId, maxRetries) {
 
 /**
  * Processes a single job with try/catch and status updates
- * @param {import('better-sqlite3').Database} db - SQLite database instance
+ * @param {import('bun:sqlite').Database} db - SQLite database instance
  * @param {Object} job - Job object with id, input, retryCount
  * @param {Function} processor - async (input, ctx) => result
  * @param {string} batchId - Unique batch identifier
@@ -237,7 +237,7 @@ export function validateBatchOptions(options) {
 
 /**
  * Executes a batch of jobs concurrently with retry support
- * @param {import('better-sqlite3').Database} db - SQLite database instance
+ * @param {import('bun:sqlite').Database} db - SQLite database instance
  * @param {Object} options - Batch options
  * @param {Array<Object>} options.jobs - Array of job objects
  * @param {Function} options.processor - async (input, ctx) => result
