@@ -910,19 +910,3 @@ function normalizeError(err) {
   return { message: String(err) };
 }
 
-// CLI shim (optional)
-if (import.meta.url === pathToFileURL(process.argv[1]).href) {
-  const modulePath = process.argv[2] || "./tasks/index.js";
-  const initJson = process.argv[3];
-  const initialContext = initJson ? JSON.parse(initJson) : {};
-  runPipeline(modulePath, initialContext)
-    .then((result) => {
-      const code = result.ok ? 0 : 1;
-      console.log(JSON.stringify(result, null, 2));
-      process.exit(code);
-    })
-    .catch((e) => {
-      console.error("Runner failed:", e);
-      process.exit(1);
-    });
-}

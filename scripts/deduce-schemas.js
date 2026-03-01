@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 import "dotenv/config";
 import fs from "node:fs/promises";
 import { Command } from "commander";

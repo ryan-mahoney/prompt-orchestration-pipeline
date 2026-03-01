@@ -7,7 +7,7 @@ This guide shows you how to use external dependencies and shared utilities in yo
 ### The 3 Types of Imports You Can Use
 
 1. **Relative imports** - Import files from the same task directory
-2. **Package imports** - Import npm packages from `node_modules`
+2. **Package imports** - Import packages installed into `node_modules`
 3. **Project imports** - Import files from anywhere in your repository
 
 ## Step-by-Step Examples
@@ -81,7 +81,7 @@ Perfect for external libraries like Lodash, Axios, Zod, etc.
 **First, install the package:**
 
 ```bash
-npm install lodash axios zod
+bun add lodash axios zod
 ```
 
 **Then use it in your task:**
@@ -469,7 +469,7 @@ export const preprocessing = async (context) => {
 | Problem                                    | Solution                                                         |
 | ------------------------------------------ | ---------------------------------------------------------------- |
 | "Cannot resolve module"                    | Check file paths and ensure `.js` extension is included          |
-| "Module not found" for npm package         | Run `npm install <package-name>` in repo root                    |
+| "Module not found" for package import      | Run `bun install` or `bun add <package-name>` in repo root       |
 | Import works locally but fails in pipeline | Check if you're on Linux/macOS (symlink bridge requirement)      |
 | Relative import path not working           | Verify path is relative to your task file location               |
 | Project import not working                 | Use `project/` prefix: `import X from 'project/path/to/file.js'` |

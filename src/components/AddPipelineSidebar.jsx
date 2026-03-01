@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "./ui/button.jsx";
 import { Sidebar, SidebarFooter } from "./ui/sidebar.jsx";

@@ -105,15 +105,15 @@ flowchart LR
 ## Getting Started
 
 ### 1. Install
-Add the orchestrator as a dependency in your Node.js project:
+Add the orchestrator as a dependency in your Bun project:
 ```bash
-npm install @ryan-fw/prompt-orchestration-pipeline
+bun add @ryanfw/prompt-orchestration-pipeline
 ```
 
 ### 2. Initialize Structure
 Scaffold the required `pipeline-config` and `pipeline-data` directories:
 ```bash
-npx pipeline-orchestrator init --root ./pipelines
+bunx pipeline-orchestrator init --root ./pipelines
 ```
 
 ### 3. Configure Scripts
@@ -121,14 +121,14 @@ Add the following to your `package.json` for easy access:
 ```json
 {
   "scripts": {
-    "pipeline": "npx pipeline-orchestrator start --root pipelines --port 3010"
+    "pipeline": "bunx pipeline-orchestrator start --root pipelines --port 3010"
   }
 }
 ```
 
 ### 4. Start the System
 ```bash
-npm run pipeline
+bun run pipeline
 ```
 This starts the file watcher and the web dashboard at `http://localhost:3010`.
 

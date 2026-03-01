@@ -1,7 +1,7 @@
 import fs from "fs";
 import path from "path";
 import { spawn } from "node:child_process";
-import { fileURLToPath } from "url";
+import { buildReexecArgs } from "../../cli/self-reexec.js";
 import {
   resetJobToCleanSlate,
   resetJobFromTask,
@@ -18,10 +18,6 @@ import {
   getJobMetadataPath,
   getJobPipelinePath,
 } from "../../config/paths.js";
-
-// Get __dirname equivalent in ES modules
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 // In-memory restart guard to prevent duplicate concurrent restarts per job
 const restartingJobs = new Set();
@@ -457,8 +453,7 @@ export async function handleJobRestart(req, res, jobId, dataDir, sendJson) {
       endRestart(jobId);
     }
 
-    // Spawn detached pipeline-runner process
-    const runnerPath = path.join(__dirname, "../../core/pipeline-runner.js");
+    // Spawn detached pipeline-runner via self-reexec hidden command
     const base = process.env.PO_ROOT || dataDir;
     const env = {
       ...process.env,
@@ -471,7 +466,8 @@ export async function handleJobRestart(req, res, jobId, dataDir, sendJson) {
       ...(singleTask && !continueAfter && { PO_RUN_SINGLE_TASK: "true" }),
     };
 
-    const child = spawn(process.execPath, [runnerPath, jobId], {
+    const reexec = buildReexecArgs(["_run-job", jobId]);
+    const child = spawn(reexec.execPath, reexec.args, {
       env,
       stdio: "ignore",
       detached: true,
@@ -953,8 +949,7 @@ export async function handleTaskStart(
     beginStart(jobId);
 
     try {
-      // Spawn detached runner (mirror restart code)
-      const runnerPath = path.join(__dirname, "../../core/pipeline-runner.js");
+      // Spawn detached runner via self-reexec hidden command
       const base = process.env.PO_ROOT || dataDir;
       const env = {
         ...process.env,
@@ -964,10 +959,10 @@ export async function handleTaskStart(
         PO_CURRENT_DIR: path.join(base, "pipeline-data", "current"),
         PO_COMPLETE_DIR: path.join(base, "pipeline-data", "complete"),
         PO_START_FROM_TASK: taskId,
-        // Note: PO_RUN_SINGLE_TASK is NOT set here so pipeline continues after this task
       };
 
-      const child = spawn(process.execPath, [runnerPath, jobId], {
+      const reexec = buildReexecArgs(["_run-job", jobId]);
+      const child = spawn(reexec.execPath, reexec.args, {
         env,
         stdio: "ignore",
         detached: true,

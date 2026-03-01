@@ -1,7 +1,5 @@
-import { createRequire } from "node:module";
-const require = createRequire(import.meta.url);
-const traverse =
-  require("@babel/traverse").default ?? require("@babel/traverse");
+import _traverse from "@babel/traverse";
+const traverse = _traverse.default ?? _traverse;
 
 /**
  * Extract exported function stages from an AST.

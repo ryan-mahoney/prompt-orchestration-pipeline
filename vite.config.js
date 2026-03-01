@@ -60,7 +60,9 @@ export default defineConfig({
   // Vitest configuration moved from vitest.config.js
   test: {
     // Test file patterns - include tests from project root
+    // Exclude .bun.test.js files (run with `bun test` instead of vitest)
     include: ["tests/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}"],
+    exclude: ["tests/**/*.bun.test.{js,ts}", "**/node_modules/**"],
 
     // Global setup files (includes hard timeout watchdog)
     setupFiles: ["./tests/setup.js"],

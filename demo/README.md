@@ -1,9 +1,9 @@
 # Demo
 
-NPM commands:
+Bun commands:
 
 - Run the demo:
-  - npm run demo:all
+  - bun run demo:all
 
 ### Directory Structure
 

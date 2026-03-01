@@ -1,6 +1,4 @@
-import { createRequire } from "node:module";
-const require = createRequire(import.meta.url);
-const parser = require("@babel/parser");
+import * as parser from "@babel/parser";
 
 /**
  * Parse task source code into a Babel AST.

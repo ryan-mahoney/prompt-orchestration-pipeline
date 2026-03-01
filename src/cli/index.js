@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 import { Command } from "commander";
 import { submitJobWithValidation } from "../api/index.js";
 import { PipelineOrchestrator } from "../api/index.js";
@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
 import { updatePipelineJson } from "./update-pipeline-json.js";
 import { analyzeTaskFile } from "./analyze-task.js";
+import { buildReexecArgs, isCompiledBinary } from "./self-reexec.js";
 
 // Derive package root for resolving internal paths regardless of host CWD
 const currentFile = fileURLToPath(import.meta.url);
@@ -146,22 +147,24 @@ program
     });
 
     try {
-      // Step d: Check for prebuilt UI assets
-      const distPath = path.join(PKG_ROOT, "src/ui/dist");
-      try {
-        await fs.access(distPath);
-        console.log("UI build found, skipping build step");
-      } catch {
-        console.error(
-          "UI assets missing. This indicates a source checkout. Run 'npm run ui:build' locally or install dev deps."
-        );
-        process.exit(1);
+      // Step d: Check for prebuilt UI assets (skip in compiled binary — assets are embedded)
+      if (!isCompiledBinary()) {
+        const distPath = path.join(PKG_ROOT, "src/ui/dist");
+        try {
+          await fs.access(distPath);
+          console.log("UI build found, skipping build step");
+        } catch {
+          console.error(
+            "UI assets missing. This indicates a source checkout. Run 'bun run ui:build' locally before starting the source checkout."
+          );
+          process.exit(1);
+        }
       }
 
-      // Step e: Spawn UI server
+      // Step e: Spawn UI server via self-reexec hidden command
       console.log("Starting UI server...");
-      const uiServerPath = path.join(PKG_ROOT, "src/ui/server.js");
-      uiChild = spawn("node", [uiServerPath], {
+      const uiReexec = buildReexecArgs(["_start-ui"]);
+      uiChild = spawn(uiReexec.execPath, uiReexec.args, {
         stdio: "pipe",
         env: {
           ...process.env,
@@ -181,13 +184,10 @@ program
         console.error(`[ui] ${data.toString().trim()}`);
       });
 
-      // Step f: Spawn orchestrator
+      // Step f: Spawn orchestrator via self-reexec hidden command
       console.log("Starting orchestrator...");
-      const orchestratorPath = path.join(
-        PKG_ROOT,
-        "src/cli/run-orchestrator.js"
-      );
-      orchestratorChild = spawn("node", [orchestratorPath], {
+      const orcReexec = buildReexecArgs(["_start-orchestrator"]);
+      orchestratorChild = spawn(orcReexec.execPath, orcReexec.args, {
         stdio: "pipe",
         env: {
           ...process.env,
@@ -489,5 +489,42 @@ function getStagePurpose(stageName) {
   };
   return purposes[stageName] || "handle stage-specific processing";
 }
+
+// Hidden internal subcommands for self-reexec (compiled binary support)
+program
+  .command("_start-ui", { hidden: true })
+  .action(async () => {
+    const { startServer } = await import("../ui/server.js");
+    const dataDir = process.env.PO_ROOT || process.cwd();
+    const port = process.env.PORT ? parseInt(process.env.PORT) : 4000;
+    await startServer({ dataDir, port });
+  });
+
+program
+  .command("_start-orchestrator", { hidden: true })
+  .action(async () => {
+    const { startOrchestrator } = await import("../core/orchestrator.js");
+    const root = process.env.PO_ROOT;
+    if (!root) {
+      console.error("PO_ROOT environment variable is required.");
+      process.exit(1);
+    }
+    const { stop } = await startOrchestrator({ dataDir: root });
+    process.on("SIGINT", async () => {
+      await stop();
+      process.exit(0);
+    });
+    process.on("SIGTERM", async () => {
+      await stop();
+      process.exit(0);
+    });
+  });
+
+program
+  .command("_run-job <jobId>", { hidden: true })
+  .action(async (jobId) => {
+    const { runPipelineJob } = await import("../core/pipeline-runner.js");
+    await runPipelineJob(jobId);
+  });
 
 program.parse();

@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 
 /**
  * Migration script for transforming demo data from legacy artifacts to new files.* schema
@@ -10,7 +10,7 @@
  * 4. Moves any legacy artifact files from job root to task subdirectories
  * 5. Provides dry-run mode for safe preview
  *
- * Usage: node scripts/migrate-demo-files.js [--dry-run] [--data-dir=demo]
+ * Usage: bun scripts/migrate-demo-files.js [--dry-run] [--data-dir=demo]
  */
 
 import { promises as fs, existsSync } from "node:fs";
@@ -37,7 +37,7 @@ function parseArgs() {
       options.dataDir = arg.split("=")[1];
     } else if (arg === "--help" || arg === "-h") {
       console.log(`
-Usage: node scripts/migrate-demo-files.js [options]
+Usage: bun scripts/migrate-demo-files.js [options]
 
 Options:
   --dry-run     Preview changes without executing
@@ -45,8 +45,8 @@ Options:
   --help, -h    Show this help message
 
 Example:
-  node scripts/migrate-demo-files.js --dry-run
-  node scripts/migrate-demo-files.js --data-dir=/path/to/demo
+  bun scripts/migrate-demo-files.js --dry-run
+  bun scripts/migrate-demo-files.js --data-dir=/path/to/demo
       `);
       process.exit(0);
     }

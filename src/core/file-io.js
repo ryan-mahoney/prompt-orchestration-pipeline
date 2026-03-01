@@ -8,7 +8,7 @@ import {
   isValidLogEvent,
   isValidLogFileExtension,
 } from "../config/log-events.js";
-import Database from "better-sqlite3";
+import { Database } from "bun:sqlite";
 import { executeBatch, validateBatchOptions } from "./batch-runner.js";
 
 /**
@@ -298,14 +298,15 @@ export function createTaskFileIO({
 
     /**
      * Get a SQLite database instance for this job run
-     * @param {Object} options - better-sqlite3 options
-     * @returns {Database} better-sqlite3 Database instance
+     * @param {Object} options - bun:sqlite options
+     * @returns {Database} bun:sqlite Database instance
      */
     getDB(options = {}) {
       ensureDirSync(artifactsDir);
       const dbPath = path.join(artifactsDir, "run.db");
-      const db = new Database(dbPath, options);
-      db.pragma("journal_mode = WAL");
+      const hasOptions = Object.keys(options).length > 0;
+      const db = hasOptions ? new Database(dbPath, options) : new Database(dbPath);
+      db.exec("PRAGMA journal_mode = WAL;");
       updateStatusWithFilesSync("artifacts", "run.db");
       return db;
     },
