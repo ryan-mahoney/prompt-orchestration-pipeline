@@ -3,9 +3,9 @@
   "version": "0.17.5",
   "description": "A Prompt-orchestration pipeline (POP) is a framework for building, running, and experimenting with complex chains of LLM tasks.",
   "type": "module",
-  "main": "src/ui/server.js",
+  "main": "src/ui/server/index.ts",
   "bin": {
-    "pipeline-orchestrator": "src/cli/index.js"
+    "pipeline-orchestrator": "src/cli/index.ts"
   },
   "files": [
     "src",
@@ -21,20 +21,20 @@
     "access": "public"
   },
   "scripts": {
-    "analyze": "bun src/cli/index.js analyze",
+    "analyze": "bun src/cli/index.ts analyze",
     "deduce-schemas": "bun scripts/deduce-schemas.js",
-    "test": "vitest run --config ./vite.config.js --root .",
+    "test": "bash scripts/test.sh",
     "lint": "eslint . --ext .js,.jsx",
-    "backend": "NODE_ENV=development bun --watch src/ui/server.js",
-    "ui": "NODE_ENV=development bun --watch src/ui/server.js",
+    "backend": "NODE_ENV=development bun --watch src/ui/server/index.ts",
+    "ui": "NODE_ENV=development bun --watch src/ui/server/index.ts",
     "ui:dev": "vite",
     "ui:build": "vite build && bun run generate:embedded-assets",
     "prepack": "bun run ui:build",
-    "ui:prod": "bun src/ui/server.js",
-    "demo:ui": "NODE_ENV=production PO_ROOT=demo bun src/ui/server.js",
-    "demo:orchestrator": "PO_ROOT=demo NODE_ENV=production bun -e \"import('./src/core/orchestrator.js').then(m => m.startOrchestrator({ dataDir: process.env.PO_ROOT || 'demo' })).catch(err => { console.error(err); process.exit(1) })\"",
+    "ui:prod": "bun src/ui/server/index.ts",
+    "demo:ui": "NODE_ENV=production PO_ROOT=demo bun src/ui/server/index.ts",
+    "demo:orchestrator": "PO_ROOT=demo NODE_ENV=production bun -e \"import('./src/core/orchestrator.ts').then(m => m.startOrchestrator({ dataDir: process.env.PO_ROOT || 'demo' })).catch(err => { console.error(err); process.exit(1) })\"",
     "demo:all": "NODE_ENV=development PO_ROOT=demo bun run ui:build && concurrently \"bun:demo:ui\" \"bun:demo:orchestrator\" --kill-others-on-fail",
-    "demo:prod": "bun run ui:build && NODE_ENV=production PO_ROOT=demo bun src/ui/server.js",
+    "demo:prod": "bun run ui:build && NODE_ENV=production PO_ROOT=demo bun src/ui/server/index.ts",
     "generate:embedded-assets": "bun scripts/generate-embedded-assets.js",
     "typecheck": "tsc --noEmit"
   },

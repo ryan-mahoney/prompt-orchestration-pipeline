@@ -71,7 +71,7 @@ function getJobPipelinePath(baseDir: string, jobId: string, location?: JobLocati
 
 ```typescript
 // Literal union types derived from the source constants
-type ProviderName = "openai" | "anthropic" | "gemini" | "deepseek" | "moonshot" | "claude-code" | "xai";
+type ProviderName = "openai" | "anthropic" | "gemini" | "deepseek" | "moonshot" | "claude-code" | "zai";
 type ModelAliasKey = typeof ModelAlias[keyof typeof ModelAlias]; // derived from the as-const ModelAlias object
 
 interface ModelConfigEntry {
@@ -499,7 +499,7 @@ export function getJobPipelinePath(baseDir: string, jobId: string, location?: Jo
 **Type signatures:**
 
 ```typescript
-export type ProviderName = "openai" | "anthropic" | "gemini" | "deepseek" | "moonshot" | "claude-code" | "xai";
+export type ProviderName = "openai" | "anthropic" | "gemini" | "deepseek" | "moonshot" | "claude-code" | "zai";
 export type ModelAliasKey = typeof ModelAlias[keyof typeof ModelAlias];
 
 export interface ModelConfigEntry {

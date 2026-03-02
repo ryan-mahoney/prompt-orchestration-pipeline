@@ -25,19 +25,19 @@ A set of TypeScript modules under `src/ui/client/` that provide identical behavi
 
 ### Files to create
 
-| File | Responsibility |
-|------|---------------|
-| `src/ui/client/main.tsx` | Application entry point — mounts React root with providers and route table. |
-| `src/ui/client/bootstrap.ts` | Fetches initial state snapshot, applies it, then opens an SSE `EventSource` connection. |
-| `src/ui/client/api.ts` | Typed REST API helpers for job control commands (restart, stop, rescan, start-task). |
-| `src/ui/client/sse-fetch.ts` | Fetch-based SSE parser for POST-initiated SSE streams (used by analysis progress). |
-| `src/ui/client/time-store.ts` | Singleton global time tick with subscriber management, cadence hints, and background-tab throttling. |
-| `src/ui/client/hooks/useJobList.ts` | React hook for fetching job list from `/api/jobs`. |
-| `src/ui/client/hooks/useJobListWithUpdates.ts` | Extends `useJobList` with real-time SSE updates via `EventSource`. |
-| `src/ui/client/hooks/useJobDetailWithUpdates.ts` | Fetches single job detail and maintains it with SSE updates, filtered by `jobId`. |
-| `src/ui/client/hooks/useAnalysisProgress.ts` | Manages pipeline analysis progress via POST-based SSE stream. |
-| `src/ui/client/adapters/job-adapter.ts` | Normalizes raw API job data into canonical UI shapes; derives allowed actions. |
-| `src/ui/client/types.ts` | Shared TypeScript types and interfaces for the entire `ui/client` module. |
+| File                                             | Responsibility                                                                                       |
+| ------------------------------------------------ | ---------------------------------------------------------------------------------------------------- |
+| `src/ui/client/main.tsx`                         | Application entry point — mounts React root with providers and route table.                          |
+| `src/ui/client/bootstrap.ts`                     | Fetches initial state snapshot, applies it, then opens an SSE `EventSource` connection.              |
+| `src/ui/client/api.ts`                           | Typed REST API helpers for job control commands (restart, stop, rescan, start-task).                 |
+| `src/ui/client/sse-fetch.ts`                     | Fetch-based SSE parser for POST-initiated SSE streams (used by analysis progress).                   |
+| `src/ui/client/time-store.ts`                    | Singleton global time tick with subscriber management, cadence hints, and background-tab throttling. |
+| `src/ui/client/hooks/useJobList.ts`              | React hook for fetching job list from `/api/jobs`.                                                   |
+| `src/ui/client/hooks/useJobListWithUpdates.ts`   | Extends `useJobList` with real-time SSE updates via `EventSource`.                                   |
+| `src/ui/client/hooks/useJobDetailWithUpdates.ts` | Fetches single job detail and maintains it with SSE updates, filtered by `jobId`.                    |
+| `src/ui/client/hooks/useAnalysisProgress.ts`     | Manages pipeline analysis progress via POST-based SSE stream.                                        |
+| `src/ui/client/adapters/job-adapter.ts`          | Normalizes raw API job data into canonical UI shapes; derives allowed actions.                       |
+| `src/ui/client/types.ts`                         | Shared TypeScript types and interfaces for the entire `ui/client` module.                            |
 
 ### Key types and interfaces
 
@@ -274,26 +274,26 @@ type AnalysisSseEventType =
 
 **Internal (`src/`) imports:**
 
-| Import From | Used By | What Is Used |
-|-------------|---------|-------------|
-| `src/config/statuses` | `job-adapter.ts` | `normalizeTaskState`, `deriveJobStatusFromTasks` |
-| `src/utils/pipelines` | `job-adapter.ts` | `derivePipelineMetadata` |
-| `src/utils/jobs` | `job-adapter.ts` | `classifyJobForDisplay` |
-| `src/core/lifecycle-policy` | `job-adapter.ts` | `decideTransition` |
-| `src/ui/transformers/list-transformer` | `useJobListWithUpdates.ts` | `sortJobs` |
-| `src/ui/client/sse-fetch` | `useAnalysisProgress.ts` | `fetchSSE` |
-| `src/ui/client/adapters/job-adapter` | `useJobDetailWithUpdates.ts` | `adaptJobDetail` |
-| `src/ui/client/hooks/useJobList` | `useJobListWithUpdates.ts` | `useJobList` |
-| `src/ui/client/types` | All files | Shared type definitions |
+| Import From                            | Used By                      | What Is Used                                     |
+| -------------------------------------- | ---------------------------- | ------------------------------------------------ |
+| `src/config/statuses`                  | `job-adapter.ts`             | `normalizeTaskState`, `deriveJobStatusFromTasks` |
+| `src/utils/pipelines`                  | `job-adapter.ts`             | `derivePipelineMetadata`                         |
+| `src/utils/jobs`                       | `job-adapter.ts`             | `classifyJobForDisplay`                          |
+| `src/core/lifecycle-policy`            | `job-adapter.ts`             | `decideTransition`                               |
+| `src/ui/transformers/list-transformer` | `useJobListWithUpdates.ts`   | `sortJobs`                                       |
+| `src/ui/client/sse-fetch`              | `useAnalysisProgress.ts`     | `fetchSSE`                                       |
+| `src/ui/client/adapters/job-adapter`   | `useJobDetailWithUpdates.ts` | `adaptJobDetail`                                 |
+| `src/ui/client/hooks/useJobList`       | `useJobListWithUpdates.ts`   | `useJobList`                                     |
+| `src/ui/client/types`                  | All files                    | Shared type definitions                          |
 
 **External packages:**
 
-| Package | Used By |
-|---------|---------|
-| `react` | All hook files, `main.tsx` |
-| `react-dom` | `main.tsx` |
-| `react-router-dom` | `main.tsx` |
-| `@radix-ui/themes` | `main.tsx` |
+| Package            | Used By                    |
+| ------------------ | -------------------------- |
+| `react`            | All hook files, `main.tsx` |
+| `react-dom`        | `main.tsx`                 |
+| `react-router-dom` | `main.tsx`                 |
+| `@radix-ui/themes` | `main.tsx`                 |
 
 ## 5. Acceptance Criteria
 
@@ -425,6 +425,7 @@ type AnalysisSseEventType =
 **Why:** Satisfies acceptance criteria 4 and 44 — structured error objects for all API failures.
 
 **Type signatures:**
+
 ```typescript
 function getErrorCodeFromStatus(status: number): ApiErrorCode;
 function getErrorMessageFromStatus(status: number): string;
@@ -444,6 +445,7 @@ function getStopErrorMessage(errorData: unknown, status: number): string;
 **Why:** Satisfies acceptance criteria 4, 5, and 44 — typed API helpers for job lifecycle commands.
 
 **Type signatures:**
+
 ```typescript
 // --- API Response Envelopes ---
 interface ApiOkResponse {
@@ -451,7 +453,10 @@ interface ApiOkResponse {
   message?: string;
 }
 
-async function restartJob(jobId: string, opts?: RestartJobOptions): Promise<ApiOkResponse>;
+async function restartJob(
+  jobId: string,
+  opts?: RestartJobOptions,
+): Promise<ApiOkResponse>;
 async function rescanJob(jobId: string): Promise<ApiOkResponse>;
 async function startTask(jobId: string, taskId: string): Promise<ApiOkResponse>;
 async function stopJob(jobId: string): Promise<ApiOkResponse>;
@@ -468,12 +473,13 @@ async function stopJob(jobId: string): Promise<ApiOkResponse>;
 **Why:** Satisfies acceptance criteria 11–16 — fetch-based SSE parsing for POST-initiated streams.
 
 **Type signatures:**
+
 ```typescript
 function fetchSSE(
   url: string,
   options: RequestInit | undefined,
   onEvent: SseEventCallback,
-  onError?: SseErrorCallback
+  onError?: SseErrorCallback,
 ): SseFetchHandle;
 ```
 
@@ -488,6 +494,7 @@ function fetchSSE(
 **Why:** Satisfies acceptance criteria 17–22 — global time tick with dynamic cadence and background throttling.
 
 **Type signatures:**
+
 ```typescript
 function subscribe(listener: TimeStoreListener): TimeStoreUnsubscribe;
 function getSnapshot(): number;
@@ -507,8 +514,11 @@ function removeCadenceHint(id: string): void;
 **Why:** Satisfies acceptance criteria 2, 3, and 45 — state snapshot hydration before SSE, including non-OK response handling and sync/async callback support.
 
 **Type signatures:**
+
 ```typescript
-async function bootstrap(options?: BootstrapOptions): Promise<EventSource | null>;
+async function bootstrap(
+  options?: BootstrapOptions,
+): Promise<EventSource | null>;
 ```
 
 **Test:** Create `src/ui/client/__tests__/bootstrap.test.ts`. Mock `fetch` and `EventSource`. Test that `applySnapshot` is called before `EventSource` is constructed. Test that fetch failure still calls `applySnapshot(null)` and returns an `EventSource`. Test that a non-OK HTTP response (e.g., 500 with JSON body) calls `applySnapshot` with the parsed error body. Test that a non-OK HTTP response with unparseable body calls `applySnapshot(null)`. Test that a synchronous `applySnapshot` callback works without errors. Test that `EventSource` creation failure returns `null`. Test that SSE event listeners are registered for all six bootstrap event types.
@@ -522,6 +532,7 @@ async function bootstrap(options?: BootstrapOptions): Promise<EventSource | null
 **Why:** Satisfies acceptance criteria 8 — backward-compatible task normalization.
 
 **Type signatures:**
+
 ```typescript
 function normalizeTasks(rawTasks: unknown): Record<string, NormalizedTask>;
 ```
@@ -537,9 +548,12 @@ function normalizeTasks(rawTasks: unknown): Record<string, NormalizedTask>;
 **Why:** Satisfies acceptance criteria 6 and 7 — canonical UI shapes with defaults.
 
 **Type signatures:**
+
 ```typescript
 function adaptJobSummary(apiJob: Record<string, unknown>): NormalizedJobSummary;
-function adaptJobDetail(apiDetail: Record<string, unknown>): NormalizedJobDetail;
+function adaptJobDetail(
+  apiDetail: Record<string, unknown>,
+): NormalizedJobDetail;
 ```
 
 **Test:** In `src/ui/client/__tests__/job-adapter.test.ts`, add tests. Test that `adaptJobSummary` produces all required fields with valid defaults. Test that it reads from `tasksStatus` when `tasks` is absent. Test that `adaptJobDetail` preserves `costs` field. Test that `progress` is computed from `doneCount / taskCount * 100` when not provided. Test that `__warnings` is populated for normalization issues.
@@ -553,10 +567,11 @@ function adaptJobDetail(apiDetail: Record<string, unknown>): NormalizedJobDetail
 **Why:** Satisfies acceptance criteria 9 and 10 — allowed action computation.
 
 **Type signatures:**
+
 ```typescript
 function deriveAllowedActions(
   adaptedJob: NormalizedJobSummary,
-  pipelineTasks: string[]
+  pipelineTasks: string[],
 ): AllowedActions;
 ```
 
@@ -571,6 +586,7 @@ function deriveAllowedActions(
 **Why:** Satisfies acceptance criteria 23–25 — base job list hook.
 
 **Type signatures:**
+
 ```typescript
 function useJobList(): UseJobListResult;
 ```
@@ -586,6 +602,7 @@ function useJobList(): UseJobListResult;
 **Why:** Satisfies acceptance criteria 26–32 — live-updating job list.
 
 **Type signatures:**
+
 ```typescript
 function useJobListWithUpdates(): UseJobListWithUpdatesResult;
 ```
@@ -601,6 +618,7 @@ function useJobListWithUpdates(): UseJobListWithUpdatesResult;
 **Why:** Satisfies acceptance criteria 33–40 — live-updating job detail.
 
 **Type signatures:**
+
 ```typescript
 const REFRESH_DEBOUNCE_MS = 200;
 function useJobDetailWithUpdates(jobId: string): UseJobDetailWithUpdatesResult;
@@ -617,6 +635,7 @@ function useJobDetailWithUpdates(jobId: string): UseJobDetailWithUpdatesResult;
 **Why:** Satisfies acceptance criteria 41–43 — analysis progress via POST-based SSE.
 
 **Type signatures:**
+
 ```typescript
 function useAnalysisProgress(): UseAnalysisProgressResult;
 ```

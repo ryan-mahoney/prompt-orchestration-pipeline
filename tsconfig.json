@@ -5,7 +5,7 @@
     "module": "ESNext",
     "moduleResolution": "bundler",
     "types": ["bun-types"],
-    "lib": ["ESNext"],
+    "lib": ["ESNext", "DOM"],
 
     // Strictness
     "strict": true,
@@ -19,6 +19,7 @@
     "verbatimModuleSyntax": true,
     "isolatedModules": true,
     "resolveJsonModule": true,
+    "jsx": "react-jsx",
 
     // Output
     "declaration": true,
@@ -32,6 +33,6 @@
     },
     "outDir": "dist"
   },
-  "include": ["src/**/*.ts"],
+  "include": ["src/**/*.ts", "src/**/*.tsx"],
   "exclude": ["node_modules", "dist", "src-legacy"]
 }

@@ -1,0 +1,80 @@
+@import "tailwindcss";
+@import "@radix-ui/themes/styles.css";
+@config "../../../tailwind.config.js";
+
+/* ── Steel Terminal Theme ── */
+
+:root {
+  --font-sans: "Inter", system-ui, sans-serif;
+  --background: 30 5% 97%;
+  --foreground: 210 15% 15%;
+  --card: 0 0% 100%;
+  --card-foreground: 210 15% 15%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 210 15% 15%;
+  --primary: 243deg 75% 59%;
+  --primary-foreground: 0 0% 100%;
+  --primary-hover: 243deg 75% 50%;
+  --secondary: 210 10% 92%;
+  --secondary-foreground: 243deg 75% 30%;
+  --muted: 210 10% 92%;
+  --muted-foreground: 243deg 50% 45%;
+  --accent: 175 45% 48%;
+  --accent-foreground: 243deg 75% 59%;
+  --destructive: 0 70% 55%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 210 10% 85%;
+  --input: 210 10% 92%;
+  --ring: 243deg 75% 59%;
+  --radius: 0.5rem;
+
+  --success: 145 50% 45%;
+  --success-foreground: 0 0% 100%;
+  --warning: 35 85% 55%;
+  --warning-foreground: 210 15% 15%;
+  --error: 0 70% 55%;
+  --error-foreground: 0 0% 100%;
+  --info: 200 75% 52%;
+  --info-foreground: 0 0% 100%;
+}
+
+.dark {
+  --font-sans: "Inter", system-ui, sans-serif;
+  --background: 215 20% 8%;
+  --foreground: 210 15% 92%;
+  --card: 215 15% 12%;
+  --card-foreground: 210 15% 92%;
+  --popover: 215 15% 12%;
+  --popover-foreground: 210 15% 92%;
+  --primary: 200 20% 70%;
+  --primary-foreground: 215 20% 8%;
+  --primary-hover: 200 20% 62%;
+  --secondary: 215 15% 18%;
+  --secondary-foreground: 210 15% 92%;
+  --muted: 215 15% 18%;
+  --muted-foreground: 210 15% 65%;
+  --accent: 175 55% 58%;
+  --accent-foreground: 215 20% 8%;
+  --destructive: 0 65% 62%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 215 15% 25%;
+  --input: 215 15% 18%;
+  --ring: 200 20% 70%;
+
+  --success: 145 45% 55%;
+  --success-foreground: 215 20% 8%;
+  --warning: 35 80% 60%;
+  --warning-foreground: 215 20% 8%;
+  --error: 0 65% 62%;
+  --error-foreground: 0 0% 100%;
+  --info: 200 70% 62%;
+  --info-foreground: 215 20% 8%;
+}
+
+@layer base {
+  body {
+    font-family: var(--font-sans);
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
+  }
+}

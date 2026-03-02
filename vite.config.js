@@ -26,12 +26,12 @@ export default defineConfig({
     },
   },
   esbuild: {
-    loader: "jsx", // Default loader for all files
-    include: /.*\.jsx?$/, // Apply to both .js and .jsx files
+    loader: "tsx", // Default loader for all files
+    include: /.*\.[jt]sx?$/, // Apply to .js, .jsx, .ts, and .tsx files
   },
   optimizeDeps: {
     esbuildOptions: {
-      loader: { ".js": "jsx" },
+      loader: { ".js": "jsx", ".ts": "tsx", ".tsx": "tsx" },
     },
   },
   css: {

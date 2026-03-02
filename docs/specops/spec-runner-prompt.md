@@ -15,7 +15,9 @@ After each step:
 - Run targeted tests for the affected module only (`bun test <path>`)
 
 SPEC: <path to spec file>
-ONLY STEP(S): All
+ONLY STEP(S): All Implementation Steps
 
 Before each step, consider if it is the correct approach given the existing
-src-ts/ structure and any already-migrated modules. Adapt as needed, then implement.
+src/ structure and existing modules. Adapt the plan as needed, then implement.
+
+In the end, consider all of the acceptance criteria and provide a report on if they were met.

@@ -23,15 +23,11 @@ jobs:
       - name: Install dependencies
         run: bun install
 
+      - name: TypeScript type check
+        run: bun run typecheck
+
       - name: Build UI assets
         run: bun run ui:build
 
-      - name: Run Bun migration tests
-        run: bun test tests/bun-migration.bun.test.js tests/batch-runner.bun.test.js tests/file-io-sqlite.bun.test.js
-
-      - name: Run compiled binary smoke test
-        run: bun test tests/compiled-binary.bun.test.js
-        timeout-minutes: 5
-
-      - name: Run vitest suite
+      - name: Run tests
         run: bun run test

@@ -45,7 +45,7 @@ A set of TypeScript modules under `src/providers/` and `src/llm/` that provide i
 | `src/providers/gemini.ts` | Google Gemini GenerateContent adapter. |
 | `src/providers/deepseek.ts` | DeepSeek adapter with streaming support via async generator. |
 | `src/providers/moonshot.ts` | Moonshot adapter with content-filter fallback to DeepSeek. |
-| `src/providers/zhipu.ts` | Zhipu (Z.ai) OpenAI-compatible adapter. |
+| `src/providers/zhipu.ts` | Z.ai OpenAI-compatible adapter. |
 | `src/providers/claude-code.ts` | Claude Code CLI adapter using Bun subprocess APIs. |
 | `src/llm/index.ts` | Central gateway: `chat()` dispatcher, `complete()`, named-model factories (`createLLM`, `createNamedModelsAPI`, `createHighLevelLLM`), `createLLMWithOverride`, `createChain`, `withRetry`, `parallel`, telemetry event bus, mock provider, cost calculation. |
 
@@ -174,7 +174,7 @@ type ProviderName =
   | "anthropic"
   | "deepseek"
   | "gemini"
-  | "zhipu"
+  | "zai"
   | "claudecode"
   | "moonshot"
   | "mock";
@@ -209,7 +209,7 @@ interface ProviderAvailability {
   deepseek: boolean;
   anthropic: boolean;
   gemini: boolean;
-  zhipu: boolean;
+  zai: boolean;
   claudecode: boolean;
   moonshot: boolean;
   mock: boolean;
@@ -452,7 +452,7 @@ export interface ChatMessage { role: "system" | "user" | "assistant"; content: s
 export interface ProviderOptions { messages: ChatMessage[]; model?: string; temperature?: number; maxTokens?: number; responseFormat?: string | ResponseFormatObject; topP?: number; stop?: string | string[]; maxRetries?: number }
 export interface AdapterResponse { content: Record<string, unknown> | string; text?: string; usage?: AdapterUsage; raw?: unknown }
 export interface ChatResponse { content: Record<string, unknown> | string; usage: NormalizedUsage; raw?: unknown }
-export type ProviderName = "openai" | "anthropic" | "deepseek" | "gemini" | "zhipu" | "claudecode" | "moonshot" | "mock"
+export type ProviderName = "openai" | "anthropic" | "deepseek" | "gemini" | "zai" | "claudecode" | "moonshot" | "mock"
 export type ModelFunction = (options?: Partial<ChatOptions>) => Promise<ChatResponse>
 export type ProviderGroup = Record<string, ModelFunction>
 export type ProviderModelMap = Record<string, ProviderGroup>
@@ -638,7 +638,7 @@ export async function moonshotChat(options: MoonshotOptions): Promise<AdapterRes
 
 ### Step 8: Implement Zhipu adapter
 
-**What to do:** Create `src/providers/zhipu.ts` exporting `zhipuChat(options: ProviderOptions): Promise<AdapterResponse>`.
+**What to do:** Create `src/providers/zhipu.ts` exporting `zaiChat(options: ProviderOptions): Promise<AdapterResponse>`.
 
 **Why:** Zhipu follows the OpenAI-compatible format. Satisfies acceptance criterion 18.
 
