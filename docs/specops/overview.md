@@ -1,4 +1,4 @@
-# SpecOps Prompt Index
+# SpecOps Approach
 
 This document catalogs the prompts used to execute the [SpecOps method](https://github.com/spec-ops-method/spec-ops) for the POP JavaScript-to-TypeScript migration. SpecOps treats **specifications as the source of truth** — extracting institutional knowledge from a legacy codebase into verified specs before building a replacement.
 
