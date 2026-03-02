@@ -89,7 +89,14 @@ interface Breadcrumb {
   href?: string;
 }
 
+// --- Task Collection (object map or array — both shapes exist in the wild) ---
+
+type TaskCollection = Record<string, TaskStateObject> | TaskStateObject[];
+
 // --- Job Summary (from adapter, consumed by Dashboard/JobTable) ---
+// NOTE: `tasks` is a union because the API may return either an object map
+// or an array. Consumers that require object-map access must normalize via
+// `normalizeTaskCollection()` (see below) before indexing by key.
 
 interface JobSummary {
   id: string;
@@ -100,7 +107,7 @@ interface JobSummary {
   taskCount: number;
   doneCount: number;
   location: string;
-  tasks: Record<string, TaskStateObject>;
+  tasks: TaskCollection;
   current: string | null;
   currentStage?: string;
   createdAt?: string;
@@ -112,6 +119,14 @@ interface JobSummary {
   totalTokens?: number;
   displayCategory: DisplayCategory;
 }
+
+// --- Task Collection Normalizer ---
+// Converts a TaskCollection to Record<string, TaskStateObject> for components
+// that require keyed access. Array items are keyed by their `name` property.
+
+function normalizeTaskCollection(
+  tasks: TaskCollection,
+): Record<string, TaskStateObject>;
 
 // --- Costs Summary ---
 
@@ -156,12 +171,15 @@ interface TaskFiles {
 }
 
 // --- Job Detail (extended, consumed by PipelineDetail/JobDetail/DAGGrid) ---
+// NOTE: `tasks` is a union for the same reason as JobSummary. `JobDetail`
+// consumers (particularly `JobDetail.tsx`) must call `normalizeTaskCollection()`
+// before passing tasks to `DAGGrid` or indexing by task name.
 
 interface JobDetail {
   id: string;
   name: string;
   status: string;
-  tasks: Record<string, TaskStateObject>;
+  tasks: TaskCollection;
   pipeline: { tasks: string[] };
   costs?: {
     summary: CostsSummary;
@@ -410,7 +428,7 @@ interface UploadResult {
 18. `TaskCreationSidebar` supports @mentions of pipeline artifacts, streams SSE from `/api/ai/task-plan`, detects task proposals via regex, and creates tasks via `/api/tasks/create`.
 19. `TaskCreationSidebar` registers a `beforeunload` handler when messages exist and cleans it up on unmount.
 20. `TaskCreationSidebar` disables input during all three sending phases: `isSending`, `isWaiting`, `isReceiving`.
-21. `AddPipelineSidebar` POSTs to `/api/pipelines`, waits 1 second, then navigates to the new pipeline page.
+21. `AddPipelineSidebar` POSTs to `/api/pipelines` (response must include `{slug: string}`), shows a "Creating…" spinner during the 1-second post-create delay, then navigates to `/pipelines/{slug}`. The timer is cleaned up on unmount via `clearTimeout`.
 22. `SchemaPreviewPanel` renders as a fixed bottom panel (50% height) with syntax-highlighted JSON and copy button.
 23. `PipelineTypeTaskSidebar` fetches task analysis from `/api/pipelines/{slug}/tasks/{taskId}/analysis` and delegates to `TaskAnalysisDisplay`.
 
@@ -419,7 +437,13 @@ interface UploadResult {
 24. `TaskFilePane` fetches file content from `/api/jobs/{jobId}/tasks/{taskId}/file?type={type}&filename={filename}`.
 25. `TaskFilePane` validates `type` against the allowlist `["artifacts", "logs", "tmp"]` before making API requests.
 26. `TaskFilePane` cancels in-flight fetch requests via `AbortController` when props change or the pane closes.
-27. `TaskFilePane` renders MIME-type-aware content: JSON pretty-print, basic Markdown, plain text, binary placeholder.
+27. `TaskFilePane` renders MIME-type-aware content with explicit rules:
+    - `application/json` or `.json` extension: pretty-printed via `JSON.stringify(parsed, null, 2)` with syntax highlighting. Falls back to plain text if JSON parsing fails.
+    - `text/markdown` or `.md` extension: rendered via basic Markdown (raw HTML disabled).
+    - `text/plain`, `text/csv`, or any other `text/*` MIME type: rendered as monospace preformatted text.
+    - Unknown or missing MIME types: fall back to plain text rendering.
+    - Binary MIME types (`image/*`, `application/octet-stream`, etc.): display a placeholder message ("Binary file — cannot display preview") with the file name and size if available.
+    - Files larger than 500 KB are truncated to the first 500 KB with a "(truncated)" indicator to prevent browser rendering degradation.
 28. `TaskFilePane` supports copy-to-clipboard and retry via `retryCounter` state.
 
 ### Upload
@@ -428,7 +452,7 @@ interface UploadResult {
 
 ### Markdown
 
-30. `MarkdownRenderer` renders GFM markdown with syntax highlighting, custom component overrides (headings, lists, tables, blockquotes), and code copy buttons.
+30. `MarkdownRenderer` renders GFM markdown with syntax highlighting, custom component overrides (headings, lists, tables, blockquotes), and code copy buttons. Raw HTML is disabled (`rehype-raw` is not included; `react-markdown` strips raw HTML by default). This is a security requirement since the UI renders server-provided content.
 
 ### Live timers
 
@@ -460,7 +484,7 @@ interface UploadResult {
 
 ### Environment and responsiveness
 
-50. `DAGGrid` and `PipelineDAGGrid` skip `ResizeObserver`, `requestAnimationFrame`, and `matchMedia` when `process.env.NODE_ENV === "test"`.
+50. `DAGGrid` and `PipelineDAGGrid` accept an optional `geometryAdapter` prop (defaulting to a real-browser implementation) that wraps `ResizeObserver`, `requestAnimationFrame`, and `matchMedia`. Tests inject a no-op or mock adapter instead of branching on `process.env.NODE_ENV`. No test-only runtime branches exist in production code.
 51. `DAGGrid` and `PipelineDAGGrid` switch to single-column layout below 1024px viewport width.
 
 ### Bug fixes
@@ -651,10 +675,17 @@ export function StopJobModal(props: {
 
 **What to do:** Create `src/ui/components/LiveText.tsx` and `src/ui/components/TimerText.tsx`.
 
-- `LiveText`: Default export. Accepts `compute: (nowMs: number) => string`, `cadenceMs` (default 10000), `className`. Uses `useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot)` from the time-store module. On mount, calls `addCadenceHint` with a unique ID and `cadenceMs`; on unmount, calls `removeCadenceHint`. Renders `compute(snapshot)`.
-- `TimerText`: Default export. Accepts `startMs: number`, `endMs: number | null`, `granularity: "second" | "minute"` (default `"second"`), `format` (default `fmtDuration`), `className`. Internally composes `LiveText` with a `compute` function that calculates elapsed time.
+- `LiveText`: Default export. Accepts `compute: (nowMs: number) => string`, `cadenceMs` (default 10000), `className`. Uses `useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot)` from the time-store module. The snapshot is a `number` representing `Date.now()` at the last tick. On mount inside a `useEffect`, calls `addCadenceHint(id, cadenceMs)` where `id` is a stable unique identifier (generated once via `useRef`); on unmount (effect cleanup), calls `removeCadenceHint(id)`. Multiple components registering the same `cadenceMs` value coalesce into a single interval inside the time-store — no per-component polling occurs. `getServerSnapshot` returns `0` (SSR placeholder). Renders `compute(snapshot)`.
+- `TimerText`: Default export. Accepts `startMs: number`, `endMs: number | null`, `granularity: "second" | "minute"` (default `"second"`), `format` (default `fmtDuration`), `className`. Internally composes `LiveText` with a `compute` function that calculates elapsed time. Passes `cadenceMs` of 1000 for `"second"` granularity or 60000 for `"minute"` granularity.
 
 **Why:** These are used by `JobTable`, `DAGGrid`, and other components to display live durations. They depend on the time-store but nothing else in the component tree (AC 31, 32, 33).
+
+**Time-store subscription contract:** The time-store exposes five functions consumed by these components:
+- `subscribe(callback: () => void): () => void` — registers a listener notified on each tick; returns an unsubscribe function.
+- `getSnapshot(): number` — returns the current `Date.now()` value from the last tick.
+- `getServerSnapshot(): number` — returns `0` (safe SSR fallback).
+- `addCadenceHint(id: string, cadenceMs: number): void` — declares that a component needs ticks at the given cadence. The store maintains a single `setInterval` at the GCD of all active cadences (or the minimum cadence). Multiple hints at the same cadence are reference-counted, not duplicated.
+- `removeCadenceHint(id: string): void` — removes a cadence hint. When all hints are removed, the internal interval stops (no idle polling).
 
 **Type signatures:**
 
@@ -810,6 +841,7 @@ export function AnalysisProgressTray(props: {
 - `computeConnectorLines(nodeRefs: ..., cols: number, visualOrder: number[]): ConnectorLine[]` — compute SVG path `d` attributes for connector lines between adjacent grid cells.
 - `checkReducedMotion(): boolean` — check `window.matchMedia("(prefers-reduced-motion: reduce)")`.
 - `computeEffectiveCols(containerWidth: number, breakpoint?: number, defaultCols?: number): number` — return 1 below breakpoint (default 1024px), otherwise `defaultCols` (default 3).
+- `GeometryAdapter` interface and `defaultGeometryAdapter` — injectable abstraction over `ResizeObserver`, `requestAnimationFrame`, and `matchMedia` so that tests can supply a no-op or mock adapter without baking a `NODE_ENV` branch into production code.
 
 **Why:** Eliminates the substantial code duplication identified in the analysis between `DAGGrid` and `PipelineDAGGrid` (AC 12, 13, 14, 15, 16).
 
@@ -827,6 +859,13 @@ export function computeConnectorLines(
 ): ConnectorLine[];
 export function checkReducedMotion(): boolean;
 export function computeEffectiveCols(containerWidth: number, breakpoint?: number, defaultCols?: number): number;
+
+export interface GeometryAdapter {
+  observeResize(el: HTMLElement, callback: (entry: ResizeObserverEntry) => void): () => void;
+  requestFrame(callback: () => void): void;
+  matchesReducedMotion(): boolean;
+}
+export const defaultGeometryAdapter: GeometryAdapter;
 ```
 
 **Test:** Create `src/ui/components/__tests__/dag-shared.test.ts`:
@@ -843,13 +882,15 @@ export function computeEffectiveCols(containerWidth: number, breakpoint?: number
 
 **What to do:** Create `src/ui/components/DAGGrid.tsx`.
 
-- Default export. Accepts `items: DagItem[]`, `cols` (default 3), `activeIndex?: number`, `jobId: string`, `filesByTypeForItem: ...`, `taskById: ...`, `pipelineTasks?: string[]`. Uses shared helpers from `dag-shared.ts` for layout and connectors. Manages state: `lines`, `effectiveCols`, `openIdx` (sidebar), `restartModalOpen`, `restartTaskId`, `isSubmitting`, `alertMessage`, `alertType`. Uses `useLayoutEffect` + `ResizeObserver` + `requestAnimationFrame` to compute connector lines (skipped in test env). Renders task cards in snake layout, SVG overlay with connectors (marker ID: `"dag-arrow"`). On card click, opens `TaskDetailSidebar`. On restart/start actions, calls `restartJob`/`startTask` and translates error codes to alert messages with 5-second auto-dismiss. Renders `RestartJobModal` when `restartModalOpen`.
+- Default export. Accepts `items: DagItem[]`, `cols` (default 3), `activeIndex?: number`, `jobId: string`, `filesByTypeForItem: ...`, `taskById: ...`, `pipelineTasks?: string[]`, `geometryAdapter?` (defaults to `defaultGeometryAdapter`). Uses shared helpers from `dag-shared.ts` for layout and connectors. Manages state: `lines`, `effectiveCols`, `openIdx` (sidebar), `restartModalOpen`, `restartTaskId`, `isSubmitting`, `alertMessage`, `alertType`. Uses `useLayoutEffect` + the geometry adapter's `observeResize` and `requestFrame` methods to compute connector lines. Renders task cards in snake layout, SVG overlay with connectors (marker ID: `"dag-arrow"`). On card click, opens `TaskDetailSidebar`. On restart/start actions, calls `restartJob`/`startTask` and translates error codes to alert messages with 5-second auto-dismiss. Renders `RestartJobModal` when `restartModalOpen`.
 
 **Why:** Core DAG visualization component for job detail views (AC 9, 12–16, 45).
 
 **Type signatures:**
 
 ```typescript
+import type { GeometryAdapter } from "./dag-shared";
+
 export default function DAGGrid(props: {
   items: DagItem[];
   cols?: number;
@@ -858,10 +899,11 @@ export default function DAGGrid(props: {
   filesByTypeForItem: (index: number) => TaskFiles;
   taskById: Record<string, TaskStateObject>;
   pipelineTasks?: string[];
+  geometryAdapter?: GeometryAdapter;
 }): JSX.Element;
 ```
 
-**Test:** Create `src/ui/components/__tests__/DAGGrid.test.tsx`. Set `process.env.NODE_ENV = "test"`. Render with 5 items. Assert 5 task cards are rendered. Assert ghost padding elements fill the row. Click a card — assert `TaskDetailSidebar` opens. Mock `restartJob` to reject with `{code: "job_running"}` — trigger restart and assert the alert message appears.
+**Test:** Create `src/ui/components/__tests__/DAGGrid.test.tsx`. Render with 5 items and a no-op `geometryAdapter`. Assert 5 task cards are rendered. Assert ghost padding elements fill the row. Click a card — assert `TaskDetailSidebar` opens. Mock `restartJob` to reject with `{code: "job_running"}` — trigger restart and assert the alert message appears.
 
 ---
 
@@ -869,21 +911,24 @@ export default function DAGGrid(props: {
 
 **What to do:** Create `src/ui/components/PipelineDAGGrid.tsx`.
 
-- Default export. Accepts `items: DagItem[]`, `cols` (default 3), `pipelineSlug: string`. Uses shared helpers from `dag-shared.ts`. Same visual rendering as `DAGGrid` but without job-state actions (no restart, no start, no alert notifications). SVG marker ID: `"pipeline-dag-arrow"`. On card click, opens `PipelineTypeTaskSidebar`.
+- Default export. Accepts `items: DagItem[]`, `cols` (default 3), `pipelineSlug: string`, `geometryAdapter?` (defaults to `defaultGeometryAdapter`). Uses shared helpers from `dag-shared.ts`. Same visual rendering as `DAGGrid` but without job-state actions (no restart, no start, no alert notifications). SVG marker ID: `"pipeline-dag-arrow"`. On card click, opens `PipelineTypeTaskSidebar`.
 
 **Why:** DAG visualization for pipeline type views (AC 10, 54).
 
 **Type signatures:**
 
 ```typescript
+import type { GeometryAdapter } from "./dag-shared";
+
 export default function PipelineDAGGrid(props: {
   items: DagItem[];
   cols?: number;
   pipelineSlug: string;
+  geometryAdapter?: GeometryAdapter;
 }): JSX.Element;
 ```
 
-**Test:** Create `src/ui/components/__tests__/PipelineDAGGrid.test.tsx`. Set `process.env.NODE_ENV = "test"`. Render with 4 items. Assert 4 task cards rendered. Click a card — assert `PipelineTypeTaskSidebar` opens with correct task data.
+**Test:** Create `src/ui/components/__tests__/PipelineDAGGrid.test.tsx`. Render with 4 items and a no-op `geometryAdapter`. Assert 4 task cards rendered. Click a card — assert `PipelineTypeTaskSidebar` opens with correct task data.
 
 ---
 
@@ -891,8 +936,8 @@ export default function PipelineDAGGrid(props: {
 
 **What to do:** Create `src/ui/components/TaskDetailSidebar.tsx` and `src/ui/components/PipelineTypeTaskSidebar.tsx`.
 
-- `TaskDetailSidebar`: Named + default (memoized) export. Uses `Sidebar`. Accepts `open`, `title`, `status`, `jobId`, `taskId`, `taskBody`, `taskError`, `filesByTypeForItem`, `task`, `onClose`, `taskIndex`. Renders file browser with artifacts/logs/tmp tabs (defaulting to artifacts), error callout with stack trace toggle, and inline `TaskFilePane`.
-- `PipelineTypeTaskSidebar`: Named + default (memoized) export. Uses `Sidebar`. Accepts `open`, `title`, `status`, `task`, `pipelineSlug`, `onClose`. Fetches task analysis from `/api/pipelines/{slug}/tasks/{taskId}/analysis` on open. Delegates rendering to `TaskAnalysisDisplay`.
+- `TaskDetailSidebar`: Exported as both a named export (`TaskDetailSidebar`) and a memoized default export (`React.memo(TaskDetailSidebar)`). Both export forms must be preserved because other modules may import either the named or default version. Uses `Sidebar`. Accepts `open`, `title`, `status`, `jobId`, `taskId`, `taskBody`, `taskError`, `filesByTypeForItem`, `task`, `onClose`, `taskIndex`. Renders file browser with artifacts/logs/tmp tabs (defaulting to artifacts), error callout with stack trace toggle, and inline `TaskFilePane`.
+- `PipelineTypeTaskSidebar`: Exported as both a named export (`PipelineTypeTaskSidebar`) and a memoized default export (`React.memo(PipelineTypeTaskSidebar)`). Both export forms must be preserved. Uses `Sidebar`. Accepts `open`, `title`, `status`, `task`, `pipelineSlug`, `onClose`. Fetches task analysis from `/api/pipelines/{slug}/tasks/{taskId}/analysis` on open. Delegates rendering to `TaskAnalysisDisplay`.
 
 **Why:** Side panels for inspecting task details in both job and pipeline-type views (AC 17, 23).
 
@@ -922,7 +967,17 @@ export default PipelineTypeTaskSidebar;
 
 **What to do:** Create `src/ui/components/TaskCreationSidebar.tsx`.
 
-- Default export. Accepts `isOpen`, `onClose`, `pipelineSlug`. Full chat state machine with states: idle, `isSending` (300ms transition), `isWaiting`, `isReceiving`. Uses `react-mentions` for @mention input. Fetches artifacts from `/api/pipelines/{slug}/artifacts` for mention suggestions. On send, POSTs to `/api/ai/task-plan` via SSE stream. Accumulates assistant response chunks. Parses task proposals via `TASK_PROPOSAL_REGEX`. Renders `TaskProposalCard` with "Create Task" button that POSTs to `/api/tasks/create`. Input disabled during all three sending phases. Registers `beforeunload` handler when messages exist. Auto-scrolls to latest message.
+- Default export. Accepts `isOpen`, `onClose`, `pipelineSlug`. Full chat state machine with states: idle, `isSending` (300ms transition), `isWaiting`, `isReceiving`. Uses `react-mentions` for @mention input. Fetches artifacts from `/api/pipelines/{slug}/artifacts` for mention suggestions. Input disabled during all three sending phases. Registers `beforeunload` handler when messages exist. Auto-scrolls to latest message.
+
+  **SSE streaming contract:**
+  - On send, POSTs to `/api/ai/task-plan` with `{messages, pipelineSlug}` body and receives a streaming response (`Content-Type: text/event-stream`).
+  - The response body is consumed via `response.body.getReader()` producing `Uint8Array` chunks decoded by a persistent `TextDecoder` instance (not recreated per chunk, so multi-byte characters split across chunk boundaries decode correctly).
+  - Each decoded text segment is appended to the running assistant message buffer. There is no SSE event-framing parse (no `event:`/`data:` field splitting) — the stream is treated as raw text.
+  - Task proposals are extracted from the accumulated buffer via `TASK_PROPOSAL_REGEX` after each chunk append.
+  - **Abort on close/unmount:** An `AbortController` is created per send. Its signal is passed to the `fetch` call. On sidebar close or component unmount, `controller.abort()` is called, which cancels the in-flight fetch and releases the reader. The effect cleanup also calls `reader.cancel()` if the reader is still locked.
+  - **Abort on new send:** If the user sends a new message while a previous stream is still active, the previous `AbortController` is aborted before starting the new fetch. Stale chunks arriving after abort are ignored because the reader loop exits on abort signal.
+  - **Error handling:** If the fetch rejects or the reader throws (including `AbortError`), the error is displayed inline with a "Retry" button that re-sends the last user message. `AbortError` from intentional cancellation (close/unmount/new-send) is silently ignored and does not show an error.
+  - Renders `TaskProposalCard` with "Create Task" button that POSTs to `/api/tasks/create`.
 
 **Why:** AI-powered task creation interface (AC 18, 19, 20, 46).
 
@@ -944,7 +999,7 @@ export default function TaskCreationSidebar(props: {
 
 **What to do:** Create `src/ui/components/AddPipelineSidebar.tsx`.
 
-- Named + default export. Uses `Sidebar`. Accepts `open`, `onOpenChange`. Renders a form with name and description fields. On submit, POSTs to `/api/pipelines`. On success, waits 1 second via `setTimeout`, then navigates to `/pipelines/{slug}` via `useNavigate`. Displays inline error on failure. Cleans up timer on unmount.
+- Named + default export. Uses `Sidebar`. Accepts `open`, `onOpenChange`. Renders a form with name and description fields. On submit, POSTs to `/api/pipelines` with `{name, description}` body. The response must include `{slug: string}` — the `slug` field is required for navigation. On success, the form enters a "pending navigation" state: the submit button shows a spinner with "Creating…" text, and all form fields remain disabled. After a 1-second `setTimeout` delay (to allow the backend file watcher to detect the new registry entry), navigates to `/pipelines/{slug}` via `useNavigate`. If the component unmounts before the timer fires (e.g., sidebar closed), `clearTimeout` prevents the stale navigation. Displays inline error on failure. The 1-second delay is a workaround for backend eventual consistency and is preserved as-is from the JS source.
 
 **Why:** Used by `PipelineList` for creating new pipeline types (AC 21).
 
@@ -1015,7 +1070,7 @@ export default function JobCard(props: {
 
 **What to do:** Create `src/ui/components/JobDetail.tsx`.
 
-- Default export. Accepts `job: JobDetail`, `pipeline: PipelineType`. Normalizes `job.tasks` (handles array-to-object conversion). Computes DAG items via `computeDagItems`. Enriches each item with subtitle metadata (model, temperature, token count, cost joined by " · ") and error body text. Preserves object identity via `prevDagItemsRef` + shallow property comparison. Computes `activeIndex` via `computeActiveIndex`. Derives `filesByTypeForItem` via `getTaskFilesForTask`. Renders `DAGGrid`.
+- Default export. Accepts `job: JobDetail`, `pipeline: PipelineType`. Normalizes `job.tasks` via `normalizeTaskCollection()` to produce a `Record<string, TaskStateObject>` before any keyed access. Computes DAG items via `computeDagItems`. Enriches each item with subtitle metadata (model, temperature, token count, cost joined by " · ") and error body text. Preserves object identity via `prevDagItemsRef` + shallow property comparison. Computes `activeIndex` via `computeActiveIndex`. Derives `filesByTypeForItem` via `getTaskFilesForTask`. Renders `DAGGrid`.
 
 **Why:** Orchestrates DAG visualization for the job detail page (AC 8).
 

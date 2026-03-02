@@ -130,7 +130,7 @@ interface PersistedTaskAnalysis extends TaskAnalysis {
 /** Result of LLM-powered schema deduction. */
 interface DeducedSchema {
   schema: Record<string, unknown>;
-  example: unknown;
+  example: Record<string, unknown>;
   reasoning: string;
 }
 
@@ -161,7 +161,7 @@ interface UnresolvedArtifactDescriptor {
 |------|------------------------|-----------|
 | File I/O | Replace `node:fs/promises` (`mkdir`, `writeFile`) with `Bun.write()` for file writing and `import { mkdir } from "node:fs/promises"` for directory creation | `Bun.write` is the native file write API. Bun has no native `mkdir` equivalent, but supports `node:fs/promises`. |
 | Path handling | Continue using `node:path` for `path.join` and `path.parse` | Bun natively supports `node:path`. No migration needed. |
-| Babel CJS/ESM interop | Remove the `_traverse.default ?? _traverse` dual-access pattern | In Bun with ESM, Babel packages import cleanly. The interop hack is unnecessary. If issues arise, use explicit `.default` access. |
+| Babel CJS/ESM interop | Remove the `_traverse.default ?? _traverse` dual-access pattern | In Bun with ESM, Babel packages import cleanly. The interop hack is unnecessary. A smoke test (acceptance criterion 5a) validates this assumption. If Bun's import resolution changes, re-add explicit `.default` access. |
 
 ### Dependency map
 
@@ -191,11 +191,12 @@ interface UnresolvedArtifactDescriptor {
 1. `analyzeTask(code)` returns a `TaskAnalysis` object with `taskFilePath`, `stages`, `artifacts`, and `models` fields.
 2. `analyzeTask(code, taskFilePath)` stores the provided file path in the result's `taskFilePath`.
 3. `analyzeTask(code)` with no `taskFilePath` argument sets `taskFilePath` to `null`.
-4. Every `io.readArtifact`, `io.writeArtifact`, and `llm.*.*` call in the source is represented either as a resolved entry or an unresolved entry — nothing is silently dropped.
+4. Every `io.readArtifact` and `io.writeArtifact` call in the source is represented either as a resolved entry or an unresolved entry — nothing is silently dropped. Every LLM call matching the three supported syntax forms (direct `llm.provider.method()`, variable-destructured, parameter-destructured per criteria 24–26) is represented as a `ModelCall` — other indirect LLM access patterns (e.g., passing `llm` to a helper function, dynamic property access) are not detected and are outside the scope of static extraction.
 
 ### Parsing
 
 5. `parseTaskSource` parses valid ESM JavaScript with JSX into a Babel `File` AST node.
+5a. `import traverse from "@babel/traverse"` and `import generate from "@babel/generator"` resolve to callable functions under Bun's ESM loader without `.default` unwrapping. A dedicated smoke test imports both and asserts `typeof traverse === "function"` and `typeof generate === "function"`.
 6. `parseTaskSource` throws an `Error` with syntax error location (line/column) and the original error as `cause` on invalid source code.
 
 ### Stage extraction
@@ -244,15 +245,16 @@ interface UnresolvedArtifactDescriptor {
 ### Artifact resolution (enrichment)
 
 35. `resolveArtifactReference` returns `{ resolvedFileName, confidence, reasoning }`.
-36. If the LLM's suggested filename is not in `availableArtifacts`, `resolvedFileName` is forced to `null` and `confidence` to `0`.
+36. `confidence` is always a finite number in `[0, 1]`. Non-finite values (`NaN`, `Infinity`) are forced to `0`; out-of-range values are clamped. If the LLM's suggested filename is not in `availableArtifacts`, `resolvedFileName` is forced to `null` and `confidence` to `0`.
 37. `resolveArtifactReference` never throws — catches all errors and returns `{ resolvedFileName: null, confidence: 0, reasoning: "Failed to analyze artifact reference" }`.
+37a. Both `deduceArtifactSchema` and `resolveArtifactReference` treat `chat()` response `content` as a pre-parsed object (the gateway normalizes JSON-mode responses). If `content` is unexpectedly a string or null, the call fails with a clear assertion error (caught by the resolver's blanket catch, propagated by the deducer).
 
 ### Persistence
 
 38. `writeAnalysisFile` validates all required fields of `analysisData` (including `taskFilePath` is non-null non-empty string, `stages` and `models` are arrays, `artifacts` has `reads` and `writes` arrays) before any I/O.
 39. `writeAnalysisFile` creates `{pipelinePath}/analysis/` directory with `recursive: true` and writes `{taskName}.analysis.json` with the analysis data plus `analyzedAt` ISO-8601 timestamp.
 40. `writeAnalysisFile` throws on invalid `analysisData` or file system errors.
-41. `writeSchemaFiles` validates `deducedData` has `schema` (object), `example` (non-null), and `reasoning` (string) before any I/O.
+41. `writeSchemaFiles` validates `deducedData` has `schema` (non-null plain object), `example` (non-null plain object — arrays and primitives rejected), and `reasoning` (string) before any I/O.
 42. `writeSchemaFiles` creates `{pipelinePath}/schemas/` directory and writes three files: `{baseName}.schema.json`, `{baseName}.sample.json`, `{baseName}.meta.json`.
 43. The `{baseName}` is derived by stripping the file extension from the artifact filename.
 44. The meta file contains `{ source: "llm-deduction", generatedAt: "<ISO-8601>", reasoning: "<string>" }`.
@@ -271,7 +273,7 @@ interface UnresolvedArtifactDescriptor {
 ### Design trade-offs
 
 - **Module-level Ajv instance:** The JS original uses a single module-level `Ajv` instance with dynamic add/remove of schemas. The TS version preserves this pattern since `deduceArtifactSchema` is not expected to be called concurrently in practice. The `removeSchema` before `compile` pattern is retained. If concurrency becomes a concern, the Ajv instance could be created per-call, but this adds GC overhead for the common sequential case.
-- **Babel interop pattern removal:** The JS original uses `_traverse.default ?? _traverse` to handle CJS/ESM dual-loading of Babel packages. In the TS/Bun environment with proper ESM imports, this is unnecessary. Standard `import traverse from "@babel/traverse"` should work. If Bun's Babel interop requires `.default`, a single-line adjustment handles it.
+- **Babel interop pattern removal:** The JS original uses `_traverse.default ?? _traverse` to handle CJS/ESM dual-loading of Babel packages. In the TS/Bun environment with proper ESM imports, this is unnecessary. Standard `import traverse from "@babel/traverse"` should work. Acceptance criterion 5a and a dedicated smoke test validate this assumption under Bun. If Bun's Babel interop requires `.default`, a single-line adjustment handles it.
 - **Template literals with expressions in resolved arrays:** The analysis flagged this as ambiguous (Open Question 1). The TS version preserves the JS behavior: template literals with expressions go into the resolved arrays with `${...}` syntax in the `fileName` field. This matches existing consumer expectations and avoids breaking downstream behavior.
 - **Hardcoded LLM provider:** Both enrichment functions hardcode `provider: "deepseek"` and `model: "deepseek-chat"`. The TS version preserves this to maintain behavioral parity. Making it configurable is a future enhancement.
 
@@ -470,6 +472,7 @@ export function parseTaskSource(code: string): BabelFile
 - Parse valid ESM code: `export function foo() {}`. Verify result is a `File` node with a body.
 - Parse valid JSX code: `export function Comp() { return <div /> }`. Verify it parses without error.
 - Parse invalid code: `export function {`. Verify it throws an `Error` with line/column info and `cause` set to the original error.
+- **Babel import interop smoke test:** `import traverse from "@babel/traverse"` — assert `typeof traverse === "function"`. `import generate from "@babel/generator"` — assert `typeof generate === "function"`. This validates the CJS/ESM interop assumption (criterion 5a) and catches regressions if Bun's import resolution changes.
 
 ---
 
@@ -662,7 +665,8 @@ export async function deduceArtifactSchema(
 - Import `chat` from `src/llm/index.ts`.
 - Construct a prompt asking the LLM to analyze the task code and infer a JSON Schema Draft-07 for the given artifact. Include the `taskCode`, `artifact.fileName`, and `artifact.stage` in the prompt.
 - Call `chat({ provider: "deepseek", model: "deepseek-chat", messages, temperature: 0, responseFormat: { type: "json_object" } })`.
-- Validate the response: `response` must be an object, `response.content` must be an object with `schema` (object), `example` (non-null), and `reasoning` (string). Throw on violations.
+- The `chat()` gateway returns `{ content: unknown }`. Assert `typeof content === "object" && content !== null`; throw if not (unexpected gateway behavior — content should be pre-parsed when `responseFormat` is JSON mode).
+- Validate `content` fields: `schema` (non-null plain object), `example` (non-null plain object), and `reasoning` (string). Throw on violations. Specifically, `example` must satisfy `typeof example === "object" && example !== null && !Array.isArray(example)` — primitives and arrays are rejected.
 - Create a module-level `Ajv` instance with formats enabled (`addFormats(new Ajv())`).
 - Before compiling the schema, check if a schema with the same `$id` already exists and remove it.
 - Compile the schema with Ajv and validate `example` against it. Throw if validation fails.
@@ -672,6 +676,7 @@ export async function deduceArtifactSchema(
 - Mock the `chat` function to return a valid response with a schema, example, and reasoning. Call `deduceArtifactSchema`. Verify it returns the expected `DeducedSchema`.
 - Mock `chat` to return an invalid response (missing `schema`). Verify it throws.
 - Mock `chat` to return a schema and an example that does NOT validate against the schema. Verify it throws.
+- Mock `chat` to return an `example` that is a primitive (e.g., `"just a string"`) or an array. Verify it throws before Ajv validation (rejected as non-object).
 - Verify that calling twice with the same `$id` does not throw "schema already exists".
 
 ---
@@ -698,14 +703,19 @@ export async function resolveArtifactReference(
 - Import `chat` from `src/llm/index.ts`.
 - Construct a prompt asking the LLM to resolve the dynamic expression to one of the `availableArtifacts`.
 - Call `chat({ provider: "deepseek", messages, temperature: 0, responseFormat: { type: "json_object" } })`.
-- Parse the response content (use `JSON.parse` if content is a string, or use directly if already an object).
-- Extract `resolvedFileName`, `confidence`, `reasoning` from the parsed result.
-- Sanitize: if `resolvedFileName` is not in `availableArtifacts`, set `resolvedFileName = null` and `confidence = 0`.
+- The `chat()` gateway returns `{ content: unknown }`. The contract for this path is: `content` is always a parsed object when `responseFormat` is `{ type: "json_object" }` — the gateway normalizes string-vs-object internally. Assert `typeof content === "object" && content !== null`; throw otherwise (unexpected gateway behavior).
+- Extract `resolvedFileName`, `confidence`, `reasoning` from `content`.
+- Sanitize `confidence`: if `confidence` is not a finite number, or is outside `[0, 1]`, clamp it — values below 0 become 0, values above 1 become 1, `NaN`/`Infinity` become 0.
+- Sanitize filename: if `resolvedFileName` is not in `availableArtifacts`, set `resolvedFileName = null` and `confidence = 0`.
 - Wrap the entire function body in a try/catch. On any error, return `{ resolvedFileName: null, confidence: 0, reasoning: "Failed to analyze artifact reference" }`.
 
 **Test:** `src/task-analysis/__tests__/enrichers-artifact-resolver.test.ts`
 - Mock `chat` to return `{ resolvedFileName: "data.json", confidence: 0.9, reasoning: "..." }` where `"data.json"` is in `availableArtifacts`. Verify the result is returned as-is.
 - Mock `chat` to return `{ resolvedFileName: "hallucinated.json", confidence: 0.8, reasoning: "..." }` where `"hallucinated.json"` is NOT in `availableArtifacts`. Verify `resolvedFileName` is `null` and `confidence` is `0`.
+- Mock `chat` to return `{ resolvedFileName: "data.json", confidence: 7, reasoning: "..." }` where `"data.json"` IS in `availableArtifacts`. Verify `confidence` is clamped to `1`.
+- Mock `chat` to return `{ resolvedFileName: "data.json", confidence: NaN, reasoning: "..." }`. Verify `confidence` is forced to `0`.
+- Mock `chat` to return `{ resolvedFileName: "data.json", confidence: -1, reasoning: "..." }`. Verify `confidence` is clamped to `0`.
+- Mock `chat` to return `{ content: '{"resolvedFileName":"x.json"}' }` (a raw string instead of parsed object). Verify the function returns the fallback result (the string content triggers the assertion, which is caught by the blanket catch).
 - Mock `chat` to throw an error. Verify the function returns the fallback `{ resolvedFileName: null, confidence: 0, reasoning: "Failed to analyze artifact reference" }` and does NOT throw.
 
 ---
@@ -729,7 +739,7 @@ export async function writeSchemaFiles(
 ```
 
 **Implementation details:**
-- Validate `deducedData`: `schema` must be an object, `example` must be non-null, `reasoning` must be a string. Throw on violations.
+- Validate `deducedData`: `schema` must be a non-null plain object, `example` must be a non-null plain object (`typeof === "object" && !Array.isArray`), `reasoning` must be a string. Throw on violations.
 - Derive `baseName` by stripping the file extension from `artifactName` using `path.parse(artifactName).name`.
 - Create `{pipelinePath}/schemas/` directory with `mkdir(path, { recursive: true })`.
 - Write three files using `Bun.write`:

@@ -45,8 +45,11 @@ import type { Database } from "bun:sqlite";
 
 type JobStatus = "pending" | "processing" | "complete" | "failed";
 
-// The "permanently_failed" status is checked in insertJobs but never written.
-// Include it as a type for the terminal-state guard only.
+// Rows read from the database may contain "permanently_failed" written by
+// external processes. This wider type is used for the row shape and the
+// terminal-state guard in insertJobs.
+type PersistedJobStatus = JobStatus | "permanently_failed";
+
 type TerminalJobStatus = "complete" | "permanently_failed";
 
 // --- Database row shape ---
@@ -54,7 +57,7 @@ type TerminalJobStatus = "complete" | "permanently_failed";
 interface BatchJobRow {
   id: string;
   batch_id: string;
-  status: JobStatus;
+  status: PersistedJobStatus;
   input: string;       // JSON text
   output: string | null;
   error: string | null;
@@ -147,7 +150,7 @@ interface BatchResult {
 1. `ensureBatchSchema(db)` creates a `batch_jobs` table with the correct columns and an index `idx_batch_jobs_batch_status` on `(batch_id, status)` if they do not exist. Running it twice on the same database is idempotent.
 2. `insertJobs(db, batchId, jobs)` inserts all jobs in a single transaction and returns an array of job IDs in insertion order.
 3. When a job object has an `id` property, that value is used as the primary key; otherwise a UUID is generated.
-4. `insertJobs` uses `INSERT OR IGNORE` so duplicate primary-key rows are silently skipped.
+4. `insertJobs` uses `INSERT OR IGNORE` so duplicate primary-key rows are silently skipped. Because `id` is the table-wide primary key, this includes duplicates across different batches — a job ID that already exists in another batch is silently skipped, and the returned ID array still includes that ID.
 5. `insertJobs` throws if an existing same-batch row is in `complete` or `permanently_failed` status, and rolls back the entire transaction.
 6. `markProcessing(db, jobId)` sets `status = 'processing'` and updates `started_at` to the current UTC datetime.
 7. `markComplete(db, jobId, output)` sets `status = 'complete'`, stores `JSON.stringify(output)`, and updates `completed_at`.
@@ -163,31 +166,33 @@ interface BatchResult {
 
 ### Retry behavior
 
-14. Failed jobs with `retry_count < maxRetries` are re-fetched and re-processed in the next retry round.
+14. Failed jobs with `retry_count < maxRetries` (i.e., jobs that have not yet exhausted their total-attempt budget) are re-fetched and re-processed in the next round.
 15. When `maxRetries` is 0, no jobs are processed (the pending query returns nothing).
-16. The default `maxRetries` is 3, meaning a job gets up to 3 total attempts.
+16. The default `maxRetries` is 3. Despite its name, `maxRetries` controls the total-attempt ceiling, not retries after a first attempt: a job with `maxRetries: 3` gets up to 3 total calls to the processor (the query `retry_count < maxRetries` enforces this because `retry_count` starts at 0 and increments on each failure).
 17. The `attempt` field in the processor context equals `retryCount + 1`.
 
 ### Crash recovery
 
 18. `recoverStaleJobs` is called at the start of `executeBatch`, resetting any `processing` jobs from a prior crash to `pending`.
 19. Recovery does not increment `retry_count`.
+20. `executeBatch` accepts an empty `jobs` array for recovery-only invocations. The empty-array check in `validateBatchOptions` applies only when callers invoke validation explicitly (see AC 22).
 
 ### Validation
 
-20. `validateBatchOptions` throws a descriptive error when: options is not an object, `jobs` is not an array, `jobs` is empty, `processor` is not a function, `concurrency` is present but not a positive integer, `maxRetries` is present but not a non-negative integer.
-21. `validateBatchOptions` is exported but NOT called by `executeBatch` — callers must invoke it explicitly.
+21. `validateBatchOptions` throws a descriptive error when: options is not an object, `jobs` is not an array, `jobs` is empty, `processor` is not a function, `concurrency` is present but not a positive integer, `maxRetries` is present but not a non-negative integer.
+22. `validateBatchOptions` is exported but NOT called by `executeBatch` — callers must invoke it explicitly.
 
 ### Error handling
 
-22. Individual processor failures are caught, recorded via `markFailed`, and do not reject the `executeBatch` promise.
-23. The processor context includes `{ attempt, batchId, db }`.
-24. Database/schema errors propagate as thrown errors from `executeBatch`.
-25. If `JSON.stringify(output)` fails inside `processOneJob`, the error is caught and the job is marked as failed.
+23. Individual processor failures are caught, recorded via `markFailed`, and do not reject the `executeBatch` promise.
+24. The processor context includes `{ attempt, batchId, db }`.
+25. Database/schema errors propagate as thrown errors from `executeBatch`.
+26. If `JSON.stringify(output)` fails inside `processOneJob`, the error is caught and the job is marked as failed.
+27. Thrown values that are not `Error` instances are normalized to strings before being passed to `markFailed`: `Error` → `.message`, `string` → used directly, all other types → `String(value)`.
 
 ### Result
 
-26. `executeBatch` returns `{ completed, failed }` where `completed` contains all `complete` jobs and `failed` contains all jobs with `retry_count >= maxRetries` still in `failed` status, both with deserialized `input`.
+28. `executeBatch` returns `{ completed, failed }` where `completed` contains all `complete` jobs and `failed` contains all jobs with `retry_count >= maxRetries` still in `failed` status, both with deserialized `input`.
 
 ---
 
@@ -222,7 +227,7 @@ interface BatchResult {
 
 ### Step 1: Define types and interfaces
 
-**What to do:** Create `src/core/batch-runner.ts` with all type definitions: `JobStatus`, `TerminalJobStatus`, `BatchJobRow`, `PendingJob`, `ProcessorContext`, `BatchProcessor`, `BatchOptions`, `CompletedJob`, `FailedJob`, `BatchResult`. Export all public types.
+**What to do:** Create `src/core/batch-runner.ts` with all type definitions: `JobStatus`, `PersistedJobStatus`, `TerminalJobStatus`, `BatchJobRow`, `PendingJob`, `ProcessorContext`, `BatchProcessor`, `BatchOptions`, `CompletedJob`, `FailedJob`, `BatchResult`. Export all public types.
 
 **Why:** Types are the foundation for all subsequent functions and satisfy the Architecture § Key types requirement.
 
@@ -230,6 +235,7 @@ interface BatchResult {
 
 ```typescript
 export type JobStatus = "pending" | "processing" | "complete" | "failed";
+export type PersistedJobStatus = JobStatus | "permanently_failed";
 export type TerminalJobStatus = "complete" | "permanently_failed";
 
 export interface PendingJob {
@@ -385,6 +391,18 @@ describe("insertJobs", () => {
     const ids = insertJobs(db, "batch1", [{ id: "a" }]);
     expect(ids).toEqual(["a"]);
     const rows = db.query("SELECT id FROM batch_jobs").all();
+    expect(rows).toHaveLength(1);
+    db.close();
+  });
+
+  test("silently skips cross-batch duplicate IDs and still returns the ID", () => {
+    const db = new Database(":memory:");
+    ensureBatchSchema(db);
+    insertJobs(db, "batch1", [{ id: "shared" }]);
+    const ids = insertJobs(db, "batch2", [{ id: "shared" }]);
+    expect(ids).toEqual(["shared"]);
+    // Only one row exists because id is the table-wide PK
+    const rows = db.query("SELECT id FROM batch_jobs WHERE id = 'shared'").all();
     expect(rows).toHaveLength(1);
     db.close();
   });
@@ -600,7 +618,7 @@ describe("recoverStaleJobs", () => {
 5. If `options.concurrency` is defined, it must be a positive integer — throw `"concurrency must be a positive integer"`.
 6. If `options.maxRetries` is defined, it must be a non-negative integer — throw `"maxRetries must be a non-negative integer"`.
 
-**Why:** Validates caller input before batch execution (AC #20–21).
+**Why:** Validates caller input before batch execution (AC #21–22).
 
 **Type signature:**
 
@@ -701,7 +719,7 @@ describe("concurrency limiter (via executeBatch)", () => {
 
 **What to do:** Implement:
 
-1. A private `processOneJob` function that: calls `markProcessing`, invokes the `processor` with `{ attempt: retryCount + 1, batchId, db }`, calls `markComplete` on success, catches errors (including serialization errors from `markComplete`) and calls `markFailed` with the error message.
+1. A private `processOneJob` function that: calls `markProcessing`, invokes the `processor` with `{ attempt: retryCount + 1, batchId, db }`, calls `markComplete` on success, catches errors (including serialization errors from `markComplete`) and calls `markFailed` with the normalized error string. Error normalization rule: if the caught value is an `Error`, use `.message`; if it is a `string`, use it directly; for all other types, use `String(value)`.
 
 2. Two private query helpers:
    - `getCompletedJobs(db: Database, batchId: string): CompletedJob[]` — `SELECT id, input, output FROM batch_jobs WHERE batch_id = ? AND status = 'complete'`, deserializing `input` and `output` from JSON.
@@ -716,7 +734,7 @@ describe("concurrency limiter (via executeBatch)", () => {
    - Retry loop: `while (getPendingJobs(db, batchId, maxRetries).length > 0)`: fetch pending, map through limiter → `processOneJob`, `await Promise.allSettled(promises)`.
    - Collect and return `{ completed: getCompletedJobs(...), failed: getFailedJobs(...) }`.
 
-**Why:** This is the core batch execution engine (AC #11–19, #22–26).
+**Why:** This is the core batch execution engine (AC #11–20, #23–28).
 
 **Type signature:**
 
@@ -741,7 +759,7 @@ describe("executeBatch", () => {
     db.close();
   });
 
-  test("retries failed jobs up to maxRetries", async () => {
+  test("retries failed jobs within total-attempt budget (maxRetries)", async () => {
     const db = new Database(":memory:");
     let attempts = 0;
     const result = await executeBatch(db, {
@@ -820,6 +838,25 @@ describe("executeBatch", () => {
     expect(receivedCtx!.attempt).toBe(1);
     expect(receivedCtx!.batchId).toBe("test-batch");
     expect(receivedCtx!.db).toBe(db);
+    db.close();
+  });
+
+  test("normalizes non-Error thrown values to strings", async () => {
+    const db = new Database(":memory:");
+    const result = await executeBatch(db, {
+      jobs: [{ id: "a" }, { id: "b" }, { id: "c" }],
+      processor: async (input) => {
+        const id = (input as any).id;
+        if (id === "a") throw "string error";
+        if (id === "b") throw 42;
+        if (id === "c") throw null;
+      },
+      maxRetries: 1,
+    });
+    expect(result.failed).toHaveLength(3);
+    expect(result.failed.find(j => j.id === "a")?.error).toBe("string error");
+    expect(result.failed.find(j => j.id === "b")?.error).toBe("42");
+    expect(result.failed.find(j => j.id === "c")?.error).toBe("null");
     db.close();
   });
 

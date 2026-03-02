@@ -118,8 +118,11 @@ interface ChatOptions extends ProviderOptions {
   metadata?: Record<string, unknown>;
   frequencyPenalty?: number;
   presencePenalty?: number;
-  stream?: boolean;
 }
+// NOTE: `stream` is intentionally absent from ChatOptions.
+// Streaming is adapter-only (DeepSeekOptions.stream) and is never
+// exposed through the chat() gateway or any HighLevelLLM method.
+// Callers that need streaming must call deepseekChat() directly.
 
 /** Anthropic-specific options (no extras beyond ProviderOptions). */
 type AnthropicOptions = ProviderOptions;
@@ -249,6 +252,20 @@ interface ConversationChain {
   execute(options: Omit<ChatOptions, "messages">): Promise<ChatResponse>;
 }
 
+/** A callable model function returned by factory APIs. */
+type ModelFunction = (options?: Partial<ChatOptions>) => Promise<ChatResponse>;
+
+/** A provider group: an object whose properties are callable model functions. */
+type ProviderGroup = Record<string, ModelFunction>;
+
+/** The nested provider→model map returned by createLLM(). */
+type ProviderModelMap = Record<string, ProviderGroup>;
+
+/** Mock provider interface with concrete adapter contract. */
+interface MockProvider {
+  chat(options: ChatOptions): Promise<AdapterResponse>;
+}
+
 /** High-level LLM API object. */
 interface HighLevelLLM {
   chat(options: ChatOptions): Promise<ChatResponse>;
@@ -257,7 +274,8 @@ interface HighLevelLLM {
   withRetry<T>(fn: () => Promise<T>, args?: unknown[], options?: RetryOptions): Promise<T>;
   parallel<T, R>(workerFn: (item: T) => Promise<R>, items: T[], concurrency?: number): Promise<R[]>;
   getAvailableProviders(): ProviderAvailability;
-  [provider: string]: unknown;
+  /** Provider-grouped callable model functions (e.g., llm.openai.gpt5(opts)). */
+  [provider: string]: ProviderGroup | ModelFunction | unknown;
 }
 
 /** Options for withRetry(). */
@@ -304,65 +322,73 @@ interface RetryOptions {
 1. `chat()` routes to the correct provider adapter based on the `provider` field and returns a `ChatResponse` with `content` and normalized `usage` (camelCase).
 2. Each provider adapter transforms the common `ProviderOptions` into the provider-specific HTTP request format and normalizes the response into `AdapterResponse`.
 3. `extractMessages()` correctly splits a messages array into `systemMsg`, `userMsg`, `userMessages`, and `assistantMessages`.
-4. `tryParseJSON()` successfully parses valid JSON, JSON wrapped in markdown fences, and JSON embedded in surrounding text (first `{...}` or `[...]` substring extraction).
+4. `tryParseJSON()` is a pure parsing utility: it returns the parsed value on success, or the original text (as a `string`) on total parse failure. It never throws. Adapters are responsible for detecting JSON-mode failure: when the adapter requested JSON output (i.e., `responseFormat` indicates JSON mode) and `tryParseJSON()` returns a `string`, the adapter throws `ProviderJsonParseError`. In non-JSON mode, a `string` return from `tryParseJSON()` is a legitimate text result and is not an error.
 5. `stripMarkdownFences()` removes markdown code fences from text.
 6. `ensureJsonResponseFormat()` accepts valid JSON formats (`"json"`, `"json_object"`, `{ type: "json_object" }`, `{ json_schema: ... }`) and throws `ProviderJsonModeError` for invalid/missing formats.
 7. `createLLM()` returns a nested object of provider-grouped callable functions built from `MODEL_CONFIG` / `PROVIDER_FUNCTIONS`.
 8. `createHighLevelLLM()` returns an object combining `chat`, `complete`, `createChain`, `withRetry`, `parallel`, `getAvailableProviders` with provider-grouped functions.
 9. `createLLMWithOverride()` returns a Proxy that redirects all method calls to a single override provider/model, while skipping interception for `toJSON`, `toString`, `valueOf`, `then`, `catch`, `finally`, and `constructor`.
-10. `complete()` sends a single user message via `chat()` using the configured default provider.
+10. `complete()` sends a single user message via `chat()` using the configured default provider from `getConfig().llm.defaultProvider`. **Breaking change from JS original:** the JS implementation hardcodes `"openai"` as the default in test mode; the TS implementation always uses the configured default provider regardless of environment. This is an intentional cleanup — callers in test mode should configure `defaultProvider` explicitly.
+
+### Streaming boundary
+
+11. Streaming is adapter-only: `chat()`, `complete()`, `HighLevelLLM.chat()`, and `ConversationChain.execute()` always return `Promise<ChatResponse>` and never accept a `stream` option. Callers that need streaming must call `deepseekChat()` directly. `ChatOptions` does not include a `stream` field.
 
 ### Provider-specific behavior
 
-11. **Anthropic:** Uses `https://api.anthropic.com/v1/messages` with `anthropic-version: 2023-06-01` header, transforms messages into Anthropic's `system` + `messages` format, normalizes usage from `input_tokens`/`output_tokens`.
-12. **OpenAI:** Routes to Responses API for models matching `/^gpt-5/i`, falls back to Chat Completions API on "unsupported" errors, and uses Chat Completions API for all other models.
-13. **OpenAI:** Destructures `max_tokens` to prevent it from leaking through `...rest` into the request body.
-14. **Gemini:** Constructs `contents`/`systemInstruction`/`generationConfig` format, sets all four safety categories to `BLOCK_NONE`, supports `json_schema` via system instruction injection.
-15. **DeepSeek:** Supports streaming mode via async generator yielding `StreamingChunk` objects; suppresses `response_format` when `stream` is true.
-16. **Moonshot:** Falls back to DeepSeek on content-filter errors (HTTP 400 with "high risk"/"rejected"), using `deepseek-reasoner` if thinking was enabled and `deepseek-chat` otherwise, but only if `DEEPSEEK_API_KEY` is set.
-17. **Zhipu:** Uses OpenAI-compatible chat completions format against the Zhipu API endpoint, supports JSON schema via system instruction injection.
-18. **Claude Code:** Invokes `claude` CLI via `Bun.spawn` with `--output-format json`, parses the JSON envelope, reports usage as zeros.
-19. **Claude Code:** `isClaudeCodeAvailable()` uses `Bun.spawnSync` with a 5-second timeout to check `claude --version`.
+12. **Anthropic:** Uses `https://api.anthropic.com/v1/messages` with `anthropic-version: 2023-06-01` header, transforms messages into Anthropic's `system` + `messages` format, normalizes usage from `input_tokens`/`output_tokens`.
+13. **OpenAI:** Routes to Responses API for models matching `/^gpt-5/i`, falls back to Chat Completions API on "unsupported" errors, and uses Chat Completions API for all other models.
+14. **OpenAI:** Destructures `max_tokens` to prevent it from leaking through `...rest` into the request body.
+15. **Gemini:** Constructs `contents`/`systemInstruction`/`generationConfig` format, sets all four safety categories to `BLOCK_NONE`, supports `json_schema` via system instruction injection.
+16. **DeepSeek:** Supports streaming mode via async generator yielding `StreamingChunk` objects; suppresses `response_format` when `stream` is true.
+17. **Moonshot:** Falls back to DeepSeek on content-filter errors (HTTP 400 with "high risk"/"rejected"), using `deepseek-reasoner` if thinking was enabled and `deepseek-chat` otherwise, but only if `DEEPSEEK_API_KEY` is set.
+18. **Zhipu:** Uses OpenAI-compatible chat completions format against the Zhipu API endpoint, supports JSON schema via system instruction injection.
+19. **Claude Code:** Invokes `claude` CLI via `Bun.spawn` with `--output-format json`, parses the JSON envelope, reports usage as zeros.
+20. **Claude Code:** `isClaudeCodeAvailable()` uses `Bun.spawnSync` with a 5-second timeout to check `claude --version`.
 
 ### Retry and error handling
 
-20. All adapters retry transient errors (network errors, HTTP 429/500/502/503/504) with exponential backoff (`2^attempt * 1000ms`) up to `maxRetries` (default 3).
-21. HTTP 401 / authentication errors are never retried by any adapter.
-22. `ProviderJsonParseError` is not retried by adapters (Moonshot explicitly does not retry it).
-23. `isRetryableError()` correctly classifies transient vs non-transient errors.
-24. `withRetry()` in the gateway supports configurable `maxRetries` and `backoffMs` with exponential backoff, and skips retry on 401 errors.
+21. All adapters retry transient errors (network errors, HTTP 429/500/502/503/504) with exponential backoff (`2^attempt * 1000ms`) up to `maxRetries` (default 3).
+22. HTTP 401 / authentication errors are never retried by any adapter.
+23. `ProviderJsonParseError` is not retried by adapters (Moonshot explicitly does not retry it).
+24. `isRetryableError()` correctly classifies transient vs non-transient errors.
+25. `withRetry()` in the gateway supports configurable `maxRetries` and `backoffMs` with exponential backoff, and skips retry on 401 errors.
 
 ### Telemetry
 
-25. `chat()` emits `llm:request:start` before the provider call and `llm:request:complete` or `llm:request:error` after.
-26. Telemetry events include `id`, `provider`, `model`, `metadata`, `timestamp`, and (on complete) `duration`, `promptTokens`, `completionTokens`, `totalTokens`, `cost`.
-27. `getLLMEvents()` returns the global `EventEmitter` instance.
+26. `chat()` emits `llm:request:start` before the provider call and `llm:request:complete` or `llm:request:error` after.
+27. Telemetry events include `id`, `provider`, `model`, `metadata`, `timestamp`, and (on complete) `duration`, `promptTokens`, `completionTokens`, `totalTokens`, `cost`.
+28. `getLLMEvents()` returns the global `EventEmitter` instance.
 
 ### Cost and usage
 
-28. `calculateCost()` computes dollar cost from token usage and model pricing in `MODEL_CONFIG`.
-29. `estimateTokens()` returns `Math.ceil(text.length / 4)`.
-30. Usage is always present in `ChatResponse` — estimated if the API does not provide it.
+29. `calculateCost()` computes dollar cost from token usage and model pricing in `MODEL_CONFIG`.
+30. `estimateTokens()` returns `Math.ceil(text.length / 4)`.
+31. Usage is always present in `ChatResponse` — estimated if the API does not provide it.
 
 ### Concurrency
 
-31. `parallel()` executes an async worker over items with bounded concurrency (default 5) and preserves result ordering.
+32. `parallel()` executes an async worker over items with bounded concurrency (default 5) and preserves result ordering.
 
 ### Conversation chain
 
-32. `createChain()` returns a stateful chain with `addSystemMessage`, `addUserMessage`, `addAssistantMessage`, `getMessages`, `clear`, and `execute` methods.
+33. `createChain()` returns a stateful chain with `addSystemMessage`, `addUserMessage`, `addAssistantMessage`, `getMessages`, `clear`, and `execute` methods.
 
 ### JSON format inference
 
-33. For OpenAI, DeepSeek, Gemini, and Moonshot, when `responseFormat` is undefined/null/empty, the gateway checks the first two messages for the word "json" (case-insensitive) and infers `"json_object"` format if found.
+34. For OpenAI, DeepSeek, Gemini, and Moonshot, when `responseFormat` is undefined/null/empty, the gateway checks the first two messages for the word "json" (case-insensitive) and infers `"json_object"` format if found.
 
 ### Provider availability
 
-34. `getAvailableProviders()` returns a map of provider names to booleans based on environment variables (or `isClaudeCodeAvailable()` for claudecode, or mock provider registration for mock).
+35. `getAvailableProviders()` returns a map of provider names to booleans based on environment variables (or `isClaudeCodeAvailable()` for claudecode, or mock provider registration for mock).
 
 ### Mock provider
 
-35. `registerMockProvider()` registers a mock provider for testing. In test mode (`NODE_ENV=test` or `VITEST=true`), a mock provider is auto-registered if the default provider is `"mock"` and none has been registered.
+36. `registerMockProvider()` registers a mock provider for testing. In test mode (`NODE_ENV=test` or `VITEST=true`), a mock provider is auto-registered if the default provider is `"mock"` and none has been registered.
+
+### Debug logging (breaking change)
+
+37. `chat()` writes request/response data to `/tmp/messages.log` via `Bun.write` only when the `LLM_DEBUG` environment variable is set (any truthy value). When `LLM_DEBUG` is unset or empty, no file write occurs. **Breaking change from JS original:** the JS implementation writes unconditionally via `writeFileSync`; the TS implementation gates this behind `LLM_DEBUG` to avoid unintended disk I/O in production.
 
 ---
 
@@ -384,8 +410,9 @@ interface RetryOptions {
 ### Migration-specific concerns
 
 - **Behaviors that change intentionally:**
-  - Debug file write gated behind `LLM_DEBUG` instead of unconditional.
+  - Debug file write gated behind `LLM_DEBUG` instead of unconditional (see acceptance criterion 37).
   - `parallel()` concurrency bug fixed.
+  - `complete()` always uses `getConfig().llm.defaultProvider` instead of hardcoding `"openai"` in test mode.
 - **Behaviors that must remain identical:**
   - All retry logic, error classification, and backoff timing.
   - Provider-specific request construction and response normalization.
@@ -426,6 +453,10 @@ export interface ProviderOptions { messages: ChatMessage[]; model?: string; temp
 export interface AdapterResponse { content: Record<string, unknown> | string; text?: string; usage?: AdapterUsage; raw?: unknown }
 export interface ChatResponse { content: Record<string, unknown> | string; usage: NormalizedUsage; raw?: unknown }
 export type ProviderName = "openai" | "anthropic" | "deepseek" | "gemini" | "zhipu" | "claudecode" | "moonshot" | "mock"
+export type ModelFunction = (options?: Partial<ChatOptions>) => Promise<ChatResponse>
+export type ProviderGroup = Record<string, ModelFunction>
+export type ProviderModelMap = Record<string, ProviderGroup>
+export interface MockProvider { chat(options: ChatOptions): Promise<AdapterResponse> }
 export class ProviderJsonModeError extends Error { provider: string; constructor(provider: string, message?: string) }
 export class ProviderJsonParseError extends Error { provider: string; model: string; sample: string; constructor(provider: string, model: string, sample: string, message?: string) }
 ```
@@ -456,7 +487,7 @@ export function ensureJsonResponseFormat(responseFormat: unknown, providerName: 
 - `extractMessages`: splits system/user/assistant messages correctly; handles empty array; handles multiple user messages joined into `userMsg`.
 - `isRetryableError`: returns `true` for 429, 500, 502, 503, 504, network errors (`ECONNRESET`, `ENOTFOUND`, `ETIMEDOUT`, `ECONNREFUSED`); returns `false` for 401, 400, `ProviderJsonParseError`.
 - `stripMarkdownFences`: removes `` ```json ... ``` `` and `` ```lang ... ``` `` fences; preserves text without fences.
-- `tryParseJSON`: parses valid JSON; parses fenced JSON; extracts first `{...}` from surrounding text; returns original text on total failure.
+- `tryParseJSON`: parses valid JSON; parses fenced JSON; extracts first `{...}` from surrounding text; returns original text (as `string`) on total failure; never throws.
 - `ensureJsonResponseFormat`: accepts `"json"`, `"json_object"`, `{ type: "json_object" }`, `{ json_schema: {} }`; throws `ProviderJsonModeError` for `undefined`, `null`, `""`, `"text"`.
 - `createProviderError`: returns `Error` with `.status`, `.code`, `.details`.
 
@@ -466,7 +497,7 @@ export function ensureJsonResponseFormat(responseFormat: unknown, providerName: 
 
 **What to do:** Create `src/providers/anthropic.ts` exporting `anthropicChat(options: AnthropicOptions): Promise<AdapterResponse>`.
 
-**Why:** Anthropic is a core provider. This adapter makes HTTP requests to `https://api.anthropic.com/v1/messages` using `fetch`. Satisfies acceptance criteria 11, 20, 21.
+**Why:** Anthropic is a core provider. This adapter makes HTTP requests to `https://api.anthropic.com/v1/messages` using `fetch`. Satisfies acceptance criteria 12, 21, 22.
 
 **Type signatures:**
 
@@ -482,13 +513,14 @@ export async function anthropicChat(options: AnthropicOptions): Promise<AdapterR
 - Retry loop with `isRetryableError` + exponential backoff.
 - Immediate throw on 401.
 - Normalize usage from `input_tokens`/`output_tokens` to `prompt_tokens`/`completion_tokens`/`total_tokens`.
-- Strip markdown fences, parse JSON via `tryParseJSON`.
+- Strip markdown fences, parse JSON via `tryParseJSON`. If the adapter is in JSON mode (i.e., `ensureJsonResponseFormat` did not throw) and `tryParseJSON` returns a `string`, throw `ProviderJsonParseError`.
 
 **Test:** `src/providers/__tests__/anthropic.test.ts`
 - Mock `fetch` to return a valid Anthropic response; verify `content` is parsed JSON, `usage` has correct shape, `text` is present.
 - Mock `fetch` to return 401; verify immediate throw without retry.
 - Mock `fetch` to return 429 then 200; verify retry occurs and succeeds.
 - Verify `ProviderJsonModeError` is thrown when `responseFormat` is invalid.
+- Mock `fetch` to return non-JSON text in JSON mode; verify `ProviderJsonParseError` is thrown with `provider`, `model`, and `sample` set.
 
 ---
 
@@ -496,7 +528,7 @@ export async function anthropicChat(options: AnthropicOptions): Promise<AdapterR
 
 **What to do:** Create `src/providers/openai.ts` exporting `openaiChat(options: OpenAIOptions): Promise<AdapterResponse>`.
 
-**Why:** OpenAI has the most complex routing logic (Responses API vs Chat Completions API). Satisfies acceptance criteria 12, 13, 20, 21.
+**Why:** OpenAI has the most complex routing logic (Responses API vs Chat Completions API). Satisfies acceptance criteria 13, 14, 21, 22.
 
 **Type signatures:**
 
@@ -524,7 +556,7 @@ export async function openaiChat(options: OpenAIOptions): Promise<AdapterRespons
 
 **What to do:** Create `src/providers/gemini.ts` exporting `geminiChat(options: GeminiOptions): Promise<AdapterResponse>`.
 
-**Why:** Gemini uses a distinct request format with safety settings. Satisfies acceptance criterion 14.
+**Why:** Gemini uses a distinct request format with safety settings. Satisfies acceptance criterion 15.
 
 **Type signatures:**
 
@@ -554,7 +586,7 @@ export async function geminiChat(options: GeminiOptions): Promise<AdapterRespons
 
 **What to do:** Create `src/providers/deepseek.ts` exporting `deepseekChat(options: DeepSeekOptions): Promise<AdapterResponse | AsyncGenerator<StreamingChunk>>`.
 
-**Why:** DeepSeek is the only provider supporting streaming. Satisfies acceptance criterion 15.
+**Why:** DeepSeek is the only provider supporting streaming. Satisfies acceptance criterion 16.
 
 **Type signatures:**
 
@@ -581,7 +613,7 @@ export async function deepseekChat(options: DeepSeekOptions): Promise<AdapterRes
 
 **What to do:** Create `src/providers/moonshot.ts` exporting `moonshotChat(options: MoonshotOptions): Promise<AdapterResponse>`.
 
-**Why:** Moonshot has content-filter fallback logic to DeepSeek. Satisfies acceptance criterion 16.
+**Why:** Moonshot has content-filter fallback logic to DeepSeek. Satisfies acceptance criterion 17.
 
 **Type signatures:**
 
@@ -608,7 +640,7 @@ export async function moonshotChat(options: MoonshotOptions): Promise<AdapterRes
 
 **What to do:** Create `src/providers/zhipu.ts` exporting `zhipuChat(options: ProviderOptions): Promise<AdapterResponse>`.
 
-**Why:** Zhipu follows the OpenAI-compatible format. Satisfies acceptance criterion 17.
+**Why:** Zhipu follows the OpenAI-compatible format. Satisfies acceptance criterion 18.
 
 **Type signatures:**
 
@@ -633,7 +665,7 @@ export async function zhipuChat(options: ProviderOptions): Promise<AdapterRespon
 
 **What to do:** Create `src/providers/claude-code.ts` exporting `claudeCodeChat(options: ClaudeCodeOptions): Promise<AdapterResponse>` and `isClaudeCodeAvailable(): boolean`.
 
-**Why:** Claude Code uses subprocess invocation instead of HTTP. Satisfies acceptance criteria 18, 19.
+**Why:** Claude Code uses subprocess invocation instead of HTTP. Satisfies acceptance criteria 19, 20.
 
 **Type signatures:**
 
@@ -660,22 +692,22 @@ export function isClaudeCodeAvailable(): boolean
 
 **What to do:** Create `src/llm/index.ts` exporting `chat`, `complete`, `createLLM`, `createNamedModelsAPI`, `createHighLevelLLM`, `createLLMWithOverride`, `createChain`, `withRetry`, `parallel`, `getLLMEvents`, `registerMockProvider`, `getAvailableProviders`, `estimateTokens`, `calculateCost`.
 
-**Why:** This is the central dispatcher that wires providers together and provides the public API used by the rest of the system. Satisfies acceptance criteria 1, 7, 8, 9, 10, 25–35.
+**Why:** This is the central dispatcher that wires providers together and provides the public API used by the rest of the system. Satisfies acceptance criteria 1, 7, 8, 9, 10, 11, 26–37.
 
 **Type signatures:**
 
 ```typescript
 export async function chat(options: ChatOptions): Promise<ChatResponse>
 export async function complete(prompt: string, options?: Partial<ChatOptions>): Promise<ChatResponse>
-export function createLLM(): Record<string, Record<string, (options: Partial<ChatOptions>) => Promise<ChatResponse>>>
-export function createNamedModelsAPI(): ReturnType<typeof createLLM>
+export function createLLM(): ProviderModelMap
+export function createNamedModelsAPI(): ProviderModelMap
 export function createHighLevelLLM(options?: Partial<ChatOptions>): HighLevelLLM
 export function createLLMWithOverride(override: { provider: ProviderName; model: string }): HighLevelLLM
 export function createChain(): ConversationChain
 export async function withRetry<T>(fn: () => Promise<T>, args?: unknown[], options?: RetryOptions): Promise<T>
 export async function parallel<T, R>(workerFn: (item: T) => Promise<R>, items: T[], concurrency?: number): Promise<R[]>
 export function getLLMEvents(): EventEmitter
-export function registerMockProvider(provider: { chat: (options: ChatOptions) => Promise<AdapterResponse> }): void
+export function registerMockProvider(provider: MockProvider): void
 export function getAvailableProviders(): ProviderAvailability
 export function estimateTokens(text: string): number
 export function calculateCost(provider: string, model: string, usage: NormalizedUsage): number
@@ -690,7 +722,8 @@ export function calculateCost(provider: string, model: string, usage: Normalized
 - Mock provider auto-registration in test mode.
 
 **Test:** `src/llm/__tests__/index.test.ts`
-- Register a mock provider; call `chat({ provider: "mock", messages: [...] })`; verify response shape.
+- Register a mock provider conforming to `MockProvider`; call `chat({ provider: "mock", messages: [...] })`; verify response shape.
+- Verify `createLLM()` returns a `ProviderModelMap` where each provider group contains callable `ModelFunction` properties (i.e., functions that accept `Partial<ChatOptions>` and return `Promise<ChatResponse>`).
 - Verify `llm:request:start` and `llm:request:complete` events are emitted with correct fields.
 - Verify `estimateTokens("abcdefgh")` returns `2`.
 - Verify `calculateCost` produces correct dollar amount from `MODEL_CONFIG` pricing.
@@ -700,3 +733,4 @@ export function calculateCost(provider: string, model: string, usage: Normalized
 - Verify `createLLMWithOverride` redirects calls and guards built-in methods.
 - Verify `getAvailableProviders` returns boolean map based on env vars.
 - Verify JSON format inference from message content.
+- Verify `chat()` writes to `/tmp/messages.log` when `LLM_DEBUG` is set; verify no write occurs when `LLM_DEBUG` is unset.

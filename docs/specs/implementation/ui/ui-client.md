@@ -46,7 +46,7 @@ A set of TypeScript modules under `src/ui/client/` that provide identical behavi
 
 // --- API Error ---
 interface ApiError {
-  code: string;
+  code: ApiErrorCode;
   message: string;
   status?: number;
 }
@@ -76,6 +76,11 @@ interface RestartJobOptions {
 }
 
 // --- SSE Event Types ---
+// Bootstrap EventSource events (emitted by /api/events for bootstrap path):
+//   state, job:updated, job:created, job:removed, heartbeat, message
+// Hook-based EventSource events (emitted by /api/events and /api/events?jobId=<id>):
+//   job:updated, job:created, job:removed, status:changed, seed:uploaded,
+//   state:change, state:summary, task:updated
 type SseEventType =
   | "state"
   | "job:updated"
@@ -93,7 +98,7 @@ type SseEventType =
 interface BootstrapOptions {
   stateUrl?: string;
   sseUrl?: string;
-  applySnapshot?: (snapshot: unknown) => Promise<void>;
+  applySnapshot?: (snapshot: unknown) => void | Promise<void>;
   onSseEvent?: (type: string, data: unknown) => void;
 }
 
@@ -196,6 +201,11 @@ interface NormalizedTask {
   error?: Record<string, unknown>;
 }
 
+interface CurrentTaskInfo {
+  taskName: string;
+  stage?: string;
+}
+
 interface NormalizedJobSummary {
   id: string;
   jobId: string;
@@ -206,7 +216,7 @@ interface NormalizedJobSummary {
   doneCount: number;
   location: string;
   tasks: Record<string, NormalizedTask>;
-  current?: unknown;
+  current?: CurrentTaskInfo | null;
   currentStage?: string;
   createdAt?: string;
   updatedAt?: string;
@@ -219,8 +229,16 @@ interface NormalizedJobSummary {
   __warnings?: string[];
 }
 
+interface TaskCostBreakdown {
+  inputTokens: number;
+  outputTokens: number;
+  inputCost: number;
+  outputCost: number;
+  totalCost: number;
+}
+
 interface NormalizedJobDetail extends NormalizedJobSummary {
-  costs?: Record<string, unknown>;
+  costs?: Record<string, TaskCostBreakdown>;
 }
 
 // --- Allowed Actions ---
@@ -281,10 +299,10 @@ type AnalysisSseEventType =
 
 ### Core behavior
 
-1. `main.tsx` mounts a React root into a DOM element with id `"root"` and renders the route table with all five routes (`/`, `/pipeline/:jobId`, `/pipelines`, `/pipelines/:slug`, `/code`).
-2. `bootstrap()` fetches the state URL, calls `applySnapshot` exactly once (with data or `null`), then opens an `EventSource` and returns it.
-3. `bootstrap()` guarantees `applySnapshot` completes before `EventSource` is created.
-4. All `api.ts` functions (`restartJob`, `rescanJob`, `startTask`, `stopJob`) return parsed JSON on HTTP 2xx and throw a structured `ApiError` (`{ code, message, status }`) on failure.
+1. `main.tsx` mounts a React root into a DOM element with id `"root"`, wraps the application in `StrictMode`, `ToastProvider`, Radix `Theme`, and `BrowserRouter` (in that nesting order), and renders the route table with all five routes (`/`, `/pipeline/:jobId`, `/pipelines`, `/pipelines/:slug`, `/code`).
+2. `bootstrap()` fetches the state URL, calls `applySnapshot` exactly once, then opens an `EventSource` and returns it. On HTTP 2xx, `applySnapshot` receives the parsed JSON body. On non-OK HTTP responses, `applySnapshot` receives the parsed JSON error body when parseable, or `null` otherwise. On fetch failure (network error), `applySnapshot` receives `null`.
+3. `bootstrap()` guarantees `applySnapshot` completes (whether synchronous return or awaited promise) before `EventSource` is created.
+4. All `api.ts` functions (`restartJob`, `rescanJob`, `startTask`, `stopJob`) return a typed `ApiOkResponse` (`{ ok: true, message? }`) on HTTP 2xx and throw a structured `ApiError` (`{ code: ApiErrorCode, message, status }`) on failure.
 5. `restartJob` defaults `clearTokenUsage` to `true` when not specified.
 6. `adaptJobSummary` and `adaptJobDetail` produce objects with all required fields populated (never `undefined` for required fields).
 7. `adaptJobSummary` and `adaptJobDetail` handle both `tasks` and `tasksStatus` input fields for backward compatibility.
@@ -346,7 +364,7 @@ type AnalysisSseEventType =
 ### Error handling
 
 44. `api.ts` maps HTTP status codes to semantic error codes (`job_running`, `job_not_found`, `conflict`, `spawn_failed`, `unknown_error`, `network_error`).
-45. `bootstrap` calls `applySnapshot(null)` on fetch failure — never throws.
+45. `bootstrap` calls `applySnapshot` on non-OK HTTP responses (with parsed JSON when available, `null` otherwise) and on fetch failure (with `null`) — never throws.
 46. Hooks catch errors internally and expose them via state — never throw to components.
 47. SSE event JSON parse errors in hooks are logged and skipped, never propagated.
 
@@ -354,6 +372,8 @@ type AnalysisSseEventType =
 
 48. Debounced refetch operations coalesce rapid SSE events into a single fetch (300ms for list, 200ms for detail).
 49. All hooks clean up `EventSource`, timers, and abort controllers on unmount.
+50. `useJobList().refetch()` does not cancel an existing in-flight request — a new fetch races with any pending fetch, and the last response to arrive wins (last-write-wins). This preserves the analyzed JS behavior.
+51. `useJobListWithUpdates` and `useJobDetailWithUpdates` queue SSE events that arrive during a refetch and replay them in order after the refetch response is applied, preserving the analyzed hydration-queue contract for both initial hydration and subsequent refetches.
 
 ## 6. Notes
 
@@ -425,13 +445,19 @@ function getStopErrorMessage(errorData: unknown, status: number): string;
 
 **Type signatures:**
 ```typescript
-async function restartJob(jobId: string, opts?: RestartJobOptions): Promise<unknown>;
-async function rescanJob(jobId: string): Promise<unknown>;
-async function startTask(jobId: string, taskId: string): Promise<unknown>;
-async function stopJob(jobId: string): Promise<unknown>;
+// --- API Response Envelopes ---
+interface ApiOkResponse {
+  ok: true;
+  message?: string;
+}
+
+async function restartJob(jobId: string, opts?: RestartJobOptions): Promise<ApiOkResponse>;
+async function rescanJob(jobId: string): Promise<ApiOkResponse>;
+async function startTask(jobId: string, taskId: string): Promise<ApiOkResponse>;
+async function stopJob(jobId: string): Promise<ApiOkResponse>;
 ```
 
-**Test:** Create `src/ui/client/__tests__/api.test.ts`. Mock `globalThis.fetch`. Test `restartJob` sends POST to `/api/jobs/:jobId/restart` with correct body, defaults `clearTokenUsage` to `true`. Test that a 409 response throws `{ code: "conflict", message: "..." }`. Test `stopJob` returns parsed JSON on 200. Test network failure throws `{ code: "network_error" }`.
+**Test:** Create `src/ui/client/__tests__/api.test.ts`. Mock `globalThis.fetch`. Test `restartJob` sends POST to `/api/jobs/:jobId/restart` with correct body, defaults `clearTokenUsage` to `true`. Test that a 409 response throws `{ code: "conflict", message: "..." }`. Test `stopJob` returns `ApiOkResponse` (`{ ok: true }`) on 200. Test network failure throws `{ code: "network_error" }`.
 
 ---
 
@@ -476,16 +502,16 @@ function removeCadenceHint(id: string): void;
 
 ### Step 6: Implement `bootstrap.ts`
 
-**What to do:** Create `src/ui/client/bootstrap.ts`. Implement `bootstrap(options?: BootstrapOptions): Promise<EventSource | null>`. Fetch `stateUrl`, call `applySnapshot` with parsed JSON or `null` on failure, then create an `EventSource` for `sseUrl` with listeners for all six event types.
+**What to do:** Create `src/ui/client/bootstrap.ts`. Implement `bootstrap(options?: BootstrapOptions): Promise<EventSource | null>`. Fetch `stateUrl`. On HTTP 2xx, call `applySnapshot` with parsed JSON. On non-OK HTTP responses, call `applySnapshot` with parsed JSON error body when parseable or `null` otherwise. On fetch failure, call `applySnapshot(null)`. Await the result of `applySnapshot` if it returns a promise; proceed synchronously otherwise. Then create an `EventSource` for `sseUrl` with listeners for all six bootstrap event types (`state`, `job:updated`, `job:created`, `job:removed`, `heartbeat`, `message`).
 
-**Why:** Satisfies acceptance criteria 2, 3, and 45 — state snapshot hydration before SSE.
+**Why:** Satisfies acceptance criteria 2, 3, and 45 — state snapshot hydration before SSE, including non-OK response handling and sync/async callback support.
 
 **Type signatures:**
 ```typescript
 async function bootstrap(options?: BootstrapOptions): Promise<EventSource | null>;
 ```
 
-**Test:** Create `src/ui/client/__tests__/bootstrap.test.ts`. Mock `fetch` and `EventSource`. Test that `applySnapshot` is called before `EventSource` is constructed. Test that fetch failure still calls `applySnapshot(null)` and returns an `EventSource`. Test that `EventSource` creation failure returns `null`. Test that SSE event listeners are registered for all six types.
+**Test:** Create `src/ui/client/__tests__/bootstrap.test.ts`. Mock `fetch` and `EventSource`. Test that `applySnapshot` is called before `EventSource` is constructed. Test that fetch failure still calls `applySnapshot(null)` and returns an `EventSource`. Test that a non-OK HTTP response (e.g., 500 with JSON body) calls `applySnapshot` with the parsed error body. Test that a non-OK HTTP response with unparseable body calls `applySnapshot(null)`. Test that a synchronous `applySnapshot` callback works without errors. Test that `EventSource` creation failure returns `null`. Test that SSE event listeners are registered for all six bootstrap event types.
 
 ---
 
@@ -605,4 +631,4 @@ function useAnalysisProgress(): UseAnalysisProgressResult;
 
 **Why:** Satisfies acceptance criterion 1 — application entry point.
 
-**Test:** Create `src/ui/client/__tests__/main.test.ts`. Verify that the module imports correctly. Test that `ReactDOM.createRoot` is called with the `"root"` element. Test that all five route paths are defined. (Requires DOM mocking via `happy-dom`.)
+**Test:** Create `src/ui/client/__tests__/main.test.ts`. Verify that the module imports correctly. Test that `ReactDOM.createRoot` is called with the `"root"` element. Test that the provider stack renders `StrictMode` > `ToastProvider` > Radix `Theme` > `BrowserRouter` in the correct nesting order. Test that all five route paths are defined. (Requires DOM mocking via `happy-dom`.)

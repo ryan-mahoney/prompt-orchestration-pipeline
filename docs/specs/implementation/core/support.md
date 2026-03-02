@@ -291,17 +291,19 @@ export function createRetryWrapper(defaultOptions?: RetryOptions): <T>(fn: () =>
 
 ### Configuration — Core behavior
 
-1. `defaultConfig` is a frozen object containing all documented config sections with their default values.
+> **Sync/async parity note:** `loadConfig()` (async) and `getConfig()` (sync) both merge defaults and environment overrides, but they differ in guarantees. `loadConfig` performs schema validation, registry hydration from disk, and pipeline directory existence checks. `getConfig` skips schema validation and pipeline path existence checks — it is a fast synchronous fallback. The criteria below are annotated with `[async-only]` where a guarantee applies only to `loadConfig`.
+
+1. `defaultConfig` is an exported `const` containing all documented config sections with their default values. Callers never receive a direct reference — `loadConfig` and `getConfig` deep-clone it before use (see AC #28).
 2. `loadConfig()` returns a fully assembled configuration object merging defaults, optional config file, and environment variables in priority order: env vars > config file > defaults.
-3. `loadConfig({ configPath })` reads and merges the JSON config file at the given path.
-4. `loadConfig()` throws `"PO_ROOT is required"` when `paths.root` is not set after merging.
-5. `loadConfig()` throws `"No pipelines are registered"` when the registry yields zero pipelines.
-6. `loadConfig()` throws when a pipeline's `configDir`, `tasksDir`, or `pipeline.json` does not exist on disk.
-7. `loadConfig()` throws `"Configuration validation failed"` when numeric/enum constraints fail.
-8. `loadConfig()` throws `"Failed to load config file"` when the config file exists but cannot be parsed.
-9. `loadConfig()` throws `"Failed to read pipeline registry"` when the registry exists but cannot be parsed.
+3. `loadConfig({ configPath })` reads and merges the JSON config file at the given path. `[async-only]`
+4. `loadConfig()` throws `"PO_ROOT is required"` when `paths.root` is not set after merging. `getConfig()` also throws this — both paths enforce it.
+5. `loadConfig()` throws `"No pipelines are registered"` when the registry yields zero pipelines. `[async-only]` (`getConfig` skips this check when `NODE_ENV === "test"`; see AC #12.)
+6. `loadConfig()` throws when a pipeline's `configDir`, `tasksDir`, or `pipeline.json` does not exist on disk. `[async-only]`
+7. `loadConfig()` throws `"Configuration validation failed"` when numeric/enum constraints fail. `[async-only]`
+8. `loadConfig()` throws `"Failed to load config file"` when the config file exists but cannot be parsed. `[async-only]`
+9. `loadConfig()` throws `"Failed to read pipeline registry"` when the registry exists but cannot be parsed. `[async-only]`
 10. `getConfig()` returns the cached configuration on repeat calls (same object reference).
-11. `getConfig()` lazily initializes from defaults and environment on first call when `loadConfig` has not been called.
+11. `getConfig()` lazily initializes from defaults and environment on first call when `loadConfig` has not been called. It does **not** perform schema validation or pipeline path existence checks.
 12. `getConfig()` skips the "no pipelines" check when `NODE_ENV === "test"`.
 13. `resetConfig()` clears the cached configuration so the next `getConfig()` re-initializes.
 14. `getConfigValue("orchestrator.shutdownTimeout")` returns the value at that path.
@@ -350,8 +352,8 @@ export function createRetryWrapper(defaultOptions?: RetryOptions): <T>(fn: () =>
 
 ### Logger — Convenience factories
 
-42. `createJobLogger("Runner", "job-1")` is equivalent to `createLogger("Runner", { jobId: "job-1" })`.
-43. `createTaskLogger("Runner", "job-1", "task-a")` is equivalent to `createLogger("Runner", { jobId: "job-1", taskName: "task-a" })`.
+42. `createJobLogger("Runner", "job-1")` is equivalent to `createLogger("Runner", { jobId: "job-1" })`. When `additionalContext` is provided, `jobId` takes precedence over any conflicting key in `additionalContext`.
+43. `createTaskLogger("Runner", "job-1", "task-a")` is equivalent to `createLogger("Runner", { jobId: "job-1", taskName: "task-a" })`. When `additionalContext` is provided, `jobId` and `taskName` take precedence over any conflicting keys in `additionalContext`.
 
 ### Module Loader — Core behavior
 
@@ -415,7 +417,7 @@ export function createRetryWrapper(defaultOptions?: RetryOptions): <T>(fn: () =>
 - **Six modules, one spec:** These modules are grouped because they are all foundational leaf dependencies with no mutual dependencies (except `validation.ts` → `config.ts`). Keeping them in one spec avoids orchestration overhead for six small specs.
 - **Keep `dotenv`:** The `.env` format has enough edge cases (quoted values, multiline, comments, `#` escaping) that re-implementing it would be more code than the dependency itself. `dotenv` is well-tested and small.
 - **Keep `ajv` + `ajv-formats`:** No Bun-native JSON Schema validator exists. AJV is the standard.
-- **Schema recompilation in `validateSeed`:** The analysis notes that AJV compiles schemas on every call. For `validateSeed` this is necessary because the `pipeline` enum is dynamic. For `validatePipeline` the schema is static — the TS implementation should cache the compiled pipeline schema. However, the analysis flags this as a potential intentional design choice, so preserve the per-call behavior to match the JS implementation exactly.
+- **Schema recompilation:** AJV compiles schemas on every call in the JS implementation. For `validateSeed` this is necessary because the `pipeline` enum is dynamic (pulled from config). For `validatePipeline` the schema is static, but the TS implementation preserves per-call compilation to match the JS behavior exactly. Do not cache the pipeline schema.
 - **`logging.level` is not consulted by the logger:** The analysis confirms this. The TS implementation preserves this behavior — debug gating uses `NODE_ENV` and `DEBUG`, not `config.logging.level`. This avoids scope creep.
 
 ### Open questions from analysis
@@ -852,9 +854,10 @@ describe("config environment overrides", () => {
    - Deep-clones `defaultConfig` via `JSON.parse(JSON.stringify(defaultConfig))`.
    - If `options.configPath`, loads and deep-merges the file.
    - Merges environment variable overrides.
-   - Hydrates pipelines from registry.
+   - Validates that `paths.root` (`PO_ROOT`) is set — throw `"PO_ROOT is required"` before any registry work, because the registry path depends on it.
+   - Hydrates pipelines from registry at `<paths.root>/pipeline-config/registry.json`.
+   - Checks at least one pipeline exists and all pipeline directories/files exist on disk.
    - Validates if `options.validate !== false`.
-   - Checks `PO_ROOT` is set, at least one pipeline exists, and all pipeline directories/files exist on disk.
    - Caches in module-level `currentConfig`.
 
 **Why:** This is the primary async config initialization path. Satisfies AC #2–6, #9, #18–22, #27.
@@ -997,9 +1000,9 @@ describe("getPipelineConfig", () => {
    - `groupEnd`: `console.groupEnd`.
    - `sse`: logs to console, then asynchronously broadcasts via SSE registry (if available). Catches and warns on broadcast failure.
 
-5. Export `createJobLogger(componentName, jobId, additionalContext?)` — calls `createLogger(componentName, { jobId, ...additionalContext })`.
+5. Export `createJobLogger(componentName, jobId, additionalContext?)` — calls `createLogger(componentName, { ...additionalContext, jobId })`. The explicit `jobId` is spread **last** so that `additionalContext` cannot accidentally override it.
 
-6. Export `createTaskLogger(componentName, jobId, taskName, additionalContext?)` — calls `createLogger(componentName, { jobId, taskName, ...additionalContext })`.
+6. Export `createTaskLogger(componentName, jobId, taskName, additionalContext?)` — calls `createLogger(componentName, { ...additionalContext, jobId, taskName })`. The explicit `jobId` and `taskName` are spread **last** so that `additionalContext` cannot accidentally override them.
 
 **Why:** Logger is used by all modules. The SSE dependency is lazy and gracefully degraded. Satisfies AC #35–43.
 

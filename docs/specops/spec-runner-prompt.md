@@ -7,6 +7,8 @@ Act in accordance with:
 - AGENTS.md (TypeScript, Bun, and coding conventions)
 - docs/engineering-standards.md
 
+If the task related to frontend React components, re-purpose legacy React components from: react-legacy/
+
 After each step:
 
 - Run `bun run typecheck` and fix any errors before proceeding

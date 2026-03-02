@@ -93,11 +93,19 @@ interface TaskLogEntry {
   skipped?: boolean;
 }
 
-/** Normalized error with optional debug metadata. */
+/** Normalized error for serialization into status files and logs. */
 interface NormalizedError {
   name?: string;
   message: string;
   stack?: string;
+}
+
+/** Operational error metadata attached to thrown errors that carry HTTP-compatible status info.
+ *  Used for lifecycle policy blocks and other domain-specific failures.
+ *  Thrown as: Object.assign(new Error(message), { httpStatus, error }) */
+interface OperationalErrorMeta {
+  httpStatus: number;
+  error: string;
 }
 
 /** Job status snapshot (subset of fields the runner directly reads/writes). */
@@ -142,6 +150,7 @@ interface ResolvedJobConfig {
   pipelineSlug: string;
   pipelineJsonPath: string;
   tasksDir: string;
+  taskRegistryPath: string; // Fully resolved module path: PO_TASK_REGISTRY or join(tasksDir, "index.js")
   workDir: string;
   statusPath: string;
   startFromTask: string | null;
@@ -186,12 +195,14 @@ interface ResolvedJobConfig {
 
 ### Core behavior
 
-1. `runPipelineJob(jobId)` resolves the pipeline slug from either `PO_PIPELINE_SLUG` env var or `seed.json`'s `pipeline` field, and throws if neither is available.
+1. `runPipelineJob(jobId)` resolves the pipeline slug via the following deterministic sequence: (a) compute `workDir` from `PO_ROOT`, `PO_DATA_DIR`, and `PO_CURRENT_DIR` plus `jobId` — these paths do not depend on the slug; (b) read `seed.json` from `workDir`; (c) select the slug from `PO_PIPELINE_SLUG` env var if set, otherwise from `seed.json`'s `pipeline` field; (d) throw if neither provides a slug. This entire sequence is encapsulated in `resolveJobConfig(jobId)`.
 2. The pipeline definition is read from the path resolved by `getPipelineConfig(slug).pipelineJsonPath`, parsed as JSON, and validated via `validatePipelineOrThrow`.
-3. The task registry is loaded dynamically from the path resolved by `getPipelineConfig(slug).tasksDir` (or `PO_TASK_REGISTRY` env override) using `loadFreshModule`. The default export is a `TaskRegistry` mapping task names to module paths.
+3. The task registry module is loaded dynamically using `loadFreshModule`. The module path is `PO_TASK_REGISTRY` env var if set, otherwise `join(getPipelineConfig(slug).tasksDir, "index.js")` — the directory's index module. The default export must be a `TaskRegistry` (`Record<string, string>`) mapping task names to relative module file paths. Relative paths in the registry are resolved relative to the directory containing the registry file.
 4. Tasks are executed in the order declared in `pipeline.tasks`, strictly sequentially — no parallel execution.
 5. When `PO_START_FROM_TASK` is set, tasks before the start-from task are skipped (but their artifacts are loaded if they are in `DONE` state).
 6. When `PO_RUN_SINGLE_TASK` is `"true"` and `PO_START_FROM_TASK` is set, the runner exits the task loop after executing the start-from task.
+6a. If `PO_START_FROM_TASK` is set but names a task that does not exist in `pipeline.tasks`, the runner throws immediately with a clear error (`"Start-from task not found in pipeline: {taskName}"`) before executing any task.
+6b. If `PO_RUN_SINGLE_TASK` is `"true"` but `PO_START_FROM_TASK` is not set or is empty, the runner throws immediately with a clear error (`"PO_RUN_SINGLE_TASK requires PO_START_FROM_TASK to be set"`) before executing any task.
 7. On full pipeline completion (not single-task mode), the job directory is moved from `current/{jobId}` to `complete/{jobId}`, a summary record is appended to `runs.jsonl`, and task symlinks are cleaned up.
 
 ### PID file lifecycle
@@ -199,7 +210,7 @@ interface ResolvedJobConfig {
 8. A `runner.pid` file is written to the job's working directory at startup, containing `process.pid` followed by a newline.
 9. Signal handlers for `SIGINT` and `SIGTERM` clean up the PID file and call `process.exit()`.
 10. A synchronous `process.on("exit")` handler performs best-effort PID file cleanup via `unlinkSync`, ignoring `ENOENT`.
-11. The PID file is cleaned up in all exit paths: normal completion, signal, and crash.
+11. The PID file is cleaned up in all exit paths: on normal completion it is explicitly deleted before the job directory is moved to `complete/` (so the registered cleanup path is never stale); on signal it is removed by the `SIGINT`/`SIGTERM` handler; on crash it is removed best-effort by the synchronous `exit` handler.
 
 ### Status tracking
 
@@ -212,7 +223,7 @@ interface ResolvedJobConfig {
 ### Lifecycle policy
 
 17. Before starting each task (when `startFromTask` is NOT set), `decideTransition` is called with `{ op: "start", taskState, dependenciesReady }` where `dependenciesReady` is true only if all preceding tasks are in `DONE` state.
-18. If `decideTransition` returns `{ ok: false }`, the runner throws an error with `httpStatus: 409` and `error: "unsupported_lifecycle"`.
+18. If `decideTransition` returns `{ ok: false }`, the runner throws an `Error` with `OperationalErrorMeta` properties attached via `Object.assign(new Error(message), { httpStatus: 409, error: "unsupported_lifecycle" })`. This is a separate concern from `NormalizedError` — `NormalizedError` is used for serialization into status files; `OperationalErrorMeta` is used for thrown errors that carry HTTP-compatible status info.
 19. When `startFromTask` is set, the lifecycle check is bypassed entirely for the target task.
 
 ### Symlink management
@@ -295,7 +306,7 @@ interface ResolvedJobConfig {
 
 ### Step 1: Define types and interfaces
 
-**What:** Create `src/core/pipeline-runner.ts` with all type definitions: `PipelineDefinition`, `TaskRegistry`, `SeedData`, `TaskExecutionContext`, `TaskRunResult`, `TaskLogEntry`, `NormalizedError`, `JobStatus`, `TaskStatus`, `CompletionRecord`, `ResolvedJobConfig`. Also add the `getTaskName` helper function.
+**What:** Create `src/core/pipeline-runner.ts` with all type definitions: `PipelineDefinition`, `TaskRegistry`, `SeedData`, `TaskExecutionContext`, `TaskRunResult`, `TaskLogEntry`, `NormalizedError`, `OperationalErrorMeta`, `JobStatus`, `TaskStatus`, `CompletionRecord`, `ResolvedJobConfig`. Also add the `getTaskName` helper function.
 
 **Why:** All subsequent steps depend on these types. Types-first ordering per spec conventions.
 
@@ -327,17 +338,17 @@ function normalizeError(e: unknown): NormalizedError
 
 ### Step 3: Implement `resolveJobConfig`
 
-**What:** Add `resolveJobConfig(jobId: string): ResolvedJobConfig`. Reads environment variables (`PO_ROOT` defaulting to `process.cwd()`, `PO_DATA_DIR` defaulting to `"pipeline-data"`, `PO_CURRENT_DIR`, `PO_COMPLETE_DIR`, `PO_PIPELINE_SLUG`, `PO_TASK_REGISTRY`, `PO_PIPELINE_PATH`, `PO_START_FROM_TASK`, `PO_RUN_SINGLE_TASK`). Computes `workDir`, `statusPath`, and resolves pipeline config via `getPipelineConfig` if `PO_PIPELINE_PATH` is not set.
+**What:** Add `async resolveJobConfig(jobId: string): Promise<ResolvedJobConfig>`. Resolution sequence: (1) read `PO_ROOT` (default `process.cwd()`), `PO_DATA_DIR` (default `"pipeline-data"`), `PO_CURRENT_DIR`, `PO_COMPLETE_DIR` to compute `workDir` — these paths are slug-independent; (2) read `seed.json` from `workDir` via `Bun.file().text()`; (3) derive `pipelineSlug` from `PO_PIPELINE_SLUG` env var if set, otherwise from `seed.pipeline`, throwing if neither is available; (4) resolve pipeline config via `getPipelineConfig(pipelineSlug)` unless `PO_PIPELINE_PATH` is set directly; (5) read `PO_TASK_REGISTRY`, `PO_START_FROM_TASK`, `PO_RUN_SINGLE_TASK` and populate the remaining fields of `ResolvedJobConfig`.
 
-**Why:** Centralizes configuration resolution before the main execution begins.
+**Why:** Centralizes configuration resolution — including slug derivation — in a single function, eliminating the inconsistency where `runPipelineJob` was described as resolving the slug but `resolveJobConfig` expected it as a parameter.
 
 **Type signature:**
 
 ```typescript
-function resolveJobConfig(jobId: string, pipelineSlug: string): ResolvedJobConfig
+async function resolveJobConfig(jobId: string): Promise<ResolvedJobConfig>
 ```
 
-**Test:** `tests/core/pipeline-runner.test.ts` — set env vars, call `resolveJobConfig`, assert all paths are correctly computed. Test default fallbacks when optional env vars are unset.
+**Test:** `tests/core/pipeline-runner.test.ts` — (1) set `PO_PIPELINE_SLUG`, call `resolveJobConfig`, assert slug is taken from env; (2) unset `PO_PIPELINE_SLUG`, write `seed.json` with `pipeline` field, assert slug is taken from seed; (3) unset both, assert throws; (4) assert all computed paths are correct. Test default fallbacks when optional env vars are unset.
 
 ---
 
@@ -361,7 +372,7 @@ function installSignalHandlers(workDir: string): void
 
 ### Step 5: Implement pipeline loading and validation
 
-**What:** Add `loadPipeline(pipelineJsonPath: string): Promise<PipelineDefinition>` that reads the pipeline JSON file via `Bun.file().text()`, parses it, calls `validatePipelineOrThrow`, and returns the typed definition. Add `loadTaskRegistry(registryPath: string): Promise<TaskRegistry>` that calls `loadFreshModule` and returns the default export.
+**What:** Add `loadPipeline(pipelineJsonPath: string): Promise<PipelineDefinition>` that reads the pipeline JSON file via `Bun.file().text()`, parses it, calls `validatePipelineOrThrow`, and returns the typed definition. Add `loadTaskRegistry(registryPath: string): Promise<TaskRegistry>` that calls `loadFreshModule` and returns the default export. The `registryPath` parameter is the fully resolved module file path — either `PO_TASK_REGISTRY` env var or `join(tasksDir, "index.js")` as computed by `resolveJobConfig`.
 
 **Why:** Acceptance criteria 2, 3.
 
@@ -372,15 +383,15 @@ async function loadPipeline(pipelineJsonPath: string): Promise<PipelineDefinitio
 async function loadTaskRegistry(registryPath: string): Promise<TaskRegistry>
 ```
 
-**Test:** `tests/core/pipeline-runner.test.ts` — (1) `loadPipeline` with a valid JSON file returns a parsed `PipelineDefinition`; (2) `loadPipeline` with invalid JSON throws; (3) `loadPipeline` with a structurally invalid definition throws via `validatePipelineOrThrow`.
+**Test:** `tests/core/pipeline-runner.test.ts` — (1) `loadPipeline` with a valid JSON file returns a parsed `PipelineDefinition`; (2) `loadPipeline` with invalid JSON throws; (3) `loadPipeline` with a structurally invalid definition throws via `validatePipelineOrThrow`; (4) `loadTaskRegistry` returns the default export of the registry module as a `Record<string, string>`.
 
 ---
 
 ### Step 6: Implement task execution loop — status updates and lifecycle checks
 
-**What:** Add the core `executeTaskLoop` function (or integrate directly into `runPipelineJob`). For each task in the pipeline's `tasks` array: extract the task name via `getTaskName`, handle `startFromTask` skip logic, handle already-`DONE` tasks (load their `output.json` into `pipelineArtifacts`), check lifecycle policy via `decideTransition` (unless `startFromTask` is set), update status to `RUNNING` via `writeJobStatus` with `startedAt` and incremented `attempts`, and handle the `runSingleTask` break condition.
+**What:** Add the core `executeTaskLoop` function (or integrate directly into `runPipelineJob`). Before entering the loop, validate `startFromTask` and `runSingleTask` configuration: if `startFromTask` is set but names no task in `pipeline.tasks`, throw immediately; if `runSingleTask` is `true` but `startFromTask` is not set, throw immediately. Then for each task in the pipeline's `tasks` array: extract the task name via `getTaskName`, handle `startFromTask` skip logic, handle already-`DONE` tasks (load their `output.json` into `pipelineArtifacts`), check lifecycle policy via `decideTransition` (unless `startFromTask` is set), update status to `RUNNING` via `writeJobStatus` with `startedAt` and incremented `attempts`, and handle the `runSingleTask` break condition.
 
-**Why:** Acceptance criteria 4, 5, 6, 12, 13, 17, 18, 19.
+**Why:** Acceptance criteria 4, 5, 6, 6a, 6b, 12, 13, 17, 18, 19.
 
 **Type signatures:**
 
@@ -388,7 +399,7 @@ async function loadTaskRegistry(registryPath: string): Promise<TaskRegistry>
 export async function runPipelineJob(jobId: string): Promise<void>
 ```
 
-**Test:** `tests/core/pipeline-runner.test.ts` — (1) tasks execute in declared order; (2) with `startFromTask`, preceding tasks are skipped; (3) with `runSingleTask`, the loop exits after the target task; (4) lifecycle policy block throws with status 409; (5) status is updated to `RUNNING` before each task with `startedAt` and incremented `attempts`.
+**Test:** `tests/core/pipeline-runner.test.ts` — (1) tasks execute in declared order; (2) with `startFromTask`, preceding tasks are skipped; (3) with `runSingleTask`, the loop exits after the target task; (4) lifecycle policy block throws with status 409; (5) status is updated to `RUNNING` before each task with `startedAt` and incremented `attempts`; (6) `startFromTask` naming a non-existent task throws before any execution; (7) `runSingleTask` without `startFromTask` throws before any execution.
 
 ---
 
@@ -404,7 +415,7 @@ export async function runPipelineJob(jobId: string): Promise<void>
 
 ### Step 8: Implement pipeline completion — directory move, runs.jsonl, symlink cleanup
 
-**What:** After the task loop completes without failure (and not in single-task mode): move the job directory from `current/{jobId}` to `complete/{jobId}` via `fs.rename`, create the `complete/` directory if needed via `mkdir({ recursive: true })`, build the `CompletionRecord`, append it as a JSON line to `{completeDir}/runs.jsonl` via `appendFile`, and call `cleanupTaskSymlinks` on the completed directory.
+**What:** After the task loop completes without failure (and not in single-task mode): delete `runner.pid` via `cleanupPidFile(workDir)` before any directory move so the registered cleanup path is never stale, then create the `complete/` directory if needed via `mkdir({ recursive: true })`, move the job directory from `current/{jobId}` to `complete/{jobId}` via `fs.rename`, build the `CompletionRecord`, append it as a JSON line to `{completeDir}/runs.jsonl` via `appendFile`, and call `cleanupTaskSymlinks` on the completed directory.
 
 **Why:** Acceptance criteria 7, 29, 30, 22.
 

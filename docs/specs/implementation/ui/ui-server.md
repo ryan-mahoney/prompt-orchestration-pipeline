@@ -87,6 +87,15 @@ interface ServerHandle {
   close: () => Promise<void>;
 }
 
+// ── Public module surface (index.ts) ──
+// The module MUST export these named exports to preserve the analyzed API:
+//   startServer(options: ServerOptions): Promise<ServerHandle>
+//   createServer(dataDir?: string): { fetch: (req: Request) => Promise<Response> }
+//   initializeWatcher(dataDir: string): Promise<void>
+//   sseRegistry: SSERegistry              (re-export from sse-registry.ts)
+//   broadcastStateUpdate: (...)=> void    (re-export from sse-broadcast.ts)
+//   state: StateModule                    (re-export from ui/state)
+
 // ── SSE Registry ──
 
 interface SSEClient {
@@ -298,8 +307,8 @@ interface Route {
 | Replace `express.static()` with `Bun.file()` serving | `Bun.file()` provides zero-copy file serving with automatic MIME type detection. The SPA fallback (`index.html`) is handled in the catch-all route. |
 | Replace `http.ServerResponse.write()` SSE with `ReadableStream` | SSE connections use `new Response(new ReadableStream(...))` with proper `text/event-stream` headers. Client disconnects are detected via `AbortSignal` from the request. This is the Bun/web-standard approach per AGENTS.md section 5. |
 | Replace `child_process.spawn` with `Bun.spawn` | Bun.spawn provides the same `detached` and `stdio` options with better performance and native TypeScript types. |
-| Replace `fs.readFile` with `Bun.file().text()` / `Bun.file().json()` | Native Bun file I/O is faster and more ergonomic. File existence checks use `Bun.file().exists()`. |
-| Replace `fs.writeFile` with `Bun.write()` | Atomic writes via `Bun.write()`. |
+| Replace `fs.readFile` with `Bun.file().text()` + explicit JSON parse | Native Bun file I/O is faster and more ergonomic. File existence checks use `Bun.file().exists()`. **Do not use `Bun.file().json()`** — the text must be read first via `.text()` so that BOM stripping can occur before `JSON.parse()`. |
+| Replace `fs.writeFile` with `Bun.write()` | `Bun.write()` is used for general file writes. **For files requiring atomic replacement** (e.g., `registry.json`, `tasks-status.json`), use a temp-file-and-rename strategy: write to a temporary file in the same directory, then `rename()` to the target path, ensuring readers never see a partial write. |
 | Replace `fs.readdir` with `readdir` from `node:fs/promises` | Bun supports `node:fs/promises` natively; `readdir` with `withFileTypes` is needed for directory scanning and is not yet available via a Bun-native equivalent. |
 | Replace `fflate.unzipSync` with same | `fflate` is retained — Bun does not provide a native zip extraction API. |
 | `URLPattern` for routing | Web-standard URL pattern matching replaces Express route strings. Bun supports `URLPattern` natively. |
@@ -358,6 +367,7 @@ interface Route {
 8. OPTIONS preflight requests return 204 with correct CORS headers.
 9. Unmatched routes return `index.html` (SPA fallback) when a static dist directory exists.
 10. Static assets are served with correct MIME types from the dist directory or embedded assets.
+10a. In development mode, Vite dev server middleware is dynamically imported, created via `createServer()` from `vite`, injected into the request pipeline (before static file serving), and shut down during `close()`. The Vite integration is behind a dynamic import so it does not affect production bundles.
 
 ### SSE Registry
 
@@ -388,7 +398,7 @@ interface Route {
 26. `readJSONFile` reads and parses JSON, strips UTF-8 BOM, and returns `{ ok: true, data, path }`.
 27. `readJSONFile` returns an `ErrorEnvelope` for missing files (`NOT_FOUND`), parse failures (`INVALID_JSON`), and I/O errors (`FS_ERROR`).
 28. `validateFilePath` returns file metadata on success or `ErrorEnvelope` if the file doesn't exist, isn't a regular file, or exceeds 5MB.
-29. `readFileWithRetry` retries on `INVALID_JSON` and `FS_ERROR` up to `maxAttempts` (capped at 5, delay capped at 50ms), but returns immediately for `NOT_FOUND`.
+29. `readFileWithRetry` retries on `INVALID_JSON` and `FS_ERROR` up to `maxAttempts` (capped at 5, delay capped at 50ms), but returns immediately for `NOT_FOUND`. Normative defaults: `maxAttempts = 3`, `delayMs = 10` (from `RETRY_CONFIG`). Caller-provided values are accepted but hard-capped at 5 attempts and 50ms delay. In test environments (`NODE_ENV=test`), `delayMs` defaults to `10`.
 30. `readMultipleJSONFiles` reads all files in parallel and returns all results.
 
 ### Job Reader
@@ -496,15 +506,35 @@ interface Route {
 83. `GET /api/events` establishes an SSE connection with correct headers, registers the client, and handles disconnect via `AbortSignal`.
 84. `GET /api/events?jobId=...` registers the client with a jobId filter for scoped event delivery.
 
+### Atomic Writes
+
+85a. Files that must be updated atomically (`registry.json`, `tasks-status.json`, and any file where a concurrent reader could observe a partial write) use a temp-file-and-rename strategy: `Bun.write()` to a temporary file in the same directory, then `fs.rename()` to the target path.
+
 ### Error Handling
 
 85. All endpoints return structured JSON error responses — never unhandled exceptions.
 86. File reader errors are returned as `ErrorEnvelope`, never thrown.
 87. Job control guards use `try/finally` for cleanup — concurrency guards are never leaked.
 
+### Watcher-to-State-to-SSE Contract
+
+88a. `initializeWatcher(dataDir)` watches the `current` and `complete` lifecycle directories (resolved via `resolvePipelinePaths(dataDir)`).
+88b. File change events from chokidar are normalized into `{ path, type, timestamp }` records and passed to `ui/state.recordChange()`.
+88c. After state is updated, `broadcastStateUpdate(state.getState())` is called to push changes to SSE clients.
+88d. Changes to `tasks-status.json` files additionally trigger `sseEnhancer.handleJobChange({ jobId, category, filePath })` for debounced job enrichment broadcasting.
+88e. The watcher's `onChange` callbacks hold no references that outlive `watcher.close()` — after teardown, no further state updates or SSE broadcasts occur from stale callbacks.
+88f. `state.setWatchedPaths()` is called during initialization with the resolved watch directories so the state module can report them.
+
 ### Graceful Shutdown
 
-88. On `close()`, the server stops accepting connections, finishes in-flight requests, clears timers, stops the watcher, disconnects SSE clients, and shuts down the HTTP server.
+88. On `close()`, the server executes the following shutdown sequence in order:
+    1. Stop the heartbeat interval timer.
+    2. Stop the file watcher (await `watcher.close()`).
+    3. Close all SSE clients via `sseRegistry.closeAll()` — in-flight SSE streams are terminated (controllers are closed, not drained).
+    4. Clean up the SSE enhancer via `sseEnhancer.cleanup()` (clears pending debounce timers).
+    5. If a Vite dev server is running, shut it down via `viteServer.close()`.
+    6. Stop the Bun HTTP server via `server.stop()` — this stops accepting new connections. In-flight non-streaming responses are allowed to complete; the stop call does not wait for them indefinitely.
+    7. The returned `Promise<void>` resolves only after all of the above steps have completed. If any step throws, the error is logged but shutdown continues through remaining steps (best-effort teardown).
 
 ---
 
@@ -530,7 +560,7 @@ interface Route {
 ### Migration-specific concerns
 
 - **Behavioral preservation:** All API response shapes, SSE event types and payloads, and error response structures must remain identical. The client SPA depends on these contracts.
-- **Static asset serving:** Three modes must work: Vite dev server (development), embedded assets (compiled binary), and filesystem dist (standard deployment). Vite integration is development-only and dynamically imported.
+- **Static asset serving:** Three modes must work and are all required by acceptance criteria: (1) Vite dev server (development — AC 10a), (2) embedded assets (compiled binary — AC 10), and (3) filesystem dist (standard deployment — AC 10). Vite is dynamically imported so it is excluded from production bundles. The router must check modes in order: Vite (if running) → embedded assets → filesystem dist → SPA fallback.
 - **Process spawning:** `Bun.spawn` replaces `child_process.spawn` but must preserve `detached: true` behavior for background pipeline runners. `unref()` is replaced by Bun's equivalent mechanism.
 - **Multipart parsing:** The custom multipart parser must be reimplemented to work with `Request.arrayBuffer()` instead of Express's request stream.
 
@@ -1026,7 +1056,7 @@ export function handlePipelineAnalysis(req: Request, slug: string): Promise<Resp
 
 ### Step 22: Create `src/ui/server/index.ts` — server lifecycle
 
-**What to do:** Export `startServer(options: ServerOptions): Promise<ServerHandle>`. Load environment, initialize PATHS, optionally start Vite (dev mode, dynamically imported), create the router, start `Bun.serve()` on the configured port. Start the watcher (via `ui/state` watcher module), start the heartbeat timer (30s interval broadcasting `heartbeat` event). Return `{ url, close }` where `close` tears down all resources in order: stop heartbeat, stop watcher, close all SSE clients, close Vite (if running), stop the Bun server. Handle `EADDRINUSE` and 5s startup timeout. Export `createServer(dataDir?: string)` for direct server creation without startup side effects. Re-export `sseRegistry`, `broadcastStateUpdate`, and `state`.
+**What to do:** Export `startServer(options: ServerOptions): Promise<ServerHandle>`. Load environment, initialize PATHS, optionally start Vite (dev mode, dynamically imported), create the router, start `Bun.serve()` on the configured port. Start the watcher via `initializeWatcher(dataDir)` which watches `current` and `complete` lifecycle directories, normalizes change events into `{ path, type, timestamp }`, feeds them to `state.recordChange()`, calls `broadcastStateUpdate()`, and triggers the SSE enhancer for `tasks-status.json` changes (see AC 88a–88f). Start the heartbeat timer (30s interval broadcasting `heartbeat` event). Return `{ url, close }` where `close` executes the shutdown sequence defined in AC 88: (1) stop heartbeat timer, (2) stop watcher, (3) close all SSE clients, (4) cleanup SSE enhancer, (5) close Vite if running, (6) stop Bun HTTP server. Each step is best-effort — errors are logged but do not prevent subsequent steps. The returned promise resolves only after all steps complete. Handle `EADDRINUSE` and 5s startup timeout. Export `createServer(dataDir?: string)` for direct server creation without startup side effects. Re-export `sseRegistry`, `broadcastStateUpdate`, and `state`.
 
 **Why:** Server lifecycle is the entry point for the module. Acceptance criteria 1–6, 88.
 
@@ -1034,6 +1064,11 @@ export function handlePipelineAnalysis(req: Request, slug: string): Promise<Resp
 ```typescript
 export function startServer(options: ServerOptions): Promise<ServerHandle>;
 export function createServer(dataDir?: string): { fetch: (req: Request) => Promise<Response> };
+export function initializeWatcher(dataDir: string): Promise<void>;
+// Re-exports — these MUST be named exports from index.ts:
+export { sseRegistry } from './sse-registry';
+export { broadcastStateUpdate } from './sse-broadcast';
+export { state } from '../../ui/state';
 ```
 
 **Test:** `tests/ui/server/index.test.ts`

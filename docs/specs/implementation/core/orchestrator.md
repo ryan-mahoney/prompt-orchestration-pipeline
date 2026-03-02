@@ -106,7 +106,11 @@ interface Watcher {
 /** Factory function that creates a filesystem watcher. */
 type WatcherFactory = (path: string, options: Record<string, unknown>) => Watcher;
 
-/** Spawn function signature matching Bun.spawn's used surface. */
+/**
+ * Spawn function signature matching Bun.spawn's used surface.
+ * Throws synchronously on spawn failure (e.g. binary not found, permission denied).
+ * Callers must catch spawn errors distinctly from child exit failures.
+ */
 type SpawnFn = (cmd: string[], options: {
   env: Record<string, string>;
   stdin: "ignore";
@@ -114,10 +118,21 @@ type SpawnFn = (cmd: string[], options: {
   stderr: "inherit";
 }) => ChildHandle;
 
+/** Result of a child process exit, capturing all diagnostic fields. */
+interface ChildExitResult {
+  /** Exit code, or null if terminated by signal. */
+  code: number | null;
+  /** Signal name (e.g. "SIGTERM"), or null if exited normally. */
+  signal: string | null;
+  /** Completion classification: "success" (code 0), "failure" (non-zero code), or "signal" (killed). */
+  completionType: "success" | "failure" | "signal";
+}
+
 /** Minimal child process handle for tracking. */
 interface ChildHandle {
   readonly pid: number;
-  readonly exited: Promise<number | undefined>;
+  /** Resolves with structured exit details when the process terminates. */
+  readonly exited: Promise<ChildExitResult>;
   kill(signal?: number): void;
 }
 
@@ -140,7 +155,7 @@ interface ChildHandle {
 
 | Source | Import | Purpose |
 |--------|--------|---------|
-| `./config` | `getConfig`, `getPipelineConfig` | Resolve pipeline registry and config values |
+| `./config` | `getConfig`, `getPipelineConfig` | Resolve pipeline registry and config values. Both must accept an explicit `root` parameter so config can be resolved without reading `process.env.PO_ROOT`. |
 | `./logger` | `createLogger` | Structured logging |
 | `./file-io` | `createTaskFileIO`, `generateLogName` | Write structured start log |
 | `../config/log-events` | `LogEvent` | `LogEvent.START` constant |
@@ -161,7 +176,7 @@ interface ChildHandle {
 3. The returned `OrchestratorHandle` has a `stop()` method that closes the watcher, terminates all active child processes, and resolves when cleanup is complete.
 4. When a file matching `{jobId}-seed.json` appears in `pending/`, the orchestrator reads its JSON content, moves it to `current/{jobId}/seed.json`, creates `current/{jobId}/tasks/`, writes `tasks-status.json`, writes a start log, and spawns a pipeline runner process.
 5. Non-matching filenames in `pending/` are logged as warnings and left in place.
-6. Invalid JSON in a seed file is silently ignored (logged), and the file is left in `pending/`.
+6. Invalid JSON in a seed file causes a warning to be logged (including the filename and parse error message) and the file is left in `pending/` without further processing.
 7. If `current/{jobId}/seed.json` already exists (idempotency guard), the seed is skipped without error.
 8. If the job ID is already in the `running` map, the seed is skipped without error.
 
@@ -175,14 +190,14 @@ interface ChildHandle {
 11. The pipeline runner is spawned with environment variables: `PO_ROOT`, `PO_DATA_DIR`, `PO_PENDING_DIR`, `PO_CURRENT_DIR`, `PO_COMPLETE_DIR`, `PO_PIPELINE_SLUG`, and `PO_DEFAULT_PROVIDER` (sourced from config, not hardcoded).
 12. `stdin` is `"ignore"`, `stdout` and `stderr` are `"inherit"`.
 13. Active child processes are tracked in the `running` map by job ID.
-14. When a child process exits (via `exited` promise), it is removed from the `running` map and exit details (code, signal, completion type) are logged.
-15. On child spawn error, the error is logged and the child is removed from the `running` map.
+14. When a child process exits (via `exited` promise resolving to `ChildExitResult`), it is removed from the `running` map and exit details are logged: `code` (number or null), `signal` (string or null), and `completionType` (`"success"`, `"failure"`, or `"signal"`).
+15. On child spawn error (synchronous throw from `SpawnFn`), the error is logged distinctly from exit failures and the child is not added to (or is removed from) the `running` map.
 
 ### Graceful shutdown
 
-16. `stop()` sends `SIGTERM` to all active children, waits up to 500ms, then sends `SIGKILL` to any that haven't exited.
+16. `stop()` sends `SIGTERM` to all active children and starts a 500ms grace period per child. If a child's `exited` promise resolves before the timeout, the timeout is cleared (no SIGKILL sent). If a child has not exited after 500ms, `SIGKILL` is sent. After `SIGKILL`, `stop()` waits on the child's `exited` promise unconditionally — if the process still doesn't terminate (kernel-level zombie), the promise is raced against a final 1000ms timeout, after which the child is considered abandoned and logged as a warning.
 17. `stop()` closes the filesystem watcher.
-18. After `stop()` resolves, the `running` map is empty.
+18. `stop()` resolves only after all children have exited (or been abandoned per criterion 16) and the watcher is closed. After `stop()` resolves, the `running` map is empty.
 
 ### Error handling
 
@@ -208,8 +223,8 @@ interface ChildHandle {
 ### Design trade-offs
 
 - **Chokidar retained as default watcher:** Bun's `fs.watch` (via `node:fs`) is available but lacks chokidar's cross-platform stability, `ignoreInitial` semantics, and glob filtering. Since chokidar is already injected via `watcherFactory`, keeping it as the default preserves reliability. The typed `Watcher` interface allows future replacement.
-- **`Bun.spawn` `exited` promise vs event listeners:** The JS original used `child.on("exit")` and `child.on("error")` callbacks. `Bun.spawn` returns a `Subprocess` with an `exited` promise, which simplifies lifecycle tracking to a single `.then()` chain per child. The `ChildHandle` interface abstracts this to support testing.
-- **No `process.env` mutation:** The JS original temporarily set `process.env.PO_ROOT` so `getConfig()` and `getPipelineConfig()` would resolve correctly. This created a race condition with concurrent seeds. The TS version resolves config once before spawning and passes all values via the child's `env` option. This requires ensuring `getConfig` and `getPipelineConfig` can resolve with the current `PO_ROOT` without mutation.
+- **`Bun.spawn` `exited` promise vs event listeners:** The JS original used `child.on("exit")` and `child.on("error")` callbacks. `Bun.spawn` returns a `Subprocess` with an `exited` promise, which simplifies lifecycle tracking to a single `.then()` chain per child. The default spawn wrapper transforms the raw exit code into a `ChildExitResult` (reading `exitCode` and `signalCode` from the subprocess) so callers get structured `code`, `signal`, and `completionType` fields. Spawn failures (e.g. binary not found) throw synchronously and are caught distinctly from child exit. The `ChildHandle` interface abstracts this to support testing.
+- **No `process.env` mutation:** The JS original temporarily set `process.env.PO_ROOT` so `getConfig()` and `getPipelineConfig()` would resolve correctly. This created a race condition with concurrent seeds. The TS version resolves config once before spawning and passes all values via the child's `env` option. **Prerequisite:** `getConfig` and `getPipelineConfig` must accept an explicit `root: string` parameter so config can be resolved deterministically without reading `process.env.PO_ROOT`. If the `core/config` module is not yet migrated with this root-aware API, a shim must be provided that accepts `root` and returns config resolved against that path. Without this, the race condition is not actually eliminated — it is merely moved.
 
 ### Known risks
 
@@ -220,12 +235,12 @@ interface ChildHandle {
 ### Migration-specific concerns
 
 - **`PO_DEFAULT_PROVIDER` no longer hardcoded to `"mock"`:** The TS version reads from `getConfig().llm.defaultProvider`. This is an intentional behavior change — the JS original always set `"mock"`, which was identified as a bug/testing artifact.
-- **`testMode` parameter removed:** The analysis identified `testMode` as having no meaningful behavioral effect. The TS version drops it. Testability is achieved through the `spawn` and `watcherFactory` injection points.
-- **Default export removed:** The JS module had both named and default exports. The TS version exports only `startOrchestrator` as a named export, per the project convention of preferring named exports.
+- **`testMode` parameter removed (approved breaking change):** The analysis identified `testMode` as having no meaningful behavioral effect. The TS version drops it. Testability is achieved through the `spawn` and `watcherFactory` injection points. Any callers passing `testMode` must be updated to remove the argument.
+- **Default export removed (approved breaking change):** The JS module had both named and default exports. The TS version exports only `startOrchestrator` as a named export, per the project convention of preferring named exports. Any callers using `import orchestrator from ...` must switch to `import { startOrchestrator } from ...`.
 
 ### Dependencies on other modules
 
-- Depends on `core/config` (`getConfig`, `getPipelineConfig`) being migrated or shimmed.
+- Depends on `core/config` (`getConfig`, `getPipelineConfig`) being migrated or shimmed. Both functions must accept an explicit `root: string` parameter to eliminate the `process.env.PO_ROOT` race condition.
 - Depends on `core/logger` (`createLogger`) being migrated or shimmed.
 - Depends on `core/file-io` (`createTaskFileIO`, `generateLogName`) being migrated or shimmed.
 - Depends on `config/log-events` (`LogEvent`) being migrated or shimmed.
@@ -297,6 +312,11 @@ interface Watcher {
 
 type WatcherFactory = (path: string, options: Record<string, unknown>) => Watcher;
 
+/**
+ * Spawn function signature matching Bun.spawn's used surface.
+ * Throws synchronously on spawn failure (e.g. binary not found, permission denied).
+ * Callers must catch spawn errors distinctly from child exit failures.
+ */
 type SpawnFn = (cmd: string[], options: {
   env: Record<string, string>;
   stdin: "ignore";
@@ -304,9 +324,20 @@ type SpawnFn = (cmd: string[], options: {
   stderr: "inherit";
 }) => ChildHandle;
 
+/** Result of a child process exit, capturing all diagnostic fields. */
+interface ChildExitResult {
+  /** Exit code, or null if terminated by signal. */
+  code: number | null;
+  /** Signal name (e.g. "SIGTERM"), or null if exited normally. */
+  signal: string | null;
+  /** Completion classification: "success" (code 0), "failure" (non-zero code), or "signal" (killed). */
+  completionType: "success" | "failure" | "signal";
+}
+
 interface ChildHandle {
   readonly pid: number;
-  readonly exited: Promise<number | undefined>;
+  /** Resolves with structured exit details when the process terminates. */
+  readonly exited: Promise<ChildExitResult>;
   kill(signal?: number): void;
 }
 
@@ -351,7 +382,7 @@ export function startOrchestrator(opts: OrchestratorOptions): Promise<Orchestrat
 
 ### Step 4: Implement `handleSeedAdd` — seed validation, parsing, and idempotency
 
-**What:** Add the `handleSeedAdd` function. On watcher `add` event: extract filename from path, test against `SEED_PATTERN`, warn and return on non-match. Read file with `Bun.file(path).text()`, parse JSON in a try/catch (return silently on invalid JSON). Check idempotency: if `jobId` is in the `running` map, return. If `current/{jobId}/seed.json` exists (via `Bun.file().exists()`), return. Wire `handleSeedAdd` into the watcher's `add` event in `startOrchestrator`.
+**What:** Add the `handleSeedAdd` function. On watcher `add` event: extract filename from path, test against `SEED_PATTERN`, warn and return on non-match. Read file with `Bun.file(path).text()`, parse JSON in a try/catch (log a warning with the filename and parse error on invalid JSON, then return). Check idempotency: if `jobId` is in the `running` map, return. If `current/{jobId}/seed.json` exists (via `Bun.file().exists()`), return. Wire `handleSeedAdd` into the watcher's `add` event in `startOrchestrator`.
 
 **Why:** Acceptance criteria 4, 5, 6, 7, 8.
 
@@ -367,7 +398,7 @@ async function handleSeedAdd(
 ): Promise<void>
 ```
 
-**Test:** `tests/core/orchestrator.test.ts` — (1) non-matching filename logs warning and returns without action; (2) invalid JSON logs and returns; (3) seed with jobId already in `running` map returns; (4) seed with existing `current/{jobId}/seed.json` returns.
+**Test:** `tests/core/orchestrator.test.ts` — (1) non-matching filename logs warning and returns without action; (2) invalid JSON logs a warning (with filename and error message) and returns; (3) seed with jobId already in `running` map returns; (4) seed with existing `current/{jobId}/seed.json` returns.
 
 ---
 
@@ -393,7 +424,7 @@ async function handleSeedAdd(
 
 ### Step 7: Implement `spawnRunner` — config resolution and child spawning
 
-**What:** Add `spawnRunner` function. Resolve `PO_ROOT` from config. Call `getPipelineConfig(seed.pipeline)` — throw if pipeline slug is missing from seed or not in registry. Assemble environment variables: `PO_ROOT`, `PO_DATA_DIR`, `PO_PENDING_DIR`, `PO_CURRENT_DIR`, `PO_COMPLETE_DIR`, `PO_PIPELINE_SLUG`, `PO_DEFAULT_PROVIDER` (from `getConfig().llm.defaultProvider`). Call `buildReexecArgs` to construct the spawn command. Spawn via `opts.spawn` (defaulting to a wrapper around `Bun.spawn`). Add child to `running` map. Chain `.exited.then()` to remove from `running` and log exit details.
+**What:** Add `spawnRunner` function. Resolve `PO_ROOT` from the already-resolved `dirs.dataDir`. Call `getPipelineConfig(seed.pipeline, root)` with the explicit root — throw if pipeline slug is missing from seed or not in registry. Assemble environment variables: `PO_ROOT`, `PO_DATA_DIR`, `PO_PENDING_DIR`, `PO_CURRENT_DIR`, `PO_COMPLETE_DIR`, `PO_PIPELINE_SLUG`, `PO_DEFAULT_PROVIDER` (from `getConfig().llm.defaultProvider`). Call `buildReexecArgs` to construct the spawn command. Spawn via `opts.spawn` (defaulting to a wrapper around `Bun.spawn`). Add child to `running` map. Chain `.exited.then()` to remove from `running` and log exit details.
 
 **Why:** Acceptance criteria 11, 12, 13, 14, 15, 22, 23, 26.
 
@@ -410,13 +441,13 @@ async function spawnRunner(
 ): Promise<void>
 ```
 
-**Test:** `tests/core/orchestrator.test.ts` — inject a mock `spawn` function. Process a seed with a valid pipeline slug. Assert: (1) `spawn` was called with correct env vars (no hardcoded `"mock"` for `PO_DEFAULT_PROVIDER`); (2) the child was added to the `running` map; (3) after the mock child's `exited` resolves, the entry is removed from `running`. Also test: (4) missing `seed.pipeline` throws; (5) unregistered pipeline slug throws.
+**Test:** `tests/core/orchestrator.test.ts` — inject a mock `spawn` function that returns a `ChildHandle` with a controllable `exited` promise resolving to `ChildExitResult`. Process a seed with a valid pipeline slug. Assert: (1) `spawn` was called with correct env vars (no hardcoded `"mock"` for `PO_DEFAULT_PROVIDER`); (2) the child was added to the `running` map; (3) after the mock child's `exited` resolves with `{ code: 0, signal: null, completionType: "success" }`, the entry is removed from `running` and exit details are logged. Also test: (4) missing `seed.pipeline` throws; (5) unregistered pipeline slug throws; (6) mock `spawn` that throws synchronously logs the spawn error distinctly and does not add to `running`.
 
 ---
 
 ### Step 8: Implement `stop` — graceful shutdown
 
-**What:** Implement the `stop()` function returned by `startOrchestrator`. Close the watcher. For each child in the `running` map: send `SIGTERM`, set a 500ms timeout, then send `SIGKILL` if the child's `exited` promise hasn't resolved. Wait for all children to exit. Clear the `running` map.
+**What:** Implement the `stop()` function returned by `startOrchestrator`. Close the watcher. For each child in the `running` map: send `SIGTERM` and race the child's `exited` promise against a 500ms timeout. If `exited` wins, clear the timeout (no SIGKILL). If the timeout wins, send `SIGKILL` and wait on `exited` again, raced against a final 1000ms timeout. If the child is still not exited after SIGKILL + 1000ms, log a warning and treat it as abandoned. After all children are resolved or abandoned, clear the `running` map. `stop()` resolves only after all cleanup is complete.
 
 **Why:** Acceptance criteria 3, 16, 17, 18.
 
@@ -427,13 +458,13 @@ async function spawnRunner(
 stop: () => Promise<void>
 ```
 
-**Test:** `tests/core/orchestrator.test.ts` — start orchestrator with a mock watcher and spawn a mock child. Call `stop()`. Assert: (1) watcher's `close()` was called; (2) child received SIGTERM; (3) after 500ms without exit, child receives SIGKILL; (4) `running` map is empty after `stop()` resolves.
+**Test:** `tests/core/orchestrator.test.ts` — start orchestrator with a mock watcher and spawn a mock child. Call `stop()`. Assert: (1) watcher's `close()` was called; (2) child received SIGTERM; (3) if mock child exits before 500ms, no SIGKILL is sent and timeout is cleared; (4) if mock child does not exit within 500ms, SIGKILL is sent; (5) `running` map is empty after `stop()` resolves; (6) if mock child never exits even after SIGKILL, `stop()` still resolves after the 1000ms abandon timeout and logs a warning.
 
 ---
 
 ### Step 9: Wire default `spawn` wrapper around `Bun.spawn`
 
-**What:** Create a default `SpawnFn` implementation that wraps `Bun.spawn`. Map the `ChildHandle` interface to `Bun.Subprocess`: `pid` maps directly, `exited` maps to the subprocess's `exited` promise, and `kill(signal)` maps to `subprocess.kill(signal)`.
+**What:** Create a default `SpawnFn` implementation that wraps `Bun.spawn`. Map the `ChildHandle` interface to `Bun.Subprocess`: `pid` maps directly, `kill(signal)` maps to `subprocess.kill(signal)`, and `exited` maps to the subprocess's `exited` promise transformed into a `ChildExitResult` — reading `subprocess.exitCode` and `subprocess.signalCode` after the promise resolves to populate `code`, `signal`, and `completionType`.
 
 **Why:** Acceptance criterion 11 (Bun-native spawning) and providing a production default when no `spawn` option is injected.
 
@@ -443,7 +474,7 @@ stop: () => Promise<void>
 function createDefaultSpawn(): SpawnFn
 ```
 
-**Test:** `tests/core/orchestrator.test.ts` — integration test: call `createDefaultSpawn()`, spawn a trivial process (`echo hello`), assert `pid` is a number and `exited` resolves to 0.
+**Test:** `tests/core/orchestrator.test.ts` — integration test: call `createDefaultSpawn()`, spawn a trivial process (`echo hello`), assert `pid` is a number and `exited` resolves to `{ code: 0, signal: null, completionType: "success" }`.
 
 ---
 

@@ -70,41 +70,50 @@ function getJobPipelinePath(baseDir: string, jobId: string, location?: JobLocati
 #### models.ts
 
 ```typescript
+// Literal union types derived from the source constants
+type ProviderName = "openai" | "anthropic" | "gemini" | "deepseek" | "moonshot" | "claude-code" | "xai";
+type ModelAliasKey = typeof ModelAlias[keyof typeof ModelAlias]; // derived from the as-const ModelAlias object
+
 interface ModelConfigEntry {
-  readonly provider: string;
+  readonly provider: ProviderName;
   readonly model: string;
   readonly tokenCostInPerMillion: number;
   readonly tokenCostOutPerMillion: number;
 }
 
 interface ProviderFunctionEntry {
-  readonly alias: string;
-  readonly provider: string;
+  readonly alias: ModelAliasKey;
+  readonly provider: ProviderName;
   readonly model: string;
   readonly functionName: string;
   readonly fullPath: string;
 }
 
-type ModelAliasMap = Readonly<Record<string, string>>;
-type ModelConfigMap = Readonly<Record<string, ModelConfigEntry>>;
-type DefaultModelByProvider = Readonly<Record<string, string>>;
-type FunctionNameByAlias = Readonly<Record<string, string>>;
-type ProviderFunctionsIndex = Readonly<Record<string, readonly ProviderFunctionEntry[]>>;
+// Type aliases use literal unions rather than broad `string` to enforce the fixed catalog shape at compile time
+type ModelAliasMap = Readonly<Record<string, ModelAliasKey>>;
+type ModelConfigMap = Readonly<Record<ModelAliasKey, ModelConfigEntry>>;
+type DefaultModelByProvider = Readonly<Record<ProviderName, ModelAliasKey>>;
+type FunctionNameByAlias = Readonly<Record<ModelAliasKey, string>>;
+type ProviderFunctionsIndex = Readonly<Record<ProviderName, readonly ProviderFunctionEntry[]>>;
 
 // Constants
 const ModelAlias: ModelAliasMap;
 const MODEL_CONFIG: ModelConfigMap;
-const VALID_MODEL_ALIASES: Set<string>;
+const VALID_MODEL_ALIASES: ReadonlySet<ModelAliasKey>;
 const DEFAULT_MODEL_BY_PROVIDER: DefaultModelByProvider;
 const FUNCTION_NAME_BY_ALIAS: FunctionNameByAlias;
 const PROVIDER_FUNCTIONS: ProviderFunctionsIndex;
 
 // Functions
 function aliasToFunctionName(alias: string): string;
-function getProviderFromAlias(alias: string): string;
+function getProviderFromAlias(alias: string): ProviderName;
 function getModelFromAlias(alias: string): string;
 function getModelConfig(alias: string): ModelConfigEntry | null;
 function buildProviderFunctionsIndex(): ProviderFunctionsIndex;
+function validateModelRegistry(
+  config: Record<string, ModelConfigEntry>,
+  aliasSet: ReadonlySet<string>,
+): void;
 ```
 
 #### log-events.ts
@@ -144,8 +153,8 @@ const LogFileExtension: Readonly<{
   JSON: "json";
 }>;
 
-const VALID_LOG_EVENTS: Set<string>;
-const VALID_LOG_FILE_EXTENSIONS: Set<string>;
+const VALID_LOG_EVENTS: ReadonlySet<string>;
+const VALID_LOG_FILE_EXTENSIONS: ReadonlySet<string>;
 
 function isValidLogEvent(event: string): event is LogEventValue;
 function isValidLogFileExtension(ext: string): ext is LogFileExtensionValue;
@@ -181,9 +190,9 @@ const JobLocation: Readonly<{
   REJECTED: "rejected";
 }>;
 
-const VALID_TASK_STATES: Set<string>;
-const VALID_JOB_STATUSES: Set<string>;
-const VALID_JOB_LOCATIONS: Set<string>;
+const VALID_TASK_STATES: ReadonlySet<string>;
+const VALID_JOB_STATUSES: ReadonlySet<string>;
+const VALID_JOB_LOCATIONS: ReadonlySet<string>;
 
 function normalizeTaskState(state: unknown): TaskStateValue;
 function normalizeJobStatus(status: unknown): JobStatusValue;
@@ -194,7 +203,7 @@ function deriveJobStatusFromTasks(tasks: ReadonlyArray<{ state: unknown }>): Job
 
 - **`path` module:** Continue using `import { join } from "node:path"` which Bun supports natively. No migration needed — Bun's `node:path` is fully compatible.
 - **No Bun-specific file I/O needed** — this module performs no I/O. It is pure computation and constant definitions.
-- **`Object.freeze` → `as const satisfies`:** Where the JS original uses `Object.freeze({...})`, the TS version uses `as const satisfies <Type>` to get both compile-time literal types and runtime immutability via `Object.freeze`. The `satisfies` ensures the shape matches the expected type while `as const` preserves literal inference.
+- **`Object.freeze` → `as const satisfies` with deep freeze:** Where the JS original uses `Object.freeze({...})`, the TS version uses `as const satisfies <Type>` to get both compile-time literal types and runtime immutability via `Object.freeze`. The `satisfies` ensures the shape matches the expected type while `as const` preserves literal inference. For nested structures (`MODEL_CONFIG` entries, `PROVIDER_FUNCTIONS` entry arrays and objects), a recursive `deepFreeze` utility must be applied so that nested values cannot be mutated at runtime. Exported validation sets must also be protected from mutation (e.g., by casting to `ReadonlySet` and not exposing the underlying `Set` reference with `.add()` / `.delete()` available).
 
 ### Dependency map
 
@@ -287,7 +296,7 @@ function deriveJobStatusFromTasks(tasks: ReadonlyArray<{ state: unknown }>): Job
 
 ### Immutability
 
-55. All exported constant objects (`ModelAlias`, `MODEL_CONFIG`, `TaskState`, `JobStatus`, `JobLocation`, `LogEvent`, `LogFileExtension`, `DEFAULT_MODEL_BY_PROVIDER`, `FUNCTION_NAME_BY_ALIAS`, `PROVIDER_FUNCTIONS`) are frozen (`Object.isFrozen` returns `true`).
+55. All exported constant objects (`ModelAlias`, `MODEL_CONFIG`, `TaskState`, `JobStatus`, `JobLocation`, `LogEvent`, `LogFileExtension`, `DEFAULT_MODEL_BY_PROVIDER`, `FUNCTION_NAME_BY_ALIAS`, `PROVIDER_FUNCTIONS`) are deeply frozen: `Object.isFrozen` returns `true` for the top-level object and for every nested value object. Specifically, each entry in `MODEL_CONFIG`, each entry array and entry object in `PROVIDER_FUNCTIONS`, and all exported validation sets (`VALID_MODEL_ALIASES`, `VALID_LOG_EVENTS`, `VALID_LOG_FILE_EXTENSIONS`, `VALID_TASK_STATES`, `VALID_JOB_STATUSES`, `VALID_JOB_LOCATIONS`) must be immutable at runtime.
 
 ### Idempotency
 
@@ -305,7 +314,7 @@ function deriveJobStatusFromTasks(tasks: ReadonlyArray<{ state: unknown }>): Job
 
 - **String literal unions vs. TypeScript `enum`:** Using `as const` objects with derived string literal unions rather than TypeScript `enum`. Rationale: `enum` generates runtime code and doesn't interop cleanly with plain string comparisons. `as const` objects preserve the original JS pattern while adding compile-time type safety.
 - **Normalization inconsistency preserved:** The analysis notes that `normalizeTaskState`/`normalizeJobStatus` default to `"pending"` while `normalizeLogEvent`/`normalizeLogFileExtension` return `null`. This asymmetry is intentional per the original design and is preserved in the TS migration. The type signatures make this explicit.
-- **`getJobDirectoryPath` with invalid location:** The JS version produces a path containing `"undefined"` for invalid location values. The TS version constrains the `location` parameter to the `JobLocation` union type, catching this at compile time. Runtime behavior for dynamic callers is unchanged.
+- **`getJobDirectoryPath` with invalid location (intentional breaking change):** The JS version accepts arbitrary strings for `location` and produces a path containing `"undefined"` for invalid values. The TS version narrows the `location` parameter to `JobLocationValue`, which is an intentional breaking change for dynamic callers and plain JS consumers that previously passed arbitrary strings. This is a deliberate API tightening: callers that relied on the permissive behavior must validate or cast their location values before calling. The migration should surface any such callers at compile time.
 
 ### Known risks from analysis
 
@@ -469,7 +478,7 @@ export function getJobPipelinePath(baseDir: string, jobId: string, location?: Jo
 
 1. `ModelConfigEntry` interface and `ProviderFunctionEntry` interface.
 2. `ModelAlias` as a frozen `as const` object with all 35 model alias constants.
-3. `MODEL_CONFIG` as a frozen object keyed by alias string, each value having `{ provider, model, tokenCostInPerMillion, tokenCostOutPerMillion }`. All 35 entries with exact pricing data from the JS source.
+3. `MODEL_CONFIG` as a deeply frozen object keyed by alias string, each value having `{ provider, model, tokenCostInPerMillion, tokenCostOutPerMillion }`. Each entry object must itself be frozen. All 35 entries with exact pricing data from the JS source.
 4. `VALID_MODEL_ALIASES` as `new Set(Object.keys(MODEL_CONFIG))`.
 5. `aliasToFunctionName(alias: string): string` — validates string + colon, splits on `:`, takes segments after first, joins with `:`, applies `model.replace(/[-.]([a-z0-9])/gi, (_, char) => char.toUpperCase())`.
 6. `getProviderFromAlias(alias: string): string` — validates, returns `alias.split(":")[0]`.
@@ -477,38 +486,46 @@ export function getJobPipelinePath(baseDir: string, jobId: string, location?: Jo
 8. `getModelConfig(alias: string): ModelConfigEntry | null` — returns `MODEL_CONFIG[alias] ?? null`.
 9. `DEFAULT_MODEL_BY_PROVIDER` as a frozen object with 7 provider-to-default-alias mappings.
 10. `FUNCTION_NAME_BY_ALIAS` computed by iterating `MODEL_CONFIG` keys and applying `aliasToFunctionName`. Frozen.
-11. `buildProviderFunctionsIndex(): ProviderFunctionsIndex` — groups entries by provider, each with `{ alias, provider, model, functionName, fullPath: "llm.<provider>.<functionName>" }`. Freezes each array and the outer object.
+11. `buildProviderFunctionsIndex(): ProviderFunctionsIndex` — groups entries by provider, each with `{ alias, provider, model, functionName, fullPath: "llm.<provider>.<functionName>" }`. Deep-freezes each entry object, each provider array, and the outer object.
 12. `PROVIDER_FUNCTIONS` computed at module scope via `buildProviderFunctionsIndex()`.
-13. Module-load-time invariant checks:
-    - Provider-alias consistency: for each `[alias, config]` in `MODEL_CONFIG`, verify `getProviderFromAlias(alias) === config.provider`.
+13. Module-load-time invariant checks, implemented as a separately exported `validateModelRegistry(config, aliasSet)` function so that failure paths are independently testable:
+    - Provider-alias consistency: for each `[alias, config]` in the config, verify `getProviderFromAlias(alias) === config.provider`.
     - Token cost validation: verify both cost fields are non-negative numbers.
-    - Alias set consistency: verify `VALID_MODEL_ALIASES` size and content matches `MODEL_CONFIG` keys.
+    - Alias set consistency: verify the alias set size and content matches the config keys.
+    - The module's top-level code calls `validateModelRegistry(MODEL_CONFIG, VALID_MODEL_ALIASES)` at load time.
 
 **Why:** Central model registry consumed by providers, LLM gateway, CLI, and cost calculators.
 
 **Type signatures:**
 
 ```typescript
+export type ProviderName = "openai" | "anthropic" | "gemini" | "deepseek" | "moonshot" | "claude-code" | "xai";
+export type ModelAliasKey = typeof ModelAlias[keyof typeof ModelAlias];
+
 export interface ModelConfigEntry {
-  readonly provider: string;
+  readonly provider: ProviderName;
   readonly model: string;
   readonly tokenCostInPerMillion: number;
   readonly tokenCostOutPerMillion: number;
 }
 
 export interface ProviderFunctionEntry {
-  readonly alias: string;
-  readonly provider: string;
+  readonly alias: ModelAliasKey;
+  readonly provider: ProviderName;
   readonly model: string;
   readonly functionName: string;
   readonly fullPath: string;
 }
 
 export function aliasToFunctionName(alias: string): string;
-export function getProviderFromAlias(alias: string): string;
+export function getProviderFromAlias(alias: string): ProviderName;
 export function getModelFromAlias(alias: string): string;
 export function getModelConfig(alias: string): ModelConfigEntry | null;
-export function buildProviderFunctionsIndex(): Readonly<Record<string, readonly ProviderFunctionEntry[]>>;
+export function buildProviderFunctionsIndex(): Readonly<Record<ProviderName, readonly ProviderFunctionEntry[]>>;
+export function validateModelRegistry(
+  config: Record<string, ModelConfigEntry>,
+  aliasSet: ReadonlySet<string>,
+): void; // throws Error on invariant violation
 ```
 
 **Test:** `src/config/__tests__/models.test.ts`
@@ -534,6 +551,17 @@ export function buildProviderFunctionsIndex(): Readonly<Record<string, readonly 
 - Assert each `PROVIDER_FUNCTIONS` entry has `alias`, `provider`, `model`, `functionName`, `fullPath`.
 - Assert `fullPath` follows pattern `"llm.<provider>.<functionName>"`.
 - Assert all constant objects are frozen (`Object.isFrozen`).
+- Assert deep immutability: each `MODEL_CONFIG[alias]` entry is frozen, each `PROVIDER_FUNCTIONS[provider]` array is frozen, and each entry object within those arrays is frozen.
+
+**Testing module-load invariant failures (acceptance criteria 28–30):**
+
+The invariant checks (provider-alias consistency, non-negative pricing, alias-set drift) execute at module load time, which means a normal `import` triggers them once and caches the result. To test that these invariant checks correctly throw on bad data, the implementation must expose the validation logic as a separately callable internal function (e.g., `validateModelRegistry(config, aliasSet)`) that the tests can invoke with fixture data containing deliberate violations. The tests should:
+
+- Call the validation function with a config entry whose `provider` field mismatches its alias prefix and assert it throws an `Error` with a descriptive message (AC 28).
+- Call the validation function with a config entry that has a negative `tokenCostInPerMillion` and assert it throws an `Error` (AC 29).
+- Call the validation function with an alias set whose size differs from the config keys and assert it throws an `Error` (AC 30).
+
+The module's top-level code should call this same validation function against the real `MODEL_CONFIG` and `VALID_MODEL_ALIASES`, so the runtime behavior is unchanged while the failure paths become independently testable.
 
 ---
 

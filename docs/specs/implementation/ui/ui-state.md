@@ -39,7 +39,8 @@ A TypeScript module rooted at `src/ui/state/` that provides identical behavioral
 
 | File | Responsibility |
 |------|---------------|
-| `src/ui/state/index.ts` | Barrel re-export of the public API from all submodules. |
+| `src/ui/state/types.ts` | Shared type and interface definitions for all submodules. |
+| `src/ui/state/index.ts` | Barrel re-export of the public API and types from all submodules. |
 | `src/ui/state/change-tracker.ts` | In-memory change tracking: `getState()`, `recordChange()`, `reset()`, `setWatchedPaths()`. Replaces `state.js`. |
 | `src/ui/state/snapshot.ts` | Snapshot composition: `composeStateSnapshot()` (pure) and `buildSnapshotFromFilesystem()` (async I/O). Replaces `state-snapshot.js`. |
 | `src/ui/state/watcher.ts` | File-system watching: `startWatcher()`, `stopWatcher()`. Debounced batching, job change routing, registry reload. Replaces `watcher.js`. |
@@ -175,7 +176,7 @@ interface SchemaContext {
 
 interface SSEWriter {
   send: (event: string, data: unknown) => void;
-  end: () => void;
+  close: () => void;
 }
 
 interface SSEStreamResult {
@@ -400,56 +401,63 @@ interface TransformOptions {
 
 35. `createSSEStream()` returns a `Response` with `Content-Type: text/event-stream`, `Cache-Control: no-cache`, `Connection: keep-alive` headers.
 36. The `writer.send(event, data)` method formats messages as valid SSE frames (`event:` + `data:` + blank line).
-37. The `writer.end()` method closes the stream.
+37. The `writer.close()` method clears the keep-alive interval and closes the stream.
+38. A periodic `: ping` SSE comment is enqueued every 30 seconds as a keep-alive to detect dead connections and prevent proxy timeouts.
+39. When an `AbortSignal` is provided and aborts, the keep-alive interval is cleared and the stream is closed.
+40. `writer.send()` after close or abort is a silent no-op (does not throw).
 
 ### Core behavior — Task Reviewer
 
-38. `reviewAndCorrectTask()` returns the original code when the LLM responds with `NO_CHANGES_NEEDED`.
-39. `reviewAndCorrectTask()` returns the LLM's corrected output with markdown fences stripped when changes are made.
-40. `reviewAndCorrectTask()` propagates LLM call failures to the caller.
+41. `reviewAndCorrectTask()` returns the original code when the LLM response, after trimming, equals `NO_CHANGES_NEEDED` exactly.
+42. `reviewAndCorrectTask()` returns the LLM's corrected output with markdown fences stripped when changes are made.
+43. `reviewAndCorrectTask()` propagates LLM call failures to the caller.
 
 ### Core behavior — Status Transformer
 
-41. `computeJobStatus()` returns `{ status: 'pending', progress: 0 }` for invalid input.
-42. `computeJobStatus()` correctly derives status from task states (all done = complete, any running = running, any error = error, else pending).
-43. `transformTasks()` normalizes both object and array input into a keyed `Record<string, CanonicalTask>`.
-44. `transformTasks()` returns `{}` for invalid input.
-45. `transformJobStatus()` returns `null` for invalid raw input.
-46. `transformJobStatus()` outputs both `id`/`name` and `jobId`/`title` for backward compatibility.
-47. `transformJobStatus()` emits `console.warn` for job ID mismatches between raw data and the passed `jobId`.
-48. `transformMultipleJobs()` filters out failed reads (`ok !== true`) before transforming.
-49. `getTransformationStats()` correctly computes read counts, success rates, and status distribution.
+44. `computeJobStatus()` returns `{ status: 'pending', progress: 0 }` for invalid input.
+45. `computeJobStatus()` correctly derives status from task states (all done = complete, any running = running, any error = error, else pending).
+46. `transformTasks()` normalizes both object and array input into a keyed `Record<string, CanonicalTask>`.
+47. `transformTasks()` returns `{}` for invalid input.
+48. `transformJobStatus()` returns `null` for invalid raw input.
+49. `transformJobStatus()` outputs both `id`/`name` and `jobId`/`title` for backward compatibility.
+50. `transformJobStatus()` emits `console.warn` for job ID mismatches between raw data and the passed `jobId`.
+51. `transformMultipleJobs()` filters out failed reads (`ok !== true`) before transforming.
+52. `getTransformationStats()` correctly computes read counts, success rates, and status distribution.
 
 ### Core behavior — List Transformer
 
-50. `sortJobs()` sorts by status priority (running=4, error=3, pending=2, complete=1) descending, then `createdAt` ascending, then id ascending.
-51. `sortJobs()` filters out invalid jobs (missing id, status, or createdAt).
-52. `aggregateAndSortJobs()` merges current and complete with current-wins deduplication.
-53. `aggregateAndSortJobs()` returns `[]` on internal error.
-54. `groupJobsByStatus()` returns `{ running, error, pending, complete }` buckets; unknown statuses are dropped.
-55. `getJobListStats()` uses `Math.floor` for average progress.
-56. `filterJobs()` performs case-insensitive matching on title and id.
-57. `filterJobs()` supports optional `status` and `location` filters.
-58. `transformJobListForAPI()` always includes a `costsSummary` with zeroed fields on each output job.
-59. `getAggregationStats()` computes correct duplicate count, efficiency, and distributions.
+53. `sortJobs()` sorts by status priority (running=4, error=3, pending=2, complete=1) descending, then `createdAt` ascending, then id ascending.
+54. `sortJobs()` filters out invalid jobs (missing id, status, or createdAt).
+55. `aggregateAndSortJobs()` merges current and complete with current-wins deduplication.
+56. `aggregateAndSortJobs()` returns `[]` on internal error.
+57. `groupJobsByStatus()` returns `{ running, error, pending, complete }` buckets; unknown statuses are dropped.
+58. `getJobListStats()` uses `Math.floor` for average progress.
+59. `filterJobs()` performs case-insensitive matching on title and id.
+60. `filterJobs()` supports optional `status` and `location` filters.
+61. `transformJobListForAPI()` always includes a `costsSummary` with zeroed fields on each output job.
+62. `getAggregationStats()` computes correct duplicate count, efficiency, and distributions.
 
 ### Watcher
 
-60. `startWatcher()` throws if `options.baseDir` is not provided.
-61. `startWatcher()` debounces file change events (default 200ms) and invokes `onChange` with batched `ChangeEntry[]`.
-62. `startWatcher()` ignores `.git`, `node_modules`, `dist` directories and `_task_root` subdirectories.
-63. `startWatcher()` skips `'modified'` events for files under `pipeline-data/.../files/`.
-64. `startWatcher()` detects `pipeline-config/registry.json` changes and calls `resetConfig()`.
-65. `startWatcher()` routes detected job changes to the SSE enhancer.
-66. `stopWatcher()` clears timers and closes the chokidar instance; no-ops on null input.
+63. `startWatcher()` throws if `options.baseDir` is not provided.
+64. `startWatcher()` calls `setWatchedPaths()` on the change tracker with the provided paths at startup.
+65. `startWatcher()` calls `recordChange()` on the change tracker for each accepted file event.
+66. `startWatcher()` debounces file change events (default 200ms) and invokes `onChange` with batched `ChangeEntry[]`.
+67. `startWatcher()` ignores `.git`, `node_modules`, `dist` directories and `_task_root` subdirectories.
+68. `startWatcher()` skips `'modified'` events for files under `pipeline-data/.../files/`.
+69. `startWatcher()` detects `pipeline-config/registry.json` changes and calls `resetConfig()`.
+70. `startWatcher()` routes detected job changes to the SSE enhancer.
+71. Flush steps execute in fixed order: `onChange` callback, then job-change routing, then config reload. Each step is awaited if async.
+72. A failure in any flush step is caught and logged but does not prevent subsequent steps from executing.
+73. `stopWatcher()` clears any pending debounce timer and closes the chokidar instance; no-ops on null input.
 
 ### Error handling
 
-67. `composeStateSnapshot()` handles missing, null, or malformed input gracefully without throwing.
-68. `buildSnapshotFromFilesystem()` throws synchronously if required dependencies are unresolvable.
-69. `loadSchemaContext()` catches all errors and returns `null`.
-70. `aggregateAndSortJobs()` catches all internal exceptions and returns `[]`.
-71. All transformer functions produce empty/default results for invalid input rather than throwing.
+74. `composeStateSnapshot()` handles missing, null, or malformed input gracefully without throwing.
+75. `buildSnapshotFromFilesystem()` throws synchronously if required dependencies are unresolvable.
+76. `loadSchemaContext()` catches all errors and returns `null`.
+77. `aggregateAndSortJobs()` catches all internal exceptions and returns `[]`.
+78. All transformer functions produce empty/default results for invalid input rather than throwing.
 
 ---
 
@@ -470,7 +478,7 @@ interface TransformOptions {
 
 ### Migration concerns
 
-- **SSE response model change:** The original `streamSSE(res)` takes an Express response object and mutates it. The replacement `createSSEStream()` returns a new `Response` with a `ReadableStream` body and a `writer` for sending events. Callers must adapt: instead of `streamSSE(res)`, they use `const { response, writer } = createSSEStream()` and return `response` from the route handler.
+- **SSE response model change:** The original `streamSSE(res)` takes an Express response object and mutates it. The replacement `createSSEStream(signal?)` returns a new `Response` with a `ReadableStream` body and a `writer` for sending events. It also manages keep-alive pings and `AbortSignal`-based disconnect handling. Callers must adapt: instead of `streamSSE(res)`, they use `const { response, writer } = createSSEStream(request.signal)` and return `response` from the route handler.
 - **`node:fs` to `Bun.file()`:** `schema-loader.js` uses `fs.promises.readFile` + `JSON.parse`. The replacement uses `Bun.file(path).json()` which handles both in one step. Error handling remains try/catch returning `null`.
 - **chokidar version:** The original uses chokidar. Ensure chokidar v4.x is used (ESM-native, smaller). The API surface is similar.
 
@@ -493,13 +501,14 @@ interface TransformOptions {
 
 ### Step 1: Create type definitions
 
-**What to do:** Create `src/ui/state/index.ts` with all type/interface exports from the Architecture section. This file serves as both the barrel export and type definition source.
+**What to do:** Create `src/ui/state/types.ts` with all type/interface exports from the Architecture section. This dedicated file is the single source of truth for shared types; no other submodule defines public interfaces.
 
-**Why:** All subsequent steps depend on shared type definitions. Satisfies the ordering principle (types first).
+**Why:** All subsequent steps depend on shared type definitions. A separate `types.ts` avoids circular re-exports that would occur if `index.ts` were both the barrel and the type source. Satisfies the ordering principle (types first).
 
 **Type signatures:**
 
 ```typescript
+// src/ui/state/types.ts
 export type ChangeType = 'created' | 'modified' | 'deleted';
 export interface ChangeEntry { path: string; type: ChangeType; timestamp: string; }
 export interface ChangeTrackerState { updatedAt: string; changeCount: number; recentChanges: ChangeEntry[]; watchedPaths: string[]; }
@@ -510,7 +519,7 @@ export interface LockState { pipelineSlug: string; startedAt: Date; }
 export type AcquireResult = { acquired: true } | { acquired: false; heldBy: string };
 export interface ChatMessage { role: string; content: string; }
 export interface SchemaContext { fileName: string; schema: Record<string, unknown>; sample: Record<string, unknown>; meta?: Record<string, unknown>; }
-export interface SSEWriter { send: (event: string, data: unknown) => void; end: () => void; }
+export interface SSEWriter { send: (event: string, data: unknown) => void; close: () => void; }
 export interface SSEStreamResult { response: Response; writer: SSEWriter; }
 export interface NormalizedJob { jobId: string | null; status: string | null; title: string | null; updatedAt: string | null; }
 export interface SnapshotMeta { version: string; lastUpdated: string; }
@@ -520,7 +529,7 @@ export interface FilesystemSnapshot { jobs: SnapshotJob[]; meta: SnapshotMeta; }
 // ... (remaining types from Architecture section)
 ```
 
-**Test:** `tests/ui/state/types.test.ts` — Import all exported types and verify they are accessible. Create object literals satisfying each interface and verify via `satisfies` that the shapes match.
+**Test:** `tests/ui/state/types.test.ts` — Import all exported types from `src/ui/state/types.ts` and verify they are accessible. Create object literals satisfying each interface and verify via `satisfies` that the shapes match.
 
 ---
 
@@ -644,24 +653,30 @@ export function parseMentions(messages: ChatMessage[]): string[];
 
 **What to do:** Create `src/ui/state/sse-stream.ts` implementing `createSSEStream()`.
 
-**Why:** Bun-native replacement for Express-based `streamSSE()`. No external dependencies. Satisfies acceptance criteria 35-37.
+**Why:** Bun-native replacement for Express-based `streamSSE()`. No external dependencies. Satisfies acceptance criteria 35-40.
 
 **Type signatures:**
 
 ```typescript
-export function createSSEStream(): SSEStreamResult;
+export function createSSEStream(signal?: AbortSignal): SSEStreamResult;
 ```
 
 **Implementation details:**
 - Create a `ReadableStream` with a controller reference captured in the outer scope.
-- `writer.send(event, data)` enqueues `event: ${event}\ndata: ${JSON.stringify(data)}\n\n` via the controller.
-- `writer.end()` calls `controller.close()`.
+- `writer.send(event, data)` enqueues `event: ${event}\ndata: ${JSON.stringify(data)}\n\n` via the controller. If the stream is already closed (client disconnected), `send()` is a no-op.
+- `writer.close()` clears the keep-alive interval and calls `controller.close()`.
+- Start a periodic keep-alive timer (every 30 seconds) that enqueues `: ping\n\n` (SSE comment) to detect dead connections and prevent proxy timeouts.
+- If an `AbortSignal` is provided, listen for its `abort` event. On abort, clear the keep-alive interval and close the controller. This handles client disconnection when the Bun request's `signal` is passed through.
+- On `ReadableStream` cancel (pull-based disconnect detection), clear the keep-alive interval.
 - Return a `Response` with the stream body and SSE headers.
 
 **Test:** `tests/ui/state/sse-stream.test.ts`
 - Returned response has correct `Content-Type`, `Cache-Control`, `Connection` headers.
 - `writer.send("test", { key: "value" })` enqueues a correctly framed SSE message.
-- `writer.end()` closes the stream (no further writes possible).
+- `writer.close()` clears the keep-alive interval and closes the stream (no further writes possible).
+- Keep-alive `: ping` comments are enqueued periodically (verify with a short interval override or timer mock).
+- When `AbortSignal` aborts, the stream is closed and keep-alive is cleared.
+- `writer.send()` after close/abort is a silent no-op (does not throw).
 
 ---
 
@@ -669,7 +684,7 @@ export function createSSEStream(): SSEStreamResult;
 
 **What to do:** Create `src/ui/state/transformers/status-transformer.ts` implementing `computeJobStatus()`, `transformTasks()`, `transformJobStatus()`, `transformMultipleJobs()`, `getTransformationStats()`.
 
-**Why:** Core data transformation used by snapshot builder and API endpoints. Depends on `src/config/statuses.ts`, `src/utils/task-files.ts`, `src/utils/token-cost-calculator.ts`, `src/utils/pipelines.ts`. Satisfies acceptance criteria 41-49.
+**Why:** Core data transformation used by snapshot builder and API endpoints. Depends on `src/config/statuses.ts`, `src/utils/task-files.ts`, `src/utils/token-cost-calculator.ts`, `src/utils/pipelines.ts`. Satisfies acceptance criteria 44-52.
 
 **Type signatures:**
 
@@ -705,7 +720,7 @@ export function getTransformationStats(readResults: JobReadResult[], transformed
 
 **What to do:** Create `src/ui/state/transformers/list-transformer.ts` implementing `getStatusPriority()`, `sortJobs()`, `aggregateAndSortJobs()`, `groupJobsByStatus()`, `getJobListStats()`, `filterJobs()`, `transformJobListForAPI()`, `getAggregationStats()`.
 
-**Why:** Job list operations for API responses. Depends on `src/utils/pipelines.ts`. Satisfies acceptance criteria 50-59.
+**Why:** Job list operations for API responses. Depends on `src/utils/pipelines.ts`. Satisfies acceptance criteria 53-62.
 
 **Type signatures:**
 
@@ -772,7 +787,7 @@ export function buildSchemaPromptSection(contexts: SchemaContext[]): string;
 
 **What to do:** Create `src/ui/state/task-reviewer.ts` implementing `reviewAndCorrectTask()`.
 
-**Why:** LLM integration module. Depends on `src/providers/`. Satisfies acceptance criteria 38-40.
+**Why:** LLM integration module. Depends on `src/providers/`. Satisfies acceptance criteria 41-43. (Note: the sentinel check uses exact equality after trimming per review item 4.)
 
 **Type signatures:**
 
@@ -781,14 +796,17 @@ export async function reviewAndCorrectTask(code: string, guidelines: string): Pr
 ```
 
 **Implementation details:**
-- Call `createHighLevelLLM().chat()` with a system prompt containing the guidelines and user prompt containing the code.
-- If the trimmed response includes `NO_CHANGES_NEEDED`, return the original `code`.
+- Call `createHighLevelLLM().chat()` with a system prompt containing the guidelines and user prompt containing the code. The `chat()` method returns `string` (the full text response from the provider). Pin this expectation: if the provider interface changes, this call site must be updated.
+- Normalize the response: trim whitespace. Check for the sentinel using **exact equality** (`trimmedResponse === 'NO_CHANGES_NEEDED'`), not substring matching. This prevents false positives when the corrected code or explanation merely contains that phrase.
+- If the trimmed response equals `NO_CHANGES_NEEDED`, return the original `code`.
 - Otherwise, strip markdown fences via `stripMarkdownFences()` and return the result.
 - If the response is empty/falsy, return the original `code`.
 - Do not catch LLM errors — let them propagate.
 
 **Test:** `tests/ui/state/task-reviewer.test.ts`
-- Mock `createHighLevelLLM` to return `NO_CHANGES_NEEDED` — verify original code returned.
+- Mock `createHighLevelLLM` to return `NO_CHANGES_NEEDED` (exact) — verify original code returned.
+- Mock to return `NO_CHANGES_NEEDED` with surrounding whitespace — verify original code returned (trimming works).
+- Mock to return a response that *contains* `NO_CHANGES_NEEDED` as a substring within other text — verify the response is treated as corrected code (not as the sentinel).
 - Mock to return corrected code with markdown fences — verify fences stripped.
 - Mock to throw — verify error propagates.
 - Mock to return empty string — verify original code returned.
@@ -827,7 +845,7 @@ export async function buildSnapshotFromFilesystem(deps?: SnapshotDeps): Promise<
 
 **What to do:** Create `src/ui/state/watcher.ts` implementing `startWatcher()` and `stopWatcher()`.
 
-**Why:** I/O module integrating chokidar, change tracker, job change detector, and SSE enhancer. Satisfies acceptance criteria 60-66.
+**Why:** I/O module integrating chokidar, change tracker, job change detector, and SSE enhancer. Satisfies acceptance criteria 63-73.
 
 **Type signatures:**
 
@@ -838,29 +856,39 @@ export async function stopWatcher(watcher: WatcherHandle | null | undefined): Pr
 
 **Implementation details:**
 - Validate `options.baseDir` — throw if falsy.
+- On startup, call `setWatchedPaths(paths)` on the change tracker to register the watched directories.
 - Initialize chokidar with `ignored` patterns: `/(^|[\/\\])(\.|node_modules|dist|\.git|_task_root)/`.
-- On file events (`add`, `change`, `unlink`): normalize path relative to `baseDir`, classify type (`add`->`created`, `change`->`modified`, `unlink`->`deleted`). Skip `modified` events for `pipeline-data/.../files/` paths.
-- Accumulate events in a pending array. Debounce via `setTimeout` (default 200ms). On flush: call `onChange` with batch, and for each event call `detectJobChange` and route to SSE enhancer.
-- Detect `pipeline-config/registry.json` changes (add/change) and dynamically import `resetConfig`.
-- `stopWatcher()`: no-op on null/undefined. Call `close()`.
+- On file events (`add`, `change`, `unlink`): normalize path relative to `baseDir`, classify type (`add`->`created`, `change`->`modified`, `unlink`->`deleted`). Skip `modified` events for `pipeline-data/.../files/` paths. Call `recordChange(normalizedPath, changeType)` on the change tracker for each accepted event.
+- Accumulate events in a pending array. Debounce via `setTimeout` (default 200ms). On flush, execute effects in this fixed order and isolate failures between each step (see flush/error semantics below):
+  1. Call `onChange(batch)` with the batched `ChangeEntry[]`.
+  2. For each event in the batch, call `detectJobChange()` and route detected changes to the SSE enhancer.
+  3. Detect `pipeline-config/registry.json` changes (add/change) and dynamically import and call `resetConfig()`.
+- **Flush/error semantics:** Each of the three flush steps (onChange callback, job-change routing, config reload) runs sequentially and is awaited if async. Failures in any step are caught and logged via `console.error` but do not prevent subsequent steps from executing. This ensures one bad handler cannot break the entire flush cycle.
+- `stopWatcher()`: no-op on null/undefined. Clear any pending debounce timer, then call `close()` on the chokidar instance.
 
 **Test:** `tests/ui/state/watcher.test.ts`
 - `startWatcher` throws when `baseDir` is not provided.
+- `startWatcher` calls `setWatchedPaths()` with the provided paths on startup.
+- `startWatcher` calls `recordChange()` for each accepted file event.
 - `startWatcher` returns a handle with a `close()` method.
 - `stopWatcher(null)` does not throw.
+- `stopWatcher` clears the pending debounce timer.
+- Flush error isolation: if `onChange` throws, job-change routing and config reload still execute.
+- Flush ordering: `onChange` is called before job-change routing; job-change routing completes before config reload.
 - Integration test: create a temp directory, start watcher, write a file, verify `onChange` is called with batched changes after debounce.
 
 ---
 
 ### Step 13: Wire barrel exports
 
-**What to do:** Update `src/ui/state/index.ts` to re-export the public API from all submodules.
+**What to do:** Update `src/ui/state/index.ts` to re-export the public API from all submodules and all types from `types.ts`.
 
-**Why:** Provides a single import point for consumers. Satisfies the module's role as the public interface.
+**Why:** Provides a single import point for consumers. Types are re-exported from `types.ts` (not from `index.ts` itself), avoiding circular self-references.
 
 **Exports:**
 
 ```typescript
+// src/ui/state/index.ts — barrel only, no definitions here
 export { getState, recordChange, reset, setWatchedPaths } from './change-tracker.js';
 export { composeStateSnapshot, buildSnapshotFromFilesystem } from './snapshot.js';
 export { startWatcher, stopWatcher } from './watcher.js';
@@ -872,8 +900,8 @@ export { createSSEStream } from './sse-stream.js';
 export { reviewAndCorrectTask } from './task-reviewer.js';
 export * from './transformers/list-transformer.js';
 export * from './transformers/status-transformer.js';
-// All type exports
-export type { ChangeType, ChangeEntry, ChangeTrackerState, JobChange, JobChangeCategory, JobLocation, LockState, AcquireResult, ChatMessage, SchemaContext, SSEWriter, SSEStreamResult, NormalizedJob, SnapshotMeta, StateSnapshot, SnapshotJob, FilesystemSnapshot, ComposeSnapshotOptions, SnapshotDeps, WatcherOptions, WatcherOnChange, WatcherHandle, ComputedStatus, CanonicalTask, CanonicalJob, JobReadResult, TransformationStats, JobListStats, GroupedJobs, CostsSummary, APIJob, AggregationStats, FilterOptions, TransformOptions } from './index.js';
+// All type exports — sourced from types.ts, NOT from index.ts
+export type { ChangeType, ChangeEntry, ChangeTrackerState, JobChange, JobChangeCategory, JobLocation, LockState, AcquireResult, ChatMessage, SchemaContext, SSEWriter, SSEStreamResult, NormalizedJob, SnapshotMeta, StateSnapshot, SnapshotJob, FilesystemSnapshot, ComposeSnapshotOptions, SnapshotDeps, WatcherOptions, WatcherOnChange, WatcherHandle, ComputedStatus, CanonicalTask, CanonicalJob, JobReadResult, TransformationStats, JobListStats, GroupedJobs, CostsSummary, APIJob, AggregationStats, FilterOptions, TransformOptions } from './types.js';
 ```
 
-**Test:** `tests/ui/state/index.test.ts` — Import all public functions from `src/ui/state/index.ts` and verify they are functions (not undefined).
+**Test:** `tests/ui/state/index.test.ts` — Import all public functions from `src/ui/state/index.ts` and verify they are functions (not undefined). Import all types from `src/ui/state/types.ts` and verify they are accessible.

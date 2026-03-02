@@ -306,12 +306,12 @@ export function deriveModelKeyAndTokens(
 ### Core behavior
 
 1. `runPipeline(modulePath, initialContext)` loads the task module from `modulePath` and executes each pipeline stage in the fixed order: ingestion → preProcessing → promptTemplating → inference → parsing → validateStructure → validateQuality → critique → refine → finalValidation → integration.
-2. Each stage handler receives a `StageContext` where `data`, `flags`, and `output` are deep clones of the accumulated state, while `io`, `llm`, `meta`, and `validators` are shared references.
+2. Each stage handler receives a `StageContext` where `data`, `flags`, and `output` are deep clones (via `structuredClone`) of the accumulated state, while `io`, `llm`, `meta`, and `validators` are shared references. **Approved compatibility break:** `structuredClone` preserves `undefined`, `Date`, `RegExp`, and similar values that the previous `JSON.parse(JSON.stringify(...))` silently stripped or corrupted. Stage handlers may observe values in cloned data that were previously absent. This change is intentional and considered an improvement.
 3. After each stage, the handler's `output` is stored in `context.data[stageName]` and flags are merged into `context.flags`.
 4. The `output` field passed to stage handlers reflects the last **non-validation** stage's output. Validation stages (`validateStructure`, `validateQuality`, `finalValidation`) do not update the output thread.
 5. The `previousStage` field starts as `"seed"` and updates to the last executed non-validation stage name.
 6. On success, `runPipeline` returns `{ ok: true, logs, context, llmMetrics }` with `context.data` containing outputs from all executed stages.
-7. On success, the job status file is updated to `state: DONE`, `progress: 100`, `current: null`, `currentStage: null`.
+7. On success, `runPipeline` writes the job status file to `state: DONE`, `progress: 100`, `current: null`, `currentStage: null`. This write is best-effort per criterion 23: `runPipeline` returns `{ ok: true }` based on stage execution success, not on whether the final status write reached disk.
 
 ### Stage skipping
 
@@ -332,9 +332,11 @@ export function deriveModelKeyAndTokens(
 16. Redirected output is prefixed: `[ERROR]` for `console.error`, `[WARN]` for `console.warn`, `[INFO]` for `console.info`, `[DEBUG]` for `console.debug`. `console.log` has no prefix.
 17. Console is always restored via a `finally` block, even on stage handler errors.
 
+**Accepted behavior change (crash-time log durability):** Console capture uses an in-memory string buffer flushed to disk via `Bun.write()` at stage end. If the process crashes mid-stage, captured console output for that stage is lost. The previous streaming implementation (`fs.createWriteStream`) could leave partial logs on disk. This is accepted because crash recovery already loses the in-flight token write queue and leaves the task in `RUNNING` state regardless.
+
 ### Context snapshots and log markers
 
-18. Before each stage handler invocation, a context snapshot is written as JSON to `<workDir>/files/logs/<taskName>__<stageName>__context.json`.
+18. Before each stage handler invocation, a context snapshot is written as JSON to `<workDir>/files/logs/<taskName>__<stageName>__context.json`. The `console.log("STAGE CONTEXT", JSON.stringify(stageContext, null, 2))` debug artifact present in the analyzed JS implementation is intentionally removed. Context data is persisted solely via this JSON snapshot file, not logged to stdout.
 19. After each successful stage, a completion log marker is written to `<workDir>/files/logs/<taskName>__<stageName>__complete.log`.
 
 ### Status updates
@@ -343,6 +345,8 @@ export function deriveModelKeyAndTokens(
 21. A status update is written at stage completion (with progress from `computeDeterministicProgress`).
 22. A status update is written at stage failure (`state: FAILED`, `failedStage` recorded).
 23. Status write failures are caught, logged, and swallowed — they never fail the pipeline.
+
+**Status write serialization strategy:** All status file mutations — stage start/completion/failure writes (criteria 20–22) and token-usage appends (criterion 26) — use `writeJobStatus` as the single write path. `writeJobStatus` must provide merge-safe semantics (read-modify-write of the status object) so that concurrent token-usage appends and stage-status writes do not overwrite each other. Token-usage appends are additionally serialized through a per-invocation promise queue to prevent token writes from interleaving with each other.
 
 ### LLM metrics and token usage
 

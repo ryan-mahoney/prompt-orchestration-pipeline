@@ -86,7 +86,7 @@ type TaskIndex = Record<string, string>;
 | File I/O | Replace `node:fs/promises` with `Bun.file()` / `Bun.write()` for reading/writing registry, pipeline config, task files | Bun-native file I/O. |
 | Directory creation | Use `import { mkdir } from "node:fs/promises"` (Bun supports it natively) | `mkdir` with `recursive: true` has no Bun-native equivalent; `node:fs/promises` is fully supported. |
 | Compiled binary detection | Keep `/$bunfs/` check in `isCompiledBinary` | Bun's virtual filesystem path for standalone binaries. |
-| Task index parsing | Replace `eval()` with regex-based parsing or `Bun.file().text()` + JSON-compatible extraction | Eliminates code injection risk flagged in analysis. No `eval()` in the TS version. |
+| Task index parsing | Replace `eval()` with deterministic regex parsing of the controlled `export default { ... };` format (see parsing contract below) | Eliminates code injection risk flagged in analysis. No `eval()` in the TS version. |
 | Shebang | `#!/usr/bin/env bun` | Bun runtime. |
 
 ### Dependency map
@@ -134,7 +134,7 @@ type TaskIndex = Record<string, string>;
 
 9. `start` exits with code 1 if neither `--root` nor `PO_ROOT` is provided.
 10. `start` checks for `src/ui/dist` in source mode (non-compiled binary) and exits with code 1 if missing.
-11. `start` spawns the UI server and orchestrator as child processes via `buildReexecArgs`, passing correct environment variables (`NODE_ENV=production`, `PO_ROOT`, `PORT`, `PO_UI_PORT=undefined`).
+11. `start` spawns the UI server and orchestrator as child processes via `buildReexecArgs`, passing correct environment variables (`NODE_ENV=production`, `PO_ROOT`, `PORT`). The `PO_UI_PORT` key must be **omitted** (deleted) from the child environment object so the UI server falls back to `PORT`. Do not pass `PO_UI_PORT` as `undefined` or as the string `"undefined"` — delete the key from the env object before spawning.
 12. `start` pipes stdout/stderr from both children with `[ui]` and `[orc]` prefixes.
 13. `start` implements kill-others-on-fail: if either child exits non-zero, the other is terminated.
 14. `start` handles `SIGINT`/`SIGTERM` on the parent by sending `SIGTERM` to children, escalating to `SIGKILL` after 5 seconds.
@@ -164,7 +164,7 @@ type TaskIndex = Record<string, string>;
 26. `add-pipeline-task <pipeline-slug> <task-slug>` validates both slugs against kebab-case regex.
 27. `add-pipeline-task` verifies the pipeline's `tasks/` directory exists.
 28. `add-pipeline-task` generates a task file with exported function stubs for all 11 canonical stage names, where `ingestion` receives `data: { seed }` and other stages receive `data`.
-29. `add-pipeline-task` updates `tasks/index.ts` by parsing the existing default export, adding the new task mapping, sorting keys alphabetically.
+29. `add-pipeline-task` updates `tasks/index.ts` by parsing the existing default export using the task index parsing contract (see below), adding the new task mapping, sorting keys alphabetically, and writing back in the canonical format. If the file does not match the expected format, the command exits with code 1 and an error message identifying the file as unparseable.
 30. `add-pipeline-task` delegates to `updatePipelineJson` to append the task slug to the `tasks` array (idempotent — no duplicates).
 
 ### `analyze` command
@@ -194,22 +194,37 @@ type TaskIndex = Record<string, string>;
 41. Commands that can fail use try/catch with `console.error` and `process.exit(1)`.
 42. `init` and `status` command handlers have no try/catch — errors propagate as unhandled rejections (matching JS behavior).
 
+### Package metadata
+
+43. `package.json` `bin.pipeline-orchestrator` is updated to `src/cli/index.ts`, and any `scripts` entries referencing `src/cli/index.js` are updated to `src/cli/index.ts`.
+
 ---
 
 ## 6. Notes
 
 ### Design trade-offs
 
-- **`eval()` removal:** The JS original uses `eval()` to parse `tasks/index.js` default export. The TS version replaces this with regex-based extraction of key-value pairs from the export object literal. This eliminates the code injection risk while maintaining the same functionality. Trade-off: regex parsing is less flexible than `eval()` but sufficient for the controlled format of auto-generated index files.
-- **Task index file extension:** The scaffolded task index and task files will use `.ts` extension in the TypeScript version. The generated stage stubs will include TypeScript type annotations.
+- **`eval()` removal:** The JS original uses `eval()` to parse `tasks/index.js` default export. The TS version replaces this with deterministic regex parsing against a narrowly defined format: `export default { "key": "value", ... };` with double-quoted keys and values only. The parser rejects files that fall outside this shape (single quotes, comments, unquoted keys, multiline values) by exiting with code 1 and an error message. This eliminates the code injection risk while maintaining functionality for the auto-generated index format. Trade-off: manually edited index files will be rejected, but this is acceptable because the file is always machine-generated by `add-pipeline` and `add-pipeline-task`.
+- **Task index file extension:** The scaffolded task index and task files use `.ts` extensions. This changes the on-disk workspace contract: registry entries will store `.ts` `taskRegistryPath` values, and `tasks/index.ts` maps task slugs to `.ts` module paths. This is safe because: (1) the pipeline loader (`module-loader.js` / future `.ts`) uses dynamic `import()` which Bun resolves identically for `.ts` and `.js` files; (2) registry `taskRegistryPath` values are consumed only by `pipeline-runner` via `loadFreshModule`, which performs a dynamic `import()` — no extension-specific logic; (3) the `add-pipeline` command writes the registry entry with the `.ts` path at creation time, so the registry and on-disk files are always consistent. The generated stage stubs include TypeScript type annotations.
 - **Commander.js retention:** The analysis shows Commander usage is localized to `index.ts`. Retaining Commander avoids reinventing CLI parsing. If a lighter alternative is desired, it can be swapped later since the coupling is contained.
 
 ### Open questions from analysis
 
 - **Stage names synchronization:** The `STAGE_NAMES` array must match the task runner's stages. The TS version exports `STAGE_NAMES` from `src/cli/constants.ts` as a shared constant. The task runner should import from here (or both should import from a shared config module). This spec defines the CLI's constant; the task runner spec should reference the same source of truth.
 - **`init` overwriting registry:** Running `init` unconditionally writes `{ "pipelines": {} }`, destroying existing registrations. This behavior is preserved as-is since the analysis notes it may be intentional (full reset). A future enhancement could make `init` check for existing registry and skip the overwrite.
-- **`status` command `PipelineOrchestrator.create` vs constructor:** The TS version should use whatever factory method/constructor the migrated `PipelineOrchestrator` exposes. This will depend on the API module's migration.
+- **`status` command `PipelineOrchestrator` construction:** The CLI calls `new PipelineOrchestrator({ autoStart: false })` as specified in acceptance criterion 18. If the API module's migration changes the construction API (e.g., to a factory method), the CLI must define a thin adapter function `createOrchestrator(opts)` in `src/cli/index.ts` that wraps whatever the API exposes, so the CLI handler code always calls a single consistent function. The adapter is the only place that needs updating if the API contract changes.
 - **Port type:** The `--port` option defaults to `"4000"` (string). It's passed as `PORT` env var to the UI child. The hidden `_start-ui` handler parses it with `parseInt`. This string-to-number flow is preserved.
+
+### Package metadata updates
+
+The current `package.json` points the published binary and scripts at `.js` files (`"bin": { "pipeline-orchestrator": "src/cli/index.js" }`, `"scripts": { "analyze": "bun src/cli/index.js analyze" }`). After this migration:
+
+- **`bin.pipeline-orchestrator`** must be updated to `src/cli/index.ts`. Bun executes `.ts` files directly — no transpilation shim is needed. The `#!/usr/bin/env bun` shebang is retained.
+- **`scripts.analyze`** must be updated to `bun src/cli/index.ts analyze`.
+- **Any other `scripts` entries** that reference `src/cli/index.js` must be updated to `.ts`.
+- The old `src/cli/index.js` file is deleted; no `.js` shim is retained.
+
+These package.json updates are part of this spec's implementation scope. The acceptance criteria below include a requirement for this (see criterion 43).
 
 ### Migration-specific concerns
 
@@ -217,6 +232,7 @@ type TaskIndex = Record<string, string>;
   - `eval()` replaced with regex-based index parsing.
   - Scaffolded files use `.ts` extension instead of `.js`.
   - Generated stage function stubs include TypeScript type annotations for the `data` parameter.
+  - `package.json` `bin` and `scripts` entries updated from `.js` to `.ts` paths.
 - **Behaviors that must remain identical:**
   - All command names, options, arguments, and defaults.
   - Directory structure created by `init`.
@@ -442,7 +458,7 @@ async function handleAnalyze(taskPath: string): Promise<void>
 - Resolve root from `--root` option or `PO_ROOT` env var. Exit 1 if neither set.
 - Resolve to absolute path, set `process.env.PO_ROOT`.
 - In source mode (`!isCompiledBinary()`), check for `src/ui/dist` using `Bun.file` or `fs.access`. Exit 1 if missing.
-- Spawn UI child via `Bun.spawn` with `buildReexecArgs(["_start-ui"])`, env: `{ ...process.env, NODE_ENV: "production", PO_ROOT: absoluteRoot, PORT: port, PO_UI_PORT: undefined }`, `stdio: ["ignore", "pipe", "pipe"]`.
+- Build the UI child env by spreading `process.env`, setting `NODE_ENV: "production"`, `PO_ROOT: absoluteRoot`, `PORT: port`, then **deleting** `PO_UI_PORT` from the resulting object (to ensure the UI server uses `PORT`, not a stale `PO_UI_PORT`). Spawn via `Bun.spawn` with `buildReexecArgs(["_start-ui"])`, `stdio: ["ignore", "pipe", "pipe"]`.
 - Spawn orchestrator child similarly with `buildReexecArgs(["_start-orchestrator"])`, env: `{ ...process.env, NODE_ENV: "production", PO_ROOT: absoluteRoot }`.
 - Read stdout/stderr from each child, prefix lines with `[ui]` or `[orc]`, write to parent's stdout/stderr.
 - On child exit with non-zero code: kill the other child (SIGTERM, then SIGKILL after 5s timeout), exit with the failed child's exit code.
@@ -457,7 +473,7 @@ async function handleAnalyze(taskPath: string): Promise<void>
 - Catch JSON parse / file errors, log, `process.exit(1)`.
 
 **`status` command:**
-- Create `PipelineOrchestrator` with `{ autoStart: false }`.
+- Create `PipelineOrchestrator` via `new PipelineOrchestrator({ autoStart: false })`. If the API module exposes a different construction API, wrap it in a local `createOrchestrator(opts)` adapter so only the adapter needs updating.
 - If `jobName` provided: call `getStatus(jobName)`, `console.log(JSON.stringify(result, null, 2))`.
 - If no `jobName`: call `listJobs()`, `console.table(result)`.
 - No try/catch (matching JS behavior).
@@ -482,12 +498,13 @@ async function handleAnalyze(taskPath: string): Promise<void>
   - Each function returns `{ output: {}, flags: {} }`.
   - Include a comment with the stage's purpose description from `getStagePurpose`.
 - Write task file to `<root>/pipeline-config/<slug>/tasks/<task-slug>.ts`.
-- Parse existing `tasks/index.ts` using regex (not `eval()`):
-  - Match the default export object pattern.
-  - Extract existing key-value pairs.
+- Parse existing `tasks/index.ts` using the **task index parsing contract** (not `eval()`):
+  - **Supported format:** The file must match exactly `export default { <entries> };` (with optional whitespace/newlines), where each entry is `"<key>": "<value>"` separated by commas. Double-quoted keys and values only. Trailing commas are tolerated. This is the format that `add-pipeline` and `add-pipeline-task` produce — it is a controlled, auto-generated file.
+  - **Parse strategy:** Use a regex to extract the object body from `export default {` to `};`. Then use a global regex `/\s*"([^"]+)"\s*:\s*"([^"]+)"\s*/g` to extract all key-value pairs. Single quotes, comments, unquoted keys, and multiline values are **not supported**.
+  - **Failure behavior:** If the file content does not match the `export default { ... };` outer pattern, exit with code 1 and log: `Error: tasks/index.ts has been manually modified and cannot be parsed. Expected format: export default { "key": "./path.ts", ... };`
   - Add new entry: `"<task-slug>": "./<task-slug>.ts"`.
-  - Sort keys alphabetically.
-  - Write back as `export default { <sorted entries> };`.
+  - Sort all keys alphabetically.
+  - Write back in canonical format: `export default {\n  "<key>": "<value>",\n  ...\n};\n` (2-space indent, trailing comma on each entry, trailing newline).
 - Call `updatePipelineJson(root, pipelineSlug, taskSlug)`.
 - Wrap in try/catch: on error, log, `process.exit(1)`.
 
@@ -513,6 +530,7 @@ async function handleAnalyze(taskPath: string): Promise<void>
 - Set up a pipeline directory. Call `handleAddPipelineTask`. Verify task file has all 11 stage stubs. Verify `tasks/index.ts` includes the new task. Verify `pipeline.json` includes the task slug.
 - Verify `ingestion` stage has `{ seed }` destructuring and other stages have `data` parameter.
 - Verify task index keys are sorted alphabetically.
+- Write a `tasks/index.ts` with manually modified content (e.g., single-quoted keys, comments, or non-object export). Call `handleAddPipelineTask`. Verify `process.exit(1)` is called with an error message about the unparseable format.
 
 **`submit` tests:**
 - Mock `submitJobWithValidation` to return `{ success: true, jobId: "123", jobName: "test" }`. Write a temp seed file. Call `handleSubmit`. Verify success log.

@@ -41,15 +41,13 @@ A TypeScript module at `src/core/file-io.ts` that provides identical behavioral 
 ### Key types and interfaces
 
 ```typescript
-import type { Database } from "bun:sqlite";
+import { Database } from "bun:sqlite";
 
-/** Enum of valid log event types. */
-// Re-exported from config/log-events
-import type { LogEvent } from "../config/log-events";
+/** Enum of valid log event types — value import, used for runtime validation in generateLogName. */
+import { LogEvent } from "../config/log-events";
 
-/** Enum of valid log file extensions. */
-// Re-exported from config/log-events
-import type { LogFileExtension } from "../config/log-events";
+/** Enum of valid log file extensions — value import, used for runtime validation in generateLogName. */
+import { LogFileExtension } from "../config/log-events";
 
 /** Write mode for file operations. */
 type WriteMode = "replace" | "append";
@@ -180,7 +178,7 @@ interface ParsedLogName {
 ### Status tracking — async
 
 14. After a successful async write (artifact, log, tmp), the bare filename is recorded in `tasks-status.json` under `snapshot.files.{artifacts,logs,tmp}` — deduplicated by `includes()` check.
-15. If `trackTaskFiles` is `true`, the filename is also recorded under `snapshot.tasks[taskName].files` — deduplicated.
+15. If `trackTaskFiles` is `true`, the filename is also recorded under `snapshot.tasks[taskName].files.{category}` (matching the same category-scoped structure as `snapshot.files`) — deduplicated.
 16. Status tracking uses `writeJobStatus` from `status-writer`, operating on `jobDir = dirname(statusPath)`.
 
 ### Status tracking — sync
@@ -192,12 +190,14 @@ interface ParsedLogName {
 
 ### SQLite access
 
-21. `getDB()` ensures `{workDir}/files/artifacts/` exists, opens `{workDir}/files/artifacts/run.db` via `new Database(dbPath)` (or with options if provided), executes `PRAGMA journal_mode = WAL;`, and tracks `run.db` as an artifact via the sync status path.
+21. `getDB(options?)` behavior depends on whether `options.readonly` is set:
+    - **Default (read-write):** ensures `{workDir}/files/artifacts/` exists via `mkdirSync`, opens `{workDir}/files/artifacts/run.db` via `new Database(dbPath)`, executes `PRAGMA journal_mode = WAL;`, and tracks `run.db` as an artifact via the sync status path.
+    - **Read-only (`{ readonly: true }`):** does **not** create the artifacts directory, does **not** execute `PRAGMA journal_mode = WAL` (WAL cannot be set on a read-only handle), and does **not** track `run.db` in status. Opens with `new Database(dbPath, { readonly: true })`. Throws if `run.db` does not already exist.
 22. Each `getDB()` call returns a new `Database` instance; the method does not close it.
 
 ### Batch execution
 
-23. `runBatch(options)` validates options via `validateBatchOptions`, opens a DB via `this.getDB()`, delegates to `executeBatch(db, options)`, closes the DB in a `finally` block, and returns `{ completed, failed }`.
+23. `runBatch(options)` validates options via `validateBatchOptions`, opens a DB via the closure-scoped `getDB` (lexical capture, not `this`), delegates to `executeBatch(db, options)`, closes the DB in a `finally` block, and returns `{ completed, failed }`.
 
 ### Log filename helpers
 
@@ -209,7 +209,7 @@ interface ParsedLogName {
 ### Error handling
 
 28. Failed file writes propagate filesystem errors to the caller.
-29. Failed status tracking writes (async) do not fail the file write — SSE failures in status-writer are non-fatal.
+29. SSE emission failures within `status-writer` are non-fatal and do not fail the file write. However, `tasks-status.json` write errors from `writeJobStatus` propagate normally — they are not swallowed.
 30. `generateLogName` throws descriptive errors for invalid arguments (falsy values, non-canonical event/extension).
 
 ---
@@ -387,7 +387,7 @@ async function writeFileScoped(
 
 ### Step 5: Implement async status tracking helper
 
-**What:** Implement an internal `trackFile(jobDir, category, fileName, taskName, trackTaskFiles)` function that calls `writeJobStatus(jobDir, updater)`. The updater ensures `snapshot.files.{category}` exists (as an array), pushes `fileName` if not already present (via `includes()`), and if `trackTaskFiles` is true, also ensures `snapshot.tasks[taskName].files` exists and de-duplicates there.
+**What:** Implement an internal `trackFile(jobDir, category, fileName, taskName, trackTaskFiles)` function that calls `writeJobStatus(jobDir, updater)`. The updater ensures `snapshot.files.{category}` exists (as an array), pushes `fileName` if not already present (via `includes()`), and if `trackTaskFiles` is true, also ensures `snapshot.tasks[taskName].files.{category}` exists (as an array) and de-duplicates there. The task-level structure mirrors the global structure: `snapshot.tasks[taskName].files.{artifacts,logs,tmp}`.
 
 **Why:** Acceptance criteria 14, 15, 16. Shared by all async write methods.
 
@@ -468,9 +468,12 @@ export function createTaskFileIO(config: TaskFileIOConfig): TaskFileIO
 
 ### Step 8: Implement `getDB` — SQLite database access
 
-**What:** Implement the `getDB(options?)` method on the `TaskFileIO` object. It ensures `{workDir}/files/artifacts/` exists (via `mkdirSync`), constructs the path `{workDir}/files/artifacts/run.db`, creates a new `Database` instance (passing `options` if provided), executes `PRAGMA journal_mode = WAL;`, tracks `run.db` as an artifact via `writeJobStatusSync`, and returns the `Database`.
+**What:** Implement the `getDB(options?)` method on the `TaskFileIO` object with two code paths:
 
-**Why:** Acceptance criteria 21, 22.
+- **Read-write (default):** ensures `{workDir}/files/artifacts/` exists (via `mkdirSync`), constructs the path `{workDir}/files/artifacts/run.db`, creates a new `Database` instance, executes `PRAGMA journal_mode = WAL;`, tracks `run.db` as an artifact via `writeJobStatusSync`, and returns the `Database`.
+- **Read-only (`{ readonly: true }`):** constructs the path `{workDir}/files/artifacts/run.db`, opens with `new Database(dbPath, { readonly: true })`. Does not create directories, set WAL, or track in status. Throws if `run.db` does not exist.
+
+**Why:** Acceptance criteria 21, 22. The read-only branch avoids side effects (directory creation, WAL pragma, status tracking) that conflict with a read-only handle.
 
 **Type signatures:**
 
@@ -482,13 +485,14 @@ getDB(options?: DBOptions): Database
 **Test:** `tests/core/file-io.test.ts`:
 - Create a `TaskFileIO` instance. Call `getDB()`. Assert returns a `Database` instance. Assert `run.db` exists at `{workDir}/files/artifacts/run.db`. Execute a simple query (`SELECT 1`) to verify it works.
 - Call `getDB()` twice. Assert two different `Database` instances are returned.
-- Call `getDB({ readonly: true })`. Assert the database opens without error.
+- Call `getDB({ readonly: true })` after a read-write `getDB()` has created the DB. Assert the database opens without error and can execute a read query.
+- Call `getDB({ readonly: true })` when `run.db` does not exist. Assert it throws.
 
 ---
 
 ### Step 9: Implement `runBatch` — batch runner wrapper
 
-**What:** Implement the `runBatch(options)` method on the `TaskFileIO` object. It calls `validateBatchOptions(options)`, opens a database via `this.getDB()`, delegates to `executeBatch(db, options)`, closes the database in a `finally` block, and returns the result.
+**What:** Implement the `runBatch(options)` method on the `TaskFileIO` object. It calls `validateBatchOptions(options)`, opens a database via the closure-scoped `getDB` function (not `this.getDB()` — the module is closure-based, so `getDB` must be captured lexically to remain deterministic when callers destructure `runBatch` from the returned object), delegates to `executeBatch(db, options)`, closes the database in a `finally` block, and returns the result.
 
 **Why:** Acceptance criterion 23.
 

@@ -144,7 +144,7 @@ type StatusEvent =
 ### Core write behavior
 
 1. `writeJobStatus(jobDir, updateFn)` reads `tasks-status.json` from `jobDir`, applies `updateFn` to the validated snapshot, validates the result, sets `lastUpdated`, and writes the result atomically (temp file + rename).
-2. If `tasks-status.json` does not exist or contains invalid JSON, a default snapshot is created with `id` derived from `basename(jobDir)`, `state: "pending"`, `current: null`, `currentStage: null`, empty `tasks`, and default `files` manifest.
+2. If `tasks-status.json` does not exist (ENOENT) or contains invalid JSON, a default snapshot is created with `id` derived from `basename(jobDir)`, `state: "pending"`, `current: null`, `currentStage: null`, empty `tasks`, and default `files` manifest. Other filesystem errors (permission denied, I/O failures) are propagated to the caller.
 3. After a successful write, the returned promise resolves to the final validated snapshot.
 4. `lastUpdated` is set to an ISO 8601 timestamp on every write.
 5. The status file is serialized as JSON with 2-space indentation.
@@ -153,7 +153,7 @@ type StatusEvent =
 
 ### Write serialization
 
-8. Concurrent calls to `writeJobStatus` for the same `jobDir` are serialized — at most one read-modify-write cycle is in progress per job directory at any time.
+8. Concurrent calls to `writeJobStatus` for the same `jobDir` are serialized — at most one read-modify-write cycle is in progress per job directory at any time. If a queued write rejects, the queue recovers so that subsequent writes for the same `jobDir` still execute; the rejection is propagated only to the caller of the failed write.
 9. Concurrent calls to `writeJobStatus` for different `jobDir` values execute independently.
 10. Writes are processed in FIFO order for a given `jobDir`.
 
@@ -200,7 +200,7 @@ type StatusEvent =
 
 ### Status initializer
 
-31. `initializeStatusFromArtifacts({ jobDir, pipeline })` reads the `files/artifacts/` directory and returns an `apply(snapshot)` function that populates `snapshot.files.artifacts` and the first task's `files.artifacts` with discovered filenames, deduplicated.
+31. `initializeStatusFromArtifacts({ jobDir, pipeline })` reads the `files/artifacts/` directory and returns an `apply(snapshot)` function that populates `snapshot.files.artifacts` with discovered filenames, deduplicated. If `pipeline.tasks` is non-empty and the first entry has a string `id`, the function also populates that task's `files.artifacts`. If `pipeline.tasks` is empty or the first entry lacks a string `id`, task-level population is skipped.
 32. If the artifacts directory does not exist or is unreadable, a no-op function is returned.
 
 ### Parameter validation
@@ -230,6 +230,7 @@ type StatusEvent =
 
 - **Write queue uses `Map<string, Promise>` (in-memory only):** No cross-process locking. This is sufficient because only one process writes to a given `jobDir`. The atomic rename provides crash safety for the file itself — the queue only prevents interleaved writes within the same process.
 - **Write queue entries are never removed:** The original JS module has this behavior. In practice the number of unique `jobDir` values is small (bounded by the number of jobs processed in a process lifetime). The memory overhead per entry is one resolved promise reference — negligible. Implementing cleanup would add complexity for minimal gain.
+- **Write queue recovers from rejections:** Each new write chains from the previous promise's settled state (via `.catch(() => {})`), not from the potentially-rejected promise itself. This ensures a single failed write does not leave the queue permanently rejected, which would cause all future writes for that `jobDir` to short-circuit.
 - **`readJobStatus` bypasses the write queue:** This is a deliberate choice from the original design. Reads may see slightly stale data if a write is queued, but this avoids read operations blocking behind slow writes. Callers that need consistency should use `writeJobStatus` with a read-only update function.
 - **`updateTaskStatus` has its own write path:** It does not delegate to `writeJobStatus` — it has independent serialization logic and emits `task:updated` instead of `state:change`. This asymmetry is preserved from the original to maintain behavioral compatibility.
 - **`validateStatusSnapshot` mutates in place:** The validator modifies the input object. This is intentional — the snapshot passes through validation on both read and write paths, and the mutations ensure self-healing of malformed data without requiring callers to handle a new return value.
@@ -331,7 +332,7 @@ const STATUS_FILENAME = "tasks-status.json";
 
 **What:** Add `validateFilePath(filename: string): boolean` to `src/core/status-writer.ts`. Returns `false` and logs to `console.error` if the filename: is empty or not a string, contains `..`, contains `\`, or starts with `/`. Returns `true` otherwise.
 
-**Why:** Acceptance criterion 42. Required by `initializeJobArtifacts` (Step 9) and must be defined before it.
+**Why:** Acceptance criterion 42. Required by `initializeJobArtifacts` (Step 11) and must be defined before it.
 
 **Type signature:**
 
@@ -380,17 +381,17 @@ async function atomicWrite(filePath: string, content: string): Promise<void>
 
 ### Step 5: Implement `writeJobStatus`
 
-**What:** Add `writeJobStatus(jobDir: string, updateFn: StatusUpdateFn): Promise<StatusSnapshot>` to `src/core/status-writer.ts`. Validates parameters (throw if `jobDir` is not a non-empty string, throw if `updateFn` is not a function). Maintains a module-level `writeQueues: Map<string, Promise<StatusSnapshot>>`. Chains a new operation onto the queue for `jobDir`:
+**What:** Add `writeJobStatus(jobDir: string, updateFn: StatusUpdateFn): Promise<StatusSnapshot>` to `src/core/status-writer.ts`. Validates parameters (throw if `jobDir` is not a non-empty string, throw if `updateFn` is not a function). Maintains a module-level `writeQueues: Map<string, Promise<StatusSnapshot>>`. Chains a new operation onto the queue for `jobDir`, recovering from any prior rejection (e.g., chain from `queue.catch(() => {})`) so that a failed write does not poison subsequent writes:
 
-1. Read `tasks-status.json` via `Bun.file(statusPath).text()` — on any error (ENOENT, parse failure), use `createDefaultStatus(jobDir)`.
+1. Read `tasks-status.json` via `Bun.file(statusPath).text()` — on ENOENT or JSON parse failure, use `createDefaultStatus(jobDir)`. Propagate all other filesystem errors (permission denied, I/O failures) to the caller.
 2. Parse JSON and validate via `validateStatusSnapshot`.
 3. Call `updateFn(snapshot)` in a try/catch — wrap errors as `"Update function failed: <message>"`.
 4. If `updateFn` returned non-undefined, use the returned value; otherwise use the mutated input.
 5. Re-validate the result via `validateStatusSnapshot`.
 6. Set `lastUpdated` to `new Date().toISOString()`.
 7. Call `atomicWrite` with `JSON.stringify(snapshot, null, 2)`.
-8. Emit `state:change` SSE event via `createJobLogger`. Catch and log SSE errors.
-9. If `snapshot.lifecycleBlockReason` is truthy, emit `lifecycle_block` SSE event. Catch and log.
+8. Emit `state:change` SSE event via `createJobLogger(basename(jobDir)).sse()` with `{ path: statusPath, id: snapshot.id, jobId: basename(jobDir) }`. Catch and log SSE errors — never propagate.
+9. If `snapshot.lifecycleBlockReason` is truthy, also emit `lifecycle_block` SSE event with `{ jobId: basename(jobDir), taskId: snapshot.lifecycleBlockTaskId, op: snapshot.lifecycleBlockOp, reason: snapshot.lifecycleBlockReason }`. Catch and log.
 10. Return the snapshot.
 
 **Why:** Acceptance criteria 1–7, 8–10, 25–27, 33, 34, 38, 39.
@@ -401,25 +402,11 @@ async function atomicWrite(filePath: string, content: string): Promise<void>
 export function writeJobStatus(jobDir: string, updateFn: StatusUpdateFn): Promise<StatusSnapshot>
 ```
 
-**Test:** `tests/core/status-writer.test.ts` — (1) first write to a new job creates `tasks-status.json` with default fields plus the update. (2) Second write reads existing file, applies update, preserves previous fields. (3) `updateFn` returning a new object uses that object. (4) `updateFn` mutating in place (returning undefined) uses the mutated input. (5) Invalid `jobDir` throws `"jobDir must be a non-empty string"`. (6) Non-function `updateFn` throws `"updateFn must be a function"`. (7) Throwing `updateFn` propagates as `"Update function failed: ..."`. (8) `lastUpdated` is refreshed on every write. (9) Concurrent writes to the same `jobDir` are serialized (second write sees first write's result). (10) Writes to different `jobDir` values are independent.
+**Test:** `tests/core/status-writer.test.ts` — (1) first write to a new job creates `tasks-status.json` with default fields plus the update. (2) Second write reads existing file, applies update, preserves previous fields. (3) `updateFn` returning a new object uses that object. (4) `updateFn` mutating in place (returning undefined) uses the mutated input. (5) Invalid `jobDir` throws `"jobDir must be a non-empty string"`. (6) Non-function `updateFn` throws `"updateFn must be a function"`. (7) Throwing `updateFn` propagates as `"Update function failed: ..."`. (8) `lastUpdated` is refreshed on every write. (9) Concurrent writes to the same `jobDir` are serialized (second write sees first write's result). (10) Writes to different `jobDir` values are independent. (11) A failed write does not prevent subsequent writes to the same `jobDir` from executing. (12) A permission error reading `tasks-status.json` propagates to the caller rather than falling back to a default snapshot. (13) Mock the logger's `.sse()` method; write a status; assert `state:change` was emitted with correct payload. (14) Write a status with `lifecycleBlockReason` set; assert both `state:change` and `lifecycle_block` events were emitted. (15) Mock `.sse()` to throw; assert the write still succeeds and the error is logged.
 
 ---
 
-### Step 6: Implement SSE emission in `writeJobStatus`
-
-**What:** After the atomic write in `writeJobStatus`, emit SSE events using `createJobLogger(basename(jobDir)).sse()`:
-
-- Always emit `state:change` with `{ path: statusPath, id: snapshot.id, jobId: basename(jobDir) }`.
-- If `snapshot.lifecycleBlockReason` is truthy, also emit `lifecycle_block` with `{ jobId: basename(jobDir), taskId: snapshot.lifecycleBlockTaskId, op: snapshot.lifecycleBlockOp, reason: snapshot.lifecycleBlockReason }`.
-- Wrap each emission in try/catch — log errors, never propagate.
-
-**Why:** Acceptance criteria 25, 26, 27.
-
-**Test:** `tests/core/status-writer.test.ts` — (1) Mock the logger's `.sse()` method. Write a status. Assert `state:change` was emitted with correct payload. (2) Write a status with `lifecycleBlockReason` set. Assert both `state:change` and `lifecycle_block` events were emitted. (3) Mock `.sse()` to throw. Assert the write still succeeds and the error is logged.
-
----
-
-### Step 7: Implement `readJobStatus`
+### Step 6: Implement `readJobStatus`
 
 **What:** Add `readJobStatus(jobDir: string): Promise<StatusSnapshot | null>` to `src/core/status-writer.ts`. Validates `jobDir` (throw if not a non-empty string). Attempts to read and parse `tasks-status.json` via `Bun.file(statusPath).text()`. On success, validates via `validateStatusSnapshot` and returns the result. On any error (file not found, invalid JSON, I/O error), logs a warning to `console.warn` and returns `null`.
 
@@ -435,7 +422,7 @@ export function readJobStatus(jobDir: string): Promise<StatusSnapshot | null>
 
 ---
 
-### Step 8: Implement `updateTaskStatus`
+### Step 7: Implement `updateTaskStatus`
 
 **What:** Add `updateTaskStatus(jobDir: string, taskId: string, taskUpdateFn: TaskUpdateFn): Promise<StatusSnapshot>` to `src/core/status-writer.ts`. Validates parameters (throw on invalid `jobDir`, `taskId`, or `taskUpdateFn`). Uses its own write serialization (shares the same `writeQueues` map as `writeJobStatus`): reads the status file, validates, ensures `snapshot.tasks[taskId]` exists (auto-create as `{}`), calls `taskUpdateFn(task)` — if it returns non-undefined, uses the return value; otherwise uses the mutated input. Sets `lastUpdated`, writes atomically. Emits `task:updated` SSE event with `{ jobId: basename(jobDir), taskId, task: snapshot.tasks[taskId] }`. Returns the full snapshot.
 
@@ -451,7 +438,7 @@ export function updateTaskStatus(jobDir: string, taskId: string, taskUpdateFn: T
 
 ---
 
-### Step 9: Implement `resetJobFromTask`
+### Step 8: Implement `resetJobFromTask`
 
 **What:** Add `resetJobFromTask(jobDir: string, fromTask: string, options?: ResetOptions): Promise<StatusSnapshot>` to `src/core/status-writer.ts`. Validates `jobDir` and `fromTask`. Uses `writeJobStatus` internally to perform the reset atomically:
 
@@ -474,7 +461,7 @@ export function resetJobFromTask(jobDir: string, fromTask: string, options?: Res
 
 ---
 
-### Step 10: Implement `resetJobToCleanSlate`
+### Step 9: Implement `resetJobToCleanSlate`
 
 **What:** Add `resetJobToCleanSlate(jobDir: string, options?: ResetOptions): Promise<StatusSnapshot>` to `src/core/status-writer.ts`. Validates `jobDir`. Delegates to `writeJobStatus` with an update function that resets every task unconditionally using the same field-level reset as `resetJobFromTask`. Also resets root `state` to `"pending"`, `current` and `currentStage` to `null`, `progress` to 0.
 
@@ -490,7 +477,7 @@ export function resetJobToCleanSlate(jobDir: string, options?: ResetOptions): Pr
 
 ---
 
-### Step 11: Implement `resetSingleTask`
+### Step 10: Implement `resetSingleTask`
 
 **What:** Add `resetSingleTask(jobDir: string, taskId: string, options?: ResetOptions): Promise<StatusSnapshot>` to `src/core/status-writer.ts`. Validates `jobDir` and `taskId`. Uses `writeJobStatus` internally. Auto-creates the task if absent. Resets only the target task: `state` to `"pending"`, `currentStage` to `null`, deletes `failedStage` and `error`, sets `attempts` and `refinementAttempts` to 0, optionally clears `tokenUsage`. Does not modify root-level `state`, `current`, `currentStage`, or `progress`. Does not modify other tasks.
 
@@ -506,9 +493,9 @@ export function resetSingleTask(jobDir: string, taskId: string, options?: ResetO
 
 ---
 
-### Step 12: Implement `initializeJobArtifacts`
+### Step 11: Implement `initializeJobArtifacts`
 
-**What:** Add `initializeJobArtifacts(jobDir: string, uploadArtifacts?: UploadArtifact[]): Promise<void>` to `src/core/status-writer.ts`. Validates `jobDir` (throw if not non-empty string). If `uploadArtifacts` is provided, validate it is an array (throw if not). Defaults to `[]`. Creates `<jobDir>/files/` and `<jobDir>/files/artifacts/` directories via `mkdir({ recursive: true })`. Iterates over each artifact: skip if no `filename` field, skip if `validateFilePath` returns false, otherwise write `content` to `<jobDir>/files/artifacts/<filename>` via `Bun.write()`.
+**What:** Add `initializeJobArtifacts(jobDir: string, uploadArtifacts?: UploadArtifact[]): Promise<void>` to `src/core/status-writer.ts`. Validates `jobDir` (throw if not non-empty string). If `uploadArtifacts` is provided, validate it is an array (throw if not). Defaults to `[]`. Creates `<jobDir>/files/` and `<jobDir>/files/artifacts/` directories via `mkdir({ recursive: true })`. Iterates over each artifact: skip if no `filename` field, skip if `validateFilePath` returns false, otherwise resolve the target path as `<jobDir>/files/artifacts/<filename>` — if `filename` contains path separators (nested relative path), create intermediate directories via `mkdir({ recursive: true })` before writing — then write `content` via `Bun.write()`.
 
 **Why:** Acceptance criteria 28, 29, 30, 33, 36.
 
@@ -518,20 +505,18 @@ export function resetSingleTask(jobDir: string, taskId: string, options?: ResetO
 export function initializeJobArtifacts(jobDir: string, uploadArtifacts?: UploadArtifact[]): Promise<void>
 ```
 
-**Test:** `tests/core/status-writer.test.ts` — (1) Pass two valid artifacts; assert both files exist in `files/artifacts/`. (2) Pass an artifact with `filename: "../escape.txt"`; assert it is skipped and the other valid artifacts are written. (3) Pass an entry with no `filename`; assert it is skipped. (4) Call with no artifacts; assert directories are created but empty. (5) Invalid `jobDir` throws. (6) Non-array `uploadArtifacts` throws.
+**Test:** `tests/core/status-writer.test.ts` — (1) Pass two valid artifacts; assert both files exist in `files/artifacts/`. (2) Pass an artifact with `filename: "../escape.txt"`; assert it is skipped and the other valid artifacts are written. (3) Pass an entry with no `filename`; assert it is skipped. (4) Call with no artifacts; assert directories are created but empty. (5) Invalid `jobDir` throws. (6) Non-array `uploadArtifacts` throws. (7) Pass an artifact with `filename: "subdir/file.txt"`; assert `files/artifacts/subdir/file.txt` exists (intermediate directory created).
 
 ---
 
-### Step 13: Implement `initializeStatusFromArtifacts`
+### Step 12: Implement `initializeStatusFromArtifacts`
 
 **What:** Create `src/core/status-initializer.ts`. Export `initializeStatusFromArtifacts({ jobDir, pipeline }: { jobDir: string; pipeline: PipelineDescriptor }): Promise<ArtifactApplyFn>`. Validates `jobDir` and `pipeline`. Reads the `<jobDir>/files/artifacts/` directory via `readdir`. On error (ENOENT or other), return a no-op function `(snapshot) => snapshot`. On success, return a function that:
 
 1. Ensures `snapshot.files.artifacts` exists as an array.
 2. Adds discovered filenames to `snapshot.files.artifacts`, deduplicated via `Set`.
-3. Locates the first task in `pipeline.tasks` by its `id`.
-4. Ensures `snapshot.tasks[firstTaskId].files.artifacts` exists as an array.
-5. Adds discovered filenames to that task's artifacts, deduplicated via `Set`.
-6. Returns the modified snapshot.
+3. If `pipeline.tasks` is non-empty and the first entry has a string `id`, locates that task in the snapshot, ensures `snapshot.tasks[firstTaskId].files.artifacts` exists as an array, and adds discovered filenames to that task's artifacts, deduplicated via `Set`. If `pipeline.tasks` is empty or the first entry lacks a string `id`, skips task-level artifact population.
+4. Returns the modified snapshot.
 
 Use `createJobLogger` for logging instead of raw `console.log`.
 
@@ -546,11 +531,11 @@ export function initializeStatusFromArtifacts(opts: {
 }): Promise<ArtifactApplyFn>
 ```
 
-**Test:** `tests/core/status-initializer.test.ts` — (1) Create a `files/artifacts/` directory with two files. Call `initializeStatusFromArtifacts`. Apply the returned function to a snapshot with an empty first task. Assert `snapshot.files.artifacts` contains both filenames and `snapshot.tasks[firstTaskId].files.artifacts` contains both filenames. (2) Call with a non-existent artifacts directory; assert the returned function is a no-op (snapshot unchanged). (3) Call twice with same directory; assert no duplicate filenames. (4) Invalid `jobDir` throws. (5) Invalid `pipeline` throws.
+**Test:** `tests/core/status-initializer.test.ts` — (1) Create a `files/artifacts/` directory with two files. Call `initializeStatusFromArtifacts`. Apply the returned function to a snapshot with an empty first task. Assert `snapshot.files.artifacts` contains both filenames and `snapshot.tasks[firstTaskId].files.artifacts` contains both filenames. (2) Call with a non-existent artifacts directory; assert the returned function is a no-op (snapshot unchanged). (3) Call twice with same directory; assert no duplicate filenames. (4) Invalid `jobDir` throws. (5) Invalid `pipeline` throws. (6) Call with `pipeline: { tasks: [] }`; assert `snapshot.files.artifacts` is populated but no task-level artifacts are set. (7) Call with `pipeline: { tasks: [{ name: "no-id" }] }`; assert task-level population is skipped.
 
 ---
 
-### Step 14: Export public API
+### Step 13: Export public API
 
 **What:** Ensure `src/core/status-writer.ts` exports the following named exports: `writeJobStatus`, `readJobStatus`, `updateTaskStatus`, `resetJobFromTask`, `resetJobToCleanSlate`, `resetSingleTask`, `initializeJobArtifacts`. Ensure `src/core/status-initializer.ts` exports `initializeStatusFromArtifacts`. Export all public types: `StatusSnapshot`, `TaskEntry`, `FilesManifest`, `StatusUpdateFn`, `TaskUpdateFn`, `ResetOptions`, `UploadArtifact`.
 
@@ -562,7 +547,7 @@ export function initializeStatusFromArtifacts(opts: {
 
 ---
 
-### Step 15: Write serialization integration test
+### Step 14: Write serialization integration test
 
 **What:** Write an integration test that validates write serialization under concurrency. Launch 10 concurrent `writeJobStatus` calls to the same `jobDir`, each incrementing a counter field. After all resolve, assert: (1) the counter equals 10, (2) all 10 writes produced distinct `lastUpdated` values or the same value (depending on timing), (3) the file on disk contains the final state. Also launch 5 concurrent writes to two different `jobDir` values (10 total) and assert each directory's counter is independently correct.
 
