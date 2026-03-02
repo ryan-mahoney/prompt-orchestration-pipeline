@@ -149,6 +149,12 @@ demo:orchestrator] [orchestrator] status-initializer unavailable or failed for j
 [demo:orchestrator] at runPipelineJob (/Users/ryanmahoney/Documents/prompt-orchestration-pipeline/src/core/pipeline-runner.ts:269:30)
 [demo:orchestrator] at async handleRunJob (/Users/ryanmahoney/Documents/prompt-orchestration-pipeline/src/cli/index.ts:406:9)
 [demo:orchestrator] at async <anonymous> (/Users/ryanmahoney/Documents/prompt-orchestration-pipeline/src/cli/index.ts:491:11)
+[demo:orchestrator]
+[demo:orchestrator] [orchestrator] job job-1772462268611 exited {
+[demo:orchestrator] code: 1,
+[demo:orchestrator] signal: null,
+[demo:orchestrator] completionType: "failure",
+[demo:orchestrator] }
 
 # Issue 10
 
