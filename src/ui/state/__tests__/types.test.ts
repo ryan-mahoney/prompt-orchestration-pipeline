@@ -27,7 +27,7 @@ describe("ui/state types", () => {
 
     const acquire: AcquireResult = { acquired: true };
     const watcherOptions: WatcherOptions = { baseDir: "/tmp" };
-    const watcherHandle: WatcherHandle = { close: async () => {} };
+    const watcherHandle: WatcherHandle = { ready: Promise.resolve(), close: async () => {} };
     const snapshotOptions: ComposeSnapshotOptions = { jobs: [], meta: "1.0.0" };
     const snapshotDeps: SnapshotDeps = {};
     const schema: SchemaContext = {
