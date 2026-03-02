@@ -1,10 +1,8 @@
 # SpecOps Analysis Orchestration
 
-This document defines the execution plan for Phase 2 (Discovery & Specification Generation) of the JS → TS migration. Each step invokes the analysis prompt (`docs/specops/analysis-prompt.md`) with the module variables filled in for a specific subsystem.
+This document defines the execution plan for Phase 2 (Discovery & Specification Generation) of the JS → TS migration. Each step invokes the analysis prompt (`docs/specops/prompts/analysis-prompt.md`) with the module variables filled in for a specific subsystem.
 
-Execute each step by providing the analysis prompt with the **MODULE_NAME** and **SOURCE_FILES** listed below. Each step produces one spec document in `docs/specs/analysis/`.
-
-For a non-interactive Claude Code CLI workflow, use [`scripts/run-specops-analysis.sh`](/Users/ryanmahoney/Documents/prompt-orchestration-pipeline/scripts/run-specops-analysis.sh). Additional usage notes are in [`docs/specops/run-analysis-script.md`](/Users/ryanmahoney/Documents/prompt-orchestration-pipeline/docs/specops/run-analysis-script.md).
+Execute each step by providing the analysis prompt with the **MODULE_NAME** and **SOURCE_FILES** listed below. Each step produces one spec document in `docs/specops/specs/analysis/`.
 
 ---
 
@@ -13,21 +11,21 @@ For a non-interactive Claude Code CLI workflow, use [`scripts/run-specops-analys
 ### 1. Orchestrator
 
 - **MODULE_NAME:** `core/orchestrator`
-- **OUTPUT:** `docs/specs/analysis/core/orchestrator.md`
+- **OUTPUT:** `docs/specops/specs/analysis/core/orchestrator.md`
 - **SOURCE_FILES:**
   - `src/core/orchestrator.js`
 
 ### 2. Pipeline Runner
 
 - **MODULE_NAME:** `core/pipeline-runner`
-- **OUTPUT:** `docs/specs/analysis/core/pipeline-runner.md`
+- **OUTPUT:** `docs/specops/specs/analysis/core/pipeline-runner.md`
 - **SOURCE_FILES:**
   - `src/core/pipeline-runner.js`
 
 ### 3. Task Runner
 
 - **MODULE_NAME:** `core/task-runner`
-- **OUTPUT:** `docs/specs/analysis/core/task-runner.md`
+- **OUTPUT:** `docs/specops/specs/analysis/core/task-runner.md`
 - **SOURCE_FILES:**
   - `src/core/task-runner.js`
   - `src/core/lifecycle-policy.js`
@@ -36,7 +34,7 @@ For a non-interactive Claude Code CLI workflow, use [`scripts/run-specops-analys
 ### 4. File I/O
 
 - **MODULE_NAME:** `core/file-io`
-- **OUTPUT:** `docs/specs/analysis/core/file-io.md`
+- **OUTPUT:** `docs/specops/specs/analysis/core/file-io.md`
 - **SOURCE_FILES:**
   - `src/core/file-io.js`
   - `src/core/symlink-bridge.js`
@@ -45,14 +43,14 @@ For a non-interactive Claude Code CLI workflow, use [`scripts/run-specops-analys
 ### 5. Batch Runner
 
 - **MODULE_NAME:** `core/batch-runner`
-- **OUTPUT:** `docs/specs/analysis/core/batch-runner.md`
+- **OUTPUT:** `docs/specops/specs/analysis/core/batch-runner.md`
 - **SOURCE_FILES:**
   - `src/core/batch-runner.js`
 
 ### 6. Status Writer
 
 - **MODULE_NAME:** `core/status-writer`
-- **OUTPUT:** `docs/specs/analysis/core/status-writer.md`
+- **OUTPUT:** `docs/specops/specs/analysis/core/status-writer.md`
 - **SOURCE_FILES:**
   - `src/core/status-writer.js`
   - `src/core/status-initializer.js`
@@ -60,7 +58,7 @@ For a non-interactive Claude Code CLI workflow, use [`scripts/run-specops-analys
 ### 7. Core Support Modules
 
 - **MODULE_NAME:** `core/support`
-- **OUTPUT:** `docs/specs/analysis/core/support.md`
+- **OUTPUT:** `docs/specops/specs/analysis/core/support.md`
 - **SOURCE_FILES:**
   - `src/core/config.js`
   - `src/core/environment.js`
@@ -76,7 +74,7 @@ For a non-interactive Claude Code CLI workflow, use [`scripts/run-specops-analys
 ### 8. UI Server
 
 - **MODULE_NAME:** `ui/server`
-- **OUTPUT:** `docs/specs/analysis/ui/ui-server.md`
+- **OUTPUT:** `docs/specops/specs/analysis/ui/ui-server.md`
 - **SOURCE_FILES:**
   - `src/ui/server.js`
   - `src/ui/express-app.js`
@@ -113,7 +111,7 @@ For a non-interactive Claude Code CLI workflow, use [`scripts/run-specops-analys
 ### 9. UI Client
 
 - **MODULE_NAME:** `ui/client`
-- **OUTPUT:** `docs/specs/analysis/ui/ui-client.md`
+- **OUTPUT:** `docs/specops/specs/analysis/ui/ui-client.md`
 - **SOURCE_FILES:**
   - `src/ui/client/main.jsx`
   - `src/ui/client/bootstrap.js`
@@ -129,7 +127,7 @@ For a non-interactive Claude Code CLI workflow, use [`scripts/run-specops-analys
 ### 10. UI State
 
 - **MODULE_NAME:** `ui/state`
-- **OUTPUT:** `docs/specs/analysis/ui/ui-state.md`
+- **OUTPUT:** `docs/specops/specs/analysis/ui/ui-state.md`
 - **SOURCE_FILES:**
   - `src/ui/state.js`
   - `src/ui/state-snapshot.js`
@@ -146,7 +144,7 @@ For a non-interactive Claude Code CLI workflow, use [`scripts/run-specops-analys
 ### 11. UI Components
 
 - **MODULE_NAME:** `ui/components`
-- **OUTPUT:** `docs/specs/analysis/ui/ui-components.md`
+- **OUTPUT:** `docs/specops/specs/analysis/ui/ui-components.md`
 - **SOURCE_FILES:**
   - `src/pages/PromptPipelineDashboard.jsx`
   - `src/pages/PipelineList.jsx`
@@ -192,7 +190,7 @@ For a non-interactive Claude Code CLI workflow, use [`scripts/run-specops-analys
 ### 12. Providers
 
 - **MODULE_NAME:** `providers`
-- **OUTPUT:** `docs/specs/analysis/providers.md`
+- **OUTPUT:** `docs/specops/specs/analysis/providers.md`
 - **SOURCE_FILES:**
   - `src/providers/base.js`
   - `src/providers/anthropic.js`
@@ -207,7 +205,7 @@ For a non-interactive Claude Code CLI workflow, use [`scripts/run-specops-analys
 ### 13. CLI
 
 - **MODULE_NAME:** `cli`
-- **OUTPUT:** `docs/specs/analysis/cli.md`
+- **OUTPUT:** `docs/specops/specs/analysis/cli.md`
 - **SOURCE_FILES:**
   - `src/cli/index.js`
   - `src/cli/run-orchestrator.js`
@@ -218,7 +216,7 @@ For a non-interactive Claude Code CLI workflow, use [`scripts/run-specops-analys
 ### 14. Task Analysis
 
 - **MODULE_NAME:** `task-analysis`
-- **OUTPUT:** `docs/specs/analysis/task-analysis.md`
+- **OUTPUT:** `docs/specops/specs/analysis/task-analysis.md`
 - **SOURCE_FILES:**
   - `src/task-analysis/index.js`
   - `src/task-analysis/parser.js`
@@ -234,7 +232,7 @@ For a non-interactive Claude Code CLI workflow, use [`scripts/run-specops-analys
 ### 15. Config
 
 - **MODULE_NAME:** `config`
-- **OUTPUT:** `docs/specs/analysis/config.md`
+- **OUTPUT:** `docs/specops/specs/analysis/config.md`
 - **SOURCE_FILES:**
   - `src/config/paths.js`
   - `src/config/models.js`
@@ -244,7 +242,7 @@ For a non-interactive Claude Code CLI workflow, use [`scripts/run-specops-analys
 ### 16. Utils
 
 - **MODULE_NAME:** `utils`
-- **OUTPUT:** `docs/specs/analysis/utils.md`
+- **OUTPUT:** `docs/specops/specs/analysis/utils.md`
 - **SOURCE_FILES:**
   - `src/utils/dag.js`
   - `src/utils/duration.js`
@@ -260,7 +258,7 @@ For a non-interactive Claude Code CLI workflow, use [`scripts/run-specops-analys
 ### 17. API Validators
 
 - **MODULE_NAME:** `api`
-- **OUTPUT:** `docs/specs/analysis/api.md`
+- **OUTPUT:** `docs/specops/specs/analysis/api.md`
 - **SOURCE_FILES:**
   - `src/api/index.js`
   - `src/api/files.js`
