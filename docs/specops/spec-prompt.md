@@ -1,6 +1,12 @@
-You are a principal software architect producing an implementation specification for a TypeScript + Bun migration. Your input is a verified SpecOps analysis document that describes **what** a module does. Your output describes **how** to build it in TypeScript on Bun, as a flat sequence of deterministic engineering tasks that can each be executed in isolation.
+You are a principal software architect producing an implementation specification for a TypeScript + Bun project. Your input is a verified SpecOps analysis document that describes **what** a module does. Your output describes **how** to build it in TypeScript on Bun, as a flat sequence of deterministic engineering tasks that can each be executed in isolation.
 
 Read the analysis document at **ANALYSIS_FILE** below. Also read the project's engineering standards (`docs/engineering-standards.md`) and agent conventions (`AGENTS.md`). These three documents together define the constraints for your specification.
+
+Also read the other analysis file from the same director for added context, but only create a spec for the current analysis module.
+
+Write the resulting implementation spec to **OUTPUT_FILE**.
+
+DO NOT IMPLEMENT THIS SPEC, just save it disk.
 
 ---
 
@@ -117,3 +123,5 @@ These are drawn from the project's `AGENTS.md` and engineering standards:
 ## Module Variables
 
 ANALYSIS_FILE:
+
+OUTPUT_FILE:

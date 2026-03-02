@@ -6,6 +6,15 @@ Principle: **make small, verifiable changes**, and keep the system **determinist
 
 ---
 
+## Off-limits directories
+
+Do not read, modify, or reference any files in:
+
+- `src-legacy/`
+- `tests-legacy/`
+
+---
+
 ## 0) Non-negotiables
 
 - **Do not start long-running background processes** (dev servers, watchers, daemons) unless the user explicitly asks.
