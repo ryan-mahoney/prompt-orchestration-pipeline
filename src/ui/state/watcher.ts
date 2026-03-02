@@ -15,6 +15,7 @@ import type {
 } from "./types";
 
 type ChokidarLike = {
+  on(event: "ready", listener: () => void): ChokidarLike;
   on(event: string, listener: (filePath: string) => void): ChokidarLike;
   close(): Promise<void>;
 };
@@ -152,11 +153,16 @@ export function startWatcher(
     persistent: true,
   });
 
+  const ready = new Promise<void>((resolve) => {
+    watcher.on("ready", () => resolve());
+  });
+
   watcher.on("add", (filePath) => handleEvent("add", filePath));
   watcher.on("change", (filePath) => handleEvent("change", filePath));
   watcher.on("unlink", (filePath) => handleEvent("unlink", filePath));
 
   return {
+    ready,
     async close() {
       if (timer) {
         clearTimeout(timer);

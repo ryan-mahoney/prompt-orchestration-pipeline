@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -89,8 +90,8 @@ describe("watcher", () => {
     fakeWatcher.emit("change", "/tmp/root/pipeline-config/registry.json");
 
     vi.advanceTimersByTime(10);
-    await Promise.resolve();
-    await Promise.resolve();
+    // flush() is async with multiple awaits: onChange → routeJobChanges (inner await) → reloadRegistry (inner await)
+    for (let i = 0; i < 10; i++) await Promise.resolve();
 
     expect(calls).toEqual(["onChange", "route", "reset"]);
   });
@@ -115,18 +116,19 @@ describe("watcher", () => {
   it("captures a real filesystem change after debounce", async () => {
     vi.useRealTimers();
     const root = path.join(process.cwd(), ".tmp-watcher");
-    await Bun.$`rm -rf ${root}`.quiet();
-    await Bun.$`mkdir -p ${root}`.quiet();
+    fs.rmSync(root, { recursive: true, force: true });
+    fs.mkdirSync(root, { recursive: true });
 
     const batches: string[][] = [];
     const handle = startWatcher([root], (changes) => {
       batches.push(changes.map((change) => change.path));
     }, { baseDir: root, debounceMs: 25 });
 
-    await Bun.write(path.join(root, "hello.txt"), "hello");
-    await new Promise((resolve) => setTimeout(resolve, 300));
+    await handle.ready;
+    fs.writeFileSync(path.join(root, "hello.txt"), "hello");
+    await new Promise((resolve) => setTimeout(resolve, 500));
     await stopWatcher(handle);
-    await Bun.$`rm -rf ${root}`.quiet();
+    fs.rmSync(root, { recursive: true, force: true });
 
     expect(batches.some((batch) => batch.includes("hello.txt"))).toBe(true);
   });

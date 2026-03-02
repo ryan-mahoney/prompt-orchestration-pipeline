@@ -67,6 +67,7 @@ export interface WatcherOptions {
 export type WatcherOnChange = (changes: ChangeEntry[]) => void | Promise<void>;
 
 export interface WatcherHandle {
+  ready: Promise<void>;
   close: () => Promise<void>;
 }
 
