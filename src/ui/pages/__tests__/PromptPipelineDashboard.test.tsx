@@ -2,7 +2,9 @@ import "../../components/__tests__/test-dom";
 
 import { render } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import { afterEach, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, expect, mock, test } from "bun:test";
+
+const originalLocalStorage = globalThis.localStorage;
 
 mock.module("../../client/hooks/useJobListWithUpdates", () => ({
   useJobListWithUpdates: () => ({
@@ -38,8 +40,21 @@ mock.module("../../client/hooks/useJobListWithUpdates", () => ({
   }),
 }));
 
+beforeEach(() => {
+  const store: Record<string, string> = {};
+  globalThis.localStorage = {
+    getItem: (key: string) => store[key] ?? null,
+    setItem: (key: string, value: string) => { store[key] = value; },
+    removeItem: (key: string) => { delete store[key]; },
+    clear: () => { for (const k in store) delete store[k]; },
+    get length() { return Object.keys(store).length; },
+    key: (i: number) => Object.keys(store)[i] ?? null,
+  } as Storage;
+});
+
 afterEach(() => {
   document.body.innerHTML = "";
+  globalThis.localStorage = originalLocalStorage;
 });
 
 test("PromptPipelineDashboard renders tabs", async () => {

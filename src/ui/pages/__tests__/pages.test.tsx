@@ -92,7 +92,27 @@ vi.mock("../../client/hooks/useAnalysisProgress", () => ({
 }));
 
 describe("pages", () => {
+  const originalLocalStorage = globalThis.localStorage;
+
   beforeEach(() => {
+    const store: Record<string, string> = {};
+    globalThis.localStorage = {
+      getItem: (key: string) => store[key] ?? null,
+      setItem: (key: string, value: string) => {
+        store[key] = value;
+      },
+      removeItem: (key: string) => {
+        delete store[key];
+      },
+      clear: () => {
+        for (const k in store) delete store[k];
+      },
+      get length() {
+        return Object.keys(store).length;
+      },
+      key: (i: number) => Object.keys(store)[i] ?? null,
+    } as Storage;
+
     globalThis.fetch = vi.fn<typeof fetch>().mockImplementation(async (input) => {
       const url =
         typeof input === "string"
@@ -112,6 +132,7 @@ describe("pages", () => {
 
   afterEach(() => {
     globalThis.fetch = originalFetch;
+    globalThis.localStorage = originalLocalStorage;
     vi.clearAllMocks();
   });
 

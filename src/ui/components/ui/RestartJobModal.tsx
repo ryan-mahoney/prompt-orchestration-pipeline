@@ -45,12 +45,12 @@ export function RestartJobModal({
   return (
     <Sidebar open={open} onOpenChange={(nextOpen) => !nextOpen && onClose()} title="Restart job">
       <SidebarSection>
-        <p className="mb-4 text-sm text-slate-700">Job ID: {jobId}</p>
+        <p className="mb-4 text-sm text-gray-700">Job ID: {jobId}</p>
         {taskId ? (
           <fieldset className="space-y-3">
-            <legend className="mb-3 text-sm font-medium text-slate-900">Choose restart mode for {taskId}</legend>
+            <legend className="mb-3 text-sm font-medium text-gray-900">Choose restart mode for {taskId}</legend>
             {TASK_MODES.map((mode) => (
-              <label key={mode.id} className="flex items-start gap-3 rounded-lg border p-3">
+              <label key={mode.id} className="flex items-start gap-3 rounded-sm border border-gray-300 p-3">
                 <input
                   type="radio"
                   name="restart-mode"
@@ -63,7 +63,7 @@ export function RestartJobModal({
             ))}
           </fieldset>
         ) : (
-          <p className="text-sm text-slate-700">
+          <p className="text-sm text-gray-700">
             Restarting will reset the pipeline to pending and start it again.
           </p>
         )}

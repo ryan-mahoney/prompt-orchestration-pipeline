@@ -1,0 +1,3694 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Prompt Pipeline — Design System Reference v1.0</title>
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      /* ═══════════════════════════════════════════════════════════════
+   DESIGN SYSTEM TOKENS
+   These CSS custom properties are the single source of truth.
+   Every component references these — never use raw values.
+   ═══════════════════════════════════════════════════════════════ */
+
+      :root {
+        /* ── COLOR: Brand ── */
+        --color-brand-600: #16a34a; /* Primary brand green — logo, primary CTA fills */
+        --color-brand-500: #22c55e; /* Hover state for brand elements */
+        --color-brand-100: #dcfce7; /* Light brand tint — success backgrounds */
+        --color-brand-50: #f0fdf4; /* Subtle brand wash */
+
+        /* ── COLOR: Accent (Interactive) ── */
+        --color-accent-700: #6d28d9; /* Links, interactive node titles, active nav */
+        --color-accent-600: #7c3aed; /* Link hover */
+        --color-accent-100: #ede9fe; /* Selected/active row background */
+        --color-accent-50: #f5f3ff; /* Subtle accent wash */
+
+        /* ── COLOR: Semantic — Status ── */
+        --color-success-700: #15803d; /* Success text on light backgrounds */
+        --color-success-600: #16a34a; /* "DONE" badge text */
+        --color-success-100: #dcfce7; /* Success background tint */
+
+        --color-error-700: #b91c1c; /* Error text — "FAILED" badge */
+        --color-error-600: #dc2626; /* Error borders, destructive button fill */
+        --color-error-100: #fee2e2; /* Error background tint — failed node card */
+        --color-error-50: #fef2f2; /* Subtle error wash */
+
+        --color-warning-700: #a16207; /* Warning text */
+        --color-warning-600: #ca8a04; /* Warning icon fill */
+        --color-warning-100: #fef9c3; /* Warning background tint */
+
+        --color-info-700: #1d4ed8; /* Informational text */
+        --color-info-100: #dbeafe; /* Informational background */
+
+        /* ── COLOR: Neutral ── */
+        --color-gray-900: #111827; /* Primary text, headings */
+        --color-gray-700: #374151; /* Secondary text, body copy */
+        --color-gray-500: #6b7280; /* Tertiary text, timestamps, metadata */
+        --color-gray-400: #9ca3af; /* Placeholder text, disabled text */
+        --color-gray-300: #d1d5db; /* Borders — cards, inputs, dividers */
+        --color-gray-200: #e5e7eb; /* Subtle borders, table row separators */
+        --color-gray-100: #f3f4f6; /* Background — hover rows, secondary surfaces */
+        --color-gray-50: #f9fafb; /* Page background alternative */
+        --color-white: #ffffff; /* Card surfaces, primary background */
+
+        /* ── TYPOGRAPHY ── */
+        --font-family-sans:
+          "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI",
+          sans-serif;
+        --font-family-mono:
+          "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
+
+        /* Type Scale — Major Third (1.250) */
+        --text-xs: 0.75rem; /* 12px — badges, fine print */
+        --text-sm: 0.8125rem; /* 13px — table headers, metadata, helper text */
+        --text-base: 0.875rem; /* 14px — body text, table cells, form labels */
+        --text-md: 1rem; /* 16px — section subheads, nav items */
+        --text-lg: 1.25rem; /* 20px — card titles, H3 */
+        --text-xl: 1.5rem; /* 24px — page section titles, H2 */
+        --text-2xl: 1.875rem; /* 30px — page title, H1 */
+
+        --font-weight-regular: 400;
+        --font-weight-medium: 500;
+        --font-weight-semi: 600;
+        --font-weight-bold: 700;
+
+        --line-height-tight: 1.25; /* Headings */
+        --line-height-normal: 1.5; /* Body text */
+        --line-height-relaxed: 1.625; /* Long-form reading */
+
+        --letter-spacing-tight: -0.01em; /* Headings */
+        --letter-spacing-normal: 0; /* Body */
+
+        /* ── SPACING — 4px base unit ── */
+        --space-0: 0;
+        --space-1: 0.25rem; /* 4px  */
+        --space-2: 0.5rem; /* 8px  */
+        --space-3: 0.75rem; /* 12px */
+        --space-4: 1rem; /* 16px — default gap */
+        --space-5: 1.25rem; /* 20px */
+        --space-6: 1.5rem; /* 24px — card padding */
+        --space-8: 2rem; /* 32px — section gap */
+        --space-10: 2.5rem; /* 40px */
+        --space-12: 3rem; /* 48px — major section break */
+        --space-16: 4rem; /* 64px — page-level separation */
+        --space-20: 5rem; /* 80px */
+
+        /* ── BORDERS ── */
+        --radius-none: 0;
+        --radius-sm: 0.25rem; /* 4px — buttons, inputs, badges */
+        --radius-md: 0.375rem; /* 6px — cards, dropdowns */
+        --radius-lg: 0.5rem; /* 8px — modals, large cards */
+        --radius-full: 9999px; /* Pills, avatars */
+
+        --border-width-default: 1px;
+        --border-width-thick: 2px;
+
+        /* ── SHADOWS — Minimal, functional only ── */
+        --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.04);
+        --shadow-sm:
+          0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
+        --shadow-md:
+          0 4px 6px rgba(0, 0, 0, 0.05), 0 2px 4px rgba(0, 0, 0, 0.04);
+        --shadow-lg:
+          0 10px 15px rgba(0, 0, 0, 0.05), 0 4px 6px rgba(0, 0, 0, 0.03);
+
+        /* ── LAYOUT ── */
+        --content-max-width: 1360px; /* Max content width */
+        --sidebar-width: 260px; /* If sidebar is used */
+        --form-max-width: 640px; /* Max form width per form-design guide */
+        --nav-height: 56px; /* Top navigation bar height */
+        --nav-height-dense: 48px; /* Compact nav variant */
+
+        /* ── TRANSITIONS ── */
+        --duration-fast: 100ms;
+        --duration-normal: 150ms;
+        --duration-slow: 250ms;
+        --easing-default: cubic-bezier(0.4, 0, 0.2, 1);
+
+        /* ── Z-INDEX SCALE ── */
+        --z-dropdown: 100;
+        --z-sticky: 200;
+        --z-overlay: 300;
+        --z-modal: 400;
+        --z-toast: 500;
+
+        /* ── INPUT DIMENSIONS ── */
+        --input-height: 40px; /* Default input/button height */
+        --input-height-lg: 44px; /* Touch-friendly variant */
+        --input-height-sm: 32px; /* Compact tables, dense UI */
+        --target-min: 44px; /* Minimum touch target (WCAG) */
+      }
+
+      /* ═══════════════════════════════════════════════════════════════
+   RESET & BASE
+   ═══════════════════════════════════════════════════════════════ */
+
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      html {
+        font-size: 16px;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+        text-rendering: optimizeLegibility;
+      }
+
+      body {
+        font-family: var(--font-family-sans);
+        font-size: var(--text-base);
+        font-weight: var(--font-weight-regular);
+        line-height: var(--line-height-normal);
+        color: var(--color-gray-700);
+        background-color: var(--color-white);
+      }
+
+      /* ═══════════════════════════════════════════════════════════════
+   DOCUMENT STYLES (for this reference page only)
+   ═══════════════════════════════════════════════════════════════ */
+
+      .ds-page {
+        max-width: 960px;
+        margin: 0 auto;
+        padding: var(--space-12) var(--space-6);
+      }
+
+      .ds-section {
+        margin-bottom: var(--space-16);
+        border-top: 2px solid var(--color-gray-900);
+        padding-top: var(--space-8);
+      }
+
+      .ds-section-title {
+        font-size: var(--text-2xl);
+        font-weight: var(--font-weight-bold);
+        color: var(--color-gray-900);
+        letter-spacing: var(--letter-spacing-tight);
+        line-height: var(--line-height-tight);
+        margin-bottom: var(--space-2);
+      }
+
+      .ds-section-desc {
+        color: var(--color-gray-500);
+        margin-bottom: var(--space-8);
+        max-width: 640px;
+      }
+
+      .ds-subsection {
+        margin-bottom: var(--space-10);
+      }
+
+      .ds-subsection-title {
+        font-size: var(--text-md);
+        font-weight: var(--font-weight-semi);
+        color: var(--color-gray-900);
+        margin-bottom: var(--space-4);
+      }
+
+      .ds-rule {
+        font-size: var(--text-sm);
+        color: var(--color-gray-500);
+        margin-bottom: var(--space-6);
+        padding-left: var(--space-4);
+        border-left: 2px solid var(--color-gray-200);
+        font-style: italic;
+      }
+
+      .ds-grid {
+        display: grid;
+        gap: var(--space-4);
+      }
+
+      .ds-grid-2 {
+        grid-template-columns: repeat(2, 1fr);
+      }
+      .ds-grid-3 {
+        grid-template-columns: repeat(3, 1fr);
+      }
+      .ds-grid-4 {
+        grid-template-columns: repeat(4, 1fr);
+      }
+      .ds-grid-5 {
+        grid-template-columns: repeat(5, 1fr);
+      }
+      .ds-grid-6 {
+        grid-template-columns: repeat(6, 1fr);
+      }
+
+      .ds-code {
+        font-family: var(--font-family-mono);
+        font-size: var(--text-xs);
+        color: var(--color-gray-500);
+      }
+
+      .ds-label {
+        font-size: var(--text-sm);
+        font-weight: var(--font-weight-medium);
+        color: var(--color-gray-700);
+        margin-top: var(--space-2);
+      }
+
+      /* ═══════════════════════════════════════════════════════════════
+   REFERENCE PAGE CONTENT STYLES
+   ═══════════════════════════════════════════════════════════════ */
+
+      /* Header */
+      .ds-header {
+        margin-bottom: var(--space-12);
+        padding-bottom: var(--space-8);
+        border-bottom: 2px solid var(--color-gray-900);
+      }
+
+      .ds-header h1 {
+        font-size: 2.25rem;
+        font-weight: var(--font-weight-bold);
+        color: var(--color-gray-900);
+        letter-spacing: -0.02em;
+        line-height: 1.1;
+        margin-bottom: var(--space-3);
+      }
+
+      .ds-header p {
+        color: var(--color-gray-500);
+        max-width: 520px;
+        line-height: var(--line-height-relaxed);
+      }
+
+      .ds-header .ds-meta {
+        display: flex;
+        gap: var(--space-6);
+        margin-top: var(--space-4);
+        font-size: var(--text-sm);
+        color: var(--color-gray-400);
+      }
+
+      /* Color swatch */
+      .ds-swatch {
+        display: flex;
+        flex-direction: column;
+      }
+
+      .ds-swatch-color {
+        width: 100%;
+        height: 56px;
+        border-radius: var(--radius-sm);
+        border: 1px solid rgba(0, 0, 0, 0.06);
+      }
+
+      .ds-swatch-name {
+        font-size: var(--text-sm);
+        font-weight: var(--font-weight-medium);
+        color: var(--color-gray-700);
+        margin-top: var(--space-2);
+      }
+
+      .ds-swatch-hex {
+        font-family: var(--font-family-mono);
+        font-size: var(--text-xs);
+        color: var(--color-gray-400);
+      }
+
+      .ds-swatch-token {
+        font-family: var(--font-family-mono);
+        font-size: 0.6875rem;
+        color: var(--color-gray-400);
+        word-break: break-all;
+      }
+
+      /* Type specimen */
+      .ds-type-specimen {
+        margin-bottom: var(--space-6);
+        display: flex;
+        align-items: baseline;
+        gap: var(--space-6);
+        border-bottom: 1px solid var(--color-gray-200);
+        padding-bottom: var(--space-4);
+      }
+
+      .ds-type-sample {
+        flex: 1;
+        color: var(--color-gray-900);
+      }
+
+      .ds-type-meta {
+        flex-shrink: 0;
+        text-align: right;
+        min-width: 180px;
+      }
+
+      /* Spacing bar */
+      .ds-space-bar {
+        display: flex;
+        align-items: center;
+        gap: var(--space-4);
+        margin-bottom: var(--space-3);
+      }
+
+      .ds-space-visual {
+        height: 24px;
+        background-color: var(--color-accent-100);
+        border: 1px solid var(--color-accent-700);
+        border-radius: 2px;
+        flex-shrink: 0;
+      }
+
+      .ds-space-info {
+        display: flex;
+        gap: var(--space-4);
+        font-size: var(--text-sm);
+      }
+
+      /* Component showcase */
+      .ds-showcase {
+        background-color: var(--color-gray-50);
+        border: 1px solid var(--color-gray-200);
+        border-radius: var(--radius-md);
+        padding: var(--space-8);
+        margin-bottom: var(--space-4);
+      }
+
+      .ds-showcase-dark {
+        background-color: var(--color-gray-900);
+      }
+
+      .ds-do-dont {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: var(--space-4);
+        margin-top: var(--space-4);
+      }
+
+      .ds-do,
+      .ds-dont {
+        padding: var(--space-4);
+        border-radius: var(--radius-sm);
+        font-size: var(--text-sm);
+      }
+
+      .ds-do {
+        background-color: var(--color-success-100);
+        border-left: 3px solid var(--color-success-600);
+      }
+
+      .ds-dont {
+        background-color: var(--color-error-100);
+        border-left: 3px solid var(--color-error-600);
+      }
+
+      .ds-do strong,
+      .ds-dont strong {
+        display: block;
+        margin-bottom: var(--space-1);
+        font-size: var(--text-xs);
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
+
+      .ds-do strong {
+        color: var(--color-success-700);
+      }
+      .ds-dont strong {
+        color: var(--color-error-700);
+      }
+
+      /* ═══════════════════════════════════════════════════════════════
+   COMPONENT LIBRARY — ACTUAL REUSABLE COMPONENTS
+   These are the production components agents should copy.
+   ═══════════════════════════════════════════════════════════════ */
+
+      /* ── Buttons ── */
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: var(--space-2);
+        height: var(--input-height);
+        padding: 0 var(--space-4);
+        font-family: var(--font-family-sans);
+        font-size: var(--text-base);
+        font-weight: var(--font-weight-medium);
+        line-height: 1;
+        border-radius: var(--radius-sm);
+        border: var(--border-width-default) solid transparent;
+        cursor: pointer;
+        transition: all var(--duration-normal) var(--easing-default);
+        white-space: nowrap;
+        text-decoration: none;
+        min-width: var(--target-min);
+      }
+
+      .btn:focus-visible {
+        outline: 2px solid var(--color-accent-700);
+        outline-offset: 2px;
+      }
+
+      /* Primary — one per view */
+      .btn-primary {
+        background-color: var(--color-brand-600);
+        color: var(--color-white);
+        border-color: var(--color-brand-600);
+      }
+      .btn-primary:hover {
+        background-color: #15803d;
+        border-color: #15803d;
+      }
+      .btn-primary:active {
+        background-color: #166534;
+      }
+
+      /* Secondary — supporting actions */
+      .btn-secondary {
+        background-color: var(--color-white);
+        color: var(--color-gray-700);
+        border-color: var(--color-gray-300);
+      }
+      .btn-secondary:hover {
+        background-color: var(--color-gray-50);
+        border-color: var(--color-gray-400);
+      }
+      .btn-secondary:active {
+        background-color: var(--color-gray-100);
+      }
+
+      /* Ghost — minimal emphasis */
+      .btn-ghost {
+        background-color: transparent;
+        color: var(--color-accent-700);
+        border-color: transparent;
+      }
+      .btn-ghost:hover {
+        background-color: var(--color-accent-50);
+      }
+
+      /* Destructive */
+      .btn-destructive {
+        background-color: var(--color-white);
+        color: var(--color-error-700);
+        border-color: var(--color-error-700);
+      }
+      .btn-destructive:hover {
+        background-color: var(--color-error-50);
+      }
+
+      /* Sizes */
+      .btn-sm {
+        height: var(--input-height-sm);
+        padding: 0 var(--space-3);
+        font-size: var(--text-sm);
+      }
+      .btn-lg {
+        height: var(--input-height-lg);
+        padding: 0 var(--space-6);
+        font-size: var(--text-md);
+      }
+
+      /* Disabled */
+      .btn:disabled,
+      .btn[aria-disabled="true"] {
+        opacity: 0.5;
+        cursor: not-allowed;
+        pointer-events: none;
+      }
+
+      /* ── Form Inputs ── */
+      .form-group {
+        margin-bottom: var(--space-5);
+      }
+
+      .form-label {
+        display: block;
+        font-size: var(--text-sm);
+        font-weight: var(--font-weight-medium);
+        color: var(--color-gray-700);
+        margin-bottom: var(--space-1);
+      }
+
+      .form-label-optional {
+        font-weight: var(--font-weight-regular);
+        color: var(--color-gray-400);
+        margin-left: var(--space-1);
+      }
+
+      .form-input {
+        display: block;
+        width: 100%;
+        height: var(--input-height);
+        padding: 0 var(--space-3);
+        font-family: var(--font-family-sans);
+        font-size: var(--text-base);
+        color: var(--color-gray-900);
+        background-color: var(--color-white);
+        border: var(--border-width-default) solid var(--color-gray-300);
+        border-radius: var(--radius-sm);
+        transition:
+          border-color var(--duration-normal) var(--easing-default),
+          box-shadow var(--duration-normal) var(--easing-default);
+      }
+
+      .form-input::placeholder {
+        color: var(--color-gray-400);
+      }
+      .form-input:hover {
+        border-color: var(--color-gray-400);
+      }
+      .form-input:focus {
+        outline: none;
+        border-color: var(--color-accent-700);
+        box-shadow: 0 0 0 3px var(--color-accent-100);
+      }
+      .form-input-error {
+        border-color: var(--color-error-600);
+      }
+      .form-input-error:focus {
+        box-shadow: 0 0 0 3px var(--color-error-100);
+      }
+
+      .form-hint {
+        font-size: var(--text-xs);
+        color: var(--color-gray-500);
+        margin-top: var(--space-1);
+      }
+
+      .form-error {
+        font-size: var(--text-xs);
+        color: var(--color-error-700);
+        margin-top: var(--space-1);
+      }
+
+      textarea.form-input {
+        height: auto;
+        min-height: 96px;
+        padding: var(--space-3);
+        resize: vertical;
+      }
+
+      select.form-input {
+        appearance: none;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%236b7280' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 12px center;
+        padding-right: 36px;
+      }
+
+      /* ── Badges / Status indicators ── */
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-1);
+        padding: 2px var(--space-2);
+        font-size: var(--text-xs);
+        font-weight: var(--font-weight-medium);
+        border-radius: var(--radius-sm);
+        line-height: 1.4;
+        white-space: nowrap;
+      }
+
+      .badge-success {
+        background-color: var(--color-success-100);
+        color: var(--color-success-700);
+      }
+      .badge-error {
+        background-color: var(--color-error-100);
+        color: var(--color-error-700);
+      }
+      .badge-warning {
+        background-color: var(--color-warning-100);
+        color: var(--color-warning-700);
+      }
+      .badge-info {
+        background-color: var(--color-info-100);
+        color: var(--color-info-700);
+      }
+      .badge-neutral {
+        background-color: var(--color-gray-100);
+        color: var(--color-gray-700);
+      }
+
+      /* Status dot variant */
+      .badge-dot::before {
+        content: "";
+        width: 6px;
+        height: 6px;
+        border-radius: var(--radius-full);
+        flex-shrink: 0;
+      }
+      .badge-success.badge-dot::before {
+        background-color: var(--color-success-600);
+      }
+      .badge-error.badge-dot::before {
+        background-color: var(--color-error-600);
+      }
+      .badge-warning.badge-dot::before {
+        background-color: var(--color-warning-600);
+      }
+      .badge-neutral.badge-dot::before {
+        background-color: var(--color-gray-400);
+      }
+
+      /* ── Cards ── */
+      .card {
+        background-color: var(--color-white);
+        border: var(--border-width-default) solid var(--color-gray-300);
+        border-radius: var(--radius-md);
+        padding: var(--space-6);
+      }
+
+      .card-compact {
+        padding: var(--space-4);
+      }
+      .card-flush {
+        padding: 0;
+      }
+
+      .card-header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: var(--space-4);
+        margin-bottom: var(--space-4);
+      }
+
+      .card-title {
+        font-size: var(--text-md);
+        font-weight: var(--font-weight-semi);
+        color: var(--color-accent-700);
+        line-height: var(--line-height-tight);
+      }
+
+      .card-body {
+        font-size: var(--text-base);
+        color: var(--color-gray-700);
+      }
+
+      .card-meta {
+        font-size: var(--text-sm);
+        color: var(--color-gray-500);
+        font-family: var(--font-family-mono);
+      }
+
+      .card-footer {
+        margin-top: var(--space-5);
+        padding-top: var(--space-4);
+        border-top: 1px solid var(--color-gray-200);
+      }
+
+      /* Error state card */
+      .card-error {
+        border-color: var(--color-error-600);
+        background-color: var(--color-error-50);
+      }
+
+      .card-error .card-title {
+        color: var(--color-error-700);
+      }
+
+      /* ── Tables ── */
+      .table-wrapper {
+        overflow-x: auto;
+        border: 1px solid var(--color-gray-200);
+        border-radius: var(--radius-md);
+      }
+
+      .table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: var(--text-base);
+        font-variant-numeric: tabular-nums;
+      }
+
+      .table th {
+        text-align: left;
+        font-size: var(--text-sm);
+        font-weight: var(--font-weight-medium);
+        color: var(--color-gray-500);
+        padding: var(--space-3) var(--space-4);
+        border-bottom: 1px solid var(--color-gray-200);
+        background-color: var(--color-gray-50);
+        white-space: nowrap;
+        position: sticky;
+        top: 0;
+        z-index: 1;
+      }
+
+      .table td {
+        padding: var(--space-3) var(--space-4);
+        border-bottom: 1px solid var(--color-gray-200);
+        color: var(--color-gray-700);
+        vertical-align: middle;
+      }
+
+      .table tbody tr:last-child td {
+        border-bottom: none;
+      }
+      .table tbody tr:hover {
+        background-color: var(--color-gray-50);
+      }
+
+      /* Alignment helpers */
+      .table .col-num {
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+      }
+      .table .col-action {
+        text-align: right;
+        white-space: nowrap;
+      }
+
+      /* Primary identifier as link */
+      .table .col-primary {
+        font-weight: var(--font-weight-medium);
+        color: var(--color-accent-700);
+      }
+      .table .col-primary:hover {
+        text-decoration: underline;
+      }
+
+      /* Dense variant */
+      .table-dense th,
+      .table-dense td {
+        padding: var(--space-2) var(--space-3);
+      }
+
+      /* ── Navigation ── */
+      .nav-bar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        height: var(--nav-height);
+        padding: 0 var(--space-6);
+        border-bottom: 1px solid var(--color-gray-200);
+        background-color: var(--color-white);
+        position: sticky;
+        top: 0;
+        z-index: var(--z-sticky);
+      }
+
+      .nav-logo {
+        display: flex;
+        align-items: center;
+        gap: var(--space-2);
+        font-size: var(--text-md);
+        font-weight: var(--font-weight-bold);
+        color: var(--color-gray-900);
+        text-decoration: none;
+      }
+
+      .nav-links {
+        display: flex;
+        align-items: center;
+        gap: var(--space-6);
+        list-style: none;
+      }
+
+      .nav-link {
+        font-size: var(--text-base);
+        font-weight: var(--font-weight-medium);
+        color: var(--color-gray-500);
+        text-decoration: none;
+        transition: color var(--duration-normal) var(--easing-default);
+      }
+
+      .nav-link:hover {
+        color: var(--color-gray-900);
+      }
+      .nav-link-active {
+        color: var(--color-accent-700);
+      }
+
+      /* ── Breadcrumbs ── */
+      .breadcrumb {
+        display: flex;
+        align-items: center;
+        gap: var(--space-2);
+        font-size: var(--text-base);
+        padding: var(--space-3) var(--space-6);
+        border-bottom: 1px solid var(--color-gray-200);
+      }
+
+      .breadcrumb-item {
+        color: var(--color-gray-500);
+        text-decoration: none;
+      }
+
+      .breadcrumb-item:hover {
+        color: var(--color-gray-900);
+      }
+
+      .breadcrumb-item-current {
+        color: var(--color-gray-900);
+        font-weight: var(--font-weight-medium);
+      }
+
+      .breadcrumb-sep {
+        color: var(--color-gray-300);
+        font-size: var(--text-sm);
+        user-select: none;
+      }
+
+      /* ── Page Header (context bar) ── */
+      .page-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: var(--space-4) var(--space-6);
+        border-bottom: 1px solid var(--color-gray-200);
+      }
+
+      .page-header-meta {
+        display: flex;
+        align-items: center;
+        gap: var(--space-4);
+        font-family: var(--font-family-mono);
+        font-size: var(--text-sm);
+        color: var(--color-gray-500);
+      }
+
+      /* ── Toasts / Alerts ── */
+      .alert {
+        display: flex;
+        gap: var(--space-3);
+        padding: var(--space-4);
+        border-radius: var(--radius-sm);
+        font-size: var(--text-sm);
+        border-left: 3px solid;
+      }
+
+      .alert-success {
+        background-color: var(--color-success-100);
+        border-color: var(--color-success-600);
+        color: var(--color-success-700);
+      }
+      .alert-error {
+        background-color: var(--color-error-100);
+        border-color: var(--color-error-600);
+        color: var(--color-error-700);
+      }
+      .alert-warning {
+        background-color: var(--color-warning-100);
+        border-color: var(--color-warning-600);
+        color: var(--color-warning-700);
+      }
+      .alert-info {
+        background-color: var(--color-info-100);
+        border-color: var(--color-info-700);
+        color: var(--color-info-700);
+      }
+
+      /* ── Empty State ── */
+      .empty-state {
+        text-align: center;
+        padding: var(--space-16) var(--space-6);
+        color: var(--color-gray-500);
+      }
+
+      .empty-state-title {
+        font-size: var(--text-md);
+        font-weight: var(--font-weight-semi);
+        color: var(--color-gray-700);
+        margin-bottom: var(--space-2);
+      }
+
+      /* ── Sidebar Drawers ── */
+      .drawer-overlay {
+        position: fixed;
+        inset: 0;
+        background-color: rgba(17, 24, 39, 0.4);
+        z-index: var(--z-overlay);
+        opacity: 0;
+        visibility: hidden;
+        transition:
+          opacity var(--duration-slow) var(--easing-default),
+          visibility var(--duration-slow) var(--easing-default);
+      }
+
+      .drawer-overlay.is-open {
+        opacity: 1;
+        visibility: visible;
+      }
+
+      .drawer {
+        position: fixed;
+        top: 0;
+        right: 0;
+        bottom: 0;
+        width: 480px;
+        max-width: calc(100vw - 48px);
+        background-color: var(--color-white);
+        border-left: 1px solid var(--color-gray-200);
+        z-index: var(--z-modal);
+        display: flex;
+        flex-direction: column;
+        transform: translateX(100%);
+        transition: transform var(--duration-slow) var(--easing-default);
+        will-change: transform;
+      }
+
+      /* Left-anchored variant */
+      .drawer-left {
+        right: auto;
+        left: 0;
+        border-left: none;
+        border-right: 1px solid var(--color-gray-200);
+        transform: translateX(-100%);
+      }
+
+      .drawer.is-open {
+        transform: translateX(0);
+      }
+
+      /* Width variants */
+      .drawer-sm {
+        width: 360px;
+      }
+      .drawer-md {
+        width: 480px;
+      } /* Default */
+      .drawer-lg {
+        width: 640px;
+      }
+      .drawer-xl {
+        width: 800px;
+      }
+
+      .drawer-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--space-4);
+        padding: var(--space-4) var(--space-6);
+        border-bottom: 1px solid var(--color-gray-200);
+        flex-shrink: 0;
+      }
+
+      .drawer-title {
+        font-size: var(--text-md);
+        font-weight: var(--font-weight-semi);
+        color: var(--color-gray-900);
+        line-height: var(--line-height-tight);
+      }
+
+      .drawer-close {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 36px;
+        height: 36px;
+        border: none;
+        border-radius: var(--radius-sm);
+        background: transparent;
+        color: var(--color-gray-500);
+        cursor: pointer;
+        transition:
+          background-color var(--duration-fast) var(--easing-default),
+          color var(--duration-fast) var(--easing-default);
+        flex-shrink: 0;
+      }
+
+      .drawer-close:hover {
+        background-color: var(--color-gray-100);
+        color: var(--color-gray-900);
+      }
+
+      .drawer-close:focus-visible {
+        outline: 2px solid var(--color-accent-700);
+        outline-offset: 2px;
+      }
+
+      .drawer-body {
+        flex: 1;
+        overflow-y: auto;
+        padding: var(--space-6);
+        overscroll-behavior: contain;
+      }
+
+      .drawer-footer {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: var(--space-3);
+        padding: var(--space-4) var(--space-6);
+        border-top: 1px solid var(--color-gray-200);
+        flex-shrink: 0;
+      }
+
+      /* Reduced motion */
+      @media (prefers-reduced-motion: reduce) {
+        .drawer,
+        .drawer-overlay {
+          transition-duration: 0ms;
+        }
+      }
+
+      /* ── Upload Drop Zone ── */
+      .dropzone {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: var(--space-3);
+        padding: var(--space-10) var(--space-6);
+        border: var(--border-width-thick) dashed var(--color-gray-300);
+        border-radius: var(--radius-md);
+        background-color: var(--color-white);
+        cursor: pointer;
+        transition:
+          border-color var(--duration-normal) var(--easing-default),
+          background-color var(--duration-normal) var(--easing-default);
+        text-align: center;
+      }
+
+      .dropzone:hover {
+        border-color: var(--color-gray-400);
+        background-color: var(--color-gray-50);
+      }
+
+      /* Active drag-over state */
+      .dropzone.is-dragover {
+        border-color: var(--color-accent-700);
+        background-color: var(--color-accent-50);
+        border-style: solid;
+      }
+
+      /* Accepted / success flash */
+      .dropzone.is-accepted {
+        border-color: var(--color-success-600);
+        background-color: var(--color-success-100);
+        border-style: solid;
+      }
+
+      /* Rejected / error flash */
+      .dropzone.is-rejected {
+        border-color: var(--color-error-600);
+        background-color: var(--color-error-50);
+        border-style: solid;
+      }
+
+      /* Disabled */
+      .dropzone.is-disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+        pointer-events: none;
+      }
+
+      .dropzone:focus-visible {
+        outline: 2px solid var(--color-accent-700);
+        outline-offset: 2px;
+      }
+
+      .dropzone-icon {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 48px;
+        height: 48px;
+        border-radius: var(--radius-full);
+        background-color: var(--color-gray-100);
+        color: var(--color-gray-500);
+        transition:
+          background-color var(--duration-normal) var(--easing-default),
+          color var(--duration-normal) var(--easing-default);
+      }
+
+      .dropzone.is-dragover .dropzone-icon {
+        background-color: var(--color-accent-100);
+        color: var(--color-accent-700);
+      }
+
+      .dropzone-text {
+        font-size: var(--text-base);
+        color: var(--color-gray-700);
+      }
+
+      .dropzone-text strong {
+        color: var(--color-accent-700);
+        font-weight: var(--font-weight-medium);
+      }
+
+      .dropzone-hint {
+        font-size: var(--text-xs);
+        color: var(--color-gray-400);
+      }
+
+      /* Compact inline variant */
+      .dropzone-compact {
+        flex-direction: row;
+        padding: var(--space-4) var(--space-6);
+        gap: var(--space-4);
+      }
+
+      .dropzone-compact .dropzone-icon {
+        width: 40px;
+        height: 40px;
+      }
+
+      /* File list under dropzone */
+      .dropzone-files {
+        margin-top: var(--space-4);
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-2);
+      }
+
+      .dropzone-file {
+        display: flex;
+        align-items: center;
+        gap: var(--space-3);
+        padding: var(--space-2) var(--space-3);
+        background-color: var(--color-gray-50);
+        border: 1px solid var(--color-gray-200);
+        border-radius: var(--radius-sm);
+        font-size: var(--text-sm);
+      }
+
+      .dropzone-file-name {
+        flex: 1;
+        color: var(--color-gray-700);
+        font-weight: var(--font-weight-medium);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .dropzone-file-size {
+        font-family: var(--font-family-mono);
+        font-size: var(--text-xs);
+        color: var(--color-gray-400);
+        flex-shrink: 0;
+      }
+
+      .dropzone-file-remove {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 24px;
+        height: 24px;
+        border: none;
+        border-radius: var(--radius-sm);
+        background: transparent;
+        color: var(--color-gray-400);
+        cursor: pointer;
+        flex-shrink: 0;
+      }
+
+      .dropzone-file-remove:hover {
+        background-color: var(--color-error-100);
+        color: var(--color-error-700);
+      }
+
+      /* ── Utility Classes ── */
+      .text-mono {
+        font-family: var(--font-family-mono);
+      }
+      .text-muted {
+        color: var(--color-gray-500);
+      }
+      .text-sm {
+        font-size: var(--text-sm);
+      }
+      .text-xs {
+        font-size: var(--text-xs);
+      }
+      .font-medium {
+        font-weight: var(--font-weight-medium);
+      }
+      .sr-only {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="ds-page">
+      <!-- ═══════════════════════════════════════════════════════════
+       HEADER
+       ═══════════════════════════════════════════════════════════ -->
+      <header class="ds-header">
+        <h1>Prompt Pipeline<br />Design System</h1>
+        <p>
+          A functionalist design reference for building clear, data-dense
+          interfaces. Every element justifies its presence by aiding cognition
+          or task completion.
+        </p>
+        <div class="ds-meta">
+          <span>v1.0</span>
+          <span>March 2026</span>
+          <span>Philosophy: Form Follows Data</span>
+        </div>
+      </header>
+
+      <!-- ═══════════════════════════════════════════════════════════
+       0. DESIGN PRINCIPLES
+       ═══════════════════════════════════════════════════════════ -->
+      <section class="ds-section">
+        <h2 class="ds-section-title">0. Design Principles</h2>
+        <p class="ds-section-desc">
+          Non-negotiable rules that govern every design decision in this system.
+        </p>
+
+        <div
+          style="
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: var(--space-6);
+          "
+        >
+          <div>
+            <h3 class="ds-subsection-title">Data-Ink Ratio</h3>
+            <p
+              style="
+                font-size: var(--text-sm);
+                color: var(--color-gray-700);
+                margin-bottom: var(--space-4);
+              "
+            >
+              Every pixel must contribute to understanding. If you can remove an
+              element without losing meaning, remove it. No decorative
+              gradients, blobs, shadows, or textures that don't encode data.
+            </p>
+          </div>
+          <div>
+            <h3 class="ds-subsection-title">Top Tasks First</h3>
+            <p
+              style="
+                font-size: var(--text-sm);
+                color: var(--color-gray-700);
+                margin-bottom: var(--space-4);
+              "
+            >
+              Identify the 5 reasons a user visits any page. Make those actions
+              the primary visual focus. Everything else is secondary or removed.
+            </p>
+          </div>
+          <div>
+            <h3 class="ds-subsection-title">Color Encodes Meaning</h3>
+            <p
+              style="
+                font-size: var(--text-sm);
+                color: var(--color-gray-700);
+                margin-bottom: var(--space-4);
+              "
+            >
+              Color is never decorative. Green = success/done. Red =
+              error/failed. Violet = interactive/link. Gray = neutral/pending.
+              Every color choice must map to a semantic category.
+            </p>
+          </div>
+          <div>
+            <h3 class="ds-subsection-title">Plain Language</h3>
+            <p
+              style="
+                font-size: var(--text-sm);
+                color: var(--color-gray-700);
+                margin-bottom: var(--space-4);
+              "
+            >
+              Omit needless words. No marketing fluff, no intensifiers, no
+              corporate happy talk. Button labels are verb + noun. Error
+              messages explain what happened and how to fix it.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══════════════════════════════════════════════════════════
+       1. COLOR
+       ═══════════════════════════════════════════════════════════ -->
+      <section class="ds-section">
+        <h2 class="ds-section-title">1. Color</h2>
+        <p class="ds-section-desc">
+          Color is functional. It signals status, identifies interactive
+          elements, and creates hierarchy. It is never used for decoration or
+          "vibe."
+        </p>
+
+        <!-- Brand -->
+        <div class="ds-subsection">
+          <h3 class="ds-subsection-title">Brand</h3>
+          <div class="ds-rule">
+            Used for: primary CTA fills, logo, positive confirmations. One
+            primary green button per view.
+          </div>
+          <div class="ds-grid ds-grid-4">
+            <div class="ds-swatch">
+              <div class="ds-swatch-color" style="background: #16a34a"></div>
+              <span class="ds-swatch-name">Brand 600</span>
+              <span class="ds-swatch-hex">#16a34a</span>
+              <span class="ds-swatch-token">--color-brand-600</span>
+            </div>
+            <div class="ds-swatch">
+              <div class="ds-swatch-color" style="background: #22c55e"></div>
+              <span class="ds-swatch-name">Brand 500</span>
+              <span class="ds-swatch-hex">#22c55e</span>
+              <span class="ds-swatch-token">--color-brand-500</span>
+            </div>
+            <div class="ds-swatch">
+              <div class="ds-swatch-color" style="background: #dcfce7"></div>
+              <span class="ds-swatch-name">Brand 100</span>
+              <span class="ds-swatch-hex">#dcfce7</span>
+              <span class="ds-swatch-token">--color-brand-100</span>
+            </div>
+            <div class="ds-swatch">
+              <div class="ds-swatch-color" style="background: #f0fdf4"></div>
+              <span class="ds-swatch-name">Brand 50</span>
+              <span class="ds-swatch-hex">#f0fdf4</span>
+              <span class="ds-swatch-token">--color-brand-50</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Accent -->
+        <div class="ds-subsection">
+          <h3 class="ds-subsection-title">Accent (Interactive)</h3>
+          <div class="ds-rule">
+            Used for: links, clickable titles, active navigation, focus rings.
+            Signals "this is interactive."
+          </div>
+          <div class="ds-grid ds-grid-4">
+            <div class="ds-swatch">
+              <div class="ds-swatch-color" style="background: #6d28d9"></div>
+              <span class="ds-swatch-name">Accent 700</span>
+              <span class="ds-swatch-hex">#6d28d9</span>
+              <span class="ds-swatch-token">--color-accent-700</span>
+            </div>
+            <div class="ds-swatch">
+              <div class="ds-swatch-color" style="background: #7c3aed"></div>
+              <span class="ds-swatch-name">Accent 600</span>
+              <span class="ds-swatch-hex">#7c3aed</span>
+              <span class="ds-swatch-token">--color-accent-600</span>
+            </div>
+            <div class="ds-swatch">
+              <div class="ds-swatch-color" style="background: #ede9fe"></div>
+              <span class="ds-swatch-name">Accent 100</span>
+              <span class="ds-swatch-hex">#ede9fe</span>
+              <span class="ds-swatch-token">--color-accent-100</span>
+            </div>
+            <div class="ds-swatch">
+              <div class="ds-swatch-color" style="background: #f5f3ff"></div>
+              <span class="ds-swatch-name">Accent 50</span>
+              <span class="ds-swatch-hex">#f5f3ff</span>
+              <span class="ds-swatch-token">--color-accent-50</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Semantic -->
+        <div class="ds-subsection">
+          <h3 class="ds-subsection-title">Semantic — Status</h3>
+          <div class="ds-rule">
+            Status always uses color + text together. Never color alone
+            (accessibility). Each status pair: dark shade for text, light shade
+            for background.
+          </div>
+          <div class="ds-grid ds-grid-4">
+            <div class="ds-swatch">
+              <div
+                class="ds-swatch-color"
+                style="
+                  background: #dcfce7;
+                  display: flex;
+                  align-items: center;
+                  justify-content: center;
+                "
+              >
+                <span style="color: #15803d; font-size: 13px; font-weight: 600"
+                  >DONE</span
+                >
+              </div>
+              <span class="ds-swatch-name">Success</span>
+              <span class="ds-swatch-hex">#15803d on #dcfce7</span>
+            </div>
+            <div class="ds-swatch">
+              <div
+                class="ds-swatch-color"
+                style="
+                  background: #fee2e2;
+                  display: flex;
+                  align-items: center;
+                  justify-content: center;
+                "
+              >
+                <span style="color: #b91c1c; font-size: 13px; font-weight: 600"
+                  >FAILED</span
+                >
+              </div>
+              <span class="ds-swatch-name">Error</span>
+              <span class="ds-swatch-hex">#b91c1c on #fee2e2</span>
+            </div>
+            <div class="ds-swatch">
+              <div
+                class="ds-swatch-color"
+                style="
+                  background: #fef9c3;
+                  display: flex;
+                  align-items: center;
+                  justify-content: center;
+                "
+              >
+                <span style="color: #a16207; font-size: 13px; font-weight: 600"
+                  >WARNING</span
+                >
+              </div>
+              <span class="ds-swatch-name">Warning</span>
+              <span class="ds-swatch-hex">#a16207 on #fef9c3</span>
+            </div>
+            <div class="ds-swatch">
+              <div
+                class="ds-swatch-color"
+                style="
+                  background: #f3f4f6;
+                  display: flex;
+                  align-items: center;
+                  justify-content: center;
+                "
+              >
+                <span style="color: #6b7280; font-size: 13px; font-weight: 600"
+                  >PENDING</span
+                >
+              </div>
+              <span class="ds-swatch-name">Neutral</span>
+              <span class="ds-swatch-hex">#6b7280 on #f3f4f6</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Neutrals -->
+        <div class="ds-subsection">
+          <h3 class="ds-subsection-title">Neutral</h3>
+          <div class="ds-rule">
+            The backbone of the interface. Gray 900 for headings, 700 for body,
+            500 for metadata, 300 for borders, 100 for hover, 50 for page
+            backgrounds.
+          </div>
+          <div
+            class="ds-grid ds-grid-6"
+            style="grid-template-columns: repeat(9, 1fr)"
+          >
+            <div class="ds-swatch">
+              <div class="ds-swatch-color" style="background: #111827"></div>
+              <span class="ds-swatch-name">900</span>
+              <span class="ds-swatch-hex">#111827</span>
+            </div>
+            <div class="ds-swatch">
+              <div class="ds-swatch-color" style="background: #374151"></div>
+              <span class="ds-swatch-name">700</span>
+              <span class="ds-swatch-hex">#374151</span>
+            </div>
+            <div class="ds-swatch">
+              <div class="ds-swatch-color" style="background: #6b7280"></div>
+              <span class="ds-swatch-name">500</span>
+              <span class="ds-swatch-hex">#6b7280</span>
+            </div>
+            <div class="ds-swatch">
+              <div class="ds-swatch-color" style="background: #9ca3af"></div>
+              <span class="ds-swatch-name">400</span>
+              <span class="ds-swatch-hex">#9ca3af</span>
+            </div>
+            <div class="ds-swatch">
+              <div class="ds-swatch-color" style="background: #d1d5db"></div>
+              <span class="ds-swatch-name">300</span>
+              <span class="ds-swatch-hex">#d1d5db</span>
+            </div>
+            <div class="ds-swatch">
+              <div class="ds-swatch-color" style="background: #e5e7eb"></div>
+              <span class="ds-swatch-name">200</span>
+              <span class="ds-swatch-hex">#e5e7eb</span>
+            </div>
+            <div class="ds-swatch">
+              <div class="ds-swatch-color" style="background: #f3f4f6"></div>
+              <span class="ds-swatch-name">100</span>
+              <span class="ds-swatch-hex">#f3f4f6</span>
+            </div>
+            <div class="ds-swatch">
+              <div class="ds-swatch-color" style="background: #f9fafb"></div>
+              <span class="ds-swatch-name">50</span>
+              <span class="ds-swatch-hex">#f9fafb</span>
+            </div>
+            <div class="ds-swatch">
+              <div
+                class="ds-swatch-color"
+                style="background: #ffffff; border: 1px solid #e5e7eb"
+              ></div>
+              <span class="ds-swatch-name">White</span>
+              <span class="ds-swatch-hex">#ffffff</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="ds-do-dont">
+          <div class="ds-do">
+            <strong>Do</strong>
+            Use green for DONE/success, red for FAILED/error, violet for
+            interactive elements. Pair dark text with light background for
+            status badges. Maintain WCAG AAA contrast (7:1) for body text.
+          </div>
+          <div class="ds-dont">
+            <strong>Don't</strong>
+            Use color alone to convey status — always pair with text. No mesh
+            gradients, glassmorphism, or decorative color. No low-contrast text.
+            No "SaaS purple gradients on white."
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══════════════════════════════════════════════════════════
+       2. TYPOGRAPHY
+       ═══════════════════════════════════════════════════════════ -->
+      <section class="ds-section">
+        <h2 class="ds-section-title">2. Typography</h2>
+        <p class="ds-section-desc">
+          IBM Plex Sans for UI and prose. IBM Plex Mono for data, IDs, costs,
+          and code. Hierarchy is strict — never improvise new sizes.
+        </p>
+
+        <div class="ds-subsection">
+          <h3 class="ds-subsection-title">Type Scale</h3>
+
+          <div class="ds-type-specimen">
+            <div
+              class="ds-type-sample"
+              style="
+                font-size: var(--text-2xl);
+                font-weight: 700;
+                letter-spacing: -0.01em;
+                line-height: 1.25;
+              "
+            >
+              Page Title — H1
+            </div>
+            <div class="ds-type-meta">
+              <div class="ds-code">--text-2xl · 30px</div>
+              <div class="ds-code">weight: 700 · line-height: 1.25</div>
+            </div>
+          </div>
+
+          <div class="ds-type-specimen">
+            <div
+              class="ds-type-sample"
+              style="
+                font-size: var(--text-xl);
+                font-weight: 600;
+                letter-spacing: -0.01em;
+                line-height: 1.25;
+              "
+            >
+              Section Title — H2
+            </div>
+            <div class="ds-type-meta">
+              <div class="ds-code">--text-xl · 24px</div>
+              <div class="ds-code">weight: 600 · line-height: 1.25</div>
+            </div>
+          </div>
+
+          <div class="ds-type-specimen">
+            <div
+              class="ds-type-sample"
+              style="
+                font-size: var(--text-lg);
+                font-weight: 600;
+                line-height: 1.25;
+              "
+            >
+              Card Title — H3
+            </div>
+            <div class="ds-type-meta">
+              <div class="ds-code">--text-lg · 20px</div>
+              <div class="ds-code">weight: 600 · line-height: 1.25</div>
+            </div>
+          </div>
+
+          <div class="ds-type-specimen">
+            <div
+              class="ds-type-sample"
+              style="font-size: var(--text-md); font-weight: 500"
+            >
+              Subhead / Nav Item
+            </div>
+            <div class="ds-type-meta">
+              <div class="ds-code">--text-md · 16px</div>
+              <div class="ds-code">weight: 500 · line-height: 1.5</div>
+            </div>
+          </div>
+
+          <div class="ds-type-specimen">
+            <div class="ds-type-sample" style="font-size: var(--text-base)">
+              Body text — default for all running copy, table cells, and form
+              labels.
+            </div>
+            <div class="ds-type-meta">
+              <div class="ds-code">--text-base · 14px</div>
+              <div class="ds-code">weight: 400 · line-height: 1.5</div>
+            </div>
+          </div>
+
+          <div class="ds-type-specimen">
+            <div
+              class="ds-type-sample"
+              style="font-size: var(--text-sm); color: var(--color-gray-500)"
+            >
+              Meta text — table headers, helper text, timestamps
+            </div>
+            <div class="ds-type-meta">
+              <div class="ds-code">--text-sm · 13px</div>
+              <div class="ds-code">weight: 400–500 · line-height: 1.5</div>
+            </div>
+          </div>
+
+          <div class="ds-type-specimen">
+            <div
+              class="ds-type-sample"
+              style="font-size: var(--text-xs); color: var(--color-gray-500)"
+            >
+              Fine print — badges, tokens, costs
+            </div>
+            <div class="ds-type-meta">
+              <div class="ds-code">--text-xs · 12px</div>
+              <div class="ds-code">weight: 400–500 · line-height: 1.5</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="ds-subsection">
+          <h3 class="ds-subsection-title">Monospace — Data &amp; Code</h3>
+          <div class="ds-type-specimen">
+            <div
+              class="ds-type-sample"
+              style="
+                font-family: var(--font-family-mono);
+                font-size: var(--text-sm);
+                color: var(--color-gray-500);
+              "
+            >
+              ID: b6zA1nFMUTfY · Cost: $0.1398 · 11.4k tokens
+            </div>
+            <div class="ds-type-meta">
+              <div class="ds-code">--font-family-mono</div>
+              <div class="ds-code">IDs, costs, token counts, code</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="ds-do-dont">
+          <div class="ds-do">
+            <strong>Do</strong>
+            Use tabular numerals for data columns. Use monospace for IDs, costs,
+            and technical metadata. Front-load key words in labels. Keep heading
+            hierarchy strict (never skip levels).
+          </div>
+          <div class="ds-dont">
+            <strong>Don't</strong>
+            Use expressive display fonts. Use ALL CAPS for headers. Use wide
+            letter-spacing on lowercase. Use more than 4 font weights on a page.
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══════════════════════════════════════════════════════════
+       3. SPACING
+       ═══════════════════════════════════════════════════════════ -->
+      <section class="ds-section">
+        <h2 class="ds-section-title">3. Spacing</h2>
+        <p class="ds-section-desc">
+          4px base unit. Spacing communicates structure — tighter spacing groups
+          related items, wider spacing separates sections. Use tokens, never
+          arbitrary values.
+        </p>
+
+        <div class="ds-subsection">
+          <div class="ds-space-bar">
+            <div class="ds-space-visual" style="width: 4px"></div>
+            <div class="ds-space-info">
+              <span class="ds-label" style="min-width: 60px; margin: 0"
+                >4px</span
+              >
+              <span class="ds-code">--space-1</span>
+              <span class="ds-code" style="color: var(--color-gray-400)"
+                >Inline spacing, icon gaps</span
+              >
+            </div>
+          </div>
+          <div class="ds-space-bar">
+            <div class="ds-space-visual" style="width: 8px"></div>
+            <div class="ds-space-info">
+              <span class="ds-label" style="min-width: 60px; margin: 0"
+                >8px</span
+              >
+              <span class="ds-code">--space-2</span>
+              <span class="ds-code" style="color: var(--color-gray-400)"
+                >Tight internal gaps, badge padding</span
+              >
+            </div>
+          </div>
+          <div class="ds-space-bar">
+            <div class="ds-space-visual" style="width: 12px"></div>
+            <div class="ds-space-info">
+              <span class="ds-label" style="min-width: 60px; margin: 0"
+                >12px</span
+              >
+              <span class="ds-code">--space-3</span>
+              <span class="ds-code" style="color: var(--color-gray-400)"
+                >Input padding, table cell padding</span
+              >
+            </div>
+          </div>
+          <div class="ds-space-bar">
+            <div class="ds-space-visual" style="width: 16px"></div>
+            <div class="ds-space-info">
+              <span class="ds-label" style="min-width: 60px; margin: 0"
+                >16px</span
+              >
+              <span class="ds-code">--space-4</span>
+              <span class="ds-code" style="color: var(--color-gray-400)"
+                >Default gap — grid gutter, button padding, between related
+                items</span
+              >
+            </div>
+          </div>
+          <div class="ds-space-bar">
+            <div class="ds-space-visual" style="width: 24px"></div>
+            <div class="ds-space-info">
+              <span class="ds-label" style="min-width: 60px; margin: 0"
+                >24px</span
+              >
+              <span class="ds-code">--space-6</span>
+              <span class="ds-code" style="color: var(--color-gray-400)"
+                >Card padding, page horizontal padding, nav gaps</span
+              >
+            </div>
+          </div>
+          <div class="ds-space-bar">
+            <div class="ds-space-visual" style="width: 32px"></div>
+            <div class="ds-space-info">
+              <span class="ds-label" style="min-width: 60px; margin: 0"
+                >32px</span
+              >
+              <span class="ds-code">--space-8</span>
+              <span class="ds-code" style="color: var(--color-gray-400)"
+                >Section gap within a page region</span
+              >
+            </div>
+          </div>
+          <div class="ds-space-bar">
+            <div class="ds-space-visual" style="width: 48px"></div>
+            <div class="ds-space-info">
+              <span class="ds-label" style="min-width: 60px; margin: 0"
+                >48px</span
+              >
+              <span class="ds-code">--space-12</span>
+              <span class="ds-code" style="color: var(--color-gray-400)"
+                >Major section break</span
+              >
+            </div>
+          </div>
+          <div class="ds-space-bar">
+            <div class="ds-space-visual" style="width: 64px"></div>
+            <div class="ds-space-info">
+              <span class="ds-label" style="min-width: 60px; margin: 0"
+                >64px</span
+              >
+              <span class="ds-code">--space-16</span>
+              <span class="ds-code" style="color: var(--color-gray-400)"
+                >Page-level separation</span
+              >
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══════════════════════════════════════════════════════════
+       4. BUTTONS & ACTIONS
+       ═══════════════════════════════════════════════════════════ -->
+      <section class="ds-section">
+        <h2 class="ds-section-title">4. Buttons &amp; Actions</h2>
+        <p class="ds-section-desc">
+          A button label is a promise. Use Verb + Noun, sentence case, 1–3
+          words. One primary button per view. Destructive actions repeat the
+          object name.
+        </p>
+
+        <div class="ds-subsection">
+          <h3 class="ds-subsection-title">Button Variants</h3>
+          <div
+            class="ds-showcase"
+            style="
+              display: flex;
+              flex-wrap: wrap;
+              align-items: center;
+              gap: var(--space-4);
+            "
+          >
+            <button class="btn btn-primary">Upload Seed</button>
+            <button class="btn btn-secondary">Restart</button>
+            <button class="btn btn-ghost">Rescan</button>
+            <button class="btn btn-destructive">Delete pipeline</button>
+            <button class="btn btn-secondary" disabled>Start</button>
+          </div>
+        </div>
+
+        <div class="ds-subsection">
+          <h3 class="ds-subsection-title">Button Sizes</h3>
+          <div
+            class="ds-showcase"
+            style="display: flex; align-items: center; gap: var(--space-4)"
+          >
+            <button class="btn btn-secondary btn-sm">Start</button>
+            <button class="btn btn-secondary">Restart</button>
+            <button class="btn btn-primary btn-lg">Upload Seed</button>
+          </div>
+          <div
+            style="
+              display: flex;
+              gap: var(--space-8);
+              margin-top: var(--space-4);
+            "
+          >
+            <div>
+              <span class="ds-code">Small: 32px height</span><br />
+              <span class="ds-code" style="color: var(--color-gray-400)"
+                >Dense tables, inline actions</span
+              >
+            </div>
+            <div>
+              <span class="ds-code">Default: 40px height</span><br />
+              <span class="ds-code" style="color: var(--color-gray-400)"
+                >Standard UI actions</span
+              >
+            </div>
+            <div>
+              <span class="ds-code">Large: 44px height</span><br />
+              <span class="ds-code" style="color: var(--color-gray-400)"
+                >Primary CTA, touch targets</span
+              >
+            </div>
+          </div>
+        </div>
+
+        <div class="ds-subsection">
+          <h3 class="ds-subsection-title">Verb Selection Guide</h3>
+          <div class="ds-showcase">
+            <div
+              style="
+                display: grid;
+                grid-template-columns: 100px 1fr;
+                gap: var(--space-2) var(--space-6);
+                font-size: var(--text-sm);
+              "
+            >
+              <span style="font-weight: 600; color: var(--color-gray-900)"
+                >Create</span
+              ><span style="color: var(--color-gray-500)"
+                >New entity from scratch → "Create pipeline"</span
+              >
+              <span style="font-weight: 600; color: var(--color-gray-900)"
+                >Add</span
+              ><span style="color: var(--color-gray-500)"
+                >Attach existing item → "Add step"</span
+              >
+              <span style="font-weight: 600; color: var(--color-gray-900)"
+                >Save</span
+              ><span style="color: var(--color-gray-500)"
+                >Persist edits → "Save changes"</span
+              >
+              <span style="font-weight: 600; color: var(--color-gray-900)"
+                >Upload</span
+              ><span style="color: var(--color-gray-500)"
+                >Send file → "Upload Seed"</span
+              >
+              <span style="font-weight: 600; color: var(--color-gray-900)"
+                >Start</span
+              ><span style="color: var(--color-gray-500)"
+                >Begin a process → "Start"</span
+              >
+              <span style="font-weight: 600; color: var(--color-gray-900)"
+                >Restart</span
+              ><span style="color: var(--color-gray-500)"
+                >Re-run a completed/failed step</span
+              >
+              <span style="font-weight: 600; color: var(--color-gray-900)"
+                >Delete</span
+              ><span style="color: var(--color-gray-500)"
+                >Permanent removal → "Delete pipeline"</span
+              >
+              <span style="font-weight: 600; color: var(--color-gray-900)"
+                >Remove</span
+              ><span style="color: var(--color-gray-500)"
+                >Detach/unlink → "Remove step"</span
+              >
+            </div>
+          </div>
+        </div>
+
+        <div class="ds-do-dont">
+          <div class="ds-do">
+            <strong>Do</strong>
+            "Upload Seed" — verb + noun, clear outcome.<br />
+            "Restart" — single verb when context is obvious.<br />
+            "Delete pipeline" — destructive repeats the object.
+          </div>
+          <div class="ds-dont">
+            <strong>Don't</strong>
+            "OK" "Yes" "Submit" "Click here" "Done" — vague.<br />
+            "Please restart the step" — no politeness in buttons.<br />
+            Two primary (green) buttons in one view.
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══════════════════════════════════════════════════════════
+       5. STATUS BADGES
+       ═══════════════════════════════════════════════════════════ -->
+      <section class="ds-section">
+        <h2 class="ds-section-title">5. Status Badges</h2>
+        <p class="ds-section-desc">
+          Status is always communicated with color + text. Never color alone.
+          Badges appear in pipeline nodes, table rows, and page headers.
+        </p>
+
+        <div
+          class="ds-showcase"
+          style="
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: var(--space-4);
+          "
+        >
+          <span class="badge badge-success">DONE</span>
+          <span class="badge badge-success">DONE 8m 35s</span>
+          <span class="badge badge-error">FAILED</span>
+          <span class="badge badge-error">FAILED (INFERENCE)</span>
+          <span class="badge badge-warning">RUNNING</span>
+          <span class="badge badge-neutral">PENDING</span>
+        </div>
+
+        <div style="margin-top: var(--space-4)">
+          <h3 class="ds-subsection-title">With Status Dot</h3>
+          <div
+            class="ds-showcase"
+            style="
+              display: flex;
+              flex-wrap: wrap;
+              align-items: center;
+              gap: var(--space-4);
+            "
+          >
+            <span class="badge badge-success badge-dot">Connected</span>
+            <span class="badge badge-error badge-dot">Disconnected</span>
+            <span class="badge badge-warning badge-dot">Processing</span>
+            <span class="badge badge-neutral badge-dot">Idle</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══════════════════════════════════════════════════════════
+       6. CARDS
+       ═══════════════════════════════════════════════════════════ -->
+      <section class="ds-section">
+        <h2 class="ds-section-title">6. Cards</h2>
+        <p class="ds-section-desc">
+          Cards are the primary container for pipeline nodes and content groups.
+          Bordered, never shadowed. Titles are violet to signal interactivity.
+        </p>
+
+        <div class="ds-grid ds-grid-3" style="margin-bottom: var(--space-6)">
+          <!-- Normal card -->
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">Experts-in-job</span>
+              <span class="badge badge-success">DONE 8m 35s</span>
+            </div>
+            <div class="card-body">
+              <span class="card-meta">11.4k tokens · $0.0305</span>
+            </div>
+            <div class="card-footer">
+              <button class="btn btn-secondary btn-sm">Restart</button>
+            </div>
+          </div>
+
+          <!-- Pending card -->
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title" style="color: var(--color-gray-700)"
+                >Competency-model-s2</span
+              >
+              <span class="badge badge-neutral">PENDING</span>
+            </div>
+            <div class="card-body"></div>
+            <div class="card-footer">
+              <button class="btn btn-secondary btn-sm">Start</button>
+            </div>
+          </div>
+
+          <!-- Error card -->
+          <div class="card card-error">
+            <div class="card-header">
+              <span class="card-title">Competency-model-s1</span>
+              <span class="badge badge-error">FAILED (INFERENCE)</span>
+            </div>
+            <div
+              class="card-body"
+              style="color: var(--color-error-700); font-size: var(--text-sm)"
+            >
+              fetch failed
+            </div>
+            <div
+              class="card-footer"
+              style="border-color: rgba(185, 28, 28, 0.2)"
+            >
+              <button class="btn btn-secondary btn-sm">Restart</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="ds-do-dont">
+          <div class="ds-do">
+            <strong>Do</strong>
+            1px solid border, 6px radius. 24px padding. Violet title for
+            clickable cards. Monospace for technical metadata. Error cards get
+            red border + red-50 background.
+          </div>
+          <div class="ds-dont">
+            <strong>Don't</strong>
+            Drop shadows on cards (chartjunk). Rounded corners larger than 8px
+            (bento candy). Decorative backgrounds or gradients inside cards.
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══════════════════════════════════════════════════════════
+       7. FORMS
+       ═══════════════════════════════════════════════════════════ -->
+      <section class="ds-section">
+        <h2 class="ds-section-title">7. Forms</h2>
+        <p class="ds-section-desc">
+          Every field is a cost. Single-column layout, max-width 640px,
+          top-aligned labels. Validate on blur. Mark optional fields, not
+          required ones.
+        </p>
+
+        <div class="ds-showcase" style="max-width: 480px">
+          <div class="form-group">
+            <label class="form-label" for="ds-pipeline-name"
+              >Pipeline name</label
+            >
+            <input
+              class="form-input"
+              type="text"
+              id="ds-pipeline-name"
+              value="CMO-competency-v2"
+            />
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="ds-seed-url">Seed URL</label>
+            <input
+              class="form-input"
+              type="url"
+              id="ds-seed-url"
+              placeholder="https://example.com/seed.json"
+            />
+            <div class="form-hint">
+              The URL to your seed configuration file.
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="ds-model"
+              >Model <span class="form-label-optional">(optional)</span></label
+            >
+            <select class="form-input" id="ds-model">
+              <option>claude-sonnet-4-20250514</option>
+              <option>claude-opus-4-20250514</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="ds-desc-err">Description</label>
+            <input
+              class="form-input form-input-error"
+              type="text"
+              id="ds-desc-err"
+              value=""
+            />
+            <div class="form-error">
+              Provide a description for this pipeline.
+            </div>
+          </div>
+
+          <div
+            style="
+              display: flex;
+              gap: var(--space-3);
+              margin-top: var(--space-6);
+            "
+          >
+            <button class="btn btn-primary">Create pipeline</button>
+            <button class="btn btn-ghost">Cancel</button>
+          </div>
+        </div>
+
+        <div class="ds-do-dont" style="margin-top: var(--space-6)">
+          <div class="ds-do">
+            <strong>Do</strong>
+            Input height: 40px. Focus: violet ring (3px). Errors: red border +
+            message below. Labels: always visible, concise nouns, sentence case.
+            One primary action.
+          </div>
+          <div class="ds-dont">
+            <strong>Don't</strong>
+            Placeholders as labels. Multi-column forms (except coupled fields
+            like city/state). Disabled submit to hide errors. Color alone for
+            error states.
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══════════════════════════════════════════════════════════
+       8. TABLES
+       ═══════════════════════════════════════════════════════════ -->
+      <section class="ds-section">
+        <h2 class="ds-section-title">8. Tables</h2>
+        <p class="ds-section-desc">
+          Tables exist to find, compare, or act. Horizontal separators only.
+          Text left, numbers right. Headers always visible. Primary identifier
+          is a link.
+        </p>
+
+        <div class="ds-showcase" style="padding: 0">
+          <div class="table-wrapper" style="border: none">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>Pipeline</th>
+                  <th>Status</th>
+                  <th>Steps</th>
+                  <th class="col-num">Tokens</th>
+                  <th class="col-num">Cost</th>
+                  <th class="col-num">Duration</th>
+                  <th class="col-action"></th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="col-primary">CMO-competency-v2</td>
+                  <td>
+                    <span class="badge badge-error badge-dot">Failed</span>
+                  </td>
+                  <td>4 / 9</td>
+                  <td
+                    class="col-num"
+                    style="font-family: var(--font-family-mono)"
+                  >
+                    28.9k
+                  </td>
+                  <td
+                    class="col-num"
+                    style="font-family: var(--font-family-mono)"
+                  >
+                    $0.1398
+                  </td>
+                  <td
+                    class="col-num"
+                    style="font-family: var(--font-family-mono)"
+                  >
+                    20m 34s
+                  </td>
+                  <td class="col-action">
+                    <button class="btn btn-secondary btn-sm">Rescan</button>
+                  </td>
+                </tr>
+                <tr>
+                  <td class="col-primary">CTO-skills-v1</td>
+                  <td>
+                    <span class="badge badge-success badge-dot">Done</span>
+                  </td>
+                  <td>9 / 9</td>
+                  <td
+                    class="col-num"
+                    style="font-family: var(--font-family-mono)"
+                  >
+                    42.1k
+                  </td>
+                  <td
+                    class="col-num"
+                    style="font-family: var(--font-family-mono)"
+                  >
+                    $0.2847
+                  </td>
+                  <td
+                    class="col-num"
+                    style="font-family: var(--font-family-mono)"
+                  >
+                    34m 12s
+                  </td>
+                  <td class="col-action">
+                    <button class="btn btn-ghost btn-sm">View</button>
+                  </td>
+                </tr>
+                <tr>
+                  <td class="col-primary">PM-levels-v3</td>
+                  <td>
+                    <span class="badge badge-neutral badge-dot">Pending</span>
+                  </td>
+                  <td>0 / 7</td>
+                  <td
+                    class="col-num"
+                    style="font-family: var(--font-family-mono)"
+                  >
+                    —
+                  </td>
+                  <td
+                    class="col-num"
+                    style="font-family: var(--font-family-mono)"
+                  >
+                    —
+                  </td>
+                  <td
+                    class="col-num"
+                    style="font-family: var(--font-family-mono)"
+                  >
+                    —
+                  </td>
+                  <td class="col-action">
+                    <button class="btn btn-secondary btn-sm">Start</button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="ds-do-dont" style="margin-top: var(--space-6)">
+          <div class="ds-do">
+            <strong>Do</strong>
+            Tabular numerals for numbers. Right-align numeric columns. Monospace
+            for IDs, tokens, and costs. Sticky headers. Full-row hover. 1–2
+            inline actions, 3+ in menu.
+          </div>
+          <div class="ds-dont">
+            <strong>Don't</strong>
+            Vertical gridlines. Zebra striping (subtle hover is enough). ALL
+            CAPS headers. Columns you could remove without losing utility.
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══════════════════════════════════════════════════════════
+       9. NAVIGATION
+       ═══════════════════════════════════════════════════════════ -->
+      <section class="ds-section">
+        <h2 class="ds-section-title">9. Navigation</h2>
+        <p class="ds-section-desc">
+          Top navigation bar at 56px height. Breadcrumbs for hierarchy. No
+          hamburger menus on desktop. No mystery-meat navigation.
+        </p>
+
+        <div
+          class="ds-showcase"
+          style="padding: 0; overflow: hidden; border-radius: var(--radius-md)"
+        >
+          <!-- Nav bar -->
+          <nav class="nav-bar" style="position: relative">
+            <a class="nav-logo" href="#">
+              <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+                <rect width="28" height="28" rx="6" fill="#16a34a" />
+                <path
+                  d="M8 14l4 4 8-8"
+                  stroke="#fff"
+                  stroke-width="2.5"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              </svg>
+              Prompt Pipeline
+            </a>
+            <ul class="nav-links">
+              <li>
+                <a class="nav-link nav-link-active" href="#">Pipelines</a>
+              </li>
+              <li><a class="nav-link" href="#">Help</a></li>
+              <li>
+                <button class="btn btn-primary btn-sm">Upload Seed</button>
+              </li>
+            </ul>
+          </nav>
+          <!-- Breadcrumb + meta -->
+          <div
+            style="
+              display: flex;
+              align-items: center;
+              justify-content: space-between;
+              padding: var(--space-3) var(--space-6);
+              border-top: 1px solid var(--color-gray-200);
+            "
+          >
+            <div class="breadcrumb" style="border: none; padding: 0">
+              <a class="breadcrumb-item" href="#">Home</a>
+              <span class="breadcrumb-sep">›</span>
+              <a class="breadcrumb-item" href="#">Jobkit</a>
+              <span class="breadcrumb-sep">›</span>
+              <span class="breadcrumb-item-current">CMO</span>
+            </div>
+            <div class="page-header-meta" style="gap: var(--space-3)">
+              <span>ID: b6zA1nFMUTfY</span>
+              <span>Cost: $0.1398</span>
+              <button class="btn btn-ghost btn-sm">Rescan</button>
+              <span class="badge badge-error">Failed</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══════════════════════════════════════════════════════════
+       10. ALERTS & FEEDBACK
+       ═══════════════════════════════════════════════════════════ -->
+      <section class="ds-section">
+        <h2 class="ds-section-title">10. Alerts &amp; Feedback</h2>
+        <p class="ds-section-desc">
+          Immediate, clear feedback. State changes are instant and binary. Error
+          messages explain what happened and how to fix it.
+        </p>
+
+        <div
+          style="
+            display: flex;
+            flex-direction: column;
+            gap: var(--space-4);
+            max-width: 560px;
+          "
+        >
+          <div class="alert alert-success">
+            Pipeline completed. 9 steps finished in 34m 12s.
+          </div>
+          <div class="alert alert-error">
+            Step "Competency-model-s1" failed: fetch failed. Check the seed URL
+            and restart.
+          </div>
+          <div class="alert alert-warning">
+            3 steps are pending upstream dependencies.
+          </div>
+          <div class="alert alert-info">
+            Pipeline rescanned. No changes detected.
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══════════════════════════════════════════════════════════
+       11. LAYOUT & GRID
+       ═══════════════════════════════════════════════════════════ -->
+      <section class="ds-section">
+        <h2 class="ds-section-title">11. Layout &amp; Grid</h2>
+        <p class="ds-section-desc">
+          Rigorous Swiss-style grid. Whitespace is structural. Max content
+          width: 1360px. Forms max 640px. Negative space separates data and
+          reduces cognitive load.
+        </p>
+
+        <div class="ds-subsection">
+          <h3 class="ds-subsection-title">Key Dimensions</h3>
+          <div class="ds-showcase">
+            <div
+              style="
+                display: grid;
+                grid-template-columns: 200px 1fr;
+                gap: var(--space-2) var(--space-6);
+                font-size: var(--text-sm);
+              "
+            >
+              <span style="font-weight: 600">Content max-width</span
+              ><span class="ds-code">1360px · --content-max-width</span>
+              <span style="font-weight: 600">Form max-width</span
+              ><span class="ds-code">640px · --form-max-width</span>
+              <span style="font-weight: 600">Nav height</span
+              ><span class="ds-code">56px · --nav-height</span>
+              <span style="font-weight: 600">Sidebar width</span
+              ><span class="ds-code">260px · --sidebar-width</span>
+              <span style="font-weight: 600">Input height</span
+              ><span class="ds-code">40px · --input-height</span>
+              <span style="font-weight: 600">Touch target min</span
+              ><span class="ds-code">44px · --target-min (WCAG)</span>
+              <span style="font-weight: 600">Page padding</span
+              ><span class="ds-code">24px · --space-6</span>
+              <span style="font-weight: 600">Grid gutter</span
+              ><span class="ds-code">16px · --space-4</span>
+              <span style="font-weight: 600">Card border-radius</span
+              ><span class="ds-code">6px · --radius-md</span>
+              <span style="font-weight: 600">Button border-radius</span
+              ><span class="ds-code">4px · --radius-sm</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="ds-subsection">
+          <h3 class="ds-subsection-title">Border Radius Scale</h3>
+          <div
+            class="ds-showcase"
+            style="display: flex; align-items: end; gap: var(--space-6)"
+          >
+            <div style="text-align: center">
+              <div
+                style="
+                  width: 48px;
+                  height: 48px;
+                  border: 2px solid var(--color-gray-300);
+                  border-radius: 0;
+                "
+              ></div>
+              <div class="ds-code" style="margin-top: var(--space-2)">
+                0px<br />none
+              </div>
+            </div>
+            <div style="text-align: center">
+              <div
+                style="
+                  width: 48px;
+                  height: 48px;
+                  border: 2px solid var(--color-gray-300);
+                  border-radius: 4px;
+                "
+              ></div>
+              <div class="ds-code" style="margin-top: var(--space-2)">
+                4px<br />sm
+              </div>
+            </div>
+            <div style="text-align: center">
+              <div
+                style="
+                  width: 48px;
+                  height: 48px;
+                  border: 2px solid var(--color-gray-300);
+                  border-radius: 6px;
+                "
+              ></div>
+              <div class="ds-code" style="margin-top: var(--space-2)">
+                6px<br />md
+              </div>
+            </div>
+            <div style="text-align: center">
+              <div
+                style="
+                  width: 48px;
+                  height: 48px;
+                  border: 2px solid var(--color-gray-300);
+                  border-radius: 8px;
+                "
+              ></div>
+              <div class="ds-code" style="margin-top: var(--space-2)">
+                8px<br />lg
+              </div>
+            </div>
+            <div style="text-align: center">
+              <div
+                style="
+                  width: 48px;
+                  height: 48px;
+                  border: 2px solid var(--color-gray-300);
+                  border-radius: 9999px;
+                "
+              ></div>
+              <div class="ds-code" style="margin-top: var(--space-2)">
+                pill<br />full
+              </div>
+            </div>
+          </div>
+          <div class="ds-rule" style="margin-top: var(--space-4)">
+            Max radius for cards and containers: 8px (--radius-lg). Larger radii
+            create the "bento candy" effect we avoid. Pills only for badges and
+            avatars.
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══════════════════════════════════════════════════════════
+       12. SHADOWS & ELEVATION
+       ═══════════════════════════════════════════════════════════ -->
+      <section class="ds-section">
+        <h2 class="ds-section-title">12. Shadows &amp; Elevation</h2>
+        <p class="ds-section-desc">
+          Shadows are minimal and functional — they indicate elevation for
+          overlapping elements (dropdowns, modals), not decoration. Default UI
+          uses borders, not shadows.
+        </p>
+
+        <div
+          class="ds-showcase"
+          style="display: flex; gap: var(--space-8); align-items: center"
+        >
+          <div style="text-align: center">
+            <div
+              style="
+                width: 96px;
+                height: 64px;
+                background: white;
+                border: 1px solid var(--color-gray-200);
+                border-radius: 6px;
+              "
+            ></div>
+            <div class="ds-code" style="margin-top: var(--space-2)">
+              Border only<br /><span style="color: var(--color-success-600)"
+                >Default</span
+              >
+            </div>
+          </div>
+          <div style="text-align: center">
+            <div
+              style="
+                width: 96px;
+                height: 64px;
+                background: white;
+                border-radius: 6px;
+                box-shadow: var(--shadow-sm);
+              "
+            ></div>
+            <div class="ds-code" style="margin-top: var(--space-2)">
+              shadow-sm<br />Hover cards
+            </div>
+          </div>
+          <div style="text-align: center">
+            <div
+              style="
+                width: 96px;
+                height: 64px;
+                background: white;
+                border-radius: 6px;
+                box-shadow: var(--shadow-md);
+              "
+            ></div>
+            <div class="ds-code" style="margin-top: var(--space-2)">
+              shadow-md<br />Dropdowns
+            </div>
+          </div>
+          <div style="text-align: center">
+            <div
+              style="
+                width: 96px;
+                height: 64px;
+                background: white;
+                border-radius: 6px;
+                box-shadow: var(--shadow-lg);
+              "
+            ></div>
+            <div class="ds-code" style="margin-top: var(--space-2)">
+              shadow-lg<br />Modals
+            </div>
+          </div>
+        </div>
+
+        <div class="ds-rule" style="margin-top: var(--space-4)">
+          Cards, tables, inputs — all use borders (--color-gray-300), not
+          shadows. Shadows reserved for floating elements only.
+        </div>
+      </section>
+
+      <!-- ═══════════════════════════════════════════════════════════
+       13. ACCESSIBILITY
+       ═══════════════════════════════════════════════════════════ -->
+      <section class="ds-section">
+        <h2 class="ds-section-title">13. Accessibility</h2>
+        <p class="ds-section-desc">
+          Accessibility is not optional. These are hard requirements, not
+          aspirational guidelines.
+        </p>
+
+        <div class="ds-showcase">
+          <div
+            style="
+              display: grid;
+              grid-template-columns: 1fr 1fr;
+              gap: var(--space-6);
+              font-size: var(--text-sm);
+            "
+          >
+            <div>
+              <h4
+                style="
+                  font-weight: 600;
+                  color: var(--color-gray-900);
+                  margin-bottom: var(--space-2);
+                "
+              >
+                Contrast
+              </h4>
+              <p style="color: var(--color-gray-700)">
+                Body text on white: minimum 4.5:1 (AA). Prefer 7:1 (AAA).
+                Gray-700 (#374151) on white passes AA. Gray-500 (#6b7280) on
+                white passes AA for large text only — use for metadata, not
+                body.
+              </p>
+            </div>
+            <div>
+              <h4
+                style="
+                  font-weight: 600;
+                  color: var(--color-gray-900);
+                  margin-bottom: var(--space-2);
+                "
+              >
+                Keyboard
+              </h4>
+              <p style="color: var(--color-gray-700)">
+                Every interactive element must be operable via keyboard. Visible
+                focus rings (2px solid accent-700, 2px offset). Tab order
+                follows visual order. No keyboard traps.
+              </p>
+            </div>
+            <div>
+              <h4
+                style="
+                  font-weight: 600;
+                  color: var(--color-gray-900);
+                  margin-bottom: var(--space-2);
+                "
+              >
+                Semantic HTML
+              </h4>
+              <p style="color: var(--color-gray-700)">
+                &lt;button&gt; for actions, &lt;a&gt; for navigation. Proper
+                heading hierarchy (never skip h2 → h4). &lt;table&gt; with
+                &lt;thead&gt; for data tables. aria-sort on sortable columns.
+              </p>
+            </div>
+            <div>
+              <h4
+                style="
+                  font-weight: 600;
+                  color: var(--color-gray-900);
+                  margin-bottom: var(--space-2);
+                "
+              >
+                Touch Targets
+              </h4>
+              <p style="color: var(--color-gray-700)">
+                Minimum 44×44px for all interactive elements. Buttons, links,
+                checkboxes — no exceptions. Small buttons (32px visual) must
+                have 44px hit area via padding.
+              </p>
+            </div>
+            <div>
+              <h4
+                style="
+                  font-weight: 600;
+                  color: var(--color-gray-900);
+                  margin-bottom: var(--space-2);
+                "
+              >
+                Status Indicators
+              </h4>
+              <p style="color: var(--color-gray-700)">
+                Never color alone. Every status badge pairs color with text
+                label. Error states pair red border with error message text.
+                Icons include aria-label or sr-only text.
+              </p>
+            </div>
+            <div>
+              <h4
+                style="
+                  font-weight: 600;
+                  color: var(--color-gray-900);
+                  margin-bottom: var(--space-2);
+                "
+              >
+                Forms
+              </h4>
+              <p style="color: var(--color-gray-700)">
+                Every input has a programmatic &lt;label&gt;. Error messages are
+                linked via aria-describedby. Focus first error on submit. Works
+                at 320px viewport width.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══════════════════════════════════════════════════════════
+       14. TRANSITIONS & MOTION
+       ═══════════════════════════════════════════════════════════ -->
+      <section class="ds-section">
+        <h2 class="ds-section-title">14. Motion</h2>
+        <p class="ds-section-desc">
+          Motion is feedback, not decoration. Transitions confirm state changes.
+          No animations for "delight" that slow the user down.
+        </p>
+
+        <div class="ds-showcase">
+          <div
+            style="
+              display: grid;
+              grid-template-columns: 120px 1fr;
+              gap: var(--space-2) var(--space-6);
+              font-size: var(--text-sm);
+            "
+          >
+            <span style="font-weight: 600">Fast (100ms)</span
+            ><span class="ds-code" style="color: var(--color-gray-500)"
+              >Hover color changes, button press, focus ring appearance</span
+            >
+            <span style="font-weight: 600">Normal (150ms)</span
+            ><span class="ds-code" style="color: var(--color-gray-500)"
+              >Border color transitions, input state changes, badge
+              appearance</span
+            >
+            <span style="font-weight: 600">Slow (250ms)</span
+            ><span class="ds-code" style="color: var(--color-gray-500)"
+              >Panel expand/collapse, dropdown open, content reveal</span
+            >
+            <span style="font-weight: 600">Easing</span
+            ><span class="ds-code" style="color: var(--color-gray-500)"
+              >cubic-bezier(0.4, 0, 0.2, 1) — Material standard easing for all
+              transitions</span
+            >
+          </div>
+        </div>
+
+        <div class="ds-do-dont" style="margin-top: var(--space-4)">
+          <div class="ds-do">
+            <strong>Do</strong>
+            Instant state feedback on click. Smooth hover transitions. Respect
+            prefers-reduced-motion.
+          </div>
+          <div class="ds-dont">
+            <strong>Don't</strong>
+            Page transitions. Loading spinners slower than the data fetch.
+            Bounce, elastic, or spring animations. Parallax scrolling.
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══════════════════════════════════════════════════════════
+       15. Z-INDEX
+       ═══════════════════════════════════════════════════════════ -->
+      <section class="ds-section">
+        <h2 class="ds-section-title">15. Z-Index Scale</h2>
+        <p class="ds-section-desc">
+          Fixed scale to prevent z-index wars. Use tokens, not arbitrary
+          numbers.
+        </p>
+
+        <div class="ds-showcase">
+          <div
+            style="
+              display: grid;
+              grid-template-columns: 80px 120px 1fr;
+              gap: var(--space-2) var(--space-4);
+              font-size: var(--text-sm);
+              font-family: var(--font-family-mono);
+            "
+          >
+            <span>100</span
+            ><span
+              style="font-family: var(--font-family-sans); font-weight: 500"
+              >Dropdown</span
+            ><span
+              style="
+                color: var(--color-gray-500);
+                font-family: var(--font-family-sans);
+              "
+              >Menus, selects, popovers</span
+            >
+            <span>200</span
+            ><span
+              style="font-family: var(--font-family-sans); font-weight: 500"
+              >Sticky</span
+            ><span
+              style="
+                color: var(--color-gray-500);
+                font-family: var(--font-family-sans);
+              "
+              >Sticky nav, sticky table headers</span
+            >
+            <span>300</span
+            ><span
+              style="font-family: var(--font-family-sans); font-weight: 500"
+              >Overlay</span
+            ><span
+              style="
+                color: var(--color-gray-500);
+                font-family: var(--font-family-sans);
+              "
+              >Backdrop behind modals/drawers</span
+            >
+            <span>400</span
+            ><span
+              style="font-family: var(--font-family-sans); font-weight: 500"
+              >Modal</span
+            ><span
+              style="
+                color: var(--color-gray-500);
+                font-family: var(--font-family-sans);
+              "
+              >Modal dialogs, drawers</span
+            >
+            <span>500</span
+            ><span
+              style="font-family: var(--font-family-sans); font-weight: 500"
+              >Toast</span
+            ><span
+              style="
+                color: var(--color-gray-500);
+                font-family: var(--font-family-sans);
+              "
+              >Notification toasts — always on top</span
+            >
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══════════════════════════════════════════════════════════
+       16. EMPTY STATES
+       ═══════════════════════════════════════════════════════════ -->
+      <section class="ds-section">
+        <h2 class="ds-section-title">16. Empty States</h2>
+        <p class="ds-section-desc">
+          Every view has an empty state. It tells the user what goes here and
+          gives them one action to fix it.
+        </p>
+
+        <div class="ds-showcase">
+          <div class="empty-state">
+            <div class="empty-state-title">No pipelines yet</div>
+            <p style="margin-bottom: var(--space-4)">
+              Upload a seed file to create your first pipeline.
+            </p>
+            <button class="btn btn-primary">Upload Seed</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══════════════════════════════════════════════════════════
+       17. COPYWRITING QUICK REFERENCE
+       ═══════════════════════════════════════════════════════════ -->
+      <section class="ds-section">
+        <h2 class="ds-section-title">17. Copywriting Rules</h2>
+        <p class="ds-section-desc">
+          Text should be invisible so the message shines through. Objective,
+          helpful, precise — like a technical manual written by a human.
+        </p>
+
+        <div class="ds-showcase">
+          <div
+            style="
+              font-size: var(--text-sm);
+              display: grid;
+              grid-template-columns: 1fr 1fr;
+              gap: var(--space-4);
+            "
+          >
+            <div>
+              <strong
+                style="
+                  color: var(--color-success-700);
+                  display: block;
+                  margin-bottom: var(--space-2);
+                "
+                >Write this</strong
+              >
+              <p style="margin-bottom: var(--space-2)">
+                "Pipeline failed at step 4."
+              </p>
+              <p style="margin-bottom: var(--space-2)">
+                "Call volume is high."
+              </p>
+              <p style="margin-bottom: var(--space-2)">
+                "3 steps complete. 6 remaining."
+              </p>
+              <p>"To start, upload a seed file."</p>
+            </div>
+            <div>
+              <strong
+                style="
+                  color: var(--color-error-700);
+                  display: block;
+                  margin-bottom: var(--space-2);
+                "
+                >Not this</strong
+              >
+              <p style="margin-bottom: var(--space-2)">
+                "Oops! Something went wrong."
+              </p>
+              <p style="margin-bottom: var(--space-2)">
+                "We're experiencing high call volumes."
+              </p>
+              <p style="margin-bottom: var(--space-2)">
+                "Your pipeline is making great progress!"
+              </p>
+              <p>"Welcome! In order to begin the process of..."</p>
+            </div>
+          </div>
+        </div>
+
+        <div
+          style="
+            margin-top: var(--space-4);
+            font-size: var(--text-sm);
+            color: var(--color-gray-700);
+          "
+        >
+          <p style="margin-bottom: var(--space-2)">
+            <strong>Omit needless words.</strong> "In order to" → "To."
+            "Currently experiencing" → cut it.
+          </p>
+          <p style="margin-bottom: var(--space-2)">
+            <strong>Active voice.</strong> "The system saves the file" not "The
+            file is saved by the system."
+          </p>
+          <p style="margin-bottom: var(--space-2)">
+            <strong>No intensifiers.</strong> Ban: very, really, absolutely,
+            cutting-edge, revolutionary, game-changing.
+          </p>
+          <p>
+            <strong>Front-load.</strong> Key word first in every label, heading,
+            and sentence.
+          </p>
+        </div>
+      </section>
+
+      <!-- ═══════════════════════════════════════════════════════════
+       18. SIDEBAR DRAWERS
+       ═══════════════════════════════════════════════════════════ -->
+      <section class="ds-section">
+        <h2 class="ds-section-title">18. Sidebar Drawers</h2>
+        <p class="ds-section-desc">
+          Drawers slide in from the right (or left) to show detail views, edit
+          forms, and secondary workflows without losing page context. They
+          animate at 250ms with a scrim overlay.
+        </p>
+
+        <div class="ds-subsection">
+          <h3 class="ds-subsection-title">Anatomy</h3>
+          <div
+            class="ds-showcase"
+            style="
+              position: relative;
+              min-height: 400px;
+              overflow: hidden;
+              padding: 0;
+            "
+          >
+            <!-- Simulated page behind -->
+            <div style="padding: var(--space-6); opacity: 0.4">
+              <div
+                style="
+                  height: 20px;
+                  width: 200px;
+                  background: var(--color-gray-200);
+                  border-radius: 4px;
+                  margin-bottom: var(--space-4);
+                "
+              ></div>
+              <div
+                style="
+                  height: 14px;
+                  width: 320px;
+                  background: var(--color-gray-100);
+                  border-radius: 3px;
+                  margin-bottom: var(--space-3);
+                "
+              ></div>
+              <div
+                style="
+                  height: 14px;
+                  width: 280px;
+                  background: var(--color-gray-100);
+                  border-radius: 3px;
+                  margin-bottom: var(--space-3);
+                "
+              ></div>
+              <div
+                style="
+                  height: 14px;
+                  width: 300px;
+                  background: var(--color-gray-100);
+                  border-radius: 3px;
+                "
+              ></div>
+            </div>
+            <!-- Scrim -->
+            <div
+              style="
+                position: absolute;
+                inset: 0;
+                background-color: rgba(17, 24, 39, 0.4);
+                border-radius: var(--radius-md);
+              "
+            ></div>
+            <!-- Drawer panel -->
+            <div
+              style="
+                position: absolute;
+                top: 0;
+                right: 0;
+                bottom: 0;
+                width: 340px;
+                background: var(--color-white);
+                border-left: 1px solid var(--color-gray-200);
+                display: flex;
+                flex-direction: column;
+                border-radius: 0 var(--radius-md) var(--radius-md) 0;
+              "
+            >
+              <!-- Header -->
+              <div
+                style="
+                  display: flex;
+                  align-items: center;
+                  justify-content: space-between;
+                  padding: var(--space-4) var(--space-6);
+                  border-bottom: 1px solid var(--color-gray-200);
+                "
+              >
+                <span
+                  style="
+                    font-size: var(--text-md);
+                    font-weight: 600;
+                    color: var(--color-gray-900);
+                  "
+                  >Step detail</span
+                >
+                <button class="drawer-close" aria-label="Close drawer">
+                  <svg
+                    width="18"
+                    height="18"
+                    viewBox="0 0 18 18"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                  >
+                    <line x1="4" y1="4" x2="14" y2="14" />
+                    <line x1="14" y1="4" x2="4" y2="14" />
+                  </svg>
+                </button>
+              </div>
+              <!-- Body -->
+              <div style="flex: 1; padding: var(--space-6); overflow-y: auto">
+                <div class="form-group">
+                  <label class="form-label">Step name</label>
+                  <input
+                    class="form-input"
+                    type="text"
+                    value="Experts-in-job"
+                    readonly
+                    style="background: var(--color-gray-50)"
+                  />
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Status</label>
+                  <div>
+                    <span class="badge badge-success badge-dot"
+                      >Done · 8m 35s</span
+                    >
+                  </div>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Output</label>
+                  <div
+                    style="
+                      font-family: var(--font-family-mono);
+                      font-size: var(--text-sm);
+                      color: var(--color-gray-500);
+                    "
+                  >
+                    11.4k tokens · $0.0305
+                  </div>
+                </div>
+              </div>
+              <!-- Footer -->
+              <div
+                style="
+                  display: flex;
+                  align-items: center;
+                  justify-content: flex-end;
+                  gap: var(--space-3);
+                  padding: var(--space-4) var(--space-6);
+                  border-top: 1px solid var(--color-gray-200);
+                "
+              >
+                <button class="btn btn-ghost btn-sm">Close</button>
+                <button class="btn btn-secondary btn-sm">Restart</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="ds-subsection">
+          <h3 class="ds-subsection-title">Width Variants</h3>
+          <div class="ds-showcase">
+            <div
+              style="
+                display: grid;
+                grid-template-columns: 80px 1fr;
+                gap: var(--space-2) var(--space-6);
+                font-size: var(--text-sm);
+              "
+            >
+              <span style="font-weight: 600">Small</span
+              ><span class="ds-code"
+                >360px · .drawer-sm — Quick look, read-only detail,
+                confirmations</span
+              >
+              <span style="font-weight: 600">Medium</span
+              ><span class="ds-code"
+                >480px · .drawer-md — Edit forms, step detail
+                <span style="color: var(--color-success-600)"
+                  >(default)</span
+                ></span
+              >
+              <span style="font-weight: 600">Large</span
+              ><span class="ds-code"
+                >640px · .drawer-lg — Complex forms, seed file editors, config
+                panels</span
+              >
+              <span style="font-weight: 600">XL</span
+              ><span class="ds-code"
+                >800px · .drawer-xl — Side-by-side comparisons, wide data
+                views</span
+              >
+              <span style="font-weight: 600">Max</span
+              ><span class="ds-code"
+                >calc(100vw − 48px) — Never covers the full viewport; 48px peek
+                maintains context</span
+              >
+            </div>
+          </div>
+        </div>
+
+        <div class="ds-subsection">
+          <h3 class="ds-subsection-title">Animation Spec</h3>
+          <div class="ds-showcase">
+            <div
+              style="
+                display: grid;
+                grid-template-columns: 160px 1fr;
+                gap: var(--space-2) var(--space-6);
+                font-size: var(--text-sm);
+              "
+            >
+              <span style="font-weight: 600">Slide transform</span
+              ><span class="ds-code"
+                >translateX(100%) → translateX(0) · 250ms · cubic-bezier(0.4, 0,
+                0.2, 1)</span
+              >
+              <span style="font-weight: 600">Overlay fade</span
+              ><span class="ds-code"
+                >opacity 0 → 1 · 250ms · same easing · rgba(17,24,39, 0.4)</span
+              >
+              <span style="font-weight: 600">Left variant</span
+              ><span class="ds-code"
+                >translateX(−100%) → translateX(0) · same timing</span
+              >
+              <span style="font-weight: 600">Close animation</span
+              ><span class="ds-code"
+                >Reverse of open · same duration and easing</span
+              >
+              <span style="font-weight: 600">Reduced motion</span
+              ><span class="ds-code"
+                >@media (prefers-reduced-motion: reduce) → 0ms, instant
+                appear/disappear</span
+              >
+              <span style="font-weight: 600">GPU hint</span
+              ><span class="ds-code"
+                >will-change: transform on .drawer — removed after transition
+                ends</span
+              >
+            </div>
+          </div>
+        </div>
+
+        <div class="ds-subsection">
+          <h3 class="ds-subsection-title">Structure Rules</h3>
+          <div class="ds-showcase">
+            <div
+              style="
+                display: grid;
+                grid-template-columns: 160px 1fr;
+                gap: var(--space-2) var(--space-6);
+                font-size: var(--text-sm);
+              "
+            >
+              <span style="font-weight: 600">Header</span
+              ><span
+                >Fixed. Title (16px semi) + close button (36×36px). 1px bottom
+                border. Padding: 16px 24px.</span
+              >
+              <span style="font-weight: 600">Body</span
+              ><span
+                >Scrollable (overflow-y: auto, overscroll-behavior: contain).
+                Padding: 24px. Contains forms, detail fields, or content.</span
+              >
+              <span style="font-weight: 600">Footer</span
+              ><span
+                >Fixed. Right-aligned actions. 1px top border. Padding: 16px
+                24px. Primary action rightmost. One primary max.</span
+              >
+              <span style="font-weight: 600">Overlay</span
+              ><span
+                >Click-to-close scrim. z-index: 300 (overlay). Drawer panel at
+                z-index: 400 (modal).</span
+              >
+              <span style="font-weight: 600">Close triggers</span
+              ><span
+                >Close button, overlay click, Escape key. All three are
+                required.</span
+              >
+            </div>
+          </div>
+        </div>
+
+        <div class="ds-do-dont">
+          <div class="ds-do">
+            <strong>Do</strong>
+            Trap focus inside the open drawer (first tab → close button, last
+            tab → wraps). Return focus to the triggering element on close.
+            Scroll body independently from the page. Use aria-modal="true" and
+            role="dialog" with aria-labelledby pointing to the title.
+          </div>
+          <div class="ds-dont">
+            <strong>Don't</strong>
+            Stack drawers (open a drawer from a drawer). Use drawer for
+            confirmations — use a modal dialog instead. Allow page scroll behind
+            the overlay. Animate with bounce/elastic/spring easing. Skip the
+            scrim — context dimming is required.
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══════════════════════════════════════════════════════════
+       19. UPLOAD DROP ZONES
+       ═══════════════════════════════════════════════════════════ -->
+      <section class="ds-section">
+        <h2 class="ds-section-title">19. Upload Drop Zones</h2>
+        <p class="ds-section-desc">
+          Drop zones handle seed file uploads and document imports. They
+          communicate state through border style and background color — dashed
+          for idle, solid for active drag.
+        </p>
+
+        <div class="ds-subsection">
+          <h3 class="ds-subsection-title">States</h3>
+
+          <!-- Default state -->
+          <div style="margin-bottom: var(--space-4)">
+            <div class="ds-label" style="margin-bottom: var(--space-2)">
+              Default — idle
+            </div>
+            <div class="dropzone" style="cursor: default">
+              <div class="dropzone-icon">
+                <svg
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                  <polyline points="17 8 12 3 7 8" />
+                  <line x1="12" y1="3" x2="12" y2="15" />
+                </svg>
+              </div>
+              <div class="dropzone-text">
+                <strong>Drop file here</strong> or click to browse
+              </div>
+              <div class="dropzone-hint">
+                JSON or YAML seed files up to 10 MB
+              </div>
+            </div>
+          </div>
+
+          <!-- Drag-over state -->
+          <div style="margin-bottom: var(--space-4)">
+            <div class="ds-label" style="margin-bottom: var(--space-2)">
+              Drag-over — file hovering
+            </div>
+            <div class="dropzone is-dragover" style="cursor: default">
+              <div
+                class="dropzone-icon"
+                style="
+                  background-color: var(--color-accent-100);
+                  color: var(--color-accent-700);
+                "
+              >
+                <svg
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                  <polyline points="17 8 12 3 7 8" />
+                  <line x1="12" y1="3" x2="12" y2="15" />
+                </svg>
+              </div>
+              <div class="dropzone-text">
+                <strong>Release to upload</strong>
+              </div>
+              <div class="dropzone-hint">
+                JSON or YAML seed files up to 10 MB
+              </div>
+            </div>
+          </div>
+
+          <!-- Accepted -->
+          <div style="margin-bottom: var(--space-4)">
+            <div class="ds-label" style="margin-bottom: var(--space-2)">
+              Accepted — valid file dropped
+            </div>
+            <div class="dropzone is-accepted" style="cursor: default">
+              <div
+                class="dropzone-icon"
+                style="
+                  background-color: var(--color-success-100);
+                  color: var(--color-success-600);
+                "
+              >
+                <svg
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+              </div>
+              <div
+                class="dropzone-text"
+                style="color: var(--color-success-700)"
+              >
+                <strong>File accepted</strong>
+              </div>
+            </div>
+          </div>
+
+          <!-- Rejected -->
+          <div style="margin-bottom: var(--space-4)">
+            <div class="ds-label" style="margin-bottom: var(--space-2)">
+              Rejected — invalid file type or too large
+            </div>
+            <div class="dropzone is-rejected" style="cursor: default">
+              <div
+                class="dropzone-icon"
+                style="
+                  background-color: var(--color-error-100);
+                  color: var(--color-error-600);
+                "
+              >
+                <svg
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </div>
+              <div class="dropzone-text" style="color: var(--color-error-700)">
+                <strong>Invalid file type.</strong> Upload JSON or YAML only.
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="ds-subsection">
+          <h3 class="ds-subsection-title">Compact Variant</h3>
+          <div class="ds-rule">
+            Use inline/compact drop zones when the upload is a secondary action
+            within a form or drawer, not the primary page task.
+          </div>
+          <div
+            class="dropzone dropzone-compact"
+            style="max-width: 480px; cursor: default"
+          >
+            <div class="dropzone-icon" style="width: 40px; height: 40px">
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="17 8 12 3 7 8" />
+                <line x1="12" y1="3" x2="12" y2="15" />
+              </svg>
+            </div>
+            <div>
+              <div class="dropzone-text">
+                <strong>Upload seed file</strong> or drag here
+              </div>
+              <div class="dropzone-hint">JSON, YAML · 10 MB max</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="ds-subsection">
+          <h3 class="ds-subsection-title">File List (after upload)</h3>
+          <div class="ds-rule">
+            Show accepted files in a compact list below the drop zone. Each row
+            shows name, size in monospace, and a remove button.
+          </div>
+          <div style="max-width: 480px">
+            <div class="dropzone-files">
+              <div class="dropzone-file">
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="var(--color-gray-400)"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  style="flex-shrink: 0"
+                >
+                  <path
+                    d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"
+                  />
+                  <polyline points="14 2 14 8 20 8" />
+                </svg>
+                <span class="dropzone-file-name">cmo-seed-v2.json</span>
+                <span class="dropzone-file-size">24.3 KB</span>
+                <button class="dropzone-file-remove" aria-label="Remove file">
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 18 18"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                  >
+                    <line x1="4" y1="4" x2="14" y2="14" />
+                    <line x1="14" y1="4" x2="4" y2="14" />
+                  </svg>
+                </button>
+              </div>
+              <div class="dropzone-file">
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="var(--color-gray-400)"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  style="flex-shrink: 0"
+                >
+                  <path
+                    d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"
+                  />
+                  <polyline points="14 2 14 8 20 8" />
+                </svg>
+                <span class="dropzone-file-name">role-context.yaml</span>
+                <span class="dropzone-file-size">8.1 KB</span>
+                <button class="dropzone-file-remove" aria-label="Remove file">
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 18 18"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                  >
+                    <line x1="4" y1="4" x2="14" y2="14" />
+                    <line x1="14" y1="4" x2="4" y2="14" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="ds-subsection">
+          <h3 class="ds-subsection-title">Visual Spec</h3>
+          <div class="ds-showcase">
+            <div
+              style="
+                display: grid;
+                grid-template-columns: 160px 1fr;
+                gap: var(--space-2) var(--space-6);
+                font-size: var(--text-sm);
+              "
+            >
+              <span style="font-weight: 600">Border</span
+              ><span
+                >2px dashed gray-300. On drag-over: 2px solid accent-700. On
+                accept: 2px solid success-600. On reject: 2px solid
+                error-600.</span
+              >
+              <span style="font-weight: 600">Border radius</span
+              ><span>6px (--radius-md) — same as cards.</span>
+              <span style="font-weight: 600">Padding</span
+              ><span
+                >Full: 40px vertical, 24px horizontal. Compact: 16px vertical,
+                24px horizontal.</span
+              >
+              <span style="font-weight: 600">Icon container</span
+              ><span
+                >48px circle (full) or 40px circle (compact). Gray-100
+                background, gray-500 icon. On drag: accent-100 bg, accent-700
+                icon.</span
+              >
+              <span style="font-weight: 600">Text</span
+              ><span
+                >Primary: 14px medium gray-700 with accent-700 for the "browse"
+                link. Hint: 12px gray-400 for constraints (type, size).</span
+              >
+              <span style="font-weight: 600">Transition</span
+              ><span
+                >border-color + background-color: 150ms ease
+                (--duration-normal). Instant style change on dragenter, reverts
+                on dragleave.</span
+              >
+              <span style="font-weight: 600">Clickable</span
+              ><span
+                >Entire zone is a click target. Opens native file picker.
+                cursor: pointer. Focus ring: 2px accent-700, 2px offset.</span
+              >
+              <span style="font-weight: 600">File row</span
+              ><span
+                >40px height implicit. 8px gap between rows. File icon + name
+                (truncate with ellipsis) + monospace size + remove (×)
+                button.</span
+              >
+            </div>
+          </div>
+        </div>
+
+        <div class="ds-do-dont">
+          <div class="ds-do">
+            <strong>Do</strong>
+            State file type constraints and max size in the hint text. Show
+            accepted files in a list with remove action. Use the full-size zone
+            when upload is the page's primary action (e.g. the "Upload Seed"
+            flow). Use compact zone inside drawers and forms. Flash the
+            accepted/rejected state for 1.5s then return to idle.
+          </div>
+          <div class="ds-dont">
+            <strong>Don't</strong>
+            Use drag-and-drop as the only upload method — always provide a click
+            fallback. Hide file type constraints until after rejection. Use
+            animated upload progress bars for files under 1 MB (they upload
+            instantly). Use illustrations or mascots in the drop zone — icon +
+            text is sufficient.
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══════════════════════════════════════════════════════════
+       FOOTER — CHECKLIST
+       ═══════════════════════════════════════════════════════════ -->
+      <section class="ds-section" style="margin-bottom: 0">
+        <h2 class="ds-section-title">Pre-Launch Checklist</h2>
+        <p class="ds-section-desc">
+          Run this scan on every page before shipping.
+        </p>
+
+        <div class="ds-showcase">
+          <div
+            style="
+              font-size: var(--text-sm);
+              color: var(--color-gray-700);
+              line-height: 2;
+            "
+          >
+            <div>
+              ☐ <strong>Grid visible?</strong> — Alignment is obvious without
+              turning on guides.
+            </div>
+            <div>
+              ☐ <strong>Data-ink ratio high?</strong> — Can I erase this element
+              without losing meaning?
+            </div>
+            <div>
+              ☐ <strong>Color functional?</strong> — Does every color encode
+              status, category, or interaction?
+            </div>
+            <div>
+              ☐ <strong>Text skimmable?</strong> — Headers, short paragraphs,
+              front-loaded keywords?
+            </div>
+            <div>
+              ☐ <strong>Adjectives deleted?</strong> — Is the language plain and
+              direct?
+            </div>
+            <div>
+              ☐ <strong>One primary CTA?</strong> — Only one green/primary
+              button per view?
+            </div>
+            <div>
+              ☐ <strong>Buttons start with verb?</strong> — Verb + noun, outcome
+              predictable?
+            </div>
+            <div>
+              ☐ <strong>Accessible?</strong> — Contrast ≥ 4.5:1, keyboard
+              operable, semantic HTML, 44px targets?
+            </div>
+            <div>
+              ☐ <strong>Empty state exists?</strong> — Every view has a
+              zero-data state with a CTA?
+            </div>
+            <div>
+              ☐ <strong>Error states exist?</strong> — Errors explain what + how
+              to fix, not just "something went wrong"?
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </body>
+</html>

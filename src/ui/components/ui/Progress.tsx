@@ -1,11 +1,11 @@
 import type { ProgressVariant } from "../types";
 
 const variantClasses: Record<ProgressVariant, string> = {
-  default: "bg-blue-600",
-  running: "bg-blue-600",
+  default: "bg-brand-600",
+  running: "bg-brand-600",
   error: "bg-red-600",
-  completed: "bg-green-600",
-  pending: "bg-slate-400",
+  completed: "bg-brand-600",
+  pending: "bg-gray-400",
 };
 
 export function Progress({
@@ -21,7 +21,7 @@ export function Progress({
 
   return (
     <div
-      className={["h-2 w-full overflow-hidden rounded bg-slate-200", className].join(" ")}
+      className={["h-2 w-full overflow-hidden rounded-sm bg-gray-200", className].join(" ")}
     >
       <div
         className={["h-full transition-all duration-300", variantClasses[variant]].join(" ")}

@@ -27,7 +27,7 @@ export function CopyableCode({ children, className = "" }: CopyableCodeProps) {
         className="rounded p-0.5 opacity-0 transition-opacity group-hover:opacity-100 hover:bg-gray-100"
         aria-label={copied ? "Copied" : "Copy code"}
       >
-        {copied ? <Check className="h-3 w-3 text-green-600" /> : <Copy className="h-3 w-3 text-gray-500" />}
+        {copied ? <Check className="h-3 w-3 text-brand-600" /> : <Copy className="h-3 w-3 text-gray-500" />}
       </button>
     </span>
   );
@@ -53,7 +53,7 @@ export function CopyableCodeBlock({
   return (
     <div className={["relative group", className].join(" ")}>
       <pre
-        className="overflow-auto rounded-lg border border-gray-200 bg-gray-50 p-4 font-mono text-sm leading-relaxed"
+        className="overflow-auto rounded-md border border-gray-200 bg-gray-50 p-4 font-mono text-sm leading-relaxed"
         style={{
           maxHeight,
           fontSize: size,
@@ -65,13 +65,13 @@ export function CopyableCodeBlock({
         size="sm"
         variant="ghost"
         onClick={handleCopy}
-        className="absolute right-2 top-2 h-8 border border-gray-200 bg-slate-50/90 px-2 hover:bg-slate-100"
+        className="absolute right-2 top-2 h-8 border border-gray-200 bg-gray-50/90 px-2 hover:bg-gray-100"
         aria-label={copied ? "Copied" : "Copy code"}
       >
         {copied ? (
           <>
-            <Check className="mr-1 h-3.5 w-3.5 text-green-600" />
-            <span className="text-xs text-green-600">Copied</span>
+            <Check className="mr-1 h-3.5 w-3.5 text-brand-600" />
+            <span className="text-xs text-brand-600">Copied</span>
           </>
         ) : (
           <>

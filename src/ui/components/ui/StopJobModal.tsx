@@ -43,7 +43,7 @@ export function StopJobModal({
               onChange={(event) => setSelectedJobId(event.target.value)}
               disabled={isSubmitting}
               aria-label="Running jobs"
-              className="rounded-md border px-3 py-2"
+              className="rounded-sm border border-gray-300 px-3 h-10"
             >
               {runningJobs.map((job) => (
                 <option key={job.id} value={job.id}>
@@ -53,7 +53,7 @@ export function StopJobModal({
             </select>
           </label>
         ) : (
-          <p className="text-sm text-slate-700">
+          <p className="text-sm text-gray-700">
             Stop {runningJobs[0]?.name ?? "the selected job"}.
           </p>
         )}

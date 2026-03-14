@@ -14,10 +14,10 @@ export const StageTimeline = memo(function StageTimeline({ stages }: { stages: S
     });
 
   return (
-    <ol role="list" aria-label="Task execution stages" className="relative ml-1 space-y-4 border-l border-slate-300">
+    <ol role="list" aria-label="Task execution stages" className="relative ml-1 space-y-4 border-l border-gray-300">
       {sortedStages.map((stage) => (
         <li key={stage.name} className="relative flex items-center gap-3 pl-4">
-          <div className="absolute left-[-5px] h-2 w-2 rounded-full bg-blue-500" />
+          <div className="absolute left-[-5px] h-2 w-2 rounded-full bg-[#6d28d9]" />
           <span className="text-sm">{stage.name}</span>
           {stage.isAsync ? (
             <Badge intent="amber" className="ml-auto">

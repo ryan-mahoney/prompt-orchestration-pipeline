@@ -10,13 +10,13 @@ const ToastContext = createContext<ToastContextValue | null>(null);
 function toastClasses(type: ToastType): string {
   switch (type) {
     case "success":
-      return "border-green-200 bg-green-50 text-green-800";
+      return "bg-green-100 border-l-green-600 text-green-700";
     case "error":
-      return "border-red-200 bg-red-50 text-red-800";
+      return "bg-red-100 border-l-red-600 text-red-700";
     case "warning":
-      return "border-yellow-200 bg-yellow-50 text-yellow-800";
+      return "bg-yellow-100 border-l-yellow-600 text-yellow-700";
     default:
-      return "border-blue-200 bg-blue-50 text-blue-800";
+      return "bg-blue-100 border-l-blue-700 text-blue-700";
   }
 }
 
@@ -49,13 +49,13 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <ToastContext.Provider value={value}>
       {children}
-      <div className="fixed right-4 top-4 z-[2100] space-y-2">
+      <div className="fixed right-4 top-4 z-[500] space-y-2">
         {toasts.map((toast) => (
           <div
             key={toast.id}
             role="alert"
             aria-live="polite"
-            className={["max-w-sm rounded-lg border p-4 shadow-lg", toastClasses(toast.type)].join(" ")}
+            className={["max-w-sm rounded-sm border-l-[3px] p-4 shadow-sm", toastClasses(toast.type)].join(" ")}
           >
             <div className="flex items-start gap-3">
               <span className="flex-1 text-sm font-medium">{toast.message}</span>

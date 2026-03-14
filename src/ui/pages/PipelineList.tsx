@@ -46,26 +46,26 @@ export default function PipelineList() {
         </PageSubheader>
       }
     >
-      {loading ? <div className="rounded-xl border border-slate-200 bg-white p-4 text-slate-500">Loading pipeline types...</div> : null}
-      {error ? <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-red-800">{error}</div> : null}
+      {loading ? <div className="rounded-md border border-gray-200 bg-white p-4 text-gray-500">Loading pipeline types...</div> : null}
+      {error ? <div className="rounded-md border border-red-200 bg-red-50 p-4 text-red-800">{error}</div> : null}
       {!loading && !error ? (
-        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-          <table className="min-w-full divide-y divide-slate-200">
-            <thead className="bg-slate-50 text-left text-xs uppercase tracking-[0.18em] text-slate-500">
+        <div className="overflow-hidden rounded-md border border-gray-200 bg-white">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50 text-left text-sm font-medium text-gray-500">
               <tr>
                 <th className="px-4 py-3">Pipeline Name</th>
                 <th className="px-4 py-3">Description</th>
                 <th className="px-4 py-3">Tasks</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-gray-200">
               {pipelines.map((pipeline) => (
                 <tr key={pipeline.slug}>
-                  <td className="px-4 py-4 font-medium text-slate-900">
-                    <a href={`/pipelines/${pipeline.slug}`}>{pipeline.name}</a>
+                  <td className="px-4 py-4 font-medium text-[#6d28d9]">
+                    <a href={`/pipelines/${pipeline.slug}`} className="hover:underline">{pipeline.name}</a>
                   </td>
-                  <td className="px-4 py-4 text-sm text-slate-700">{pipeline.description || "—"}</td>
-                  <td className="px-4 py-4 text-sm text-slate-500">{pipeline.tasks?.length ?? 0}</td>
+                  <td className="px-4 py-4 text-sm text-gray-700">{pipeline.description || "—"}</td>
+                  <td className="px-4 py-4 text-sm text-gray-500">{pipeline.tasks?.length ?? 0}</td>
                 </tr>
               ))}
             </tbody>

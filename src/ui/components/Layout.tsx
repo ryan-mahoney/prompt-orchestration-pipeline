@@ -4,6 +4,7 @@ import { Upload } from "lucide-react";
 
 import type { LayoutProps } from "./types";
 import UploadSeed from "./UploadSeed";
+import { WelcomeModal } from "./onboarding";
 import { Logo } from "./ui/Logo";
 import { Button } from "./ui/Button";
 
@@ -33,14 +34,22 @@ export default function Layout({
 
   return (
     <div className="min-h-screen bg-gray-1">
-      <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/90 backdrop-blur">
-        <div className={["mx-auto flex items-center justify-between gap-6 px-4 py-4 sm:px-6 lg:px-8", maxWidth].join(" ")}>
+      <WelcomeModal />
+      <header className="sticky top-0 z-20 border-b h-18 border-gray-200 bg-white">
+        <div
+          className={[
+            "mx-auto flex items-center justify-between gap-6 px-4 py-4 sm:px-6 lg:px-8",
+            maxWidth,
+          ].join(" ")}
+        >
           <div className="flex items-center gap-5">
             <Link to="/" className="flex items-center gap-3">
               <div className="h-10 w-10">
                 <Logo />
               </div>
-              <div className="text-sm font-semibold leading-tight">Prompt Pipeline</div>
+              <div className="text-md font-bold text-gray-900">
+                Prompt Pipeline
+              </div>
             </Link>
             <nav className="hidden md:block" aria-label="Main navigation">
               <ul className="flex items-center gap-2">
@@ -48,7 +57,7 @@ export default function Layout({
                   <li key={item.href}>
                     <Link
                       to={item.href}
-                      className={`rounded-full px-3 py-2 text-sm ${location.pathname.startsWith(item.href) ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"}`}
+                      className={`px-3 py-2 text-sm ${location.pathname.startsWith(item.href) ? "text-[#6d28d9] font-medium" : "text-gray-500 hover:text-gray-900"}`}
                     >
                       {item.label}
                     </Link>
@@ -59,7 +68,10 @@ export default function Layout({
           </div>
           <div className="flex items-center gap-3">
             {actions}
-            <Button type="button" onClick={() => setUploadOpen((value) => !value)}>
+            <Button
+              type="button"
+              onClick={() => setUploadOpen((value) => !value)}
+            >
               <Upload className="mr-2 h-4 w-4" />
               Upload Seed
             </Button>
@@ -68,9 +80,18 @@ export default function Layout({
       </header>
 
       {uploadOpen ? (
-        <div className="border-b bg-blue-50">
-          <div className={["mx-auto space-y-3 px-4 py-4 sm:px-6 lg:px-8", maxWidth].join(" ")}>
-            {successJob ? <div className="rounded-md border border-green-200 bg-green-50 p-3 text-sm text-green-800">Job {successJob} created successfully</div> : null}
+        <div className="border-b bg-[#f5f3ff]">
+          <div
+            className={[
+              "mx-auto space-y-3 px-4 py-4 sm:px-6 lg:px-8",
+              maxWidth,
+            ].join(" ")}
+          >
+            {successJob ? (
+              <div className="rounded-sm border-l-[3px] border-l-green-600 bg-green-100 p-3 text-sm text-green-700">
+                Job {successJob} created successfully
+              </div>
+            ) : null}
             <UploadSeed
               onUploadSuccess={({ jobName }) => {
                 if (timerRef.current !== null) clearTimeout(timerRef.current);
@@ -84,11 +105,16 @@ export default function Layout({
 
       {subheader}
 
-      <main className={["mx-auto w-full px-4 py-8 sm:px-6 lg:px-8", maxWidth].join(" ")}>
+      <main
+        className={["mx-auto w-full px-4 py-8 sm:px-6 lg:px-8", maxWidth].join(
+          " ",
+        )}
+      >
         <div className="mb-8 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Operator View</p>
-            <h1 className="text-3xl font-semibold tracking-tight">{pageTitle ?? breadcrumbs?.at(-1)?.label ?? "Prompt Pipeline"}</h1>
+            <h1 className="text-2xl font-bold text-gray-900 tracking-[-0.01em]">
+              {pageTitle ?? breadcrumbs?.at(-1)?.label ?? "Prompt Pipeline"}
+            </h1>
           </div>
         </div>
         {children}

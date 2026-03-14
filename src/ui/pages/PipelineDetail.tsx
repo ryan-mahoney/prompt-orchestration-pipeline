@@ -12,6 +12,7 @@ import StopJobModal from "../components/ui/StopJobModal";
 import { statusBadge } from "../../utils/ui";
 import { formatCurrency4, formatTokensCompact } from "../../utils/formatters";
 import type { JobDetail as JobDetailType } from "../components/types";
+import { HintBanner } from "../components/onboarding";
 
 export default function PipelineDetail() {
   const { jobId } = useParams<{ jobId: string }>();
@@ -20,7 +21,7 @@ export default function PipelineDetail() {
   const [isStopping, setIsStopping] = useState(false);
 
   if (!jobId) {
-    return <Layout pageTitle="Pipeline Details"><div className="rounded-xl border border-red-200 bg-red-50 p-4 text-red-800">No job ID provided</div></Layout>;
+    return <Layout pageTitle="Pipeline Details"><div className="rounded-sm border-l-[3px] border-l-red-600 bg-red-100 p-4 text-red-700">No job ID provided</div></Layout>;
   }
 
   const { data: job, loading, error } = useJobDetailWithUpdates(jobId);
@@ -44,14 +45,14 @@ export default function PipelineDetail() {
               <Tooltip.Provider delayDuration={100}>
                 <Tooltip.Root>
                   <Tooltip.Trigger asChild>
-                    <button type="button" className="cursor-help border-b border-dotted border-slate-400 text-sm text-slate-600">
+                    <button type="button" className="cursor-help border-b border-dotted border-gray-400 text-sm text-gray-500">
                       Cost: {formatCurrency4(totalCost)}
                     </button>
                   </Tooltip.Trigger>
                   <Tooltip.Portal>
-                    <Tooltip.Content className="rounded bg-slate-900 px-2 py-1 text-xs text-white" sideOffset={5}>
+                    <Tooltip.Content className="rounded-md bg-gray-900 px-3 py-3 text-sm text-white max-w-[260px]" sideOffset={5}>
                       {formatTokensCompact(totalTokens)}
-                      <Tooltip.Arrow className="fill-slate-900" />
+                      <Tooltip.Arrow className="fill-gray-900" />
                     </Tooltip.Content>
                   </Tooltip.Portal>
                 </Tooltip.Root>
@@ -70,9 +71,10 @@ export default function PipelineDetail() {
         </PageSubheader>
       }
     >
-      {loading && !job ? <div className="rounded-2xl border border-slate-200 bg-white p-10 text-center text-slate-500">Loading job details...</div> : null}
-      {error ? <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-red-800">{error}</div> : null}
-      {!loading && !error && !job ? <div className="rounded-xl border border-slate-200 bg-white p-4 text-slate-700">Job not found</div> : null}
+      <HintBanner storageKey="pipeline-detail-hint" title="Steps run left to right." variant="info">Each step waits for its upstream dependencies to finish. Click any step card to see its output.</HintBanner>
+      {loading && !job ? <div className="rounded-md border border-gray-200 bg-white p-10 text-center text-gray-500">Loading job details...</div> : null}
+      {error ? <div className="rounded-sm border-l-[3px] border-l-red-600 bg-red-100 p-4 text-red-700">{error}</div> : null}
+      {!loading && !error && !job ? <div className="rounded-xl border border-gray-200 bg-white p-4 text-gray-700">Job not found</div> : null}
       {job ? <JobDetail job={job as unknown as JobDetailType} pipeline={{ name: job.pipelineLabel ?? job.pipeline ?? "", slug: job.pipeline ?? "", description: "", tasks: (
         Array.isArray(job.pipelineConfig?.tasks)
           ? (job.pipelineConfig.tasks as unknown[]).map((t) => typeof t === "string" ? t : ((t as Record<string, string>).name ?? "")).filter(Boolean)

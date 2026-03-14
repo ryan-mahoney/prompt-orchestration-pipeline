@@ -79,11 +79,11 @@ export default function PipelineTypeDetail() {
         </PageSubheader>
       }
     >
-      {loading ? <div className="rounded-xl border border-slate-200 bg-white p-4 text-slate-500">Loading pipeline details...</div> : null}
-      {error ? <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-red-800">{error}</div> : null}
+      {loading ? <div className="rounded-md border border-gray-200 bg-white p-4 text-gray-500">Loading pipeline details...</div> : null}
+      {error ? <div className="rounded-md border border-red-200 bg-red-50 p-4 text-red-800">{error}</div> : null}
       {pipeline ? (
         <div className="space-y-6">
-          {pipeline.description ? <p className="text-sm leading-6 text-slate-600">{pipeline.description}</p> : null}
+          {pipeline.description ? <p className="text-sm leading-6 text-gray-600">{pipeline.description}</p> : null}
           <PipelineDAGGrid items={items} pipelineSlug={pipeline.slug} />
         </div>
       ) : null}

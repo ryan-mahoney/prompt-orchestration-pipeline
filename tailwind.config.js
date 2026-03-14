@@ -3,8 +3,19 @@ export default {
   theme: {
     extend: {
       colors: {
-        brand: "#0b5cff",
-        // Steel Terminal semantic colors - mapping to CSS variables
+        brand: {
+          50: "#f0fdf4",
+          100: "#dcfce7",
+          500: "#22c55e",
+          600: "#16a34a",
+        },
+        "ds-accent": {
+          50: "#f5f3ff",
+          100: "#ede9fe",
+          600: "#7c3aed",
+          700: "#6d28d9",
+        },
+        // Semantic colors - mapping to CSS variables
         background: "hsl(var(--background))",
         foreground: "hsl(var(--foreground))",
         card: "hsl(var(--card))",
@@ -35,9 +46,23 @@ export default {
         "info-foreground": "hsl(var(--info-foreground))",
       },
       borderRadius: {
-        lg: "var(--radius)",
-        md: "calc(var(--radius) - 2px)",
-        sm: "calc(var(--radius) - 4px)",
+        none: "0",
+        sm: "0.25rem",
+        md: "0.375rem",
+        lg: "0.5rem",
+        full: "9999px",
+      },
+      fontSize: {
+        xs: ["0.75rem", { lineHeight: "1.25" }],
+        sm: ["0.8125rem", { lineHeight: "1.5" }],
+        base: ["0.875rem", { lineHeight: "1.5" }],
+        md: ["1rem", { lineHeight: "1.5" }],
+        lg: ["1.25rem", { lineHeight: "1.25" }],
+        xl: ["1.5rem", { lineHeight: "1.25" }],
+        "2xl": ["1.875rem", { lineHeight: "1.25" }],
+      },
+      fontFamily: {
+        mono: ['"IBM Plex Mono"', '"SFMono-Regular"', 'Consolas', 'monospace'],
       },
     },
   },

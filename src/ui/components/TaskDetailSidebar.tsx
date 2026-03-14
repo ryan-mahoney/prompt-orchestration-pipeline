@@ -34,10 +34,10 @@ export const TaskDetailSidebar = memo(function TaskDetailSidebar({
   const files = filesByTypeForItem[activeType] ?? [];
 
   return (
-    <Sidebar open={open} onOpenChange={(nextOpen) => !nextOpen && onClose()} title={`${title} · ${status}`}>
+    <Sidebar open={open} onOpenChange={(nextOpen) => !nextOpen && onClose()} title={`${title} · ${status}`} contentClassName="w-[900px]">
       <div className="space-y-6 p-6">
         {taskError?.message || taskBody ? (
-          <div className="rounded-lg border border-red-200 bg-red-50 p-4">
+          <div className="rounded-sm border-l-[3px] border-l-red-600 bg-red-100 p-4">
             <p className="text-sm text-red-800">{taskError?.message ?? taskBody}</p>
             {taskError?.stack ? (
               <button type="button" className="mt-2 text-sm underline" onClick={() => setShowStack((value) => !value)}>
@@ -52,7 +52,7 @@ export const TaskDetailSidebar = memo(function TaskDetailSidebar({
             <button
               key={type}
               type="button"
-              className={["rounded px-3 py-2 text-sm", activeType === type ? "bg-slate-900 text-white" : "bg-slate-100"].join(" ")}
+              className={["px-3 py-2 text-sm", activeType === type ? "text-[#6d28d9] font-medium border-b-2 border-[#6d28d9]" : "text-gray-500"].join(" ")}
               onClick={() => {
                 setActiveType(type);
                 setActiveFile(null);
@@ -71,7 +71,7 @@ export const TaskDetailSidebar = memo(function TaskDetailSidebar({
                 </button>
               </li>
             ))}
-            {files.length === 0 ? <li className="text-sm text-slate-500">No files</li> : null}
+            {files.length === 0 ? <li className="text-sm text-gray-500">No files</li> : null}
           </ul>
           {activeFile ? (
             <TaskFilePane
@@ -84,10 +84,10 @@ export const TaskDetailSidebar = memo(function TaskDetailSidebar({
               inline
             />
           ) : (
-            <div className="rounded-lg border border-dashed p-4 text-sm text-slate-500">Select a file to preview.</div>
+            <div className="rounded-md border-2 border-dashed border-gray-300 p-4 text-sm text-gray-500">Select a file to preview.</div>
           )}
         </div>
-        {task.artifacts?.length ? <div className="text-xs text-slate-500">Artifacts: {task.artifacts.join(", ")}</div> : null}
+        {task.artifacts?.length ? <div className="text-xs text-gray-500">Artifacts: {task.artifacts.join(", ")}</div> : null}
       </div>
     </Sidebar>
   );
