@@ -8,6 +8,9 @@ on:
 permissions:
   contents: write
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 jobs:
   build-binaries:
     name: Build ${{ matrix.asset_name }}
@@ -19,7 +22,7 @@ jobs:
           - os: ubuntu-latest
             asset_name: pipeline-orchestrator-linux-x64
             binary_path: dist/pipeline-orchestrator-linux-x64
-          - os: macos-13
+          - os: macos-15-intel
             asset_name: pipeline-orchestrator-macos-x64
             binary_path: dist/pipeline-orchestrator-macos-x64
           - os: macos-14
@@ -31,7 +34,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -45,7 +48,7 @@ jobs:
         run: bun run build:bin --outfile=${{ matrix.binary_path }}
 
       - name: Upload build artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.asset_name }}
           path: ${{ matrix.binary_path }}
@@ -58,7 +61,7 @@ jobs:
 
     steps:
       - name: Download artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: release-assets
           merge-multiple: true
