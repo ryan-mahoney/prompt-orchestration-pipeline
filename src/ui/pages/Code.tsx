@@ -163,7 +163,7 @@ const LLM_ARGS_CODE = `{
   seed?: number,               // For reproducibility
   provider?: string,           // Override default provider
   model?: string,              // Override default model
-  maxRetries?: number          // Auto-retry on failure
+  maxRetries?: number,         // Auto-retry on failure
   thinking?: "enabled"|"disabled", // Moonshot & Alibaba only (default: "enabled")
 }`;
 
