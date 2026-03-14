@@ -15,11 +15,6 @@ type RestartJobModalProps = {
 
 const TASK_MODES = [
   {
-    id: "pipeline",
-    label: "Restart entire pipeline",
-    value: { singleTask: false } satisfies RestartConfirmation,
-  },
-  {
     id: "continue",
     label: "Re-run task and continue",
     value: { singleTask: true, continueAfter: true } satisfies RestartConfirmation,
@@ -28,6 +23,11 @@ const TASK_MODES = [
     id: "isolation",
     label: "Re-run task in isolation",
     value: { singleTask: true } satisfies RestartConfirmation,
+  },
+  {
+    id: "pipeline",
+    label: "Restart entire pipeline",
+    value: { singleTask: false } satisfies RestartConfirmation,
   },
 ] as const;
 
@@ -39,7 +39,7 @@ export function RestartJobModal({
   taskId,
   isSubmitting = false,
 }: RestartJobModalProps) {
-  const [modeId, setModeId] = useState<(typeof TASK_MODES)[number]["id"]>("pipeline");
+  const [modeId, setModeId] = useState<(typeof TASK_MODES)[number]["id"]>("continue");
   const selectedMode = TASK_MODES.find((mode) => mode.id === modeId) ?? TASK_MODES[0];
 
   return (

@@ -514,10 +514,12 @@ describe("LLM Gateway", () => {
 
     it("dispatches to alibaba adapter without unknown-provider error", async () => {
       // Verify the callAdapter dispatch path resolves for provider "alibaba".
-      // The call will fail (no real API key), but NOT with "Unknown provider".
-      await expect(
-        chat({ provider: "alibaba", messages: baseMessages }),
-      ).rejects.not.toThrow(/unknown provider/i);
+      // The call may resolve or reject (no real API key), but NOT with "Unknown provider".
+      try {
+        await chat({ provider: "alibaba", messages: baseMessages });
+      } catch (err: unknown) {
+        expect(String(err)).not.toMatch(/unknown provider/i);
+      }
     });
   });
 
