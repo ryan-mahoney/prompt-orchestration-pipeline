@@ -134,6 +134,15 @@ describe("normalizeError", () => {
     expect(result.code).toBe("INTERNAL");
   });
 
+  test("synthesizes stack when an Error has an empty stack", () => {
+    const err = Object.assign(new Error("The operation timed out."), { name: "TimeoutError" });
+    err.stack = "";
+    const result = normalizeError(err);
+    expect(typeof result.stack).toBe("string");
+    expect(result.stack?.length).toBeGreaterThan(0);
+    expect(result.stack).toContain("TimeoutError: The operation timed out.");
+  });
+
   test("normalizes a non-string, non-object, non-Error value", () => {
     const result = normalizeError(42);
     expect(result.message).toBe("42");
@@ -459,6 +468,9 @@ describe("runPipeline", () => {
     expect(failure.error.debug.stage).toBe("ingestion");
     expect(failure.error.debug.previousStage).toBe("seed");
     expect(Array.isArray(failure.error.debug.flagsKeys)).toBe(true);
+    const failedLog = failure.logs.find((entry) => entry.stage === "ingestion" && "ok" in entry && entry.ok === false);
+    expect(failedLog).toBeDefined();
+    expect((failedLog as { error?: { message?: string } }).error?.message).toBe("ingestion-boom");
   });
 
   test("handler returning { flags: [] } produces { ok: false } (invalid result shape)", async () => {

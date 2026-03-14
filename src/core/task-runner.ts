@@ -258,7 +258,16 @@ export function normalizeError(err: unknown): Omit<NormalizedError, "debug"> {
   if (err instanceof Error) {
     const e = err as Error & { status?: unknown; code?: unknown; error?: unknown };
     const result: Omit<NormalizedError, "debug"> = { name: e.name, message: e.message };
-    if (e.stack !== undefined) result.stack = e.stack;
+    if (typeof e.stack === "string" && e.stack.trim().length > 0) {
+      result.stack = e.stack;
+    } else {
+      // Some runtime errors (e.g., TimeoutError/DOMException) may carry an empty stack.
+      // Synthesize one so downstream logs and UIs retain a traceback.
+      const synthesized = new Error(`${e.name}: ${e.message}`).stack;
+      if (typeof synthesized === "string" && synthesized.trim().length > 0) {
+        result.stack = synthesized;
+      }
+    }
     if (e.status !== undefined) result.status = e.status;
     if (e.code !== undefined) result.code = e.code;
     if (e.error !== undefined) {
@@ -740,7 +749,7 @@ export async function runPipeline(
         },
       };
 
-      const errorEntry: AuditLogEntry = { stage: stageName, ok: false, ms: 0, error: err };
+      const errorEntry: AuditLogEntry = { stage: stageName, ok: false, ms: 0, error: normalized };
       context.logs.push(errorEntry);
       returnedLogs.push(errorEntry);
 
