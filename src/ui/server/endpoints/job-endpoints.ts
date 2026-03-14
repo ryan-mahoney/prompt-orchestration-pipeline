@@ -7,6 +7,15 @@ import { readMultipleJobs, readJob } from "../job-reader";
 import { listAllJobs } from "../job-scanner";
 import { sendJson } from "../utils/http-utils";
 
+async function loadPipelineJson(slug: string): Promise<Record<string, unknown> | null> {
+  try {
+    const cfg = getPipelineConfig(slug);
+    return JSON.parse(await Bun.file(cfg.pipelineJsonPath).text()) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
 export async function handleJobList(): Promise<Response> {
   const listed = await listAllJobs();
   const [current, complete] = await Promise.all([
@@ -15,21 +24,13 @@ export async function handleJobList(): Promise<Response> {
   ]);
   const jobs = aggregateAndSortJobs(transformMultipleJobs(current), transformMultipleJobs(complete));
 
-  const configCache = new Map<string, Record<string, unknown> | null>();
+  const slugs = [...new Set(jobs.filter((j) => j.pipeline && !j.pipelineConfig).map((j) => j.pipeline!))];
+  const configs = await Promise.all(slugs.map(loadPipelineJson));
+  const configMap = new Map(slugs.map((s, i) => [s, configs[i]]));
+
   for (const job of jobs) {
     if (!job.pipeline || job.pipelineConfig) continue;
-    if (!configCache.has(job.pipeline)) {
-      try {
-        const cfg = getPipelineConfig(job.pipeline);
-        configCache.set(
-          job.pipeline,
-          JSON.parse(await Bun.file(cfg.pipelineJsonPath).text()),
-        );
-      } catch {
-        configCache.set(job.pipeline, null);
-      }
-    }
-    const cached = configCache.get(job.pipeline);
+    const cached = configMap.get(job.pipeline);
     if (cached) job.pipelineConfig = cached;
   }
 
@@ -53,10 +54,7 @@ export async function handleJobDetail(jobId: string): Promise<Response> {
   }
 
   if (job.pipeline) {
-    try {
-      const config = getPipelineConfig(job.pipeline);
-      job.pipelineConfig = JSON.parse(await Bun.file(config.pipelineJsonPath).text()) as Record<string, unknown>;
-    } catch {}
+    job.pipelineConfig = await loadPipelineJson(job.pipeline) ?? undefined;
   }
 
   const [apiJob] = transformJobListForAPI([job], { includePipelineMetadata: true });
