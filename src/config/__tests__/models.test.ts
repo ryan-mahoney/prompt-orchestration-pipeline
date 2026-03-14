@@ -15,7 +15,7 @@ import {
 } from "../models";
 import type { ModelConfigEntry } from "../models";
 
-const MODEL_COUNT = 42;
+const MODEL_COUNT = 41;
 const PROVIDER_COUNT = 8;
 
 describe("ModelAlias", () => {
@@ -180,6 +180,15 @@ describe("getModelConfig", () => {
   it("returns null for unknown aliases", () => {
     expect(getModelConfig("nonexistent:model")).toBeNull();
     expect(getModelConfig("invalid")).toBeNull();
+  });
+
+  it("returns null for removed aliases", () => {
+    expect(getModelConfig("openai:gpt-4")).toBeNull();
+    expect(getModelConfig("deepseek:r1")).toBeNull();
+    expect(getModelConfig("moonshot:kimi-moonshot-v1-128k")).toBeNull();
+    expect(getModelConfig("gemini:flash-3")).toBeNull();
+    expect(getModelConfig("gemini:pro-3")).toBeNull();
+    expect(getModelConfig("zai:glm-4-plus")).toBeNull();
   });
 });
 
