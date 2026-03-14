@@ -408,7 +408,7 @@ describe("LLM Gateway", () => {
 
       expect(llm["claudecode"]).toBe(llm["claude-code"]);
       expect(typeof llm["claudecode"]?.["sonnet"]).toBe("function");
-      expect(typeof llm["zai"]?.["glm4Plus"]).toBe("function");
+      expect(typeof llm["zai"]?.["glm5"]).toBe("function");
       expect(llm["zhipu"]).toBe(llm["zai"]);
       expect(llm["xai"]).toBeUndefined();
     });

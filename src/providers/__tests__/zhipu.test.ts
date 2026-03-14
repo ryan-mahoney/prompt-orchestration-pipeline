@@ -97,7 +97,7 @@ describe("zhipuChat", () => {
     expect(headers["Authorization"]).toBe("Bearer test-key");
 
     const body = JSON.parse(init.body as string);
-    expect(body.model).toBe("glm-4-plus");
+    expect(body.model).toBe("glm-5");
     expect(body.temperature).toBe(0.7);
     expect(body.max_tokens).toBe(8192);
     expect(body.messages).toBeDefined();
@@ -311,7 +311,7 @@ describe("zhipuChat", () => {
       expect(err).toBeInstanceOf(ProviderJsonParseError);
       const parseErr = err as ProviderJsonParseError;
       expect(parseErr.provider).toBe("zai");
-      expect(parseErr.model).toBe("glm-4-plus");
+      expect(parseErr.model).toBe("glm-5");
       expect(parseErr.sample).toBeTruthy();
     }
   });
