@@ -135,6 +135,26 @@ describe("isRetryableError", () => {
   it("returns false for plain Error without status or code", () => {
     expect(isRetryableError(new Error("generic"))).toBe(false);
   });
+
+  it("returns true for TypeError with 'fetch failed' message", () => {
+    expect(isRetryableError(new TypeError("fetch failed"))).toBe(true);
+  });
+
+  it("returns true when cause has a retryable error code", () => {
+    const err = new TypeError("unknown error", {
+      cause: Object.assign(new Error("connection refused"), {
+        code: "ECONNREFUSED",
+      }),
+    });
+    expect(isRetryableError(err)).toBe(true);
+  });
+
+  it("returns false when both error and cause are non-retryable", () => {
+    const err = new TypeError("unknown error", {
+      cause: new Error("something else"),
+    });
+    expect(isRetryableError(err)).toBe(false);
+  });
 });
 
 describe("sleep", () => {

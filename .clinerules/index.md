@@ -13,6 +13,7 @@ Use these rules to generate **Conventional Commits** and high-signal PRs, and to
 - **Commit validation:** [`validation.md`](./validation.md)
 - **Helper commands:** [`commands.md`](./commands.md)
 - **FAQ:** [`faq.md`](./faq.md)
+- **Skills:** [`skills.md`](./skills.md)
 - **Task prompt template (for Cline):** [`templates/task-prompt.md`](./templates/task-prompt.md)
 
 ## How to use this
