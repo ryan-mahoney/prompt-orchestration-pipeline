@@ -1,4 +1,4 @@
-import { mkdir, rename } from "node:fs/promises";
+import { mkdir, rename, unlink } from "node:fs/promises";
 import path from "node:path";
 
 import { createErrorResponse } from "../config-bridge";
@@ -6,7 +6,7 @@ import { Constants } from "../config-bridge-node";
 import { readJob } from "../job-reader";
 import { sendJson } from "../utils/http-utils";
 import { getJobDirectoryPath } from "../../../config/paths";
-import { readJobStatus, resetJobToCleanSlate, resetSingleTask } from "../../../core/status-writer";
+import { readJobStatus, resetJobToCleanSlate, resetSingleTask, writeJobStatus } from "../../../core/status-writer";
 
 const RUNNER_PATH = path.resolve(import.meta.dir, "../../../core/pipeline-runner.ts");
 
@@ -34,6 +34,54 @@ async function spawnDetached(args: string[], env?: Record<string, string | undef
     detached: true,
   });
   proc.unref();
+}
+
+async function readRunnerPid(jobDir: string): Promise<number | null> {
+  try {
+    const content = await Bun.file(path.join(jobDir, "runner.pid")).text();
+    const pid = parseInt(content.trim(), 10);
+    return Number.isNaN(pid) ? null : pid;
+  } catch {
+    return null;
+  }
+}
+
+async function killProcess(pid: number): Promise<{ killed: boolean; signal: string | null }> {
+  try {
+    process.kill(pid, 15); // SIGTERM
+  } catch (err: unknown) {
+    if ((err as NodeJS.ErrnoException).code === "ESRCH") {
+      return { killed: false, signal: null };
+    }
+    throw err;
+  }
+
+  await new Promise((resolve) => setTimeout(resolve, 1500));
+
+  try {
+    process.kill(pid, 0); // existence check
+  } catch {
+    return { killed: true, signal: "SIGTERM" };
+  }
+
+  try {
+    process.kill(pid, 9); // SIGKILL
+  } catch (err: unknown) {
+    if ((err as NodeJS.ErrnoException).code === "ESRCH") {
+      return { killed: true, signal: "SIGTERM" };
+    }
+    throw err;
+  }
+
+  return { killed: true, signal: "SIGKILL" };
+}
+
+async function cleanupRunnerPid(jobDir: string): Promise<void> {
+  try {
+    await unlink(path.join(jobDir, "runner.pid"));
+  } catch (err: unknown) {
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+  }
 }
 
 export async function resolveJobLifecycle(dataDir: string, jobId: string): Promise<string | null> {
@@ -168,7 +216,63 @@ export async function handleJobStop(
     if (!lifecycle) {
       return sendJson(404, createErrorResponse(Constants.ERROR_CODES.JOB_NOT_FOUND, `job "${jobId}" was not found`));
     }
-    return sendJson(202, { ok: true, jobId, action: "stop", lifecycle });
+
+    const jobDir = getJobDirectoryPath(dataDir, jobId, lifecycle as "current" | "complete");
+
+    // Kill the runner process via PID file
+    let pidFound = false;
+    let usedSignal: string | null = null;
+
+    const pid = await readRunnerPid(jobDir);
+    if (pid !== null) {
+      pidFound = true;
+      try {
+        const result = await killProcess(pid);
+        usedSignal = result.signal;
+      } catch (err) {
+        console.error(`[handleJobStop] Error killing pid ${pid} for job ${jobId}:`, err);
+      }
+      await cleanupRunnerPid(jobDir);
+    }
+
+    // Read status and find the running task
+    const snapshot = await readJobStatus(jobDir);
+    if (!snapshot) {
+      return sendJson(500, createErrorResponse("internal_error", "Failed to read job status"));
+    }
+
+    // Determine which task is currently running
+    let resetTask: string | null = null;
+
+    if (snapshot.current && snapshot.tasks[snapshot.current]?.state === "running") {
+      resetTask = snapshot.current;
+    } else {
+      for (const taskId of Object.keys(snapshot.tasks)) {
+        if (snapshot.tasks[taskId]!.state === "running") {
+          resetTask = taskId;
+          break;
+        }
+      }
+    }
+
+    // Reset the running task to pending
+    if (resetTask) {
+      await resetSingleTask(jobDir, resetTask, { clearTokenUsage: true });
+    }
+
+    // Clear root-level job fields
+    await writeJobStatus(jobDir, (s) => {
+      s.current = null;
+      s.currentStage = null;
+    });
+
+    return sendJson(200, {
+      ok: true,
+      jobId,
+      stopped: pidFound,
+      resetTask,
+      signal: usedSignal,
+    });
   } finally {
     endStop(jobId);
   }
