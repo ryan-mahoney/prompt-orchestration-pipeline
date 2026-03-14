@@ -12,6 +12,7 @@ Object.defineProperties(globalThis, {
   HTMLButtonElement: { value: dom.window.HTMLButtonElement, configurable: true, writable: true },
   HTMLInputElement: { value: dom.window.HTMLInputElement, configurable: true, writable: true },
   SVGElement: { value: dom.window.SVGElement, configurable: true, writable: true },
+  localStorage: { value: dom.window.localStorage, configurable: true, writable: true },
   Node: { value: dom.window.Node, configurable: true, writable: true },
   NodeFilter: { value: dom.window.NodeFilter, configurable: true, writable: true },
   Event: { value: dom.window.Event, configurable: true, writable: true },

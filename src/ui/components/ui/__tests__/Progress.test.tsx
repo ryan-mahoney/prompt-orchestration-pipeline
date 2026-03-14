@@ -13,8 +13,8 @@ test("Progress clamps low values to 0", () => {
 });
 
 test("Progress applies variant color classes", () => {
-  expect(Progress({ variant: "default" }).props.children.props.className).toContain("bg-blue-600");
+  expect(Progress({ variant: "default" }).props.children.props.className).toContain("bg-brand-600");
   expect(Progress({ variant: "error" }).props.children.props.className).toContain("bg-red-600");
-  expect(Progress({ variant: "completed" }).props.children.props.className).toContain("bg-green-600");
-  expect(Progress({ variant: "pending" }).props.children.props.className).toContain("bg-slate-400");
+  expect(Progress({ variant: "completed" }).props.children.props.className).toContain("bg-brand-600");
+  expect(Progress({ variant: "pending" }).props.children.props.className).toContain("bg-gray-400");
 });
