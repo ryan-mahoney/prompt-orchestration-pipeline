@@ -2,6 +2,7 @@
 // Alibaba (DashScope) adapter using OpenAI-compatible chat completions API.
 
 import {
+  DEFAULT_REQUEST_TIMEOUT_MS,
   extractMessages,
   ensureMessagesPresent,
   ensureJsonResponseFormat,
@@ -52,6 +53,7 @@ export async function alibabaChat(
     topP,
     stop,
     maxRetries = DEFAULT_MAX_RETRIES,
+    requestTimeoutMs = DEFAULT_REQUEST_TIMEOUT_MS,
     frequencyPenalty,
     presencePenalty,
     thinking = DEFAULT_THINKING,
@@ -107,6 +109,7 @@ export async function alibabaChat(
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
+      const signal = AbortSignal.timeout(requestTimeoutMs);
       const response = await fetch(endpoint, {
         method: "POST",
         headers: {
@@ -114,6 +117,7 @@ export async function alibabaChat(
           Authorization: `Bearer ${apiKey ?? ""}`,
         },
         body: JSON.stringify(body),
+        signal,
       });
 
       if (!response.ok) {

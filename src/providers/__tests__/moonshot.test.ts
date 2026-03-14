@@ -360,4 +360,27 @@ describe("moonshotChat", () => {
     const result = await moonshotChat(baseOptions);
     expect(result.content).toEqual({ fenced: true });
   });
+
+  it("passes an AbortSignal to fetch", async () => {
+    fetchMock.mockResolvedValue(
+      mockFetchResponse(makeMoonshotResponse(JSON.stringify({ ok: true }))),
+    );
+
+    await moonshotChat(baseOptions);
+
+    const init = (fetchMock.mock.calls[0] as [string, RequestInit])[1];
+    expect(init.signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it("uses custom requestTimeoutMs for the abort signal", async () => {
+    const timeoutSpy = vi.spyOn(AbortSignal, "timeout");
+    fetchMock.mockResolvedValue(
+      mockFetchResponse(makeMoonshotResponse(JSON.stringify({ ok: true }))),
+    );
+
+    await moonshotChat({ ...baseOptions, requestTimeoutMs: 5000 });
+
+    expect(timeoutSpy).toHaveBeenCalledWith(5000);
+    timeoutSpy.mockRestore();
+  });
 });

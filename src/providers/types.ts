@@ -23,6 +23,7 @@ export interface ProviderOptions {
   topP?: number;
   stop?: string | string[];
   maxRetries?: number;
+  requestTimeoutMs?: number;
 }
 
 /** Token usage at the adapter level (snake_case). */
@@ -122,6 +123,7 @@ export interface MoonshotOptions {
   thinking?: "enabled" | "disabled";
   maxRetries?: number;
   responseFormat?: string | ResponseFormatObject;
+  requestTimeoutMs?: number;
 }
 
 /** Claude Code-specific options. */

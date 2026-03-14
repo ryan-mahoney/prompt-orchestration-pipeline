@@ -234,6 +234,29 @@ describe("deepseekChat", () => {
       expect(body.frequency_penalty).toBe(0.5);
       expect(body.presence_penalty).toBe(0.2);
     });
+
+    it("passes an AbortSignal to fetch", async () => {
+      fetchMock.mockResolvedValue(
+        mockFetchResponse(makeDeepSeekResponse(JSON.stringify({ ok: true }))),
+      );
+
+      await deepseekChat(baseOptions);
+
+      const init = (fetchMock.mock.calls[0] as [string, RequestInit])[1];
+      expect(init.signal).toBeInstanceOf(AbortSignal);
+    });
+
+    it("uses custom requestTimeoutMs for the abort signal", async () => {
+      const timeoutSpy = vi.spyOn(AbortSignal, "timeout");
+      fetchMock.mockResolvedValue(
+        mockFetchResponse(makeDeepSeekResponse(JSON.stringify({ ok: true }))),
+      );
+
+      await deepseekChat({ ...baseOptions, requestTimeoutMs: 5000 });
+
+      expect(timeoutSpy).toHaveBeenCalledWith(5000);
+      timeoutSpy.mockRestore();
+    });
   });
 
   describe("streaming", () => {
@@ -286,7 +309,7 @@ describe("deepseekChat", () => {
       );
 
       await expect(
-        deepseekChat({ ...baseOptions, stream: true }),
+        deepseekChat({ ...baseOptions, stream: true, maxRetries: 0 }),
       ).rejects.toMatchObject({ status: 500, message: "Server error" });
     });
 
@@ -311,6 +334,45 @@ describe("deepseekChat", () => {
       }
 
       expect(chunks).toEqual(["only"]);
+    });
+
+    it("retries on timeout then succeeds on second attempt", async () => {
+      const sseEvents = [
+        'data: {"choices":[{"delta":{"content":"ok"}}]}\n\n',
+        "data: [DONE]\n\n",
+      ];
+
+      fetchMock
+        .mockRejectedValueOnce(
+          new DOMException("signal timed out", "TimeoutError"),
+        )
+        .mockResolvedValueOnce(mockStreamingResponse(sseEvents));
+
+      const generator = await deepseekChat({
+        ...baseOptions,
+        stream: true,
+        maxRetries: 1,
+      });
+
+      const chunks: string[] = [];
+      for await (const chunk of generator) {
+        chunks.push(chunk.content);
+      }
+
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(chunks).toEqual(["ok"]);
+    });
+
+    it("throws immediately on 401 without retrying", async () => {
+      fetchMock.mockResolvedValue(
+        mockFetchResponse({ error: { message: "Unauthorized" } }, 401),
+      );
+
+      await expect(
+        deepseekChat({ ...baseOptions, stream: true, maxRetries: 3 }),
+      ).rejects.toMatchObject({ status: 401, message: "Unauthorized" });
+
+      expect(fetchMock).toHaveBeenCalledTimes(1);
     });
 
     it("skips chunks with no content in delta", async () => {

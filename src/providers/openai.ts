@@ -3,6 +3,7 @@
 
 import OpenAI from "openai";
 import {
+  DEFAULT_REQUEST_TIMEOUT_MS,
   extractMessages,
   isRetryableError,
   sleep,
@@ -20,23 +21,27 @@ const DEFAULT_RESPONSE_FORMAT = "json_object";
 const DEFAULT_MAX_RETRIES = 3;
 const GPT5_PATTERN = /^gpt-5/i;
 
-let client: OpenAI | null = null;
+const clientCache = new Map<string, OpenAI>();
 
-function getClient(): OpenAI {
-  if (!client) {
-    client = new OpenAI({
+function getClient(timeoutMs: number): OpenAI {
+  const key = `${process.env["OPENAI_API_KEY"] ?? ""}:${process.env["OPENAI_ORGANIZATION"] ?? ""}:${process.env["OPENAI_BASE_URL"] ?? ""}:${timeoutMs}`;
+  let cached = clientCache.get(key);
+  if (!cached) {
+    cached = new OpenAI({
       apiKey: process.env["OPENAI_API_KEY"],
       organization: process.env["OPENAI_ORGANIZATION"],
       baseURL: process.env["OPENAI_BASE_URL"],
       maxRetries: 0,
+      timeout: timeoutMs,
     });
+    clientCache.set(key, cached);
   }
-  return client;
+  return cached;
 }
 
-/** Visible for testing — resets the singleton so tests get a fresh client. */
+/** Visible for testing — resets the client cache so tests get a fresh client. */
 export function _resetClient(): void {
-  client = null;
+  clientCache.clear();
 }
 
 async function callResponsesAPI(
@@ -175,6 +180,7 @@ export async function openaiChat(
     presencePenalty,
     topP,
     stop,
+    requestTimeoutMs,
     // Destructure and discard max_tokens to prevent ...rest leakage
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     max_tokens: _discardedMaxTokens,
@@ -195,7 +201,8 @@ export async function openaiChat(
       : undefined;
 
   const { systemMsg, userMsg } = extractMessages(messages);
-  const openai = getClient();
+  const timeoutMs = requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
+  const openai = getClient(timeoutMs);
   const useResponsesAPI = GPT5_PATTERN.test(model);
 
   let lastError: unknown;

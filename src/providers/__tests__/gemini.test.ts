@@ -345,6 +345,29 @@ describe("geminiChat", () => {
     expect(body.generationConfig.presencePenalty).toBeUndefined();
   });
 
+  it("passes an AbortSignal to fetch", async () => {
+    fetchMock.mockResolvedValue(
+      mockFetchResponse(makeGeminiResponse(JSON.stringify({ ok: true }))),
+    );
+
+    await geminiChat(baseOptions);
+
+    const init = (fetchMock.mock.calls[0] as [string, RequestInit])[1];
+    expect(init.signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it("uses custom requestTimeoutMs for the abort signal", async () => {
+    const timeoutSpy = vi.spyOn(AbortSignal, "timeout");
+    fetchMock.mockResolvedValue(
+      mockFetchResponse(makeGeminiResponse(JSON.stringify({ ok: true }))),
+    );
+
+    await geminiChat({ ...baseOptions, requestTimeoutMs: 5000 });
+
+    expect(timeoutSpy).toHaveBeenCalledWith(5000);
+    timeoutSpy.mockRestore();
+  });
+
   it("handles missing usageMetadata by defaulting to zeros", async () => {
     const jsonPayload = { ok: true };
     const responseWithoutUsage = {

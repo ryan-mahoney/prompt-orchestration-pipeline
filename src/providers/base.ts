@@ -4,6 +4,8 @@
 import { ProviderJsonModeError, ProviderMessagesError } from "./types.ts";
 import type { ChatMessage, ExtractedMessages, ProviderError } from "./types.ts";
 
+export const DEFAULT_REQUEST_TIMEOUT_MS = 120_000;
+
 const RETRYABLE_STATUS_CODES = new Set([429, 500, 502, 503, 504]);
 const RETRYABLE_ERROR_CODES = new Set([
   "ECONNRESET",
@@ -65,6 +67,9 @@ export function isRetryableError(err: unknown): boolean {
 
   // ProviderJsonParseError is never retryable
   if (err.name === "ProviderJsonParseError") return false;
+
+  // Fetch/AbortSignal timeout errors are always retryable
+  if (err.name === "TimeoutError") return true;
 
   // Check HTTP status codes
   const status = (err as { status?: number }).status;

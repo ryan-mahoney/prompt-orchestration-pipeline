@@ -2,6 +2,7 @@
 // Google Gemini GenerateContent adapter.
 
 import {
+  DEFAULT_REQUEST_TIMEOUT_MS,
   extractMessages,
   isRetryableError,
   sleep,
@@ -76,6 +77,7 @@ export async function geminiChat(
     topP,
     stop,
     maxRetries = DEFAULT_MAX_RETRIES,
+    requestTimeoutMs = DEFAULT_REQUEST_TIMEOUT_MS,
     // Gemini does not support these — destructure and discard
     frequencyPenalty: _frequencyPenalty,
     presencePenalty: _presencePenalty,
@@ -144,10 +146,12 @@ export async function geminiChat(
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
+      const signal = AbortSignal.timeout(requestTimeoutMs);
       const response = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
+        signal,
       });
 
       if (!response.ok) {

@@ -2,6 +2,7 @@
 // Anthropic Messages API adapter.
 
 import {
+  DEFAULT_REQUEST_TIMEOUT_MS,
   extractMessages,
   isRetryableError,
   sleep,
@@ -33,6 +34,7 @@ export async function anthropicChat(
     topP,
     stop,
     maxRetries = DEFAULT_MAX_RETRIES,
+    requestTimeoutMs,
   } = options;
 
   // Validate JSON response format — if this throws, we are not in JSON mode
@@ -73,6 +75,7 @@ export async function anthropicChat(
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
+      const signal = AbortSignal.timeout(requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS);
       const response = await fetch(ANTHROPIC_API_URL, {
         method: "POST",
         headers: {
@@ -81,6 +84,7 @@ export async function anthropicChat(
           "x-api-key": apiKey ?? "",
         },
         body: JSON.stringify(body),
+        signal,
       });
 
       if (!response.ok) {

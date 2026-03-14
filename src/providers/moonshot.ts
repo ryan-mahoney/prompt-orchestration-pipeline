@@ -2,6 +2,7 @@
 // Moonshot adapter with content-filter fallback to DeepSeek.
 
 import {
+  DEFAULT_REQUEST_TIMEOUT_MS,
   extractMessages,
   ensureMessagesPresent,
   isRetryableError,
@@ -40,6 +41,7 @@ export async function moonshotChat(
     thinking = DEFAULT_THINKING,
     maxRetries = DEFAULT_MAX_RETRIES,
     responseFormat,
+    requestTimeoutMs,
   } = options;
 
   ensureMessagesPresent(messages, "moonshot");
@@ -79,6 +81,7 @@ export async function moonshotChat(
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
+      const signal = AbortSignal.timeout(requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS);
       const response = await fetch(MOONSHOT_API_URL, {
         method: "POST",
         headers: {
@@ -86,6 +89,7 @@ export async function moonshotChat(
           Authorization: `Bearer ${apiKey ?? ""}`,
         },
         body: JSON.stringify(body),
+        signal,
       });
 
       if (!response.ok) {
