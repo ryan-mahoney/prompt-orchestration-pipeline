@@ -66,7 +66,38 @@ function getTitle(raw: Record<string, unknown>, jobId: string): string {
 }
 
 function getCosts(raw: Record<string, unknown>): Record<string, unknown> {
-  return asRecord(raw["costs"]) ?? {};
+  const explicit = asRecord(raw["costs"]);
+  if (explicit) return explicit;
+
+  // Aggregate cost and token totals from individual task entries
+  const tasks = asRecord(raw["tasks"]);
+  if (!tasks) return {};
+
+  let totalCost = 0;
+  let totalInputTokens = 0;
+  let totalOutputTokens = 0;
+
+  for (const value of Object.values(tasks)) {
+    const task = asRecord(value);
+    if (!task) continue;
+
+    // Sum from [model, input, output, cost?] tuples
+    const usage = task["tokenUsage"];
+    if (Array.isArray(usage)) {
+      for (const entry of usage) {
+        if (Array.isArray(entry) && entry.length >= 3) {
+          if (typeof entry[1] === "number") totalInputTokens += entry[1];
+          if (typeof entry[2] === "number") totalOutputTokens += entry[2];
+          if (typeof entry[3] === "number") totalCost += entry[3];
+        }
+      }
+    }
+  }
+
+  const totalTokens = totalInputTokens + totalOutputTokens;
+  if (totalCost === 0 && totalTokens === 0) return {};
+
+  return { totalCost, totalTokens, totalInputTokens, totalOutputTokens };
 }
 
 export function computeJobStatus(tasksInput: unknown, existingProgress?: number): ComputedStatus {

@@ -158,7 +158,7 @@ export interface LLMMetricRecord {
 }
 
 /** Token usage tuple written to the job status file. */
-export type TokenUsageTuple = [modelKey: string, inputTokens: number, outputTokens: number];
+export type TokenUsageTuple = [modelKey: string, inputTokens: number, outputTokens: number, cost: number];
 
 // ─── Initial context ─────────────────────────────────────────────────────────
 
@@ -239,7 +239,10 @@ export function deriveModelKeyAndTokens(metric: Record<string, unknown>): TokenU
   const outputTokens =
     typeof completion === "number" && Number.isFinite(completion) ? completion : 0;
 
-  return [modelKey, inputTokens, outputTokens];
+  const rawCost = metric["cost"];
+  const cost = typeof rawCost === "number" && Number.isFinite(rawCost) ? rawCost : 0;
+
+  return [modelKey, inputTokens, outputTokens, cost];
 }
 
 // ─── Error normalization ──────────────────────────────────────────────────────
@@ -495,14 +498,14 @@ export async function runPipeline(
     llmMetrics.push(record);
 
     // Append token usage to status file, serialized via promise queue
-    const [modelKey, inputTokens, outputTokens] = deriveModelKeyAndTokens(metric);
+    const tuple = deriveModelKeyAndTokens(metric);
     tokenWriteQueue = tokenWriteQueue.then(async () => {
       await writeJobStatus(jobDir, (snapshot: StatusSnapshot) => {
         const tasks = snapshot.tasks;
         if (!tasks[taskName]) tasks[taskName] = {};
         const task = tasks[taskName]!;
         const usage = (task.tokenUsage ?? []) as unknown[];
-        usage.push([modelKey, inputTokens, outputTokens]);
+        usage.push(tuple);
         task.tokenUsage = usage;
       }).catch(() => {});
     });
