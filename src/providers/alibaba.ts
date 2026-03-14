@@ -20,6 +20,7 @@ import type {
 
 const DEFAULT_MODEL = "qwen-plus";
 const DEFAULT_TEMPERATURE = 0.7;
+const DEFAULT_THINKING: "enabled" | "disabled" = "enabled";
 const DEFAULT_MAX_RETRIES = 3;
 
 /**
@@ -53,6 +54,7 @@ export async function alibabaChat(
     maxRetries = DEFAULT_MAX_RETRIES,
     frequencyPenalty,
     presencePenalty,
+    thinking = DEFAULT_THINKING,
   } = options;
 
   ensureMessagesPresent(messages, "alibaba");
@@ -94,6 +96,7 @@ export async function alibabaChat(
   if (stop != null) body["stop"] = stop;
   if (frequencyPenalty != null) body["frequency_penalty"] = frequencyPenalty;
   if (presencePenalty != null) body["presence_penalty"] = presencePenalty;
+  body["enable_thinking"] = thinking === "enabled";
 
   if (jsonMode) {
     ensureJsonResponseFormat(responseFormat, "alibaba");

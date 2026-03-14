@@ -157,4 +157,30 @@ describe("alibabaChat", () => {
     expect(body.frequency_penalty).toBe(0.5);
     expect(body.presence_penalty).toBe(0.2);
   });
+
+  it("sends enable_thinking true by default", async () => {
+    fetchMock.mockResolvedValue(
+      mockFetchResponse(makeAlibabaResponse(JSON.stringify({ ok: true }))),
+    );
+
+    await alibabaChat(baseOptions);
+
+    const body = JSON.parse(
+      (fetchMock.mock.calls[0] as [string, RequestInit])[1].body as string,
+    );
+    expect(body.enable_thinking).toBe(true);
+  });
+
+  it("sends enable_thinking false when thinking is disabled", async () => {
+    fetchMock.mockResolvedValue(
+      mockFetchResponse(makeAlibabaResponse(JSON.stringify({ ok: true }))),
+    );
+
+    await alibabaChat({ ...baseOptions, thinking: "disabled" });
+
+    const body = JSON.parse(
+      (fetchMock.mock.calls[0] as [string, RequestInit])[1].body as string,
+    );
+    expect(body.enable_thinking).toBe(false);
+  });
 });

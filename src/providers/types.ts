@@ -111,6 +111,7 @@ export interface DeepSeekOptions extends ProviderOptions {
 export interface AlibabaOptions extends ProviderOptions {
   frequencyPenalty?: number;
   presencePenalty?: number;
+  thinking?: "enabled" | "disabled";
 }
 
 /** Moonshot-specific options. */
