@@ -14,7 +14,7 @@ import { ProviderJsonParseError } from "./types.ts";
 import type { ProviderOptions, AdapterResponse, ResponseFormatObject } from "./types.ts";
 
 const ZAI_API_URL = "https://api.z.ai/api/paas/v4/chat/completions";
-const DEFAULT_MODEL = "glm-4-plus";
+const DEFAULT_MODEL = "glm-5";
 const DEFAULT_TEMPERATURE = 0.7;
 const DEFAULT_MAX_TOKENS = 8192;
 const DEFAULT_RESPONSE_FORMAT = "json";
