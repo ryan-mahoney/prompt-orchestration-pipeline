@@ -68,3 +68,17 @@ test("RestartJobModal confirms isolation mode", async () => {
 
   expect(onConfirm).toHaveBeenCalledWith({ singleTask: true });
 });
+
+test("RestartJobModal confirms full pipeline mode when selected at task level", async () => {
+  const onConfirm = mock((_opts: { singleTask: boolean; continueAfter?: boolean }) => {});
+  const view = render(
+    <RestartJobModal open onClose={() => {}} onConfirm={onConfirm} jobId="job-1" taskId="task-1" />,
+  );
+
+  await act(async () => {
+    view.getByLabelText("Restart entire pipeline").click();
+    view.getByRole("button", { name: "Confirm" }).click();
+  });
+
+  expect(onConfirm).toHaveBeenCalledWith({ singleTask: false });
+});
