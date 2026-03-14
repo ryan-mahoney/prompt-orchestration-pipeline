@@ -11,7 +11,7 @@ const RETRYABLE_ERROR_CODES = new Set([
   "ETIMEDOUT",
   "ECONNREFUSED",
 ]);
-const RETRYABLE_MESSAGE_PATTERN = /network|timeout|connection|socket|protocol|read ECONNRESET/i;
+const RETRYABLE_MESSAGE_PATTERN = /network|timeout|connection|socket|protocol|read ECONNRESET|fetch failed/i;
 
 /**
  * Splits a messages array into system, user, and assistant parts.
@@ -78,7 +78,13 @@ export function isRetryableError(err: unknown): boolean {
     return RETRYABLE_ERROR_CODES.has(code);
   }
 
-  return RETRYABLE_MESSAGE_PATTERN.test(err.message);
+  if (RETRYABLE_MESSAGE_PATTERN.test(err.message)) return true;
+
+  // Evaluate .cause (e.g. undici wraps root network errors as cause)
+  const cause = (err as { cause?: unknown }).cause;
+  if (cause) return isRetryableError(cause);
+
+  return false;
 }
 
 /** Returns a promise that resolves after `ms` milliseconds. */
