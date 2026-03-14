@@ -104,20 +104,45 @@ flowchart LR
 
 ## Getting Started
 
-### 1. Install
-Add the orchestrator as a dependency in your Bun project:
+Choose one runtime path:
+- **Bun CLI path**: for Bun-based projects (`bunx pipeline-orchestrator ...`).
+- **Standalone binary path**: download a prebuilt release binary, no Bun runtime required.
+
+### 1A. Install for Bun projects
+Add the orchestrator as a dependency:
 ```bash
 bun add @ryanfw/prompt-orchestration-pipeline
 ```
 
-### 2. Initialize Structure
-Scaffold the required `pipeline-config` and `pipeline-data` directories:
+### 1B. Install standalone binary (no Bun required)
+Download a release asset from:
+`https://github.com/ryan-mahoney/prompt-orchestration-pipeline/releases`
+
+Available assets:
+- `pipeline-orchestrator-linux-x64`
+- `pipeline-orchestrator-macos-x64`
+- `pipeline-orchestrator-macos-arm64`
+- `pipeline-orchestrator-windows-x64.exe`
+
+Linux/macOS example:
 ```bash
-bunx pipeline-orchestrator init --root ./pipelines
+curl -L -o pipeline-orchestrator \
+  https://github.com/ryan-mahoney/prompt-orchestration-pipeline/releases/latest/download/pipeline-orchestrator-macos-arm64
+chmod +x pipeline-orchestrator
 ```
 
-### 3. Configure Scripts
-Add the following to your `package.json` for easy access:
+### 2. Initialize Structure
+Use one of:
+```bash
+# Bun path
+bunx pipeline-orchestrator init --root ./pipelines
+
+# Standalone binary path
+./pipeline-orchestrator init --root ./pipelines
+```
+
+### 3. Configure Scripts (Bun path)
+For Bun projects, add:
 ```json
 {
   "scripts": {
@@ -127,10 +152,17 @@ Add the following to your `package.json` for easy access:
 ```
 
 ### 4. Start the System
+Use one of:
 ```bash
+# Bun path
 bun run pipeline
+
+# Standalone binary path
+./pipeline-orchestrator start --root pipelines --port 3010
 ```
 This starts the file watcher and the web dashboard at `http://localhost:3010`.
+
+> Note: `npx pipeline-orchestrator ...` requires Bun to be installed because the npm bin entry runs through a Bun shebang.
 
 ### 5. Run a Job
 Drop a JSON file into `pipelines/pipeline-data/pending/`:

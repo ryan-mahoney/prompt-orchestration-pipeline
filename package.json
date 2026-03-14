@@ -22,6 +22,8 @@
   },
   "scripts": {
     "analyze": "bun src/cli/index.ts analyze",
+    "build:bin": "bun run ui:build && bun build --compile src/cli/index.ts",
+    "build:bin:local": "bun run build:bin --outfile=dist/pipeline-orchestrator",
     "deduce-schemas": "bun scripts/deduce-schemas.js",
     "test": "bash scripts/test.sh",
     "lint": "eslint . --ext .js,.jsx",

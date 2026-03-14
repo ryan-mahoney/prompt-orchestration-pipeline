@@ -1,0 +1,72 @@
+name: Release Binaries
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-binaries:
+    name: Build ${{ matrix.asset_name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            asset_name: pipeline-orchestrator-linux-x64
+            binary_path: dist/pipeline-orchestrator-linux-x64
+          - os: macos-13
+            asset_name: pipeline-orchestrator-macos-x64
+            binary_path: dist/pipeline-orchestrator-macos-x64
+          - os: macos-14
+            asset_name: pipeline-orchestrator-macos-arm64
+            binary_path: dist/pipeline-orchestrator-macos-arm64
+          - os: windows-latest
+            asset_name: pipeline-orchestrator-windows-x64.exe
+            binary_path: dist/pipeline-orchestrator-windows-x64.exe
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Build standalone binary
+        run: bun run build:bin --outfile=${{ matrix.binary_path }}
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset_name }}
+          path: ${{ matrix.binary_path }}
+          if-no-files-found: error
+
+  publish-release:
+    name: Publish Release
+    needs: build-binaries
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: Verify assets
+        run: ls -la release-assets
+
+      - name: Publish release assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release-assets/*
