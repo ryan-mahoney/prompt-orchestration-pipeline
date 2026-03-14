@@ -1,0 +1,3167 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Prompt Pipeline — First-Time User Experience Guide</title>
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      /* ═══════════════════════════════════════════════════════════════
+   DESIGN TOKENS (shared with design-system.html)
+   ═══════════════════════════════════════════════════════════════ */
+      :root {
+        --color-brand-600: #16a34a;
+        --color-brand-500: #22c55e;
+        --color-brand-100: #dcfce7;
+        --color-brand-50: #f0fdf4;
+
+        --color-accent-700: #6d28d9;
+        --color-accent-600: #7c3aed;
+        --color-accent-100: #ede9fe;
+        --color-accent-50: #f5f3ff;
+
+        --color-success-700: #15803d;
+        --color-success-600: #16a34a;
+        --color-success-100: #dcfce7;
+
+        --color-error-700: #b91c1c;
+        --color-error-600: #dc2626;
+        --color-error-100: #fee2e2;
+        --color-error-50: #fef2f2;
+
+        --color-warning-700: #a16207;
+        --color-warning-600: #ca8a04;
+        --color-warning-100: #fef9c3;
+
+        --color-info-700: #1d4ed8;
+        --color-info-100: #dbeafe;
+
+        --color-gray-900: #111827;
+        --color-gray-700: #374151;
+        --color-gray-500: #6b7280;
+        --color-gray-400: #9ca3af;
+        --color-gray-300: #d1d5db;
+        --color-gray-200: #e5e7eb;
+        --color-gray-100: #f3f4f6;
+        --color-gray-50: #f9fafb;
+        --color-white: #ffffff;
+
+        --font-family-sans:
+          "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI",
+          sans-serif;
+        --font-family-mono:
+          "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
+
+        --text-xs: 0.75rem;
+        --text-sm: 0.8125rem;
+        --text-base: 0.875rem;
+        --text-md: 1rem;
+        --text-lg: 1.25rem;
+        --text-xl: 1.5rem;
+        --text-2xl: 1.875rem;
+
+        --font-weight-regular: 400;
+        --font-weight-medium: 500;
+        --font-weight-semi: 600;
+        --font-weight-bold: 700;
+
+        --line-height-tight: 1.25;
+        --line-height-normal: 1.5;
+        --line-height-relaxed: 1.625;
+
+        --space-1: 0.25rem;
+        --space-2: 0.5rem;
+        --space-3: 0.75rem;
+        --space-4: 1rem;
+        --space-5: 1.25rem;
+        --space-6: 1.5rem;
+        --space-8: 2rem;
+        --space-10: 2.5rem;
+        --space-12: 3rem;
+        --space-16: 4rem;
+
+        --radius-sm: 0.25rem;
+        --radius-md: 0.375rem;
+        --radius-lg: 0.5rem;
+        --radius-full: 9999px;
+
+        --shadow-sm:
+          0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
+        --shadow-md:
+          0 4px 6px rgba(0, 0, 0, 0.05), 0 2px 4px rgba(0, 0, 0, 0.04);
+        --shadow-lg:
+          0 10px 15px rgba(0, 0, 0, 0.05), 0 4px 6px rgba(0, 0, 0, 0.03);
+
+        --duration-fast: 100ms;
+        --duration-normal: 150ms;
+        --duration-slow: 250ms;
+        --easing-default: cubic-bezier(0.4, 0, 0.2, 1);
+      }
+
+      /* ═══════════════════════════════════════════════════════════════
+   RESET & BASE
+   ═══════════════════════════════════════════════════════════════ */
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      html {
+        font-size: 16px;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+      }
+
+      body {
+        font-family: var(--font-family-sans);
+        font-size: var(--text-base);
+        font-weight: var(--font-weight-regular);
+        line-height: var(--line-height-normal);
+        color: var(--color-gray-700);
+        background-color: var(--color-white);
+      }
+
+      /* ═══════════════════════════════════════════════════════════════
+   PAGE LAYOUT
+   ═══════════════════════════════════════════════════════════════ */
+      .page {
+        max-width: 960px;
+        margin: 0 auto;
+        padding: var(--space-12) var(--space-6);
+      }
+
+      .section {
+        margin-bottom: var(--space-16);
+        border-top: 2px solid var(--color-gray-900);
+        padding-top: var(--space-8);
+      }
+
+      .section-title {
+        font-size: var(--text-2xl);
+        font-weight: var(--font-weight-bold);
+        color: var(--color-gray-900);
+        letter-spacing: -0.01em;
+        line-height: var(--line-height-tight);
+        margin-bottom: var(--space-2);
+      }
+
+      .section-desc {
+        color: var(--color-gray-500);
+        margin-bottom: var(--space-8);
+        max-width: 640px;
+      }
+
+      .subsection {
+        margin-bottom: var(--space-10);
+      }
+
+      .subsection-title {
+        font-size: var(--text-md);
+        font-weight: var(--font-weight-semi);
+        color: var(--color-gray-900);
+        margin-bottom: var(--space-4);
+      }
+
+      .principle {
+        font-size: var(--text-sm);
+        color: var(--color-accent-700);
+        font-weight: var(--font-weight-medium);
+        margin-bottom: var(--space-3);
+        padding-left: var(--space-4);
+        border-left: 2px solid var(--color-accent-100);
+      }
+
+      .principle em {
+        font-style: normal;
+        color: var(--color-gray-500);
+      }
+
+      .code {
+        font-family: var(--font-family-mono);
+        font-size: var(--text-xs);
+        color: var(--color-gray-500);
+      }
+
+      /* Showcase container */
+      .showcase {
+        background-color: var(--color-gray-50);
+        border: 1px solid var(--color-gray-200);
+        border-radius: var(--radius-md);
+        padding: var(--space-8);
+        margin-bottom: var(--space-4);
+      }
+
+      .showcase-label {
+        font-size: var(--text-xs);
+        font-weight: var(--font-weight-medium);
+        color: var(--color-gray-400);
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        margin-bottom: var(--space-4);
+      }
+
+      /* Do / Don't */
+      .guidance {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: var(--space-4);
+        margin-top: var(--space-6);
+      }
+
+      .do,
+      .dont {
+        padding: var(--space-4);
+        border-radius: var(--radius-sm);
+        font-size: var(--text-sm);
+      }
+
+      .do {
+        background-color: var(--color-success-100);
+        border-left: 3px solid var(--color-success-600);
+      }
+
+      .dont {
+        background-color: var(--color-error-100);
+        border-left: 3px solid var(--color-error-600);
+      }
+
+      .do strong,
+      .dont strong {
+        display: block;
+        margin-bottom: var(--space-1);
+        font-size: var(--text-xs);
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
+
+      .do strong {
+        color: var(--color-success-700);
+      }
+      .dont strong {
+        color: var(--color-error-700);
+      }
+
+      /* ═══════════════════════════════════════════════════════════════
+   SHARED COMPONENT STYLES (mirrors design-system.html)
+   ═══════════════════════════════════════════════════════════════ */
+
+      /* Buttons */
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: var(--space-2);
+        height: 40px;
+        padding: 0 var(--space-4);
+        font-family: var(--font-family-sans);
+        font-size: var(--text-base);
+        font-weight: var(--font-weight-medium);
+        line-height: 1;
+        border-radius: var(--radius-sm);
+        border: 1px solid transparent;
+        cursor: pointer;
+        transition: all var(--duration-normal) var(--easing-default);
+        white-space: nowrap;
+        text-decoration: none;
+      }
+
+      .btn-primary {
+        background-color: var(--color-brand-600);
+        color: var(--color-white);
+        border-color: var(--color-brand-600);
+      }
+
+      .btn-secondary {
+        background-color: var(--color-white);
+        color: var(--color-gray-700);
+        border-color: var(--color-gray-300);
+      }
+
+      .btn-ghost {
+        background-color: transparent;
+        color: var(--color-accent-700);
+        border-color: transparent;
+      }
+
+      .btn-sm {
+        height: 32px;
+        padding: 0 var(--space-3);
+        font-size: var(--text-sm);
+      }
+      .btn-lg {
+        height: 44px;
+        padding: 0 var(--space-6);
+        font-size: var(--text-md);
+      }
+
+      /* Badges */
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-1);
+        padding: 2px var(--space-2);
+        font-size: var(--text-xs);
+        font-weight: var(--font-weight-medium);
+        border-radius: var(--radius-sm);
+        line-height: 1.4;
+        white-space: nowrap;
+      }
+
+      .badge-success {
+        background-color: var(--color-success-100);
+        color: var(--color-success-700);
+      }
+      .badge-error {
+        background-color: var(--color-error-100);
+        color: var(--color-error-700);
+      }
+      .badge-info {
+        background-color: var(--color-info-100);
+        color: var(--color-info-700);
+      }
+      .badge-neutral {
+        background-color: var(--color-gray-100);
+        color: var(--color-gray-700);
+      }
+
+      /* Cards */
+      .card {
+        background-color: var(--color-white);
+        border: 1px solid var(--color-gray-300);
+        border-radius: var(--radius-md);
+        padding: var(--space-6);
+      }
+
+      .form-label {
+        display: block;
+        font-size: var(--text-sm);
+        font-weight: var(--font-weight-medium);
+        color: var(--color-gray-700);
+        margin-bottom: var(--space-1);
+      }
+
+      .form-input {
+        display: block;
+        width: 100%;
+        height: 40px;
+        padding: 0 var(--space-3);
+        font-family: var(--font-family-sans);
+        font-size: var(--text-base);
+        color: var(--color-gray-900);
+        background-color: var(--color-white);
+        border: 1px solid var(--color-gray-300);
+        border-radius: var(--radius-sm);
+      }
+
+      .form-input:focus {
+        outline: none;
+        border-color: var(--color-accent-700);
+        box-shadow: 0 0 0 3px var(--color-accent-100);
+      }
+
+      /* ═══════════════════════════════════════════════════════════════
+   ONBOARDING-SPECIFIC COMPONENT STYLES
+   ═══════════════════════════════════════════════════════════════ */
+
+      /* ── Welcome Modal ── */
+      .welcome-modal {
+        background: var(--color-white);
+        border: 1px solid var(--color-gray-200);
+        border-radius: var(--radius-lg);
+        box-shadow: var(--shadow-lg);
+        max-width: 480px;
+        width: 100%;
+        overflow: hidden;
+      }
+
+      .welcome-modal-header {
+        padding: var(--space-8) var(--space-8) 0;
+        text-align: center;
+      }
+
+      .welcome-modal-icon {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 56px;
+        height: 56px;
+        border-radius: 14px;
+        background-color: var(--color-brand-50);
+        margin-bottom: var(--space-4);
+      }
+
+      .welcome-modal-title {
+        font-size: var(--text-xl);
+        font-weight: var(--font-weight-bold);
+        color: var(--color-gray-900);
+        margin-bottom: var(--space-2);
+      }
+
+      .welcome-modal-desc {
+        font-size: var(--text-base);
+        color: var(--color-gray-500);
+        max-width: 360px;
+        margin: 0 auto;
+        line-height: var(--line-height-relaxed);
+      }
+
+      .welcome-modal-body {
+        padding: var(--space-6) var(--space-8);
+      }
+
+      .welcome-modal-footer {
+        padding: var(--space-4) var(--space-8) var(--space-8);
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-3);
+        align-items: center;
+      }
+
+      .welcome-modal-footer .btn {
+        width: 100%;
+        justify-content: center;
+      }
+
+      .welcome-skip {
+        font-size: var(--text-sm);
+        color: var(--color-gray-400);
+        background: none;
+        border: none;
+        cursor: pointer;
+        padding: var(--space-2);
+        font-family: var(--font-family-sans);
+      }
+
+      .welcome-skip:hover {
+        color: var(--color-gray-700);
+      }
+
+      /* ── Onboarding Checklist ── */
+      .checklist {
+        background: var(--color-white);
+        border: 1px solid var(--color-gray-200);
+        border-radius: var(--radius-md);
+        overflow: hidden;
+      }
+
+      .checklist-header {
+        padding: var(--space-4) var(--space-5);
+        border-bottom: 1px solid var(--color-gray-200);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+
+      .checklist-title {
+        font-size: var(--text-base);
+        font-weight: var(--font-weight-semi);
+        color: var(--color-gray-900);
+      }
+
+      .checklist-progress-text {
+        font-size: var(--text-sm);
+        color: var(--color-gray-500);
+        font-family: var(--font-family-mono);
+      }
+
+      .checklist-progress-bar {
+        height: 3px;
+        background-color: var(--color-gray-100);
+      }
+
+      .checklist-progress-fill {
+        height: 100%;
+        background-color: var(--color-brand-600);
+        border-radius: 0 2px 2px 0;
+        transition: width 400ms var(--easing-default);
+      }
+
+      .checklist-items {
+        list-style: none;
+      }
+
+      .checklist-item {
+        display: flex;
+        align-items: flex-start;
+        gap: var(--space-3);
+        padding: var(--space-3) var(--space-5);
+        border-bottom: 1px solid var(--color-gray-100);
+        transition: background-color var(--duration-fast) var(--easing-default);
+      }
+
+      .checklist-item:last-child {
+        border-bottom: none;
+      }
+      .checklist-item:hover {
+        background-color: var(--color-gray-50);
+      }
+
+      .checklist-check {
+        width: 20px;
+        height: 20px;
+        border-radius: var(--radius-full);
+        border: 2px solid var(--color-gray-300);
+        flex-shrink: 0;
+        margin-top: 1px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all var(--duration-normal) var(--easing-default);
+      }
+
+      .checklist-item-done .checklist-check {
+        background-color: var(--color-brand-600);
+        border-color: var(--color-brand-600);
+      }
+
+      .checklist-item-text {
+        font-size: var(--text-sm);
+        color: var(--color-gray-700);
+        line-height: 1.5;
+      }
+
+      .checklist-item-done .checklist-item-text {
+        color: var(--color-gray-400);
+        text-decoration: line-through;
+      }
+
+      .checklist-item-active .checklist-check {
+        border-color: var(--color-accent-700);
+      }
+
+      .checklist-item-active .checklist-item-text {
+        color: var(--color-gray-900);
+        font-weight: var(--font-weight-medium);
+      }
+
+      .checklist-item-subtext {
+        font-size: var(--text-xs);
+        color: var(--color-gray-400);
+        margin-top: 2px;
+      }
+
+      /* ── Empty State ── */
+      .empty-state {
+        text-align: center;
+        padding: var(--space-16) var(--space-6);
+      }
+
+      .empty-state-icon {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 64px;
+        height: 64px;
+        border-radius: var(--radius-full);
+        background-color: var(--color-gray-100);
+        color: var(--color-gray-400);
+        margin-bottom: var(--space-4);
+      }
+
+      .empty-state-title {
+        font-size: var(--text-md);
+        font-weight: var(--font-weight-semi);
+        color: var(--color-gray-900);
+        margin-bottom: var(--space-2);
+      }
+
+      .empty-state-desc {
+        color: var(--color-gray-500);
+        font-size: var(--text-sm);
+        max-width: 360px;
+        margin: 0 auto var(--space-6);
+        line-height: var(--line-height-relaxed);
+      }
+
+      /* ── Tooltip / Coachmark ── */
+      .tooltip-example {
+        position: relative;
+        display: inline-block;
+      }
+
+      .tooltip {
+        position: absolute;
+        bottom: calc(100% + 10px);
+        left: 50%;
+        transform: translateX(-50%);
+        background-color: var(--color-gray-900);
+        color: var(--color-white);
+        padding: var(--space-3) var(--space-4);
+        border-radius: var(--radius-md);
+        font-size: var(--text-sm);
+        line-height: var(--line-height-normal);
+        max-width: 260px;
+        width: max-content;
+        box-shadow: var(--shadow-md);
+        z-index: 100;
+      }
+
+      .tooltip::after {
+        content: "";
+        position: absolute;
+        top: 100%;
+        left: 50%;
+        transform: translateX(-50%);
+        border: 6px solid transparent;
+        border-top-color: var(--color-gray-900);
+      }
+
+      .tooltip-dismiss {
+        display: block;
+        margin-top: var(--space-2);
+        font-size: var(--text-xs);
+        color: var(--color-gray-400);
+        background: none;
+        border: none;
+        cursor: pointer;
+        padding: 0;
+        font-family: var(--font-family-sans);
+      }
+
+      .tooltip-dismiss:hover {
+        color: var(--color-white);
+      }
+
+      /* ── Inline Hint Banner ── */
+      .hint-banner {
+        display: flex;
+        align-items: flex-start;
+        gap: var(--space-3);
+        padding: var(--space-4) var(--space-5);
+        background-color: var(--color-accent-50);
+        border: 1px solid var(--color-accent-100);
+        border-radius: var(--radius-md);
+        font-size: var(--text-sm);
+        color: var(--color-gray-700);
+        line-height: var(--line-height-normal);
+      }
+
+      .hint-banner-icon {
+        flex-shrink: 0;
+        width: 20px;
+        height: 20px;
+        color: var(--color-accent-700);
+        margin-top: 1px;
+      }
+
+      .hint-banner-dismiss {
+        flex-shrink: 0;
+        margin-left: auto;
+        background: none;
+        border: none;
+        color: var(--color-gray-400);
+        cursor: pointer;
+        padding: var(--space-1);
+      }
+
+      .hint-banner-dismiss:hover {
+        color: var(--color-gray-700);
+      }
+
+      /* ── Success Celebration ── */
+      .success-state {
+        text-align: center;
+        padding: var(--space-12) var(--space-6);
+      }
+
+      .success-icon {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 64px;
+        height: 64px;
+        border-radius: var(--radius-full);
+        background-color: var(--color-success-100);
+        color: var(--color-success-600);
+        margin-bottom: var(--space-4);
+      }
+
+      .success-title {
+        font-size: var(--text-lg);
+        font-weight: var(--font-weight-semi);
+        color: var(--color-gray-900);
+        margin-bottom: var(--space-2);
+      }
+
+      .success-desc {
+        font-size: var(--text-sm);
+        color: var(--color-gray-500);
+        max-width: 380px;
+        margin: 0 auto var(--space-6);
+        line-height: var(--line-height-relaxed);
+      }
+
+      /* ── Hotspot Beacon ── */
+      .hotspot {
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .hotspot-beacon {
+        width: 12px;
+        height: 12px;
+        border-radius: var(--radius-full);
+        background-color: var(--color-accent-700);
+        position: absolute;
+        top: -4px;
+        right: -4px;
+        z-index: 2;
+      }
+
+      .hotspot-beacon::before {
+        content: "";
+        position: absolute;
+        inset: -4px;
+        border-radius: var(--radius-full);
+        border: 2px solid var(--color-accent-700);
+        opacity: 0.4;
+        animation: hotspot-pulse 2s ease-in-out infinite;
+      }
+
+      @keyframes hotspot-pulse {
+        0%,
+        100% {
+          transform: scale(1);
+          opacity: 0.4;
+        }
+        50% {
+          transform: scale(1.5);
+          opacity: 0;
+        }
+      }
+
+      /* ── Progress Stepper ── */
+      .stepper {
+        display: flex;
+        align-items: center;
+        gap: 0;
+      }
+
+      .stepper-step {
+        display: flex;
+        align-items: center;
+        gap: var(--space-2);
+      }
+
+      .stepper-circle {
+        width: 28px;
+        height: 28px;
+        border-radius: var(--radius-full);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: var(--text-xs);
+        font-weight: var(--font-weight-semi);
+        flex-shrink: 0;
+        border: 2px solid var(--color-gray-300);
+        color: var(--color-gray-400);
+        background: var(--color-white);
+      }
+
+      .stepper-step-done .stepper-circle {
+        background-color: var(--color-brand-600);
+        border-color: var(--color-brand-600);
+        color: var(--color-white);
+      }
+
+      .stepper-step-active .stepper-circle {
+        border-color: var(--color-accent-700);
+        color: var(--color-accent-700);
+        background: var(--color-accent-50);
+      }
+
+      .stepper-label {
+        font-size: var(--text-sm);
+        color: var(--color-gray-400);
+        white-space: nowrap;
+      }
+
+      .stepper-step-done .stepper-label {
+        color: var(--color-gray-700);
+      }
+      .stepper-step-active .stepper-label {
+        color: var(--color-gray-900);
+        font-weight: var(--font-weight-medium);
+      }
+
+      .stepper-line {
+        width: 40px;
+        height: 2px;
+        background-color: var(--color-gray-200);
+        margin: 0 var(--space-2);
+        flex-shrink: 0;
+      }
+
+      .stepper-line-done {
+        background-color: var(--color-brand-600);
+      }
+
+      /* ── Sample Data Card (for prepopulated states) ── */
+      .sample-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 2px 8px;
+        font-size: 11px;
+        font-weight: var(--font-weight-medium);
+        color: var(--color-accent-700);
+        background-color: var(--color-accent-50);
+        border: 1px dashed var(--color-accent-100);
+        border-radius: var(--radius-sm);
+      }
+
+      /* ── Annotation Callout (for the reference doc) ── */
+      .annotation {
+        font-size: var(--text-sm);
+        color: var(--color-gray-500);
+        margin-top: var(--space-3);
+        padding: var(--space-3) var(--space-4);
+        border-left: 2px solid var(--color-gray-200);
+        line-height: var(--line-height-relaxed);
+      }
+
+      .annotation strong {
+        color: var(--color-gray-700);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <!-- ═══════════════════════════════════════════════════════════
+       HEADER
+       ═══════════════════════════════════════════════════════════ -->
+      <header
+        style="
+          margin-bottom: var(--space-12);
+          padding-bottom: var(--space-8);
+          border-bottom: 2px solid var(--color-gray-900);
+        "
+      >
+        <h1
+          style="
+            font-size: 2.25rem;
+            font-weight: 700;
+            color: var(--color-gray-900);
+            letter-spacing: -0.02em;
+            line-height: 1.1;
+            margin-bottom: var(--space-3);
+          "
+        >
+          First-Time User<br />Experience Guide
+        </h1>
+        <p
+          style="
+            color: var(--color-gray-500);
+            max-width: 560px;
+            line-height: var(--line-height-relaxed);
+          "
+        >
+          How to design every page so that first-time users achieve their first
+          meaningful outcome as quickly as possible. Based on Samuel Hulick's
+          <em>Elements of User Onboarding</em> framework, applied to Prompt
+          Pipeline.
+        </p>
+        <div
+          style="
+            display: flex;
+            gap: var(--space-6);
+            margin-top: var(--space-4);
+            font-size: var(--text-sm);
+            color: var(--color-gray-400);
+          "
+        >
+          <span>Companion to design-system.html</span>
+          <span>v1.0 · March 2026</span>
+        </div>
+      </header>
+
+      <!-- ═══════════════════════════════════════════════════════════
+       0. CORE MINDSET
+       ═══════════════════════════════════════════════════════════ -->
+      <section class="section">
+        <h2 class="section-title">0. The Core Mindset</h2>
+        <p class="section-desc">
+          Before any pattern or component, internalize the philosophy that
+          drives every onboarding decision.
+        </p>
+
+        <div
+          style="
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: var(--space-6);
+          "
+        >
+          <div class="card" style="padding: var(--space-5)">
+            <h3
+              style="
+                font-size: var(--text-md);
+                font-weight: 600;
+                color: var(--color-gray-900);
+                margin-bottom: var(--space-2);
+              "
+            >
+              Sell the outcome, not the tool
+            </h3>
+            <p
+              style="
+                font-size: var(--text-sm);
+                color: var(--color-gray-500);
+                line-height: var(--line-height-relaxed);
+              "
+            >
+              Users don't want "a pipeline orchestrator." They want to generate
+              competency models, job frameworks, and talent structures in
+              minutes instead of weeks. Show the fireball-throwing version of
+              them — not the fire flower.
+            </p>
+          </div>
+          <div class="card" style="padding: var(--space-5)">
+            <h3
+              style="
+                font-size: var(--text-md);
+                font-weight: 600;
+                color: var(--color-gray-900);
+                margin-bottom: var(--space-2);
+              "
+            >
+              Attention is a leaking spacesuit
+            </h3>
+            <p
+              style="
+                font-size: var(--text-sm);
+                color: var(--color-gray-500);
+                line-height: var(--line-height-relaxed);
+              "
+            >
+              Every field, every click, every moment of confusion is air
+              escaping. Minimize friction relentlessly. If a step isn't moving
+              the user closer to their first successful pipeline run, cut it or
+              defer it.
+            </p>
+          </div>
+          <div class="card" style="padding: var(--space-5)">
+            <h3
+              style="
+                font-size: var(--text-md);
+                font-weight: 600;
+                color: var(--color-gray-900);
+                margin-bottom: var(--space-2);
+              "
+            >
+              The product introduces itself
+            </h3>
+            <p
+              style="
+                font-size: var(--text-sm);
+                color: var(--color-gray-500);
+                line-height: var(--line-height-relaxed);
+              "
+            >
+              Don't layer an interface on top of the interface. The best
+              onboarding is indistinguishable from the product. Prepopulated
+              data, contextual hints, and smart defaults teach by doing — not by
+              lecturing.
+            </p>
+          </div>
+          <div class="card" style="padding: var(--space-5)">
+            <h3
+              style="
+                font-size: var(--text-md);
+                font-weight: 600;
+                color: var(--color-gray-900);
+                margin-bottom: var(--space-2);
+              "
+            >
+              Quick wins build momentum
+            </h3>
+            <p
+              style="
+                font-size: var(--text-sm);
+                color: var(--color-gray-500);
+                line-height: var(--line-height-relaxed);
+              "
+            >
+              Get the user to a meaningful result within 5 minutes. For Prompt
+              Pipeline, that means: upload a seed → see the pipeline graph →
+              watch the first step complete. That first "DONE" badge is the
+              hook.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══════════════════════════════════════════════════════════
+       1. WELCOME MESSAGE
+       ═══════════════════════════════════════════════════════════ -->
+      <section class="section">
+        <h2 class="section-title">1. Welcome Message</h2>
+        <p class="section-desc">
+          The first screen a new user sees. It sets expectations, offers a clear
+          next step, and can personalize the experience. Shown once, on first
+          login only.
+        </p>
+
+        <div class="principle">
+          Hulick: "The first 5 minutes are everything. If you don't make a great
+          first impression, they won't come back."
+        </div>
+
+        <div class="subsection">
+          <h3 class="subsection-title">Welcome Modal</h3>
+          <div class="showcase" style="display: flex; justify-content: center">
+            <div class="welcome-modal">
+              <div class="welcome-modal-header">
+                <div class="welcome-modal-icon">
+                  <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+                    <rect width="28" height="28" rx="6" fill="#16a34a" />
+                    <path
+                      d="M8 14l4 4 8-8"
+                      stroke="#fff"
+                      stroke-width="2.5"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    />
+                  </svg>
+                </div>
+                <h2 class="welcome-modal-title">Welcome to Prompt Pipeline</h2>
+                <p class="welcome-modal-desc">
+                  Generate competency models, levels, and job frameworks from a
+                  single seed file. Your first pipeline takes about 2 minutes.
+                </p>
+              </div>
+              <div class="welcome-modal-body">
+                <p
+                  style="
+                    font-size: var(--text-sm);
+                    font-weight: 500;
+                    color: var(--color-gray-900);
+                    margin-bottom: var(--space-3);
+                  "
+                >
+                  What are you building?
+                </p>
+                <div
+                  style="
+                    display: flex;
+                    flex-direction: column;
+                    gap: var(--space-2);
+                  "
+                >
+                  <label
+                    style="
+                      display: flex;
+                      align-items: center;
+                      gap: var(--space-3);
+                      padding: var(--space-3);
+                      border: 1px solid var(--color-accent-700);
+                      background: var(--color-accent-50);
+                      border-radius: var(--radius-sm);
+                      cursor: pointer;
+                      font-size: var(--text-sm);
+                      font-weight: 500;
+                      color: var(--color-gray-900);
+                    "
+                  >
+                    <input
+                      type="radio"
+                      name="goal"
+                      checked
+                      style="accent-color: var(--color-accent-700)"
+                    />
+                    Job architecture &amp; leveling
+                  </label>
+                  <label
+                    style="
+                      display: flex;
+                      align-items: center;
+                      gap: var(--space-3);
+                      padding: var(--space-3);
+                      border: 1px solid var(--color-gray-200);
+                      border-radius: var(--radius-sm);
+                      cursor: pointer;
+                      font-size: var(--text-sm);
+                      color: var(--color-gray-700);
+                    "
+                  >
+                    <input type="radio" name="goal" /> Competency models
+                  </label>
+                  <label
+                    style="
+                      display: flex;
+                      align-items: center;
+                      gap: var(--space-3);
+                      padding: var(--space-3);
+                      border: 1px solid var(--color-gray-200);
+                      border-radius: var(--radius-sm);
+                      cursor: pointer;
+                      font-size: var(--text-sm);
+                      color: var(--color-gray-700);
+                    "
+                  >
+                    <input type="radio" name="goal" /> Exploring — just trying
+                    it out
+                  </label>
+                </div>
+              </div>
+              <div class="welcome-modal-footer">
+                <button class="btn btn-primary btn-lg">
+                  Upload your first seed
+                </button>
+                <button class="welcome-skip">
+                  Skip — I'll explore on my own
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="annotation">
+            <strong>Personalization survey:</strong> The 1-question survey
+            routes users to a tailored experience. "Job architecture" users see
+            a job-leveling seed template. "Competency model" users see a
+            competency seed. "Exploring" users get the sample pipeline. This is
+            Hulick's segmentation principle — different needs, different
+            onboarding paths.
+          </div>
+        </div>
+
+        <div class="subsection">
+          <h3 class="subsection-title">Spec</h3>
+          <div class="showcase">
+            <div
+              style="
+                display: grid;
+                grid-template-columns: 140px 1fr;
+                gap: var(--space-2) var(--space-6);
+                font-size: var(--text-sm);
+              "
+            >
+              <span style="font-weight: 600">Trigger</span
+              ><span
+                >First login only. Store
+                <code class="code">hasSeenWelcome</code> flag. Never show again
+                once dismissed.</span
+              >
+              <span style="font-weight: 600">Width</span
+              ><span
+                >480px max. Centered modal with scrim overlay (same as drawer
+                spec).</span
+              >
+              <span style="font-weight: 600">CTA text</span
+              ><span
+                >"Upload your first seed" — verb + noun, outcome-oriented. Not
+                "Get started" (vague).</span
+              >
+              <span style="font-weight: 600">Skip option</span
+              ><span
+                >Always present. Never trap the user. Text link below primary
+                button, not a competing button.</span
+              >
+              <span style="font-weight: 600">Survey</span
+              ><span
+                >1 question max. Radio buttons, not dropdowns. Selection
+                highlights with accent border. Pre-selects most common
+                choice.</span
+              >
+              <span style="font-weight: 600">Animation</span
+              ><span
+                >Fade-in scrim + scale(0.95)→scale(1) on modal body, 250ms,
+                standard easing.</span
+              >
+            </div>
+          </div>
+        </div>
+
+        <div class="guidance">
+          <div class="do">
+            <strong>Do</strong>
+            Lead with the user's outcome ("Generate competency models in
+            minutes"), not a feature list. One clear CTA. Include a time
+            estimate ("about 2 minutes"). Respect the skip.
+          </div>
+          <div class="dont">
+            <strong>Don't</strong>
+            Multi-step onboarding wizards covering the full viewport before the
+            user sees the product. Feature tours. Marketing language ("Welcome
+            to our cutting-edge platform"). More than 1 survey question.
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══════════════════════════════════════════════════════════
+       2. EMPTY STATES
+       ═══════════════════════════════════════════════════════════ -->
+      <section class="section">
+        <h2 class="section-title">2. Empty States</h2>
+        <p class="section-desc">
+          The most underused onboarding surface. Every page a new user visits
+          will be empty. That emptiness is an opportunity to teach, motivate,
+          and direct action.
+        </p>
+
+        <div class="principle">
+          Hulick: "Basecamp pre-populates fake projects so you know where
+          they'll be and how they'll look. The interface uses itself to
+          introduce itself."
+        </div>
+
+        <div class="subsection">
+          <h3 class="subsection-title">A. Actionable Empty State (primary)</h3>
+          <p
+            style="
+              font-size: var(--text-sm);
+              color: var(--color-gray-500);
+              margin-bottom: var(--space-4);
+            "
+          >
+            Use when the user needs to create something to see value. The empty
+            state explains what goes here, why it matters, and gives one action.
+          </p>
+
+          <div class="showcase">
+            <div class="empty-state">
+              <div class="empty-state-icon">
+                <svg
+                  width="28"
+                  height="28"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.5"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <rect x="2" y="3" width="20" height="14" rx="2" />
+                  <path d="M8 21h8" />
+                  <path d="M12 17v4" />
+                  <path d="M7 8h2m2 0h2m2 0h2" />
+                  <path d="M7 11h10" />
+                </svg>
+              </div>
+              <h3 class="empty-state-title">No pipelines yet</h3>
+              <p class="empty-state-desc">
+                A pipeline transforms a seed file into a complete job framework
+                — levels, competencies, tasks, and attributes — in one run.
+              </p>
+              <button class="btn btn-primary">Upload seed file</button>
+              <div style="margin-top: var(--space-4)">
+                <button class="btn btn-ghost btn-sm">
+                  Try a sample pipeline
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="annotation">
+            <strong>Key elements:</strong> (1) Icon that represents the missing
+            content, not a generic ø. (2) Title names the thing ("No pipelines
+            yet"). (3) Description explains what pipelines do in one sentence —
+            outcome, not mechanics. (4) Primary CTA is the same green button
+            from the nav ("Upload seed file"). (5) Secondary link offers a
+            zero-effort alternative — the sample pipeline.
+          </div>
+        </div>
+
+        <div class="subsection">
+          <h3 class="subsection-title">B. Prepopulated / Sample State</h3>
+          <p
+            style="
+              font-size: var(--text-sm);
+              color: var(--color-gray-500);
+              margin-bottom: var(--space-4);
+            "
+          >
+            Use to show what the interface looks like with real data. Pre-fill
+            with a demo pipeline so users understand the graph, node cards, and
+            status badges before creating their own.
+          </p>
+
+          <div class="showcase" style="padding: var(--space-6)">
+            <div
+              style="
+                margin-bottom: var(--space-4);
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+              "
+            >
+              <div>
+                <div
+                  style="
+                    display: flex;
+                    align-items: center;
+                    gap: var(--space-3);
+                    margin-bottom: var(--space-1);
+                  "
+                >
+                  <span
+                    style="
+                      font-size: var(--text-md);
+                      font-weight: 600;
+                      color: var(--color-gray-900);
+                    "
+                    >Sample: Product Manager</span
+                  >
+                  <span class="sample-badge">
+                    <svg
+                      width="12"
+                      height="12"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2.5"
+                    >
+                      <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
+                    </svg>
+                    Sample data
+                  </span>
+                </div>
+                <span class="code"
+                  >This is a demo pipeline. Create your own by uploading a seed
+                  file.</span
+                >
+              </div>
+              <button class="btn btn-primary btn-sm">Upload your seed</button>
+            </div>
+
+            <!-- Mini pipeline graph mockup -->
+            <div
+              style="display: flex; gap: var(--space-3); align-items: center"
+            >
+              <div
+                class="card"
+                style="padding: var(--space-4); flex: 1; min-width: 0"
+              >
+                <div
+                  style="
+                    display: flex;
+                    align-items: center;
+                    justify-content: space-between;
+                    margin-bottom: var(--space-2);
+                  "
+                >
+                  <span
+                    style="
+                      font-size: var(--text-sm);
+                      font-weight: 600;
+                      color: var(--color-accent-700);
+                    "
+                    >Initialize-role</span
+                  >
+                  <span class="badge badge-success" style="font-size: 11px"
+                    >DONE</span
+                  >
+                </div>
+              </div>
+              <svg width="20" height="12" viewBox="0 0 20 12" fill="none">
+                <path
+                  d="M0 6h16m0 0l-4-4m4 4l-4 4"
+                  stroke="#d1d5db"
+                  stroke-width="1.5"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              </svg>
+              <div
+                class="card"
+                style="padding: var(--space-4); flex: 1; min-width: 0"
+              >
+                <div
+                  style="
+                    display: flex;
+                    align-items: center;
+                    justify-content: space-between;
+                    margin-bottom: var(--space-2);
+                  "
+                >
+                  <span
+                    style="
+                      font-size: var(--text-sm);
+                      font-weight: 600;
+                      color: var(--color-accent-700);
+                    "
+                    >Experts-in-job</span
+                  >
+                  <span class="badge badge-success" style="font-size: 11px"
+                    >DONE</span
+                  >
+                </div>
+                <span class="code">11.4k tokens · $0.03</span>
+              </div>
+              <svg width="20" height="12" viewBox="0 0 20 12" fill="none">
+                <path
+                  d="M0 6h16m0 0l-4-4m4 4l-4 4"
+                  stroke="#d1d5db"
+                  stroke-width="1.5"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              </svg>
+              <div
+                class="card"
+                style="padding: var(--space-4); flex: 1; min-width: 0"
+              >
+                <div
+                  style="
+                    display: flex;
+                    align-items: center;
+                    justify-content: space-between;
+                    margin-bottom: var(--space-2);
+                  "
+                >
+                  <span
+                    style="
+                      font-size: var(--text-sm);
+                      font-weight: 600;
+                      color: var(--color-accent-700);
+                    "
+                    >Levels</span
+                  >
+                  <span class="badge badge-success" style="font-size: 11px"
+                    >DONE</span
+                  >
+                </div>
+                <span class="code">5.9k tokens · $0.02</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="annotation">
+            <strong>Sample badge:</strong> The dashed-border "Sample data" badge
+            makes it unmistakable that this is demo content. The persistent
+            "Upload your seed" CTA ensures the user always knows the next real
+            action. Sample pipelines are read-only — no edit or delete actions.
+            This is Hulick's Basecamp pattern: the interface introduces itself
+            through itself.
+          </div>
+        </div>
+
+        <div class="subsection">
+          <h3 class="subsection-title">C. Empty State Inventory</h3>
+          <p
+            style="
+              font-size: var(--text-sm);
+              color: var(--color-gray-500);
+              margin-bottom: var(--space-4);
+            "
+          >
+            Every page in the app must have a designed empty state. Here's the
+            audit:
+          </p>
+
+          <div class="showcase">
+            <div
+              style="
+                display: grid;
+                grid-template-columns: 160px 1fr 1fr;
+                gap: var(--space-2) var(--space-4);
+                font-size: var(--text-sm);
+              "
+            >
+              <span style="font-weight: 600; color: var(--color-gray-900)"
+                >Page</span
+              >
+              <span style="font-weight: 600; color: var(--color-gray-900)"
+                >Empty state type</span
+              >
+              <span style="font-weight: 600; color: var(--color-gray-900)"
+                >Primary CTA</span
+              >
+
+              <span>Pipelines list</span>
+              <span style="color: var(--color-gray-500)"
+                >Actionable + sample pipeline</span
+              >
+              <span class="code">Upload seed file</span>
+
+              <span>Pipeline detail</span>
+              <span style="color: var(--color-gray-500)"
+                >N/A (always has graph)</span
+              >
+              <span class="code">—</span>
+
+              <span>Step output</span>
+              <span style="color: var(--color-gray-500)"
+                >Contextual — "Step hasn't run yet"</span
+              >
+              <span class="code">Start / Restart</span>
+
+              <span>Seed library</span>
+              <span style="color: var(--color-gray-500)"
+                >Actionable + templates</span
+              >
+              <span class="code">Upload seed file</span>
+
+              <span>Usage / billing</span>
+              <span style="color: var(--color-gray-500)"
+                >Informational — "No usage yet"</span
+              >
+              <span class="code">Run your first pipeline</span>
+
+              <span>Search results</span>
+              <span style="color: var(--color-gray-500)"
+                >No-results message</span
+              >
+              <span class="code">Clear filters</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="guidance">
+          <div class="do">
+            <strong>Do</strong>
+            Every empty state has: (1) what goes here, (2) why it matters, (3)
+            one action to fix it. Offer a sample/template as a zero-friction
+            alternative. Use the "Sample data" badge to mark demo content.
+            Remove sample content once the user creates their first real item.
+          </div>
+          <div class="dont">
+            <strong>Don't</strong>
+            Blank pages with just "No data." Illustrations or mascots (violates
+            functionalist principles). Feature lists in empty states — describe
+            the outcome, not the tool. Leave any page undesigned for the
+            zero-data case.
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══════════════════════════════════════════════════════════
+       3. PROGRESS & CHECKLISTS
+       ═══════════════════════════════════════════════════════════ -->
+      <section class="section">
+        <h2 class="section-title">3. Progress &amp; Checklists</h2>
+        <p class="section-desc">
+          Show users where they are and what's left. Progress indicators reduce
+          anxiety ("Am I doing this right?") and leverage the endowed progress
+          effect to sustain motivation.
+        </p>
+
+        <div class="principle">
+          Hulick: "Start people off with some progress already completed. The
+          Endowed Progress Effect gives people a psychological push forward."
+          <em>— Quora starts its checklist with 3/5 items pre-checked.</em>
+        </div>
+
+        <div class="subsection">
+          <h3 class="subsection-title">A. Getting Started Checklist</h3>
+          <p
+            style="
+              font-size: var(--text-sm);
+              color: var(--color-gray-500);
+              margin-bottom: var(--space-4);
+            "
+          >
+            Persistent sidebar widget that tracks the user's first-run
+            milestones. Starts with 1 item pre-completed (account creation) to
+            trigger endowed progress.
+          </p>
+
+          <div class="showcase" style="display: flex; justify-content: center">
+            <div class="checklist" style="width: 320px">
+              <div class="checklist-header">
+                <span class="checklist-title">Getting started</span>
+                <span class="checklist-progress-text">2 / 5</span>
+              </div>
+              <div class="checklist-progress-bar">
+                <div class="checklist-progress-fill" style="width: 40%"></div>
+              </div>
+              <ul class="checklist-items">
+                <li class="checklist-item checklist-item-done">
+                  <div class="checklist-check">
+                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                      <path
+                        d="M2.5 6l2.5 2.5 4.5-5"
+                        stroke="white"
+                        stroke-width="1.5"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      />
+                    </svg>
+                  </div>
+                  <div>
+                    <div class="checklist-item-text">Create account</div>
+                  </div>
+                </li>
+                <li class="checklist-item checklist-item-done">
+                  <div class="checklist-check">
+                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                      <path
+                        d="M2.5 6l2.5 2.5 4.5-5"
+                        stroke="white"
+                        stroke-width="1.5"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      />
+                    </svg>
+                  </div>
+                  <div>
+                    <div class="checklist-item-text">Upload a seed file</div>
+                  </div>
+                </li>
+                <li class="checklist-item checklist-item-active">
+                  <div class="checklist-check"></div>
+                  <div>
+                    <div class="checklist-item-text">
+                      Run your first pipeline
+                    </div>
+                    <div class="checklist-item-subtext">
+                      Click "Start" on any pending step
+                    </div>
+                  </div>
+                </li>
+                <li class="checklist-item">
+                  <div class="checklist-check"></div>
+                  <div>
+                    <div class="checklist-item-text">
+                      Review pipeline output
+                    </div>
+                  </div>
+                </li>
+                <li class="checklist-item">
+                  <div class="checklist-check"></div>
+                  <div>
+                    <div class="checklist-item-text">Export or iterate</div>
+                  </div>
+                </li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="annotation">
+            <strong>Endowed progress:</strong> "Create account" is pre-checked —
+            the user already has momentum. The active step has a highlighted
+            ring and helper subtext telling them exactly what to do next.
+            Completed items use strikethrough + muted color to fade into the
+            background. The progress bar fills with brand green, providing a
+            visceral sense of advancement. The whole widget is dismissable and
+            collapses after all 5 items are done.
+          </div>
+        </div>
+
+        <div class="subsection">
+          <h3 class="subsection-title">B. Setup Stepper (multi-step flows)</h3>
+          <p
+            style="
+              font-size: var(--text-sm);
+              color: var(--color-gray-500);
+              margin-bottom: var(--space-4);
+            "
+          >
+            Use for linear multi-step processes like seed configuration or
+            pipeline settings. Shows where the user is in the sequence.
+          </p>
+
+          <div class="showcase" style="display: flex; justify-content: center">
+            <div class="stepper">
+              <div class="stepper-step stepper-step-done">
+                <div class="stepper-circle">
+                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                    <path
+                      d="M2.5 6l2.5 2.5 4.5-5"
+                      stroke="white"
+                      stroke-width="1.5"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    />
+                  </svg>
+                </div>
+                <span class="stepper-label">Upload seed</span>
+              </div>
+              <div class="stepper-line stepper-line-done"></div>
+              <div class="stepper-step stepper-step-active">
+                <div class="stepper-circle">2</div>
+                <span class="stepper-label">Configure</span>
+              </div>
+              <div class="stepper-line"></div>
+              <div class="stepper-step">
+                <div class="stepper-circle">3</div>
+                <span class="stepper-label">Run pipeline</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="annotation">
+            <strong>Spec:</strong> 28px circles, 2px connector lines. Done
+            steps: green fill + checkmark. Active: accent ring + bold label.
+            Future: gray border + muted label. Step labels are verbs ("Upload",
+            "Configure", "Run") not nouns. Max 5 steps — if your flow has more,
+            simplify the flow.
+          </div>
+        </div>
+
+        <div class="subsection">
+          <h3 class="subsection-title">C. Pipeline Runtime Progress</h3>
+          <p
+            style="
+              font-size: var(--text-sm);
+              color: var(--color-gray-500);
+              margin-bottom: var(--space-4);
+            "
+          >
+            The pipeline graph itself is a progress indicator. As each step
+            completes, it transitions from PENDING → RUNNING → DONE, giving the
+            user continuous visual feedback.
+          </p>
+
+          <div class="showcase">
+            <div
+              style="
+                display: flex;
+                align-items: center;
+                gap: var(--space-4);
+                font-size: var(--text-sm);
+              "
+            >
+              <div
+                style="display: flex; align-items: center; gap: var(--space-2)"
+              >
+                <div
+                  style="
+                    width: 12px;
+                    height: 12px;
+                    border-radius: var(--radius-full);
+                    background: var(--color-brand-600);
+                  "
+                ></div>
+                <span>DONE — green fill, token/cost metadata appears</span>
+              </div>
+              <div
+                style="display: flex; align-items: center; gap: var(--space-2)"
+              >
+                <div
+                  style="
+                    width: 12px;
+                    height: 12px;
+                    border-radius: var(--radius-full);
+                    background: var(--color-warning-600);
+                  "
+                ></div>
+                <span>RUNNING — pulsing amber indicator</span>
+              </div>
+              <div
+                style="display: flex; align-items: center; gap: var(--space-2)"
+              >
+                <div
+                  style="
+                    width: 12px;
+                    height: 12px;
+                    border-radius: var(--radius-full);
+                    background: var(--color-gray-300);
+                  "
+                ></div>
+                <span>PENDING — gray, waiting for upstream</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="annotation">
+            <strong>Why it works:</strong> Users can watch their pipeline "light
+            up" from left to right as each step completes. This is inherently
+            satisfying and eliminates the anxiety of "is it working?" The graph
+            is the progress bar — no separate loading indicator needed.
+          </div>
+        </div>
+
+        <div class="guidance">
+          <div class="do">
+            <strong>Do</strong>
+            Pre-complete the first checklist item (endowed progress). Show
+            numeric progress ("2 / 5") alongside the visual bar. Make each
+            checklist item clickable — it navigates to the relevant page or
+            action. Auto-dismiss the checklist after all items are done, with a
+            brief celebration.
+          </div>
+          <div class="dont">
+            <strong>Don't</strong>
+            More than 5 checklist items. Progress bars without numeric labels.
+            Checklists that block the UI (they should be a sidebar widget or
+            collapsible card). Percentage-based progress for a 3-step flow (just
+            show the steps).
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══════════════════════════════════════════════════════════
+       4. CONTEXTUAL GUIDANCE
+       ═══════════════════════════════════════════════════════════ -->
+      <section class="section">
+        <h2 class="section-title">4. Contextual Guidance</h2>
+        <p class="section-desc">
+          Teach users at the moment they need to know, not in a front-loaded
+          tour. Guidance should be non-interruptive, dismissable, and embedded
+          in the interface — not layered on top of it.
+        </p>
+
+        <div class="principle">
+          Hulick: "Don't try to fix a broken interface by overlaying yet another
+          interface on top of it. Focus on better design rather than wasting
+          time with tooltips or coach marks."
+        </div>
+
+        <div class="subsection">
+          <h3 class="subsection-title">A. Inline Hint Banners</h3>
+          <p
+            style="
+              font-size: var(--text-sm);
+              color: var(--color-gray-500);
+              margin-bottom: var(--space-4);
+            "
+          >
+            The primary guidance pattern. Placed inline within the page content,
+            not floating. Dismissed permanently per-user. Use sparingly — max 1
+            per page.
+          </p>
+
+          <div class="showcase" style="max-width: 560px">
+            <div class="hint-banner">
+              <div class="hint-banner-icon">
+                <svg
+                  width="20"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <circle cx="12" cy="12" r="10" />
+                  <path d="M12 16v-4" />
+                  <path d="M12 8h.01" />
+                </svg>
+              </div>
+              <div>
+                <span style="font-weight: 500; color: var(--color-gray-900)"
+                  >Steps run left to right.</span
+                >
+                Each step waits for its upstream dependencies to finish before
+                it can start. Click any step card to see its output and
+                configuration.
+              </div>
+              <button class="hint-banner-dismiss" aria-label="Dismiss hint">
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.5"
+                  stroke-linecap="round"
+                >
+                  <line x1="4" y1="4" x2="12" y2="12" />
+                  <line x1="12" y1="4" x2="4" y2="12" />
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          <div style="margin-top: var(--space-4); max-width: 560px">
+            <div
+              class="hint-banner"
+              style="
+                background-color: var(--color-brand-50);
+                border-color: var(--color-brand-100);
+              "
+            >
+              <div
+                class="hint-banner-icon"
+                style="color: var(--color-brand-600)"
+              >
+                <svg
+                  width="20"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
+                </svg>
+              </div>
+              <div>
+                <span style="font-weight: 500; color: var(--color-gray-900)"
+                  >Your seed file is ready.</span
+                >
+                Click "Rescan" to re-run the pipeline from the failed step, or
+                "Restart" on any individual step card.
+              </div>
+              <button class="hint-banner-dismiss" aria-label="Dismiss hint">
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.5"
+                  stroke-linecap="round"
+                >
+                  <line x1="4" y1="4" x2="12" y2="12" />
+                  <line x1="12" y1="4" x2="4" y2="12" />
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          <div class="annotation">
+            <strong>Two variants:</strong> Info (accent-50 background, ⓘ icon)
+            for general guidance. Action (brand-50 background, ⚡ icon) for
+            context-specific prompts tied to the current state. Both have: bold
+            lead sentence, supporting text, × dismiss. Dismissed hints are
+            stored per-user and never return.
+          </div>
+        </div>
+
+        <div class="subsection">
+          <h3 class="subsection-title">B. Contextual Tooltips</h3>
+          <p
+            style="
+              font-size: var(--text-sm);
+              color: var(--color-gray-500);
+              margin-bottom: var(--space-4);
+            "
+          >
+            Use for explaining a specific element the first time a user
+            encounters it. Triggered by hover or first-time visibility — never
+            as a sequential tour. One tooltip at a time.
+          </p>
+
+          <div
+            class="showcase"
+            style="
+              display: flex;
+              justify-content: center;
+              padding-top: 80px;
+              padding-bottom: var(--space-6);
+            "
+          >
+            <div class="tooltip-example">
+              <div class="tooltip">
+                Each step shows its token usage and cost after it completes.
+                <button class="tooltip-dismiss">Got it</button>
+              </div>
+              <div class="card" style="padding: var(--space-4); width: 240px">
+                <div
+                  style="
+                    display: flex;
+                    align-items: center;
+                    justify-content: space-between;
+                    margin-bottom: var(--space-2);
+                  "
+                >
+                  <span
+                    style="
+                      font-size: var(--text-sm);
+                      font-weight: 600;
+                      color: var(--color-accent-700);
+                    "
+                    >Experts-in-job</span
+                  >
+                  <span class="badge badge-success" style="font-size: 11px"
+                    >DONE</span
+                  >
+                </div>
+                <span class="code">11.4k tokens · $0.0305</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="annotation">
+            <strong>Spec:</strong> Dark background (gray-900), white text, 13px,
+            max-width 260px. 6px arrow. "Got it" dismiss link. Shown once per
+            element per user. Position: prefer top, fall back to
+            bottom/left/right if clipped. Z-index: 100 (dropdown level).
+            Entrance: fade-in 150ms.
+          </div>
+        </div>
+
+        <div class="subsection">
+          <h3 class="subsection-title">C. Hotspot Beacons</h3>
+          <p
+            style="
+              font-size: var(--text-sm);
+              color: var(--color-gray-500);
+              margin-bottom: var(--space-4);
+            "
+          >
+            Subtle pulsing dots that draw attention to a feature without
+            interrupting. Click to reveal a tooltip. Use for one feature
+            discovery moment per page, max.
+          </p>
+
+          <div
+            class="showcase"
+            style="
+              display: flex;
+              justify-content: center;
+              gap: var(--space-8);
+              padding: var(--space-6);
+            "
+          >
+            <div
+              style="display: flex; align-items: center; gap: var(--space-3)"
+            >
+              <div class="hotspot" style="position: relative">
+                <button class="btn btn-secondary btn-sm">Rescan</button>
+                <div class="hotspot-beacon"></div>
+              </div>
+              <span
+                style="font-size: var(--text-sm); color: var(--color-gray-500)"
+                >← pulsing beacon on first visit</span
+              >
+            </div>
+          </div>
+
+          <div class="annotation">
+            <strong>Spec:</strong> 12px accent-700 dot, positioned at top-right
+            of the target element. Outer ring pulses at 2s interval
+            (ease-in-out, scale 1→1.5, opacity 0.4→0). Click opens tooltip.
+            Dismissed permanently after click. Max 1 beacon visible at a time —
+            queue them if multiple features need discovery.
+          </div>
+        </div>
+
+        <div class="subsection">
+          <h3 class="subsection-title">Pattern Priority</h3>
+          <p
+            style="
+              font-size: var(--text-sm);
+              color: var(--color-gray-500);
+              margin-bottom: var(--space-4);
+            "
+          >
+            Choose the least intrusive pattern that gets the job done:
+          </p>
+
+          <div class="showcase">
+            <div
+              style="
+                display: grid;
+                grid-template-columns: 40px 140px 1fr;
+                gap: var(--space-2) var(--space-4);
+                font-size: var(--text-sm);
+                align-items: center;
+              "
+            >
+              <span style="font-weight: 700; color: var(--color-brand-600)"
+                >1st</span
+              >
+              <span style="font-weight: 600">Smart defaults</span>
+              <span style="color: var(--color-gray-500)"
+                >No guidance needed — the product just works. Pre-fill inputs,
+                auto-select the right option.</span
+              >
+
+              <span style="font-weight: 700; color: var(--color-brand-600)"
+                >2nd</span
+              >
+              <span style="font-weight: 600">Empty states</span>
+              <span style="color: var(--color-gray-500)"
+                >Teach through the absence of data. Explain what goes here and
+                how to fill it.</span
+              >
+
+              <span style="font-weight: 700; color: var(--color-brand-600)"
+                >3rd</span
+              >
+              <span style="font-weight: 600">Inline hint banners</span>
+              <span style="color: var(--color-gray-500)"
+                >Persistent, embedded guidance. Dismissable. 1 per page
+                max.</span
+              >
+
+              <span style="font-weight: 700; color: var(--color-brand-600)"
+                >4th</span
+              >
+              <span style="font-weight: 600">Hotspot beacons</span>
+              <span style="color: var(--color-gray-500)"
+                >Subtle attention-draw for feature discovery.
+                Click-to-reveal.</span
+              >
+
+              <span style="font-weight: 700; color: var(--color-brand-600)"
+                >5th</span
+              >
+              <span style="font-weight: 600">Tooltips</span>
+              <span style="color: var(--color-gray-500)"
+                >Targeted explanation on first encounter. One at a time.</span
+              >
+
+              <span style="font-weight: 700; color: var(--color-error-600)"
+                >Last</span
+              >
+              <span style="font-weight: 600; color: var(--color-error-700)"
+                >Product tours</span
+              >
+              <span style="color: var(--color-gray-500)"
+                >Sequential tooltip tours are a last resort. They interrupt
+                flow, overwhelm memory, and feel coercive. Avoid if
+                possible.</span
+              >
+            </div>
+          </div>
+        </div>
+
+        <div class="guidance">
+          <div class="do">
+            <strong>Do</strong>
+            Favor inline guidance (hint banners, empty states) over floating
+            guidance (tooltips, tours). Always make guidance dismissable. Store
+            dismiss state per user. Tie guidance to context — show it when the
+            user reaches the relevant page/state, not at sign-up.
+          </div>
+          <div class="dont">
+            <strong>Don't</strong>
+            Sequential tooltip tours that hijack the interface. More than 1 hint
+            banner per page. Tooltips that appear on hover without a dismiss —
+            they'll fire on every visit. Coach marks on obvious UI elements
+            ("This is the navigation bar"). Any guidance that blocks the user
+            from interacting with the product.
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══════════════════════════════════════════════════════════
+       5. SUCCESS STATES
+       ═══════════════════════════════════════════════════════════ -->
+      <section class="section">
+        <h2 class="section-title">5. Success States &amp; Celebration</h2>
+        <p class="section-desc">
+          Celebrate the user's achievement, not your product's features. Success
+          reinforcement confirms that the user made the right choice and
+          motivates the next action.
+        </p>
+
+        <div class="principle">
+          Hulick: "When users finish the task, it's important to be there with
+          positive reinforcement. Celebrate the success that you're helping
+          someone achieve in their life."
+        </div>
+
+        <div class="subsection">
+          <h3 class="subsection-title">A. First Pipeline Complete</h3>
+          <p
+            style="
+              font-size: var(--text-sm);
+              color: var(--color-gray-500);
+              margin-bottom: var(--space-4);
+            "
+          >
+            A one-time celebration when the user's first pipeline reaches 100%
+            DONE. This is the critical "aha moment" — the user has seen value.
+          </p>
+
+          <div class="showcase" style="display: flex; justify-content: center">
+            <div style="max-width: 400px; width: 100%">
+              <div class="success-state">
+                <div class="success-icon">
+                  <svg
+                    width="28"
+                    height="28"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <path d="M20 6L9 17l-5-5" />
+                  </svg>
+                </div>
+                <h3 class="success-title">Pipeline complete</h3>
+                <p class="success-desc">
+                  9 steps finished in 34m 12s. Your competency model, levels,
+                  and job tasks are ready to review.
+                </p>
+                <div
+                  style="
+                    display: flex;
+                    gap: var(--space-3);
+                    justify-content: center;
+                  "
+                >
+                  <button class="btn btn-primary">Review output</button>
+                  <button class="btn btn-secondary">Run another</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="annotation">
+            <strong>Tone:</strong> Calm and factual. "Pipeline complete" — not
+            "Amazing! 🎉 You did it!" This is a professional tool; celebrate
+            with data (steps, duration, output), not confetti. The CTA moves
+            forward ("Review output") rather than looking backward. The
+            secondary action lets them build momentum with another run.
+          </div>
+        </div>
+
+        <div class="subsection">
+          <h3 class="subsection-title">B. Checklist Completion</h3>
+          <p
+            style="
+              font-size: var(--text-sm);
+              color: var(--color-gray-500);
+              margin-bottom: var(--space-4);
+            "
+          >
+            When all getting-started items are done, transform the checklist
+            into a brief success message, then auto-collapse after 5 seconds.
+          </p>
+
+          <div class="showcase" style="display: flex; justify-content: center">
+            <div class="checklist" style="width: 320px">
+              <div style="padding: var(--space-5); text-align: center">
+                <div
+                  style="
+                    display: inline-flex;
+                    align-items: center;
+                    justify-content: center;
+                    width: 36px;
+                    height: 36px;
+                    border-radius: var(--radius-full);
+                    background: var(--color-success-100);
+                    color: var(--color-success-600);
+                    margin-bottom: var(--space-3);
+                  "
+                >
+                  <svg
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2.5"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <path d="M20 6L9 17l-5-5" />
+                  </svg>
+                </div>
+                <div
+                  style="
+                    font-size: var(--text-base);
+                    font-weight: 600;
+                    color: var(--color-gray-900);
+                    margin-bottom: var(--space-1);
+                  "
+                >
+                  All set
+                </div>
+                <div
+                  style="
+                    font-size: var(--text-sm);
+                    color: var(--color-gray-500);
+                  "
+                >
+                  You've completed the getting started guide.
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="subsection">
+          <h3 class="subsection-title">C. Inline Step Success</h3>
+          <p
+            style="
+              font-size: var(--text-sm);
+              color: var(--color-gray-500);
+              margin-bottom: var(--space-4);
+            "
+          >
+            When an individual pipeline step completes, the node card
+            transitions smoothly: badge flips to green "DONE", token/cost
+            metadata fades in, and the "Restart" button replaces "Start".
+          </p>
+
+          <div class="showcase">
+            <div style="display: flex; gap: var(--space-6); align-items: start">
+              <div>
+                <div class="showcase-label">Before</div>
+                <div
+                  class="card"
+                  style="padding: var(--space-4); width: 200px; opacity: 0.6"
+                >
+                  <div
+                    style="
+                      display: flex;
+                      align-items: center;
+                      justify-content: space-between;
+                      margin-bottom: var(--space-3);
+                    "
+                  >
+                    <span
+                      style="
+                        font-size: var(--text-sm);
+                        font-weight: 600;
+                        color: var(--color-gray-700);
+                      "
+                      >Levels</span
+                    >
+                    <span class="badge badge-neutral" style="font-size: 11px"
+                      >PENDING</span
+                    >
+                  </div>
+                  <button class="btn btn-secondary btn-sm">Start</button>
+                </div>
+              </div>
+              <div style="align-self: center; color: var(--color-gray-300)">
+                <svg
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                >
+                  <path d="M5 12h14m-4-4 4 4-4 4" />
+                </svg>
+              </div>
+              <div>
+                <div class="showcase-label">After</div>
+                <div class="card" style="padding: var(--space-4); width: 200px">
+                  <div
+                    style="
+                      display: flex;
+                      align-items: center;
+                      justify-content: space-between;
+                      margin-bottom: var(--space-2);
+                    "
+                  >
+                    <span
+                      style="
+                        font-size: var(--text-sm);
+                        font-weight: 600;
+                        color: var(--color-accent-700);
+                      "
+                      >Levels</span
+                    >
+                    <span class="badge badge-success" style="font-size: 11px"
+                      >DONE 1m 58s</span
+                    >
+                  </div>
+                  <div
+                    style="
+                      font-family: var(--font-family-mono);
+                      font-size: var(--text-xs);
+                      color: var(--color-gray-500);
+                      margin-bottom: var(--space-3);
+                    "
+                  >
+                    5.9k tokens · $0.0166
+                  </div>
+                  <button class="btn btn-secondary btn-sm">Restart</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="annotation">
+            <strong>Animation:</strong> Badge crossfade 150ms. Metadata slides
+            in (translateY(4px) → 0, opacity 0→1, 200ms, 100ms delay). Title
+            color transition to accent-700 at 150ms. All transitions use
+            standard easing. No bounce, no confetti, no sound effects.
+          </div>
+        </div>
+
+        <div class="guidance">
+          <div class="do">
+            <strong>Do</strong>
+            Celebrate with data: "9 steps, 34m 12s, $0.14 total cost." Always
+            provide a forward-looking CTA ("Review output", "Run another"). Make
+            the first success moment special (one-time modal) but keep
+            subsequent completions inline and subtle. Auto-dismiss celebrations
+            after a timeout.
+          </div>
+          <div class="dont">
+            <strong>Don't</strong>
+            Confetti, emojis, exclamation marks, or animated mascots.
+            Celebrations that block the user from continuing. "Great job!" tone
+            — this is a power tool, not a gamified app. Celebrating partial
+            completion ("3 of 9 steps done!") unless the user triggered a
+            specific action.
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══════════════════════════════════════════════════════════
+       6. PROGRESSIVE DISCLOSURE
+       ═══════════════════════════════════════════════════════════ -->
+      <section class="section">
+        <h2 class="section-title">6. Progressive Disclosure</h2>
+        <p class="section-desc">
+          Show only what the user needs right now. Reveal complexity as they
+          advance. This reduces cognitive load for new users while preserving
+          power for experienced ones.
+        </p>
+
+        <div class="principle">
+          Hulick: "If you look at your product as a user going from 0 to 60,
+          you're designing for the person at 60. A majority of folks never reach
+          that cool spot."
+          <em>— Design for the journey, not the destination.</em>
+        </div>
+
+        <div class="subsection">
+          <h3 class="subsection-title">A. Layered Interface</h3>
+          <p
+            style="
+              font-size: var(--text-sm);
+              color: var(--color-gray-500);
+              margin-bottom: var(--space-4);
+            "
+          >
+            Map features to user maturity levels. New users see the essential
+            view; power features reveal as they gain experience.
+          </p>
+
+          <div class="showcase">
+            <div
+              style="
+                display: grid;
+                grid-template-columns: 120px 1fr 1fr;
+                gap: var(--space-3) var(--space-6);
+                font-size: var(--text-sm);
+              "
+            >
+              <span style="font-weight: 600; color: var(--color-gray-900)"
+                >Stage</span
+              >
+              <span style="font-weight: 600; color: var(--color-gray-900)"
+                >Visible</span
+              >
+              <span style="font-weight: 600; color: var(--color-gray-900)"
+                >Hidden until needed</span
+              >
+
+              <span style="color: var(--color-gray-500)">First visit</span>
+              <span
+                >Pipeline graph, status badges, Upload Seed CTA, getting-started
+                checklist</span
+              >
+              <span style="color: var(--color-gray-400)"
+                >Cost breakdown, token details, advanced config, API access,
+                export options</span
+              >
+
+              <span style="color: var(--color-gray-500)"
+                >First pipeline run</span
+              >
+              <span
+                >+ Step output drawer, Restart/Start buttons, duration and cost
+                per step</span
+              >
+              <span style="color: var(--color-gray-400)"
+                >Seed editor, step config overrides, batch operations</span
+              >
+
+              <span style="color: var(--color-gray-500)">Returning user</span>
+              <span
+                >+ Pipeline list with history, total cost column, search and
+                filters</span
+              >
+              <span style="color: var(--color-gray-400)"
+                >API keys, webhook config, team settings</span
+              >
+
+              <span style="color: var(--color-gray-500)">Power user</span>
+              <span
+                >+ Full config, API playground, bulk actions, custom step
+                definitions</span
+              >
+              <span style="color: var(--color-gray-400)"
+                >Nothing — all features accessible</span
+              >
+            </div>
+          </div>
+        </div>
+
+        <div class="subsection">
+          <h3 class="subsection-title">B. "Show more" Patterns</h3>
+          <p
+            style="
+              font-size: var(--text-sm);
+              color: var(--color-gray-500);
+              margin-bottom: var(--space-4);
+            "
+          >
+            Within a single page, use expandable sections to hide advanced
+            options behind a clear affordance.
+          </p>
+
+          <div class="showcase" style="max-width: 480px">
+            <!-- Collapsed -->
+            <div style="margin-bottom: var(--space-4)">
+              <div class="showcase-label">
+                Collapsed (default for new users)
+              </div>
+              <div class="card" style="padding: var(--space-4)">
+                <div style="margin-bottom: var(--space-4)">
+                  <label class="form-label">Pipeline name</label>
+                  <input
+                    class="form-input"
+                    type="text"
+                    value="CMO-competency-v2"
+                  />
+                </div>
+                <button
+                  style="
+                    display: flex;
+                    align-items: center;
+                    gap: var(--space-2);
+                    background: none;
+                    border: none;
+                    color: var(--color-accent-700);
+                    font-size: var(--text-sm);
+                    font-weight: 500;
+                    cursor: pointer;
+                    padding: 0;
+                    font-family: var(--font-family-sans);
+                  "
+                >
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 14 14"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                  >
+                    <path d="M7 3v8m-4-4h8" />
+                  </svg>
+                  Advanced options
+                </button>
+              </div>
+            </div>
+
+            <!-- Expanded -->
+            <div>
+              <div class="showcase-label">Expanded (on click)</div>
+              <div class="card" style="padding: var(--space-4)">
+                <div style="margin-bottom: var(--space-4)">
+                  <label class="form-label">Pipeline name</label>
+                  <input
+                    class="form-input"
+                    type="text"
+                    value="CMO-competency-v2"
+                  />
+                </div>
+                <button
+                  style="
+                    display: flex;
+                    align-items: center;
+                    gap: var(--space-2);
+                    background: none;
+                    border: none;
+                    color: var(--color-accent-700);
+                    font-size: var(--text-sm);
+                    font-weight: 500;
+                    cursor: pointer;
+                    padding: 0;
+                    font-family: var(--font-family-sans);
+                    margin-bottom: var(--space-4);
+                  "
+                >
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 14 14"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                  >
+                    <path d="M3 7h8" />
+                  </svg>
+                  Advanced options
+                </button>
+                <div
+                  style="
+                    padding-left: var(--space-4);
+                    border-left: 2px solid var(--color-gray-100);
+                  "
+                >
+                  <div style="margin-bottom: var(--space-4)">
+                    <label class="form-label">Model</label>
+                    <input
+                      class="form-input"
+                      type="text"
+                      value="claude-sonnet-4-20250514"
+                      style="
+                        font-family: var(--font-family-mono);
+                        font-size: var(--text-sm);
+                      "
+                    />
+                  </div>
+                  <div>
+                    <label class="form-label">Max tokens per step</label>
+                    <input
+                      class="form-input"
+                      type="text"
+                      value="4096"
+                      style="
+                        font-family: var(--font-family-mono);
+                        font-size: var(--text-sm);
+                        width: 120px;
+                      "
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="annotation">
+            <strong>Spec:</strong> Toggle is a text button with +/− icon,
+            accent-700 color. Expanded content has a 2px left border (gray-100)
+            as a visual group indicator. Content reveals with height animation
+            (max-height transition, 200ms). The toggle label changes from
+            "Advanced options" → same text (or collapses with − icon). Never use
+            "Show more" as a label — name the content being revealed.
+          </div>
+        </div>
+
+        <div class="guidance">
+          <div class="do">
+            <strong>Do</strong>
+            Default all advanced panels to collapsed. Name the hidden content
+            ("Advanced options", "Cost breakdown", "API configuration").
+            Remember expand/collapse state per user for returning visits. Indent
+            expanded content with a left border to visually group it.
+          </div>
+          <div class="dont">
+            <strong>Don't</strong>
+            Hide critical information behind progressive disclosure — the path
+            to the first pipeline run must be fully visible. Use accordions for
+            content the user needs to compare (use tabs instead). Nest
+            expandable sections more than 1 level deep.
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══════════════════════════════════════════════════════════
+       7. ERROR RECOVERY
+       ═══════════════════════════════════════════════════════════ -->
+      <section class="section">
+        <h2 class="section-title">7. Error Recovery for New Users</h2>
+        <p class="section-desc">
+          Errors are terrifying for first-time users. They don't have the mental
+          model to diagnose what went wrong. Every error state must explain what
+          happened, why, and exactly how to fix it.
+        </p>
+
+        <div class="principle">
+          Hulick: "Anytime there's an opportunity to increase the likelihood
+          that users are successful — that's onboarding."
+          <em>— Error recovery is onboarding.</em>
+        </div>
+
+        <div class="subsection">
+          <h3 class="subsection-title">
+            A. Failed Step — First-Time User View
+          </h3>
+          <p
+            style="
+              font-size: var(--text-sm);
+              color: var(--color-gray-500);
+              margin-bottom: var(--space-4);
+            "
+          >
+            When a pipeline step fails, the error card must be self-sufficient.
+            A new user should be able to recover without documentation or
+            support.
+          </p>
+
+          <div class="showcase" style="max-width: 420px">
+            <div
+              class="card"
+              style="
+                border-color: var(--color-error-600);
+                background: var(--color-error-50);
+                padding: var(--space-5);
+              "
+            >
+              <div
+                style="
+                  display: flex;
+                  align-items: flex-start;
+                  justify-content: space-between;
+                  margin-bottom: var(--space-3);
+                "
+              >
+                <span
+                  style="
+                    font-size: var(--text-sm);
+                    font-weight: 600;
+                    color: var(--color-error-700);
+                  "
+                  >Competency-model-s1</span
+                >
+                <span class="badge badge-error" style="font-size: 11px"
+                  >FAILED (INFERENCE)</span
+                >
+              </div>
+
+              <div
+                style="
+                  font-size: var(--text-sm);
+                  color: var(--color-error-700);
+                  margin-bottom: var(--space-4);
+                "
+              >
+                <strong style="display: block; margin-bottom: var(--space-1)"
+                  >Fetch failed</strong
+                >
+                The model couldn't retrieve the upstream data from "Job-tasks."
+                This usually means the upstream step timed out or returned
+                incomplete output.
+              </div>
+
+              <div
+                style="
+                  font-size: var(--text-sm);
+                  color: var(--color-gray-700);
+                  background: var(--color-white);
+                  border: 1px solid var(--color-gray-200);
+                  border-radius: var(--radius-sm);
+                  padding: var(--space-3);
+                  margin-bottom: var(--space-4);
+                "
+              >
+                <strong
+                  style="
+                    display: block;
+                    margin-bottom: var(--space-1);
+                    color: var(--color-gray-900);
+                  "
+                  >How to fix</strong
+                >
+                1. Check if "Job-tasks" completed successfully.<br />
+                2. If it did, click "Restart" below to re-run this step.<br />
+                3. If not, restart "Job-tasks" first, then retry this step.
+              </div>
+
+              <div style="display: flex; gap: var(--space-3)">
+                <button class="btn btn-secondary btn-sm">Restart</button>
+                <button
+                  class="btn btn-ghost btn-sm"
+                  style="color: var(--color-gray-500)"
+                >
+                  View logs
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="annotation">
+            <strong>Structure:</strong> (1) Error title — the raw error string
+            for technical users. (2) Plain-language explanation — what this
+            means in context. (3) "How to fix" box — numbered steps on white
+            background, visually separated from the error. (4) Actions —
+            "Restart" as primary, "View logs" as secondary for advanced users.
+            This mirrors Hulick's principle: guide users toward their next
+            successful action, don't just report the failure.
+          </div>
+        </div>
+
+        <div class="subsection">
+          <h3 class="subsection-title">B. Seed Upload Errors</h3>
+          <div class="showcase" style="max-width: 480px">
+            <div
+              style="
+                border: 2px solid var(--color-error-600);
+                border-radius: var(--radius-md);
+                padding: var(--space-6);
+                background: var(--color-error-50);
+                text-align: center;
+              "
+            >
+              <div
+                style="
+                  display: inline-flex;
+                  align-items: center;
+                  justify-content: center;
+                  width: 48px;
+                  height: 48px;
+                  border-radius: var(--radius-full);
+                  background: var(--color-error-100);
+                  color: var(--color-error-600);
+                  margin-bottom: var(--space-3);
+                "
+              >
+                <svg
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </div>
+              <div
+                style="
+                  font-size: var(--text-base);
+                  font-weight: 600;
+                  color: var(--color-error-700);
+                  margin-bottom: var(--space-2);
+                "
+              >
+                Invalid seed format
+              </div>
+              <div
+                style="
+                  font-size: var(--text-sm);
+                  color: var(--color-gray-700);
+                  margin-bottom: var(--space-4);
+                  max-width: 320px;
+                  margin-left: auto;
+                  margin-right: auto;
+                "
+              >
+                Expected JSON with a <code class="code">"role"</code> field at
+                the root. The uploaded file is missing this field.
+              </div>
+              <div
+                style="
+                  display: flex;
+                  gap: var(--space-3);
+                  justify-content: center;
+                "
+              >
+                <button class="btn btn-secondary btn-sm">
+                  Upload different file
+                </button>
+                <button class="btn btn-ghost btn-sm">
+                  View seed format guide
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="guidance">
+          <div class="do">
+            <strong>Do</strong>
+            Every error has three parts: what happened, why, and how to fix it.
+            Use numbered steps for multi-step recovery. Link to relevant docs or
+            guides from error states. Show the raw error string for technical
+            users but lead with the plain-language explanation.
+          </div>
+          <div class="dont">
+            <strong>Don't</strong>
+            "Something went wrong." "An unexpected error occurred." "Error 500."
+            — these tell the user nothing. Error states that only say "Restart"
+            without context. Red text without a white-background recovery box
+            (the contrast makes the fix hard to read).
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══════════════════════════════════════════════════════════
+       8. RETURNING USER NUDGES
+       ═══════════════════════════════════════════════════════════ -->
+      <section class="section">
+        <h2 class="section-title">8. Returning User Nudges</h2>
+        <p class="section-desc">
+          Onboarding doesn't end at first use. Users who don't return within 48
+          hours are at risk of churning. These patterns re-engage users who
+          started but didn't finish.
+        </p>
+
+        <div class="principle">
+          Hulick: "People dislike losing things more than they like getting
+          things. The faster you give someone something they're afraid of
+          losing, the more likely they'll continue."
+          <em>— Loss aversion as a retention tool.</em>
+        </div>
+
+        <div class="subsection">
+          <h3 class="subsection-title">A. Resume Banner</h3>
+          <p
+            style="
+              font-size: var(--text-sm);
+              color: var(--color-gray-500);
+              margin-bottom: var(--space-4);
+            "
+          >
+            Shown at the top of the dashboard when a returning user has an
+            incomplete pipeline or unfinished getting-started items.
+          </p>
+
+          <div class="showcase" style="max-width: 640px">
+            <div
+              style="
+                display: flex;
+                align-items: center;
+                gap: var(--space-4);
+                padding: var(--space-4) var(--space-5);
+                background: var(--color-accent-50);
+                border: 1px solid var(--color-accent-100);
+                border-radius: var(--radius-md);
+              "
+            >
+              <div style="flex: 1">
+                <div
+                  style="
+                    font-size: var(--text-sm);
+                    font-weight: 600;
+                    color: var(--color-gray-900);
+                    margin-bottom: 2px;
+                  "
+                >
+                  Resume your CMO pipeline
+                </div>
+                <div
+                  style="
+                    font-size: var(--text-sm);
+                    color: var(--color-gray-500);
+                  "
+                >
+                  4 of 9 steps completed · last active 2 hours ago
+                </div>
+              </div>
+              <button class="btn btn-primary btn-sm">Continue</button>
+              <button class="hint-banner-dismiss" aria-label="Dismiss">
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.5"
+                  stroke-linecap="round"
+                >
+                  <line x1="4" y1="4" x2="12" y2="12" />
+                  <line x1="12" y1="4" x2="4" y2="12" />
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          <div class="annotation">
+            <strong>Trigger:</strong> User returns with an in-progress pipeline.
+            Show the most recent incomplete pipeline. "Continue" navigates to
+            the pipeline detail page. Dismiss removes for this session; re-shows
+            on next login if pipeline is still incomplete. Include time context
+            ("2 hours ago") to leverage recency.
+          </div>
+        </div>
+
+        <div class="subsection">
+          <h3 class="subsection-title">B. Lifecycle Email Triggers</h3>
+          <div class="showcase">
+            <div
+              style="
+                display: grid;
+                grid-template-columns: 140px 140px 1fr;
+                gap: var(--space-2) var(--space-4);
+                font-size: var(--text-sm);
+              "
+            >
+              <span style="font-weight: 600; color: var(--color-gray-900)"
+                >Trigger</span
+              >
+              <span style="font-weight: 600; color: var(--color-gray-900)"
+                >Timing</span
+              >
+              <span style="font-weight: 600; color: var(--color-gray-900)"
+                >Subject / CTA</span
+              >
+
+              <span style="color: var(--color-gray-500)"
+                >Signed up, no seed uploaded</span
+              >
+              <span class="code">+24 hours</span>
+              <span>"Your first pipeline is 2 minutes away" → Upload seed</span>
+
+              <span style="color: var(--color-gray-500)"
+                >Seed uploaded, pipeline not run</span
+              >
+              <span class="code">+4 hours</span>
+              <span>"Your seed is ready to run" → Start pipeline</span>
+
+              <span style="color: var(--color-gray-500)"
+                >Pipeline failed, not retried</span
+              >
+              <span class="code">+24 hours</span>
+              <span>"Your CMO pipeline needs attention" → View pipeline</span>
+
+              <span style="color: var(--color-gray-500)"
+                >First pipeline complete, no return</span
+              >
+              <span class="code">+48 hours</span>
+              <span>"Your competency model is ready" → Review output</span>
+
+              <span style="color: var(--color-gray-500)">Inactive 7 days</span>
+              <span class="code">+7 days</span>
+              <span>"New: batch pipeline runs" → What's new</span>
+            </div>
+          </div>
+
+          <div class="annotation">
+            <strong>Rules:</strong> Each email is behavior-triggered, not
+            time-based. If the user takes the action before the email fires,
+            cancel it. Max 1 email per 48 hours. Subject lines describe the
+            user's outcome, not the product's features. Every email has exactly
+            1 CTA button. Plain-text alternative included. Unsubscribe link
+            prominent.
+          </div>
+        </div>
+
+        <div class="guidance">
+          <div class="do">
+            <strong>Do</strong>
+            Behavior-triggered emails that reference the user's specific data
+            ("Your CMO pipeline"). Resume banners that show progress context.
+            Time-since-last-activity ("2 hours ago") to leverage recency.
+          </div>
+          <div class="dont">
+            <strong>Don't</strong>
+            Generic drip campaigns on a fixed schedule. More than 1 email per 48
+            hours. "We miss you!" tone. Emails that list features the user
+            hasn't tried — focus on the outcome they started pursuing.
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══════════════════════════════════════════════════════════
+       CHECKLIST
+       ═══════════════════════════════════════════════════════════ -->
+      <section class="section" style="margin-bottom: 0">
+        <h2 class="section-title">FTUE Audit Checklist</h2>
+        <p class="section-desc">
+          Run this against every page before shipping. If the answer to any
+          question is "no," fix it.
+        </p>
+
+        <div class="showcase">
+          <div
+            style="
+              font-size: var(--text-sm);
+              color: var(--color-gray-700);
+              line-height: 2.1;
+            "
+          >
+            <div
+              style="
+                font-weight: 600;
+                color: var(--color-gray-900);
+                margin-bottom: var(--space-2);
+              "
+            >
+              First visit
+            </div>
+            <div>
+              ☐ Does this page have a designed empty state with a clear CTA?
+            </div>
+            <div>
+              ☐ Can the user understand what goes here without reading
+              documentation?
+            </div>
+            <div>
+              ☐ Is there a sample or prepopulated example they can explore?
+            </div>
+            <div>
+              ☐ Is the getting-started checklist visible and reflecting their
+              progress?
+            </div>
+
+            <div
+              style="
+                font-weight: 600;
+                color: var(--color-gray-900);
+                margin-top: var(--space-4);
+                margin-bottom: var(--space-2);
+              "
+            >
+              Guidance
+            </div>
+            <div>☐ Is there at most 1 inline hint banner on this page?</div>
+            <div>☐ Can the hint be permanently dismissed?</div>
+            <div>
+              ☐ Did I choose the least intrusive guidance pattern (smart
+              defaults first)?
+            </div>
+            <div>
+              ☐ Is all guidance showing at the moment of need, not front-loaded?
+            </div>
+
+            <div
+              style="
+                font-weight: 600;
+                color: var(--color-gray-900);
+                margin-top: var(--space-4);
+                margin-bottom: var(--space-2);
+              "
+            >
+              Errors
+            </div>
+            <div>
+              ☐ Does every error state explain what happened, why, and how to
+              fix it?
+            </div>
+            <div>
+              ☐ Is there a numbered recovery path, not just "try again"?
+            </div>
+            <div>☐ Can the user recover without leaving this page?</div>
+
+            <div
+              style="
+                font-weight: 600;
+                color: var(--color-gray-900);
+                margin-top: var(--space-4);
+                margin-bottom: var(--space-2);
+              "
+            >
+              Progress &amp; success
+            </div>
+            <div>☐ Can the user see how far they've come and what's left?</div>
+            <div>
+              ☐ Does completing a milestone give clear, data-driven feedback?
+            </div>
+            <div>
+              ☐ Does the first pipeline completion trigger a one-time
+              celebration?
+            </div>
+
+            <div
+              style="
+                font-weight: 600;
+                color: var(--color-gray-900);
+                margin-top: var(--space-4);
+                margin-bottom: var(--space-2);
+              "
+            >
+              Return &amp; retention
+            </div>
+            <div>
+              ☐ Does a returning user with unfinished work see a resume banner?
+            </div>
+            <div>
+              ☐ Are lifecycle emails triggered by behavior, not a fixed
+              schedule?
+            </div>
+            <div>☐ Is the time-to-first-value under 5 minutes?</div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </body>
+</html>
