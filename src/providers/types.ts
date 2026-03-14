@@ -69,6 +69,7 @@ export type ProviderName =
   | "zhipu"
   | "claudecode"
   | "moonshot"
+  | "alibaba"
   | "mock";
 
 /** Options for the chat() gateway function. */
@@ -104,6 +105,12 @@ export interface DeepSeekOptions extends ProviderOptions {
   frequencyPenalty?: number;
   presencePenalty?: number;
   stream?: boolean;
+}
+
+/** Alibaba-specific options. */
+export interface AlibabaOptions extends ProviderOptions {
+  frequencyPenalty?: number;
+  presencePenalty?: number;
 }
 
 /** Moonshot-specific options. */
@@ -160,6 +167,7 @@ export interface ProviderAvailability {
   zhipu: boolean;
   claudecode: boolean;
   moonshot: boolean;
+  alibaba: boolean;
   mock: boolean;
 }
 

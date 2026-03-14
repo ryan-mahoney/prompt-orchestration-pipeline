@@ -5,7 +5,8 @@ export type ProviderName =
   | "deepseek"
   | "moonshot"
   | "claude-code"
-  | "zai";
+  | "zai"
+  | "alibaba";
 
 export interface ModelConfigEntry {
   readonly provider: ProviderName;
@@ -79,6 +80,14 @@ export const ModelAlias = Object.freeze({
   ZAI_GLM_4_LONG: "zai:glm-4-long",
   ZAI_GLM_Z1_FLASH: "zai:glm-z1-flash",
   ZAI_GLM_Z1_AIR: "zai:glm-z1-air",
+  // Alibaba (Qwen via DashScope)
+  ALIBABA_QWEN3_MAX: "alibaba:qwen3-max",
+  ALIBABA_QWEN3_5_PLUS: "alibaba:qwen3.5-plus",
+  ALIBABA_QWEN_PLUS: "alibaba:qwen-plus",
+  ALIBABA_QWEN_FLASH: "alibaba:qwen-flash",
+  ALIBABA_QWQ_PLUS: "alibaba:qwq-plus",
+  ALIBABA_QWEN3_CODER_PLUS: "alibaba:qwen3-coder-plus",
+  ALIBABA_QWEN3_CODER_FLASH: "alibaba:qwen3-coder-flash",
 } as const);
 
 export type ModelAliasKey = (typeof ModelAlias)[keyof typeof ModelAlias];
@@ -304,6 +313,49 @@ const MODEL_CONFIG_RAW: Record<ModelAliasKey, ModelConfigEntry> = {
     tokenCostInPerMillion: 0.1,
     tokenCostOutPerMillion: 0.4,
   },
+  // Alibaba (Qwen via DashScope)
+  "alibaba:qwen3-max": {
+    provider: "alibaba",
+    model: "qwen3-max",
+    tokenCostInPerMillion: 0.359,
+    tokenCostOutPerMillion: 1.434,
+  },
+  "alibaba:qwen3.5-plus": {
+    provider: "alibaba",
+    model: "qwen3.5-plus",
+    tokenCostInPerMillion: 0.115,
+    tokenCostOutPerMillion: 0.688,
+  },
+  "alibaba:qwen-plus": {
+    provider: "alibaba",
+    model: "qwen-plus",
+    tokenCostInPerMillion: 0.115,
+    tokenCostOutPerMillion: 0.287,
+  },
+  "alibaba:qwen-flash": {
+    provider: "alibaba",
+    model: "qwen-flash",
+    tokenCostInPerMillion: 0.022,
+    tokenCostOutPerMillion: 0.216,
+  },
+  "alibaba:qwq-plus": {
+    provider: "alibaba",
+    model: "qwq-plus",
+    tokenCostInPerMillion: 0.8,
+    tokenCostOutPerMillion: 2.4,
+  },
+  "alibaba:qwen3-coder-plus": {
+    provider: "alibaba",
+    model: "qwen3-coder-plus",
+    tokenCostInPerMillion: 0.115, // nearest-family qwen-plus
+    tokenCostOutPerMillion: 0.287, // nearest-family qwen-plus
+  },
+  "alibaba:qwen3-coder-flash": {
+    provider: "alibaba",
+    model: "qwen3-coder-flash",
+    tokenCostInPerMillion: 0.022, // nearest-family qwen-flash
+    tokenCostOutPerMillion: 0.216, // nearest-family qwen-flash
+  },
 };
 
 export const MODEL_CONFIG: Readonly<Record<ModelAliasKey, ModelConfigEntry>> =
@@ -361,6 +413,7 @@ export const DEFAULT_MODEL_BY_PROVIDER: Readonly<Record<ProviderName, ModelAlias
     moonshot: "moonshot:kimi-k2.5",
     "claude-code": "claude-code:sonnet",
     zai: "zai:glm-4-plus",
+    alibaba: "alibaba:qwen3-max",
   } as const);
 
 // ─── Function Name Derived Index ─────────────────────────────────────────────

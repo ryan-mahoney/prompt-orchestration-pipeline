@@ -8,6 +8,7 @@ import { anthropicChat } from "../providers/anthropic.ts";
 import { openaiChat } from "../providers/openai.ts";
 import { geminiChat } from "../providers/gemini.ts";
 import { deepseekChat } from "../providers/deepseek.ts";
+import { alibabaChat } from "../providers/alibaba.ts";
 import { moonshotChat } from "../providers/moonshot.ts";
 import { zaiChat } from "../providers/zhipu.ts";
 import { claudeCodeChat, isClaudeCodeAvailable } from "../providers/claude-code.ts";
@@ -68,6 +69,7 @@ const JSON_INFER_PROVIDERS = new Set<ProviderName>([
   "deepseek",
   "gemini",
   "moonshot",
+  "alibaba",
 ]);
 
 function inferJsonFormat(options: ChatOptions): ChatOptions {
@@ -93,6 +95,12 @@ async function callAdapter(
   const { provider, messages, model, temperature, maxTokens, responseFormat, topP, stop, maxRetries } = options;
 
   switch (provider) {
+    case "alibaba":
+      return alibabaChat({
+        messages, model, temperature, maxTokens, responseFormat, topP, stop, maxRetries,
+        frequencyPenalty: options.frequencyPenalty,
+        presencePenalty: options.presencePenalty,
+      });
     case "anthropic":
       return anthropicChat({ messages, model, temperature, maxTokens, responseFormat, topP, stop, maxRetries });
     case "openai":
@@ -435,6 +443,7 @@ export function registerMockProvider(provider: MockProvider): void {
 
 export function getAvailableProviders(): ProviderAvailability {
   return {
+    alibaba: !!process.env["ALIBABA_API_KEY"],
     openai: !!process.env["OPENAI_API_KEY"],
     anthropic: !!process.env["ANTHROPIC_API_KEY"],
     gemini: !!process.env["GEMINI_API_KEY"],

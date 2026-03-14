@@ -1,4 +1,4 @@
-import { describe, it, expect } from "bun:test";
+import { describe, it, expect } from "vitest";
 import {
   ModelAlias,
   MODEL_CONFIG,
@@ -15,8 +15,8 @@ import {
 } from "../models";
 import type { ModelConfigEntry } from "../models";
 
-const MODEL_COUNT = 35;
-const PROVIDER_COUNT = 7;
+const MODEL_COUNT = 42;
+const PROVIDER_COUNT = 8;
 
 describe("ModelAlias", () => {
   it(`has exactly ${MODEL_COUNT} entries`, () => {
@@ -91,7 +91,7 @@ describe("VALID_MODEL_ALIASES", () => {
 
 describe("DEFAULT_MODEL_BY_PROVIDER", () => {
   it(`has entries for all ${PROVIDER_COUNT} providers`, () => {
-    const providers = ["openai", "anthropic", "gemini", "deepseek", "moonshot", "claude-code", "zai"];
+    const providers = ["openai", "anthropic", "gemini", "deepseek", "moonshot", "claude-code", "zai", "alibaba"];
     expect(Object.keys(DEFAULT_MODEL_BY_PROVIDER).length).toBe(PROVIDER_COUNT);
     for (const provider of providers) {
       expect(provider in DEFAULT_MODEL_BY_PROVIDER).toBe(true);
@@ -203,7 +203,7 @@ describe("FUNCTION_NAME_BY_ALIAS", () => {
 
 describe("PROVIDER_FUNCTIONS", () => {
   it(`has entries for all ${PROVIDER_COUNT} providers`, () => {
-    const providers = ["openai", "anthropic", "gemini", "deepseek", "moonshot", "claude-code", "zai"];
+    const providers = ["openai", "anthropic", "gemini", "deepseek", "moonshot", "claude-code", "zai", "alibaba"];
     for (const provider of providers) {
       expect(provider in PROVIDER_FUNCTIONS).toBe(true);
     }
