@@ -42,7 +42,7 @@ export async function handleStart(
   process.env["PO_ROOT"] = absoluteRoot;
 
   if (!isCompiledBinary()) {
-    const distPath = join(import.meta.dir, "../../ui/dist");
+    const distPath = join(import.meta.dir, "../ui/dist");
     try {
       await access(distPath);
     } catch {
