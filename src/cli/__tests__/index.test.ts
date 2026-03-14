@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach, type MockInstance } from "vitest";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, mkdir, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { access } from "node:fs/promises";
@@ -286,6 +286,8 @@ describe("handleSubmit", () => {
   let tmpDir: string;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let exitSpy: MockInstance<any>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let cwdSpy: MockInstance<any>;
 
   beforeEach(async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "pop-submit-test-"));
@@ -299,6 +301,7 @@ describe("handleSubmit", () => {
   afterEach(async () => {
     await rm(tmpDir, { recursive: true, force: true });
     exitSpy.mockRestore();
+    if (cwdSpy) cwdSpy.mockRestore();
     vi.clearAllMocks();
   });
 
@@ -314,12 +317,43 @@ describe("handleSubmit", () => {
     expect(exitSpy).toHaveBeenCalledWith(1);
   });
 
-  it("exits with 1 when submitJobWithValidation throws (API not yet implemented)", async () => {
+  it("submits a valid seed to a configured workspace", async () => {
+    // Scaffold workspace: registry, pipeline config, and pending directory
+    const configDir = join(tmpDir, "pipeline-config", "test-pipeline");
+    await mkdir(configDir, { recursive: true });
+    await mkdir(join(tmpDir, "pipeline-data", "pending"), { recursive: true });
+
+    await Bun.write(
+      join(tmpDir, "pipeline-config", "registry.json"),
+      JSON.stringify({
+        pipelines: {
+          "test-pipeline": {
+            configDir,
+            tasksDir: join(configDir, "tasks"),
+          },
+        },
+      }),
+    );
+    await Bun.write(
+      join(configDir, "pipeline.json"),
+      JSON.stringify({ name: "test-pipeline", tasks: [] }),
+    );
+
+    // Write valid seed file
     const seedPath = join(tmpDir, "seed.json");
     await Bun.write(seedPath, JSON.stringify({ pipeline: "test-pipeline" }));
-    // submitJobWithValidation throws "not yet implemented" — treated as API failure
-    await expect(handleSubmit(seedPath)).rejects.toThrow("process.exit(1)");
-    expect(exitSpy).toHaveBeenCalledWith(1);
+
+    // Stub process.cwd() so handleSubmit resolves the workspace root
+    cwdSpy = vi.spyOn(process, "cwd").mockReturnValue(tmpDir);
+
+    await handleSubmit(seedPath);
+
+    expect(exitSpy).not.toHaveBeenCalled();
+
+    // Verify a seed file was written to pending
+    const pendingFiles = await readdir(join(tmpDir, "pipeline-data", "pending"));
+    const seedFiles = pendingFiles.filter((f) => f.endsWith("-seed.json"));
+    expect(seedFiles.length).toBe(1);
   });
 });
 
