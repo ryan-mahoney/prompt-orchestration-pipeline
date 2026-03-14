@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 
 import {
@@ -12,6 +12,9 @@ import {
   Shield,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+
+import { PROVIDER_FUNCTIONS, MODEL_CONFIG } from "../../config/models";
+import type { ProviderName } from "../../config/models";
 
 import Layout from "../components/Layout";
 import PageSubheader from "../components/PageSubheader";
@@ -50,13 +53,6 @@ interface EnvVar {
   readonly name: string;
   readonly provider: string;
 }
-
-interface LlmFunctionEntry {
-  readonly fullPath: string;
-  readonly model: string;
-}
-
-type LlmFunctionsData = Record<string, readonly LlmFunctionEntry[]>;
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -125,7 +121,35 @@ const ENV_VARS: readonly EnvVar[] = [
   { name: "DEEPSEEK_API_KEY", provider: "DeepSeek" },
   { name: "ZHIPU_API_KEY", provider: "Zhipu" },
   { name: "MOONSHOT_API_KEY", provider: "Moonshot" },
+  { name: "ALIBABA_API_KEY", provider: "Alibaba Cloud" },
 ];
+
+const PROVIDER_DISPLAY_NAMES: Record<ProviderName, string> = {
+  openai: "OpenAI",
+  anthropic: "Anthropic",
+  gemini: "Google Gemini",
+  deepseek: "DeepSeek",
+  moonshot: "Moonshot",
+  "claude-code": "Claude Code",
+  zai: "Zhipu",
+  alibaba: "Alibaba Cloud",
+};
+
+const PROVIDER_ORDER: readonly ProviderName[] = [
+  "openai",
+  "anthropic",
+  "gemini",
+  "deepseek",
+  "moonshot",
+  "alibaba",
+  "zai",
+  "claude-code",
+];
+
+function formatPrice(cost: number): string {
+  if (cost === 0) return "Subscription";
+  return `$${cost % 1 === 0 ? cost.toFixed(0) : parseFloat(cost.toFixed(3))}`;
+}
 
 const LLM_ARGS_CODE = `{
   messages: Array<{ role: "system"|"user"|"assistant", content: string }>,
@@ -139,7 +163,8 @@ const LLM_ARGS_CODE = `{
   seed?: number,               // For reproducibility
   provider?: string,           // Override default provider
   model?: string,              // Override default model
-  maxRetries?: number          // Auto-retry on failure
+  maxRetries?: number,         // Auto-retry on failure
+  thinking?: "enabled"|"disabled", // Moonshot & Alibaba only (default: "enabled")
 }`;
 
 const VALIDATION_EXAMPLE_CODE = `export const validateStructure = async ({
@@ -280,18 +305,8 @@ export default function Code() {
   const [openSections, setOpenSections] = useState<Record<string, boolean>>(
     Object.fromEntries(SECTIONS.map((s) => [s.id, true])),
   );
-  const [llmFunctions, setLlmFunctions] = useState<LlmFunctionsData | null>(null);
   const [activeSection, setActiveSection] = useState<string>(SECTIONS[0]?.id ?? "environment");
   const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
-
-  useEffect(() => {
-    void fetch("/api/llm/functions")
-      .then(async (response) => {
-        const payload = (await response.json()) as { ok?: boolean; data?: LlmFunctionsData };
-        if (response.ok && payload.ok === true) setLlmFunctions(payload.data ?? null);
-      })
-      .catch(() => setLlmFunctions(null));
-  }, []);
 
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -584,36 +599,96 @@ export default function Code() {
                   </div>
                 </div>
 
+                {/* Extended Thinking Callout */}
+                <div className="bg-[#f5f3ff] border border-[#ede9fe] rounded-md p-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Cpu className="h-4 w-4 text-[#6d28d9]" />
+                    <span className="text-sm font-medium text-gray-900">
+                      Extended Thinking
+                    </span>
+                  </div>
+                  <p className="text-sm text-gray-700 mb-3">
+                    Moonshot and Alibaba Cloud models support a{" "}
+                    <code className="font-mono text-xs">thinking</code> option that enables
+                    chain-of-thought reasoning before generating the final response.
+                  </p>
+                  <ul className="space-y-1 text-sm text-gray-700">
+                    <li className="flex items-start gap-2">
+                      <span className="text-[#6d28d9] mt-0.5">•</span>
+                      <span>
+                        <code className="font-mono text-xs">thinking: &quot;enabled&quot;</code>{" "}
+                        (default) or <code className="font-mono text-xs">&quot;disabled&quot;</code>
+                      </span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-[#6d28d9] mt-0.5">•</span>
+                      <span>
+                        Applies to all{" "}
+                        <code className="font-mono text-xs">llm.moonshot.*</code> and{" "}
+                        <code className="font-mono text-xs">llm.alibaba.*</code> functions
+                      </span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-[#6d28d9] mt-0.5">•</span>
+                      <span>
+                        Reasoning increases output token usage but can improve structured output quality
+                      </span>
+                    </li>
+                  </ul>
+                </div>
+
                 {/* Available Models */}
-                {llmFunctions && (
-                  <div>
-                    <span className="text-sm font-medium mb-3 block">Available Models</span>
-                    <div className="border border-gray-200 rounded-md overflow-hidden">
-                      <table className="w-full text-sm">
-                        <thead>
-                          <tr>
-                            <th className="bg-gray-50 px-4 py-3 text-left font-medium">Function</th>
-                            <th className="bg-gray-50 px-4 py-3 text-left font-medium">Model</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {Object.entries(llmFunctions).flatMap(([, functions]) =>
-                            functions.map((fn) => (
-                              <tr key={fn.fullPath} className="border-t border-gray-100">
-                                <td className="px-4 py-3">
-                                  <code className="text-sm font-mono">{fn.fullPath}</code>
-                                </td>
-                                <td className="px-4 py-3">
-                                  <code className="text-sm font-mono text-gray-600">{fn.model}</code>
+                <div>
+                  <span className="text-sm font-medium mb-3 block">Available Models</span>
+                  <div className="border border-gray-200 rounded-md overflow-hidden">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr>
+                          <th className="bg-gray-50 px-4 py-3 text-left font-medium">Function</th>
+                          <th className="bg-gray-50 px-4 py-3 text-left font-medium">Model</th>
+                          <th className="bg-gray-50 px-4 py-3 text-right font-medium">Input / 1M</th>
+                          <th className="bg-gray-50 px-4 py-3 text-right font-medium">Output / 1M</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {PROVIDER_ORDER.filter((p) => p in PROVIDER_FUNCTIONS).map((provider) => {
+                          const entries = PROVIDER_FUNCTIONS[provider];
+                          return (
+                            <Fragment key={provider}>
+                              <tr>
+                                <td colSpan={4} className="bg-gray-100 px-4 py-2 font-semibold">
+                                  <div className="flex items-center gap-2">
+                                    {PROVIDER_DISPLAY_NAMES[provider]}
+                                    {provider === "alibaba" && <Badge intent="green">NEW</Badge>}
+                                  </div>
                                 </td>
                               </tr>
-                            )),
-                          )}
-                        </tbody>
-                      </table>
-                    </div>
+                              {entries.map((entry) => {
+                                const config = MODEL_CONFIG[entry.alias as keyof typeof MODEL_CONFIG];
+                                return (
+                                  <tr key={entry.alias} className="border-t border-gray-100">
+                                    <td className="px-4 py-2">
+                                      <code className="text-sm font-mono">{entry.fullPath}</code>
+                                    </td>
+                                    <td className="px-4 py-2">
+                                      <code className="text-sm font-mono text-gray-600">{entry.model}</code>
+                                    </td>
+                                    <td className="px-4 py-2 text-right font-mono">
+                                      {formatPrice(config.tokenCostInPerMillion)}
+                                    </td>
+                                    <td className="px-4 py-2 text-right font-mono">
+                                      {formatPrice(config.tokenCostOutPerMillion)}
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </Fragment>
+                          );
+                        })}
+                      </tbody>
+                    </table>
                   </div>
-                )}
+                </div>
               </div>
             </CollapsibleSection>
           </div>
