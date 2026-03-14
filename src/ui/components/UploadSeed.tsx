@@ -58,7 +58,7 @@ export default function UploadSeed({
       <div
         className={[
           "rounded-lg border border-dashed p-4 text-sm",
-          isDragging ? "border-blue-500 bg-blue-50" : "border-slate-300 bg-slate-50",
+          isDragging ? "border-[#6d28d9] bg-[#f5f3ff] border-solid" : "border-gray-300 bg-white",
         ].join(" ")}
         onDragOver={(event) => {
           event.preventDefault();
@@ -88,7 +88,7 @@ export default function UploadSeed({
         />
       </div>
       {error ? (
-        <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+        <div className="rounded-sm border-l-[3px] border-l-red-600 bg-red-100 p-3 text-sm text-red-700">
           <p>{error}</p>
           <button type="button" className="mt-2 underline" onClick={() => setError(null)}>
             Dismiss

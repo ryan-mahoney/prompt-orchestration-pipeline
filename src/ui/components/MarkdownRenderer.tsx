@@ -50,7 +50,7 @@ export function MarkdownRenderer({
           ul: ({ children }) => <ul className="list-disc pl-5">{children}</ul>,
           ol: ({ children }) => <ol className="list-decimal pl-5">{children}</ol>,
           table: ({ children }) => <table>{children}</table>,
-          blockquote: ({ children }) => <blockquote className="border-l-4 pl-4 italic">{children}</blockquote>,
+          blockquote: ({ children }) => <blockquote className="border-l-4 border-gray-300 pl-4 italic">{children}</blockquote>,
           code: ({ children, className: codeClassName }) => {
             const code = String(children).replace(/\n$/, "");
             const isBlock = Boolean(codeClassName);

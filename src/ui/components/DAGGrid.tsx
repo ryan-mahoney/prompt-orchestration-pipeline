@@ -26,7 +26,7 @@ function getHeaderClasses(status: TaskState): string {
     case "running":
       return "bg-amber-50 border-amber-200 text-amber-700";
     case "failed":
-      return "bg-pink-50 border-pink-200 text-pink-700";
+      return "bg-red-50 border-red-200 text-red-700";
     default:
       return "bg-gray-100 border-gray-200 text-gray-700";
   }
@@ -187,12 +187,12 @@ export default function DAGGrid({
     <div className="relative w-full" role="list">
       {alert ? (
         <div
-          className={`fixed right-4 top-4 z-[3000] max-w-sm rounded-lg border p-4 shadow-lg ${
+          className={`fixed right-4 top-4 z-[500] max-w-sm rounded-sm border-l-[3px] p-4 shadow-sm ${
             alert.type === "error"
-              ? "border-red-200 bg-red-50 text-red-800"
+              ? "border-red-500 bg-red-50 text-red-800"
               : alert.type === "warning"
-                ? "border-amber-200 bg-amber-50 text-amber-800"
-                : "border-green-200 bg-green-50 text-green-800"
+                ? "border-amber-500 bg-amber-50 text-amber-800"
+                : "border-green-500 bg-green-50 text-green-800"
           }`}
           role="alert"
           aria-live="polite"
@@ -270,7 +270,7 @@ export default function DAGGrid({
                   setOpenIndex(index);
                 }
               }}
-              className={`cursor-pointer overflow-hidden rounded-lg border border-gray-400 outline outline-2 outline-transparent hover:outline-gray-400/70 focus-visible:outline-blue-500/60 ${reducedMotion ? "" : "transition-all duration-200 ease-in-out"} ${getItemStatus(items[index], index, activeIndex) === "pending" ? "bg-gray-50" : "bg-white"}`}
+              className={`cursor-pointer overflow-hidden rounded-md border border-gray-300 outline outline-2 outline-transparent hover:border-gray-400 focus-visible:outline-[#6d28d9] ${reducedMotion ? "" : "transition-all duration-200 ease-in-out"} ${getItemStatus(items[index], index, activeIndex) === "pending" ? "bg-gray-50" : "bg-white"}`}
             >
               <div
                 data-role="card-header"
@@ -286,7 +286,7 @@ export default function DAGGrid({
                         <span className={`absolute inset-0 rounded-full border-2 border-transparent border-t-amber-600 ${reducedMotion ? "" : "animate-spin"}`} />
                       </div>
                       {items[index]?.stage ? (
-                        <span className="truncate text-[11px] font-medium uppercase tracking-wide opacity-80" title={items[index]?.stage ?? undefined}>
+                        <span className="truncate text-xs font-medium opacity-80" title={items[index]?.stage ?? undefined}>
                           {formatStageLabel(items[index]!.stage!)}
                         </span>
                       ) : null}
@@ -296,10 +296,10 @@ export default function DAGGrid({
                     </>
                   ) : (
                     <>
-                      <span className="text-[11px] uppercase tracking-wide opacity-80">
+                      <span className="text-xs font-medium opacity-80">
                         {getItemStatus(items[index], index, activeIndex)}
                         {getItemStatus(items[index], index, activeIndex) === "failed" && items[index]?.stage ? (
-                          <span className="ml-2 truncate text-[11px] font-medium uppercase tracking-wide opacity-80" title={items[index]?.stage ?? undefined}>
+                          <span className="ml-2 truncate text-xs font-medium opacity-80" title={items[index]?.stage ?? undefined}>
                             ({formatStageLabel(items[index]!.stage!)})
                           </span>
                         ) : null}

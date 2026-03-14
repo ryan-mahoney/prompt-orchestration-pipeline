@@ -44,9 +44,9 @@ export const TaskAnalysisDisplay = memo(function TaskAnalysisDisplay({
     }
   };
 
-  if (loading) return <div className="p-4 text-sm text-slate-500">Loading analysis…</div>;
+  if (loading) return <div className="p-4 text-sm text-gray-500">Loading analysis…</div>;
   if (error) return <div className="p-4 text-sm text-red-700">{error}</div>;
-  if (analysis === null) return <div className="p-4 text-sm text-slate-500">No analysis available.</div>;
+  if (analysis === null) return <div className="p-4 text-sm text-gray-500">No analysis available.</div>;
 
   return (
     <div className="space-y-6 p-6">
@@ -95,7 +95,7 @@ export const TaskAnalysisDisplay = memo(function TaskAnalysisDisplay({
           ))}
         </ul>
       </section>
-      <p className="text-xs text-slate-500">Analyzed at {analysis.analyzedAt}</p>
+      <p className="text-xs text-gray-500">Analyzed at {analysis.analyzedAt}</p>
       {preview !== null ? (
         <SchemaPreviewPanel
           fileName={preview.fileName}

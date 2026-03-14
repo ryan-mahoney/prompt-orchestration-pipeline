@@ -71,7 +71,7 @@ export function AddPipelineSidebar({
             <label className="block text-sm">
               <span className="mb-1 block font-medium">Name</span>
               <input
-                className="w-full rounded-md border px-3 py-2"
+                className="w-full rounded-sm border border-gray-300 px-3 h-10 focus:border-[#6d28d9] focus:ring-[3px] focus:ring-[#ede9fe] focus:outline-none"
                 value={name}
                 onChange={(event) => setName(event.target.value)}
                 disabled={submitting || pendingNavigation}
@@ -80,13 +80,13 @@ export function AddPipelineSidebar({
             <label className="block text-sm">
               <span className="mb-1 block font-medium">Description</span>
               <textarea
-                className="min-h-28 w-full rounded-md border px-3 py-2"
+                className="min-h-28 w-full rounded-sm border border-gray-300 px-3 py-3 focus:border-[#6d28d9] focus:ring-[3px] focus:ring-[#ede9fe] focus:outline-none"
                 value={description}
                 onChange={(event) => setDescription(event.target.value)}
                 disabled={submitting || pendingNavigation}
               />
             </label>
-            {error ? <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">{error}</div> : null}
+            {error ? <div className="rounded-sm border-l-[3px] border-l-red-600 bg-red-100 p-3 text-sm text-red-700">{error}</div> : null}
           </div>
         </SidebarSection>
         <SidebarFooter>

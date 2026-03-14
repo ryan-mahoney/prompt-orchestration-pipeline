@@ -27,12 +27,12 @@ export default function PipelineDAGGrid({
             <button
               key={items[index]?.id}
               type="button"
-              className="rounded-xl border bg-white p-4 text-left shadow-sm"
+              className="rounded-md border border-gray-300 bg-white p-4 text-left"
               onClick={() => setOpenIndex(index)}
             >
-              <div className="text-xs uppercase tracking-[0.18em] text-slate-500">Task</div>
+              <div className="text-xs text-gray-500">Task</div>
               <div className="mt-1 text-base font-semibold">{items[index]?.title ?? formatStepName(items[index]?.id ?? "")}</div>
-              <div className="mt-2 text-sm text-slate-500">{items[index]?.status}</div>
+              <div className="mt-2 text-sm text-gray-500">{items[index]?.status}</div>
             </button>
           ),
         )}

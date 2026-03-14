@@ -6,6 +6,7 @@ import JobTable from "../components/JobTable";
 import Layout from "../components/Layout";
 import type { JobSummary } from "../components/types";
 import { Progress } from "../components/ui/Progress";
+import { HintBanner } from "../components/onboarding";
 
 type TabKey = "current" | "errors" | "complete";
 
@@ -39,7 +40,7 @@ export default function PromptPipelineDashboard() {
       pageTitle="Prompt Pipeline"
       subheader={
         runningJobs.length > 0 ? (
-          <div className="border-b border-blue-200 bg-blue-50">
+          <div className="border-b border-[#ede9fe] bg-[#f5f3ff]">
             <div className="mx-auto flex w-full max-w-7xl items-center gap-4 px-4 py-3 sm:px-6 lg:px-8">
               <span className="text-sm">{runningJobs.length} running</span>
               <Progress value={aggregateProgress} variant="running" className="flex-1" />
@@ -49,13 +50,14 @@ export default function PromptPipelineDashboard() {
         ) : null
       }
     >
-      {error ? <div className="mb-4 rounded-md border border-yellow-200 bg-yellow-50 p-3 text-sm text-yellow-800">Unable to load jobs from the server</div> : null}
+      {error ? <div className="mb-4 rounded-sm border-l-[3px] border-l-yellow-600 bg-yellow-100 p-3 text-sm text-yellow-700">Unable to load jobs from the server</div> : null}
+      <HintBanner storageKey="dashboard-hint" title="Upload a seed file to get started." variant="action">Your first pipeline takes about 2 minutes to complete.</HintBanner>
       <div className="mb-4 flex flex-wrap gap-2">
         {(["current", "errors", "complete"] as const).map((tab) => (
           <button
             key={tab}
             type="button"
-            className={`rounded-full px-4 py-2 text-sm ${activeTab === tab ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-700"}`}
+            className={`px-4 py-2 text-sm ${activeTab === tab ? "text-[#6d28d9] font-medium border-b-2 border-[#6d28d9]" : "text-gray-500 hover:text-gray-900"}`}
             onClick={() => setActiveTab(tab)}
           >
             {tab === "complete" ? "Complete" : `${tab.charAt(0).toUpperCase()}${tab.slice(1)}`} ({grouped[tab].length})

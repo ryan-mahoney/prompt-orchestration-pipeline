@@ -24,6 +24,7 @@ export const MIME_MAP = Object.freeze({
   jpg: "image/jpeg",
   js: "application/javascript",
   json: "application/json",
+  log: "text/plain",
   map: "application/json",
   md: "text/markdown",
   mjs: "application/javascript",

@@ -263,7 +263,7 @@ function FunctionGroup({
         <div className={`w-2 h-2 rounded-full ${dotColor}`} />
         <span className="text-sm font-medium">{label}</span>
       </div>
-      <div className="border border-gray-200 rounded-lg px-4 bg-white">
+      <div className="border border-gray-200 rounded-md px-4 bg-white">
         {functions.map((fn) => (
           <FunctionRow key={fn.name} {...fn} />
         ))}
@@ -333,7 +333,7 @@ export default function Code() {
         {/* Sidebar Navigation */}
         <nav aria-label="Page sections" className="hidden lg:block">
           <div className="sticky top-28 space-y-1">
-            <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-3">
+            <p className="text-xs font-medium text-gray-400 mb-3">
               On this page
             </p>
             {SECTIONS.map((section) => (
@@ -342,8 +342,8 @@ export default function Code() {
                 href={`#${section.id}`}
                 className={`flex items-center gap-2 px-3 py-2 text-sm rounded-md transition-colors ${
                   activeSection === section.id
-                    ? "bg-blue-50 text-blue-700 font-medium"
-                    : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+                    ? "bg-[#f5f3ff] text-[#6d28d9] font-medium"
+                    : "text-gray-500 hover:bg-gray-50 hover:text-gray-900"
                 }`}
               >
                 <section.icon className="h-4 w-4" />
@@ -372,7 +372,7 @@ export default function Code() {
                 Configure API keys in your <code className="text-sm font-mono">.env</code> file
                 before running pipelines. Only add keys for providers you plan to use.
               </p>
-              <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+              <div className="bg-gray-50 rounded-md p-4 border border-gray-200">
                 <div className="grid gap-2">
                   {ENV_VARS.map(({ name, provider }) => (
                     <div key={name} className="flex items-center justify-between">
@@ -443,7 +443,7 @@ export default function Code() {
                 {/* Fields Table */}
                 <div>
                   <span className="text-sm font-medium mb-3 block">Fields</span>
-                  <div className="border border-gray-200 rounded-lg overflow-hidden">
+                  <div className="border border-gray-200 rounded-md overflow-hidden">
                     <table className="w-full text-sm">
                       <thead>
                         <tr>
@@ -489,36 +489,36 @@ export default function Code() {
                 </div>
 
                 {/* LLM Override Callout */}
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <div className="bg-[#f5f3ff] border border-[#ede9fe] rounded-md p-4">
                   <div className="flex items-center gap-2 mb-2">
-                    <Cpu className="h-4 w-4 text-blue-600" />
-                    <span className="text-sm font-medium text-blue-800">
+                    <Cpu className="h-4 w-4 text-[#6d28d9]" />
+                    <span className="text-sm font-medium text-gray-900">
                       Pipeline-Level LLM Override
                     </span>
                     <Badge intent="green">NEW</Badge>
                   </div>
-                  <p className="text-sm text-blue-700 mb-3">
+                  <p className="text-sm text-gray-700 mb-3">
                     When the <code className="font-mono text-xs">llm</code> field is set in
                     pipeline.json, ALL LLM calls from task stages are automatically routed to the
                     specified provider and model — regardless of what the task code requests.
                   </p>
-                  <ul className="space-y-1 text-sm text-blue-700">
+                  <ul className="space-y-1 text-sm text-gray-700">
                     <li className="flex items-start gap-2">
-                      <span className="text-blue-500 mt-0.5">•</span>
+                      <span className="text-[#6d28d9] mt-0.5">•</span>
                       <span>
                         Tasks calling <code className="font-mono text-xs">llm.deepseek.chat()</code>{" "}
                         will use the override provider/model
                       </span>
                     </li>
                     <li className="flex items-start gap-2">
-                      <span className="text-blue-500 mt-0.5">•</span>
+                      <span className="text-[#6d28d9] mt-0.5">•</span>
                       <span>
                         Original provider/model is preserved in{" "}
                         <code className="font-mono text-xs">metadata.originalProvider</code>
                       </span>
                     </li>
                     <li className="flex items-start gap-2">
-                      <span className="text-blue-500 mt-0.5">•</span>
+                      <span className="text-[#6d28d9] mt-0.5">•</span>
                       <span>
                         Useful for A/B testing, cost control, or switching providers during outages
                       </span>
@@ -579,7 +579,7 @@ export default function Code() {
                 {/* Returns */}
                 <div>
                   <span className="text-sm font-medium mb-2 block">Returns</span>
-                  <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+                  <div className="bg-gray-50 rounded-md p-3 border border-gray-200">
                     <code className="text-sm font-mono">{`Promise<{ content: any, usage?: object, raw?: any }>`}</code>
                   </div>
                 </div>
@@ -588,7 +588,7 @@ export default function Code() {
                 {llmFunctions && (
                   <div>
                     <span className="text-sm font-medium mb-3 block">Available Models</span>
-                    <div className="border border-gray-200 rounded-lg overflow-hidden">
+                    <div className="border border-gray-200 rounded-md overflow-hidden">
                       <table className="w-full text-sm">
                         <thead>
                           <tr>
@@ -637,7 +637,7 @@ export default function Code() {
                 {/* Signature */}
                 <div>
                   <span className="text-sm font-medium mb-2 block">Function Signature</span>
-                  <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+                  <div className="bg-gray-50 rounded-md p-3 border border-gray-200">
                     <code className="text-sm font-mono">
                       validateWithSchema(schema, data) → {"{"} valid: boolean, errors?: AjvError[] {"}"}
                     </code>

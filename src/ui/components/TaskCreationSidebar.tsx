@@ -143,21 +143,21 @@ export default function TaskCreationSidebar({
         </div>
         <div className="space-y-4">
           {messages.map((message, index) => (
-            <div key={`${message.role}-${index}`} className={`rounded-lg p-3 ${message.role === "user" ? "bg-slate-900 text-white" : "bg-slate-100"}`}>
+            <div key={`${message.role}-${index}`} className={`rounded-lg p-3 ${message.role === "user" ? "bg-gray-900 text-white" : "bg-gray-100"}`}>
               {message.role === "assistant" ? <MarkdownRenderer content={message.content} /> : message.content}
             </div>
           ))}
           {proposals.map((proposal) => (
-            <div key={`${proposal.filename}-${proposal.taskName}`} className="rounded-lg border p-3">
+            <div key={`${proposal.filename}-${proposal.taskName}`} className="rounded-sm border border-gray-300 p-3">
               <div className="text-sm font-medium">{proposal.taskName}</div>
-              <div className="text-xs text-slate-500">{proposal.filename}</div>
+              <div className="text-xs text-gray-500">{proposal.filename}</div>
               <Button size="sm" className="mt-3" onClick={() => void createTask(proposal)}>
                 Create Task
               </Button>
             </div>
           ))}
           {error ? (
-            <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+            <div className="rounded-sm border-l-[3px] border-l-red-600 bg-red-100 p-3 text-sm text-red-700">
               {error}
               <Button size="sm" className="mt-3" onClick={() => messages.length > 0 && void send(messages.filter((message) => message.role === "user").at(-1)?.content ?? "")}>
                 Retry

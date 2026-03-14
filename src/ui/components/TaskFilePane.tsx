@@ -88,7 +88,7 @@ export function TaskFilePane({
   }, [content]);
 
   const body = (() => {
-    if (loading) return <div className="text-sm text-slate-500">Loading file…</div>;
+    if (loading) return <div className="text-sm text-gray-500">Loading file…</div>;
     if (error) {
       return (
         <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800">
@@ -101,7 +101,7 @@ export function TaskFilePane({
     }
     if (content === null) return null;
     if (isBinaryMime(mime)) {
-      return <div className="text-sm text-slate-600">Binary file - cannot display preview {size ? `(${size} bytes)` : ""}</div>;
+      return <div className="text-sm text-gray-600">Binary file - cannot display preview {size ? `(${size} bytes)` : ""}</div>;
     }
     if (mime === "application/json" || filename.endsWith(".json")) {
       try {
@@ -120,11 +120,11 @@ export function TaskFilePane({
   })();
 
   const contentEl = (
-    <div className="space-y-3 rounded-lg border border-slate-200 bg-white p-4">
+    <div className="space-y-3 rounded-lg border border-gray-200 bg-white p-4">
       <div className="flex items-center justify-between gap-3">
         <div>
           <p className="text-sm font-medium">{filename}</p>
-          <p className="text-xs text-slate-500">{type}</p>
+          <p className="text-xs text-gray-500">{type}</p>
         </div>
         {!inline ? (
           <Button variant="ghost" size="sm" onClick={onClose}>
