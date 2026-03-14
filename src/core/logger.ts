@@ -66,11 +66,20 @@ export function createLogger(componentName: string, context?: LogContext): Logge
     }
   }
 
+  function stringify(data: unknown): string {
+    if (typeof data === "string") return data;
+    try {
+      return JSON.stringify(data);
+    } catch {
+      return String(data);
+    }
+  }
+
   return {
     debug(message, data) {
       if (process.env["NODE_ENV"] === "production" && !process.env["DEBUG"]) return;
       if (data !== undefined) {
-        console.debug(prefix, message, data);
+        console.debug(prefix, message, stringify(data));
       } else {
         console.debug(prefix, message);
       }
@@ -78,7 +87,7 @@ export function createLogger(componentName: string, context?: LogContext): Logge
 
     log(message, data) {
       if (data !== undefined) {
-        console.log(prefix, message, data);
+        console.log(prefix, message, stringify(data));
       } else {
         console.log(prefix, message);
       }
@@ -86,7 +95,7 @@ export function createLogger(componentName: string, context?: LogContext): Logge
 
     warn(message, data) {
       if (data !== undefined) {
-        console.warn(prefix, message, data);
+        console.warn(prefix, message, stringify(data));
       } else {
         console.warn(prefix, message);
       }
@@ -95,7 +104,7 @@ export function createLogger(componentName: string, context?: LogContext): Logge
     error(message, data) {
       const enriched = data !== undefined ? formatData(data) : undefined;
       if (enriched !== undefined) {
-        console.error(prefix, message, enriched);
+        console.error(prefix, message, stringify(enriched));
       } else {
         console.error(prefix, message);
       }
@@ -103,7 +112,7 @@ export function createLogger(componentName: string, context?: LogContext): Logge
 
     group(label, data) {
       if (data !== undefined) {
-        console.group(prefix, label, data);
+        console.group(prefix, label, stringify(data));
       } else {
         console.group(prefix, label);
       }
@@ -114,7 +123,7 @@ export function createLogger(componentName: string, context?: LogContext): Logge
     },
 
     sse(eventType, eventData) {
-      console.log(prefix, `[SSE:${eventType}]`, eventData);
+      console.log(prefix, `[SSE:${eventType}]`, stringify(eventData));
       void getSSERegistry().then((registry) => {
         if (!registry) return;
         try {
