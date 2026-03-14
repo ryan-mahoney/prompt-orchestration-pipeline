@@ -56,24 +56,25 @@ async function killProcess(pid: number): Promise<{ killed: boolean; signal: stri
     throw err;
   }
 
-  await new Promise((resolve) => setTimeout(resolve, 1500));
-
-  try {
-    process.kill(pid, 0); // existence check
-  } catch {
-    return { killed: true, signal: "SIGTERM" };
-  }
-
-  try {
-    process.kill(pid, 9); // SIGKILL
-  } catch (err: unknown) {
-    if ((err as NodeJS.ErrnoException).code === "ESRCH") {
-      return { killed: true, signal: "SIGTERM" };
+  // Do not hold the HTTP request open while waiting for shutdown.
+  const timer = setTimeout(() => {
+    try {
+      process.kill(pid, 0);
+    } catch {
+      return;
     }
-    throw err;
-  }
 
-  return { killed: true, signal: "SIGKILL" };
+    try {
+      process.kill(pid, 9); // SIGKILL
+    } catch (err: unknown) {
+      if ((err as NodeJS.ErrnoException).code !== "ESRCH") {
+        console.error(`[handleJobStop] Failed to SIGKILL pid ${pid}:`, err);
+      }
+    }
+  }, 1500);
+  timer.unref();
+
+  return { killed: true, signal: "SIGTERM" };
 }
 
 async function cleanupRunnerPid(jobDir: string): Promise<void> {
@@ -235,38 +236,39 @@ export async function handleJobStop(
       await cleanupRunnerPid(jobDir);
     }
 
-    // Read status and find the running task
-    const snapshot = await readJobStatus(jobDir);
-    if (!snapshot) {
-      return sendJson(500, createErrorResponse("internal_error", "Failed to read job status"));
-    }
-
-    // Determine which task is currently running
     let resetTask: string | null = null;
 
-    if (snapshot.current && snapshot.tasks[snapshot.current]?.state === "running") {
-      resetTask = snapshot.current;
-    } else {
-      for (const taskId of Object.keys(snapshot.tasks)) {
-        if (snapshot.tasks[taskId]!.state === "running") {
-          resetTask = taskId;
-          break;
+    // Reset running task and clear root-level fields in a single atomic write.
+    await writeJobStatus(jobDir, (snapshot) => {
+      if (snapshot.current && snapshot.tasks[snapshot.current]?.state === "running") {
+        resetTask = snapshot.current;
+      } else {
+        for (const taskId of Object.keys(snapshot.tasks)) {
+          if (snapshot.tasks[taskId]!.state === "running") {
+            resetTask = taskId;
+            break;
+          }
         }
       }
-    }
 
-    // Reset the running task to pending
-    if (resetTask) {
-      await resetSingleTask(jobDir, resetTask, { clearTokenUsage: true });
-    }
+      if (resetTask) {
+        const task = snapshot.tasks[resetTask];
+        if (task) {
+          task.state = "pending";
+          task.currentStage = null;
+          delete task.failedStage;
+          delete task.error;
+          task.attempts = 0;
+          task.refinementAttempts = 0;
+          task.tokenUsage = [];
+        }
+      }
 
-    // Clear root-level job fields
-    await writeJobStatus(jobDir, (s) => {
-      s.current = null;
-      s.currentStage = null;
+      snapshot.current = null;
+      snapshot.currentStage = null;
     });
 
-    return sendJson(200, {
+    return sendJson(202, {
       ok: true,
       jobId,
       stopped: pidFound,
