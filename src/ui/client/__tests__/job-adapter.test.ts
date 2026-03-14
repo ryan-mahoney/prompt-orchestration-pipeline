@@ -91,6 +91,26 @@ describe("job adapter", () => {
     });
   });
 
+  it("derives taskCount from pipelineConfig when available", () => {
+    const job = adaptJobSummary({
+      jobId: "job-1",
+      tasks: { build: { state: "done" }, test: { state: "pending" }, _fileTrack: { state: "pending" } },
+      pipelineConfig: { tasks: [{ name: "build" }, { name: "test" }] },
+    });
+
+    expect(job.taskCount).toBe(2);
+    expect(job.doneCount).toBe(1);
+  });
+
+  it("falls back to taskList length when pipelineConfig is absent", () => {
+    const job = adaptJobSummary({
+      jobId: "job-1",
+      tasks: { build: { state: "done" }, test: { state: "pending" }, _fileTrack: { state: "pending" } },
+    });
+
+    expect(job.taskCount).toBe(3);
+  });
+
   it("adds warnings for unsupported task shapes", () => {
     const job = adaptJobSummary({
       jobId: "job-1",
