@@ -16,7 +16,7 @@ export default function PageSubheader({
 }) {
   return (
     <div role="region" aria-label="Page header" className="mb-4 border-b border-gray-300 bg-white/80 backdrop-blur">
-      <div className={["mx-auto flex w-full items-center justify-between gap-4 px-1.5 py-3", maxWidth].join(" ")}>
+      <div className={["mx-auto flex w-full items-center justify-between gap-4 px-4 py-3 sm:px-6 lg:px-8", maxWidth].join(" ")}>
         <nav aria-label="Breadcrumb">
           <ol className="flex items-center gap-2 text-sm text-slate-600">
             {breadcrumbs.map((crumb, index) => (
