@@ -14,6 +14,25 @@ export async function handleJobList(): Promise<Response> {
     readMultipleJobs(listed.complete),
   ]);
   const jobs = aggregateAndSortJobs(transformMultipleJobs(current), transformMultipleJobs(complete));
+
+  const configCache = new Map<string, Record<string, unknown> | null>();
+  for (const job of jobs) {
+    if (!job.pipeline || job.pipelineConfig) continue;
+    if (!configCache.has(job.pipeline)) {
+      try {
+        const cfg = getPipelineConfig(job.pipeline);
+        configCache.set(
+          job.pipeline,
+          JSON.parse(await Bun.file(cfg.pipelineJsonPath).text()),
+        );
+      } catch {
+        configCache.set(job.pipeline, null);
+      }
+    }
+    const cached = configCache.get(job.pipeline);
+    if (cached) job.pipelineConfig = cached;
+  }
+
   return sendJson(200, { ok: true, data: transformJobListForAPI(jobs, { includePipelineMetadata: true }) });
 }
 

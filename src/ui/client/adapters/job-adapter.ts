@@ -132,7 +132,11 @@ function adaptBaseJob(apiJob: Record<string, unknown>): NormalizedJobSummary {
   const tasks = normalizeTasks(rawTasks);
   const taskList = Object.values(tasks);
   const doneCount = taskList.filter((task) => task.state === "done").length;
-  const taskCount = taskList.length;
+  const rawPipelineConfig = isRecord(apiJob["pipelineConfig"]) ? apiJob["pipelineConfig"] : null;
+  const pipelineTaskArray = rawPipelineConfig && Array.isArray(rawPipelineConfig["tasks"])
+    ? rawPipelineConfig["tasks"] as unknown[]
+    : null;
+  const taskCount = pipelineTaskArray ? pipelineTaskArray.length : taskList.length;
   const inferredStatus = deriveJobStatusFromTasks(taskList);
   const status = normalizeJobStatus(apiJob["status"] ?? inferredStatus);
   const progress = typeof apiJob["progress"] === "number"
