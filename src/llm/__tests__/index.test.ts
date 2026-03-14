@@ -477,6 +477,7 @@ describe("LLM Gateway", () => {
       delete process.env["ZAI_API_KEY"];
       delete process.env["ZHIPU_API_KEY"];
       delete process.env["MOONSHOT_API_KEY"];
+      delete process.env["ALIBABA_API_KEY"];
 
       const availability = getAvailableProviders();
 
@@ -487,12 +488,14 @@ describe("LLM Gateway", () => {
       expect(availability.zai).toBe(false);
       expect(availability.zhipu).toBe(false);
       expect(availability.moonshot).toBe(false);
+      expect(availability.alibaba).toBe(false);
     });
 
     it("returns true for providers with API keys set", () => {
       process.env["OPENAI_API_KEY"] = "test";
       process.env["ANTHROPIC_API_KEY"] = "test";
       process.env["ZAI_API_KEY"] = "test";
+      process.env["ALIBABA_API_KEY"] = "test";
 
       const availability = getAvailableProviders();
 
@@ -500,12 +503,21 @@ describe("LLM Gateway", () => {
       expect(availability.anthropic).toBe(true);
       expect(availability.zai).toBe(true);
       expect(availability.zhipu).toBe(true);
+      expect(availability.alibaba).toBe(true);
     });
 
     it("reports mock as available when provider is registered", () => {
       registerMockProvider(makeMockProvider());
       const availability = getAvailableProviders();
       expect(availability.mock).toBe(true);
+    });
+
+    it("dispatches to alibaba adapter without unknown-provider error", async () => {
+      // Verify the callAdapter dispatch path resolves for provider "alibaba".
+      // The call will fail (no real API key), but NOT with "Unknown provider".
+      await expect(
+        chat({ provider: "alibaba", messages: baseMessages }),
+      ).rejects.not.toThrow(/unknown provider/i);
     });
   });
 
