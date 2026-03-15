@@ -73,9 +73,15 @@ export async function claudeCodeChat(
       });
 
       const idle = new IdleTimeoutController(DEFAULT_REQUEST_TIMEOUT_MS);
+
+      // Kill the subprocess if the idle timeout fires
+      const onAbort = () => proc.kill();
+      idle.signal.addEventListener("abort", onAbort, { once: true });
+
       const deltas = parseClaudeCodeStream(proc.stdout as ReadableStream<Uint8Array>);
       const accumulated = await accumulateStream(deltas, idle);
 
+      idle.signal.removeEventListener("abort", onAbort);
       await proc.exited;
 
       if (proc.exitCode !== 0) {

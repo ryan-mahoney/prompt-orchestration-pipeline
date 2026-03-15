@@ -45,7 +45,8 @@ export async function* frameSse(
       // Keep the last (potentially incomplete) line in the buffer
       buffer = lines.pop()!;
 
-      for (const line of lines) {
+      for (let line of lines) {
+        line = line.endsWith("\r") ? line.slice(0, -1) : line;
         if (line.startsWith(":")) continue; // comment line
 
         if (line === "") {
@@ -72,8 +73,8 @@ export async function* frameSse(
 
   // Process any remaining content in the buffer (no trailing newline)
   if (buffer) {
-    const line = buffer;
-    if (!line.startsWith(":")) {
+    const line = buffer.endsWith("\r") ? buffer.slice(0, -1) : buffer;
+    if (line && !line.startsWith(":")) {
       if (line.startsWith("event:")) {
         currentEvent = line.slice(6).trim();
       } else if (line.startsWith("data:")) {
@@ -113,6 +114,11 @@ export class IdleTimeoutController {
     if (!this.controller.signal.aborted) {
       this.startTimer();
     }
+  }
+
+  /** Clear the pending timer so it doesn't keep the process alive. */
+  cleanup(): void {
+    this.clearTimer();
   }
 
   private startTimer(): void {
@@ -355,6 +361,22 @@ export async function* parseClaudeCodeStream(
   } finally {
     reader.releaseLock();
   }
+
+  // Process any remaining buffered content (no trailing newline)
+  const trailing = buffer.trim();
+  if (trailing) {
+    let parsed: Record<string, unknown>;
+    try {
+      parsed = JSON.parse(trailing);
+      if (parsed.type === "assistant") {
+        yield { deltaText: extractClaudeCodeText(parsed), done: false };
+      } else if (parsed.type === "result") {
+        yield { deltaText: "", done: true };
+      }
+    } catch {
+      // ignore malformed trailing data
+    }
+  }
 }
 
 function extractClaudeCodeText(event: Record<string, unknown>): string {
@@ -398,11 +420,15 @@ export async function accumulateStream(
   let text = "";
   let usage: AdapterUsage | undefined;
 
-  for await (const delta of deltas) {
-    idle.reset();
-    text += delta.deltaText;
-    if (delta.usage) usage = delta.usage;
-    if (delta.done) break;
+  try {
+    for await (const delta of deltas) {
+      idle.reset();
+      text += delta.deltaText;
+      if (delta.usage) usage = delta.usage;
+      if (delta.done) break;
+    }
+  } finally {
+    idle.cleanup();
   }
 
   return { text, usage };

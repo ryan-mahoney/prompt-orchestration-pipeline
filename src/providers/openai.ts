@@ -228,31 +228,37 @@ async function callStreamingResponsesAPI(
     params["text"] = { format: { type: "json_object" } };
   }
 
-  const stream = await openai.responses.create(
-    params as Parameters<typeof openai.responses.create>[0],
-  );
-
   const idle = new IdleTimeoutController(DEFAULT_REQUEST_TIMEOUT_MS);
+
+  const stream = await openai.responses.create({
+    ...(params as Parameters<typeof openai.responses.create>[0]),
+    signal: idle.signal,
+  } as Parameters<typeof openai.responses.create>[0]);
+
   let text = "";
   let usage: AdapterUsage | undefined;
 
-  for await (const event of stream as AsyncIterable<Record<string, unknown>>) {
-    idle.reset();
-    const type = event.type as string | undefined;
+  try {
+    for await (const event of stream as AsyncIterable<Record<string, unknown>>) {
+      idle.reset();
+      const type = event.type as string | undefined;
 
-    if (type === "response.output_text.delta") {
-      text += (event as { delta?: string }).delta ?? "";
-    } else if (type === "response.completed") {
-      const resp = event.response as Record<string, unknown> | undefined;
-      const u = resp?.usage as Record<string, number> | undefined;
-      if (u) {
-        usage = {
-          prompt_tokens: u.input_tokens ?? 0,
-          completion_tokens: u.output_tokens ?? 0,
-          total_tokens: (u.input_tokens ?? 0) + (u.output_tokens ?? 0),
-        };
+      if (type === "response.output_text.delta") {
+        text += (event as { delta?: string }).delta ?? "";
+      } else if (type === "response.completed") {
+        const resp = event.response as Record<string, unknown> | undefined;
+        const u = resp?.usage as Record<string, number> | undefined;
+        if (u) {
+          usage = {
+            prompt_tokens: u.input_tokens ?? 0,
+            completion_tokens: u.output_tokens ?? 0,
+            total_tokens: (u.input_tokens ?? 0) + (u.output_tokens ?? 0),
+          };
+        }
       }
     }
+  } finally {
+    idle.cleanup();
   }
 
   if (!usage) {
@@ -316,30 +322,36 @@ async function callStreamingChatCompletionsAPI(
   if (topP !== undefined) params["top_p"] = topP;
   if (stop !== undefined) params["stop"] = stop;
 
-  const stream = await openai.chat.completions.create(
-    params as unknown as Parameters<typeof openai.chat.completions.create>[0],
-  );
-
   const idle = new IdleTimeoutController(DEFAULT_REQUEST_TIMEOUT_MS);
+
+  const stream = await openai.chat.completions.create({
+    ...(params as unknown as Parameters<typeof openai.chat.completions.create>[0]),
+    signal: idle.signal,
+  } as unknown as Parameters<typeof openai.chat.completions.create>[0]);
+
   let text = "";
   let usage: AdapterUsage | undefined;
 
-  for await (const chunk of stream as AsyncIterable<Record<string, unknown>>) {
-    idle.reset();
+  try {
+    for await (const chunk of stream as AsyncIterable<Record<string, unknown>>) {
+      idle.reset();
 
-    const choices = chunk.choices as
-      | Array<{ delta?: { content?: string }; finish_reason?: string }>
-      | undefined;
-    text += choices?.[0]?.delta?.content ?? "";
+      const choices = chunk.choices as
+        | Array<{ delta?: { content?: string }; finish_reason?: string }>
+        | undefined;
+      text += choices?.[0]?.delta?.content ?? "";
 
-    const u = chunk.usage as Record<string, number> | undefined;
-    if (u && typeof u.prompt_tokens === "number") {
-      usage = {
-        prompt_tokens: u.prompt_tokens,
-        completion_tokens: u.completion_tokens ?? 0,
-        total_tokens: u.total_tokens ?? (u.prompt_tokens + (u.completion_tokens ?? 0)),
-      };
+      const u = chunk.usage as Record<string, number> | undefined;
+      if (u && typeof u.prompt_tokens === "number") {
+        usage = {
+          prompt_tokens: u.prompt_tokens,
+          completion_tokens: u.completion_tokens ?? 0,
+          total_tokens: u.total_tokens ?? (u.prompt_tokens + (u.completion_tokens ?? 0)),
+        };
+      }
     }
+  } finally {
+    idle.cleanup();
   }
 
   if (!usage) {
