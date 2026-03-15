@@ -14,6 +14,12 @@ import {
 import { ProviderJsonParseError } from "./types.ts";
 import type { MoonshotOptions, AdapterResponse } from "./types.ts";
 import { deepseekChat } from "./deepseek.ts";
+import {
+  IdleTimeoutController,
+  frameSse,
+  parseOpenAiSse,
+  accumulateStream,
+} from "./stream-accumulator.ts";
 
 const MOONSHOT_API_URL = "https://api.moonshot.ai/v1/chat/completions";
 const DEFAULT_MODEL = "kimi-k2.5";
@@ -72,16 +78,17 @@ export async function moonshotChat(
     model,
     messages: apiMessages,
     max_tokens: maxTokens,
-    response_format: { type: "json_object" },
     thinking: { type: thinking },
-    stream: false,
+    stream: true,
   };
 
   let lastError: unknown;
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
-      const signal = AbortSignal.timeout(requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS);
+      const idle = new IdleTimeoutController(
+        requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS,
+      );
       const response = await fetch(MOONSHOT_API_URL, {
         method: "POST",
         headers: {
@@ -89,7 +96,7 @@ export async function moonshotChat(
           Authorization: `Bearer ${apiKey ?? ""}`,
         },
         body: JSON.stringify(body),
-        signal,
+        signal: idle.signal,
       });
 
       if (!response.ok) {
@@ -128,22 +135,15 @@ export async function moonshotChat(
         throw err;
       }
 
-      const data = (await response.json()) as {
-        choices: Array<{
-          message: { content: string };
-        }>;
-        usage?: {
-          prompt_tokens: number;
-          completion_tokens: number;
-          total_tokens: number;
-        };
-      };
+      const frames = frameSse(response.body!);
+      const deltas = parseOpenAiSse(frames);
+      const accumulated = await accumulateStream(deltas, idle);
 
-      const rawText = data.choices?.[0]?.message?.content ?? "";
+      const rawText = accumulated.text;
       const stripped = stripMarkdownFences(rawText);
       const parsed = tryParseJSON(stripped);
 
-      // Always in JSON mode (json_object response format) — string result means parse failure
+      // Always in JSON mode — string result means parse failure
       if (typeof parsed === "string") {
         throw new ProviderJsonParseError(
           "moonshot",
@@ -152,7 +152,7 @@ export async function moonshotChat(
         );
       }
 
-      const usage = data.usage ?? {
+      const usage = accumulated.usage ?? {
         prompt_tokens: 0,
         completion_tokens: 0,
         total_tokens: 0,
@@ -161,7 +161,7 @@ export async function moonshotChat(
       return {
         content: parsed as Record<string, unknown>,
         usage,
-        raw: data,
+        raw: { accumulated: rawText },
       };
     } catch (err) {
       lastError = err;

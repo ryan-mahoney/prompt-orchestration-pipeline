@@ -2,45 +2,87 @@ import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { ProviderJsonModeError, ProviderJsonParseError } from "../types.ts";
 import type { OpenAIOptions } from "../types.ts";
 
-// Mock the openai module before importing the adapter
-const mockResponsesCreate = vi.fn();
-const mockChatCompletionsCreate = vi.fn();
-
-const MockOpenAI = vi.fn().mockImplementation(() => ({
-  responses: { create: mockResponsesCreate },
-  chat: { completions: { create: mockChatCompletionsCreate } },
-}));
+// Use var to avoid TDZ — vi.mock is hoisted above let/const declarations
+// eslint-disable-next-line no-var
+var mockResponsesCreate: ReturnType<typeof vi.fn>;
+// eslint-disable-next-line no-var
+var mockChatCompletionsCreate: ReturnType<typeof vi.fn>;
+// eslint-disable-next-line no-var
+var MockOpenAI: ReturnType<typeof vi.fn>;
 
 vi.mock("openai", () => {
-  return {
-    default: MockOpenAI,
-  };
+  mockResponsesCreate = vi.fn();
+  mockChatCompletionsCreate = vi.fn();
+  MockOpenAI = vi.fn().mockImplementation(() => ({
+    responses: { create: mockResponsesCreate },
+    chat: { completions: { create: mockChatCompletionsCreate } },
+  }));
+  return { default: MockOpenAI };
 });
 
 import { openaiChat, _resetClient } from "../openai.ts";
 
-function makeChatCompletion(
-  text: string,
-  promptTokens = 10,
-  completionTokens = 20,
-) {
+/**
+ * Creates an async iterable that yields streaming chat completion chunks.
+ */
+function makeStreamingChatCompletion(
+  textChunks: string[],
+  usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number },
+): AsyncIterable<Record<string, unknown>> {
+  const events: Record<string, unknown>[] = [];
+
+  for (const chunk of textChunks) {
+    events.push({
+      choices: [{ delta: { content: chunk }, finish_reason: null }],
+    });
+  }
+  // Final chunk with finish_reason and optional usage
+  events.push({
+    choices: [{ delta: {}, finish_reason: "stop" }],
+    ...(usage ? { usage } : {}),
+  });
+
   return {
-    choices: [{ message: { content: text }, finish_reason: "stop" }],
-    usage: {
-      prompt_tokens: promptTokens,
-      completion_tokens: completionTokens,
-      total_tokens: promptTokens + completionTokens,
+    async *[Symbol.asyncIterator]() {
+      for (const event of events) {
+        yield event;
+      }
     },
   };
 }
 
-function makeResponsesResult(text: string, inputTokens = 10, outputTokens = 20) {
+/**
+ * Creates an async iterable that yields streaming Responses API events.
+ */
+function makeStreamingResponsesResult(
+  textChunks: string[],
+  inputTokens = 10,
+  outputTokens = 20,
+): AsyncIterable<Record<string, unknown>> {
+  const events: Record<string, unknown>[] = [];
+
+  for (const chunk of textChunks) {
+    events.push({
+      type: "response.output_text.delta",
+      delta: chunk,
+    });
+  }
+
+  events.push({
+    type: "response.completed",
+    response: {
+      usage: {
+        input_tokens: inputTokens,
+        output_tokens: outputTokens,
+      },
+    },
+  });
+
   return {
-    output_text: text,
-    usage: {
-      input_tokens: inputTokens,
-      output_tokens: outputTokens,
-      total_tokens: inputTokens + outputTokens,
+    async *[Symbol.asyncIterator]() {
+      for (const event of events) {
+        yield event;
+      }
     },
   };
 }
@@ -67,10 +109,10 @@ describe("openaiChat", () => {
     delete process.env["OPENAI_ORGANIZATION"];
   });
 
-  it("uses Responses API for gpt-5 models", async () => {
+  it("uses streaming Responses API for gpt-5 models", async () => {
     const jsonPayload = { result: "from-responses" };
     mockResponsesCreate.mockResolvedValue(
-      makeResponsesResult(JSON.stringify(jsonPayload)),
+      makeStreamingResponsesResult([JSON.stringify(jsonPayload)]),
     );
 
     const result = await openaiChat({
@@ -83,12 +125,16 @@ describe("openaiChat", () => {
     expect(result.content).toEqual(jsonPayload);
     expect(result.text).toBe(JSON.stringify(jsonPayload));
     expect(result.usage).toBeDefined();
+
+    // Verify stream: true is passed
+    const callArgs = mockResponsesCreate.mock.calls[0]![0] as Record<string, unknown>;
+    expect(callArgs["stream"]).toBe(true);
   });
 
-  it("uses Responses API for gpt-5-chat-latest (case-insensitive)", async () => {
+  it("uses streaming Responses API for gpt-5-chat-latest (case-insensitive)", async () => {
     const jsonPayload = { ok: true };
     mockResponsesCreate.mockResolvedValue(
-      makeResponsesResult(JSON.stringify(jsonPayload)),
+      makeStreamingResponsesResult([JSON.stringify(jsonPayload)]),
     );
 
     await openaiChat({
@@ -100,10 +146,11 @@ describe("openaiChat", () => {
     expect(mockChatCompletionsCreate).not.toHaveBeenCalled();
   });
 
-  it("uses Chat Completions API for non-gpt-5 models", async () => {
+  it("uses streaming Chat Completions API for non-gpt-5 models", async () => {
     const jsonPayload = { result: "from-completions" };
+    const usage = { prompt_tokens: 10, completion_tokens: 20, total_tokens: 30 };
     mockChatCompletionsCreate.mockResolvedValue(
-      makeChatCompletion(JSON.stringify(jsonPayload)),
+      makeStreamingChatCompletion([JSON.stringify(jsonPayload)], usage),
     );
 
     const result = await openaiChat({
@@ -114,21 +161,22 @@ describe("openaiChat", () => {
     expect(mockChatCompletionsCreate).toHaveBeenCalledTimes(1);
     expect(mockResponsesCreate).not.toHaveBeenCalled();
     expect(result.content).toEqual(jsonPayload);
-    expect(result.usage).toEqual({
-      prompt_tokens: 10,
-      completion_tokens: 20,
-      total_tokens: 30,
-    });
+    expect(result.usage).toEqual(usage);
+
+    // Verify stream: true and stream_options are passed
+    const callArgs = mockChatCompletionsCreate.mock.calls[0]![0] as Record<string, unknown>;
+    expect(callArgs["stream"]).toBe(true);
+    expect(callArgs["stream_options"]).toEqual({ include_usage: true });
   });
 
-  it("falls back to Chat Completions API on 'unsupported' error from Responses API", async () => {
+  it("falls back to streaming Chat Completions API on 'unsupported' error from Responses API", async () => {
     const unsupportedErr = new Error("This model is unsupported for the Responses API");
     (unsupportedErr as { status?: number }).status = 400;
     mockResponsesCreate.mockRejectedValue(unsupportedErr);
 
     const jsonPayload = { fallback: true };
     mockChatCompletionsCreate.mockResolvedValue(
-      makeChatCompletion(JSON.stringify(jsonPayload)),
+      makeStreamingChatCompletion([JSON.stringify(jsonPayload)]),
     );
 
     const result = await openaiChat({
@@ -144,7 +192,7 @@ describe("openaiChat", () => {
   it("does not include max_tokens in the request body", async () => {
     const jsonPayload = { ok: true };
     mockChatCompletionsCreate.mockResolvedValue(
-      makeChatCompletion(JSON.stringify(jsonPayload)),
+      makeStreamingChatCompletion([JSON.stringify(jsonPayload)]),
     );
 
     await openaiChat({
@@ -188,7 +236,7 @@ describe("openaiChat", () => {
   it("throws ProviderJsonParseError for non-JSON text in JSON mode", async () => {
     const nonJsonText = "This is plain text, not JSON at all.";
     mockChatCompletionsCreate.mockResolvedValue(
-      makeChatCompletion(nonJsonText),
+      makeStreamingChatCompletion([nonJsonText]),
     );
 
     try {
@@ -209,7 +257,7 @@ describe("openaiChat", () => {
   it("defaults to gpt-5-chat-latest model and json_object format", async () => {
     const jsonPayload = { default: true };
     mockResponsesCreate.mockResolvedValue(
-      makeResponsesResult(JSON.stringify(jsonPayload)),
+      makeStreamingResponsesResult([JSON.stringify(jsonPayload)]),
     );
 
     await openaiChat({
@@ -222,13 +270,18 @@ describe("openaiChat", () => {
     expect(callArgs["model"]).toBe("gpt-5-chat-latest");
   });
 
-  it("estimates usage at ~4 chars/token when Responses API lacks usage", async () => {
+  it("estimates usage at ~4 chars/token when Responses API stream lacks usage", async () => {
     const jsonPayload = { estimated: true };
     const text = JSON.stringify(jsonPayload);
-    mockResponsesCreate.mockResolvedValue({
-      output_text: text,
-      // No usage field
-    });
+
+    // Streaming response that completes without a response.completed event carrying usage
+    const noUsageStream: AsyncIterable<Record<string, unknown>> = {
+      async *[Symbol.asyncIterator]() {
+        yield { type: "response.output_text.delta", delta: text };
+        // No response.completed event with usage
+      },
+    };
+    mockResponsesCreate.mockResolvedValue(noUsageStream);
 
     const result = await openaiChat({
       ...baseOptions,
@@ -248,7 +301,9 @@ describe("openaiChat", () => {
     const jsonPayload = { retried: true };
     mockChatCompletionsCreate
       .mockRejectedValueOnce(retryableErr)
-      .mockResolvedValueOnce(makeChatCompletion(JSON.stringify(jsonPayload)));
+      .mockResolvedValueOnce(
+        makeStreamingChatCompletion([JSON.stringify(jsonPayload)]),
+      );
 
     const result = await openaiChat({
       ...baseOptions,
@@ -263,7 +318,7 @@ describe("openaiChat", () => {
   it("passes seed, frequencyPenalty, presencePenalty to Chat Completions API", async () => {
     const jsonPayload = { ok: true };
     mockChatCompletionsCreate.mockResolvedValue(
-      makeChatCompletion(JSON.stringify(jsonPayload)),
+      makeStreamingChatCompletion([JSON.stringify(jsonPayload)]),
     );
 
     await openaiChat({
@@ -284,7 +339,7 @@ describe("openaiChat", () => {
     process.env["OPENAI_BASE_URL"] = "https://example.test/v1";
     process.env["OPENAI_ORGANIZATION"] = "org_test";
     mockResponsesCreate.mockResolvedValue(
-      makeResponsesResult(JSON.stringify({ ok: true })),
+      makeStreamingResponsesResult([JSON.stringify({ ok: true })]),
     );
 
     await openaiChat({
@@ -303,7 +358,7 @@ describe("openaiChat", () => {
 
   it("constructs the client with custom requestTimeoutMs", async () => {
     mockChatCompletionsCreate.mockResolvedValue(
-      makeChatCompletion(JSON.stringify({ ok: true })),
+      makeStreamingChatCompletion([JSON.stringify({ ok: true })]),
     );
 
     await openaiChat({
@@ -319,7 +374,7 @@ describe("openaiChat", () => {
 
   it("creates separate client instances for different timeout values", async () => {
     mockChatCompletionsCreate.mockResolvedValue(
-      makeChatCompletion(JSON.stringify({ ok: true })),
+      makeStreamingChatCompletion([JSON.stringify({ ok: true })]),
     );
 
     await openaiChat({ ...baseOptions, model: "gpt-4o", requestTimeoutMs: 10_000 });
@@ -333,9 +388,9 @@ describe("openaiChat", () => {
     expect(timeouts).toContain(60_000);
   });
 
-  it("passes json_schema to the Responses API when provided", async () => {
+  it("passes json_schema to the streaming Responses API when provided", async () => {
     mockResponsesCreate.mockResolvedValue(
-      makeResponsesResult(JSON.stringify({ ok: true })),
+      makeStreamingResponsesResult([JSON.stringify({ ok: true })]),
     );
 
     await openaiChat({
@@ -359,6 +414,58 @@ describe("openaiChat", () => {
           properties: { ok: { type: "boolean" } },
         },
       },
+    });
+  });
+
+  describe("streaming accumulation", () => {
+    it("accumulates text across multiple streaming chunks for Chat Completions", async () => {
+      const usage = { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 };
+      mockChatCompletionsCreate.mockResolvedValue(
+        makeStreamingChatCompletion(['{"he', 'llo":"world"}'], usage),
+      );
+
+      const result = await openaiChat({
+        ...baseOptions,
+        model: "gpt-4o",
+      });
+
+      expect(result.content).toEqual({ hello: "world" });
+      expect(result.usage).toEqual(usage);
+    });
+
+    it("accumulates text across multiple streaming chunks for Responses API", async () => {
+      mockResponsesCreate.mockResolvedValue(
+        makeStreamingResponsesResult(['{"he', 'llo":"world"}'], 10, 5),
+      );
+
+      const result = await openaiChat({
+        ...baseOptions,
+        model: "gpt-5",
+      });
+
+      expect(result.content).toEqual({ hello: "world" });
+      expect(result.usage).toEqual({
+        prompt_tokens: 10,
+        completion_tokens: 5,
+        total_tokens: 15,
+      });
+    });
+
+    it("defaults usage to zeros when Chat Completions stream has no usage", async () => {
+      mockChatCompletionsCreate.mockResolvedValue(
+        makeStreamingChatCompletion([JSON.stringify({ ok: true })]),
+      );
+
+      const result = await openaiChat({
+        ...baseOptions,
+        model: "gpt-4o",
+      });
+
+      expect(result.usage).toEqual({
+        prompt_tokens: 0,
+        completion_tokens: 0,
+        total_tokens: 0,
+      });
     });
   });
 });

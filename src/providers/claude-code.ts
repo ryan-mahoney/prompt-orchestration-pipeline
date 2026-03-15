@@ -2,6 +2,7 @@
 // Claude Code CLI adapter using Bun subprocess APIs.
 
 import {
+  DEFAULT_REQUEST_TIMEOUT_MS,
   ensureJsonResponseFormat,
   extractMessages,
   isRetryableError,
@@ -9,6 +10,11 @@ import {
   stripMarkdownFences,
   tryParseJSON,
 } from "./base.ts";
+import {
+  IdleTimeoutController,
+  parseClaudeCodeStream,
+  accumulateStream,
+} from "./stream-accumulator.ts";
 import { ProviderJsonParseError } from "./types.ts";
 import type { ClaudeCodeOptions, AdapterResponse } from "./types.ts";
 
@@ -46,7 +52,7 @@ export async function claudeCodeChat(
   const args = [
     "claude",
     "--output-format",
-    "json",
+    "stream-json",
     "--model",
     model,
     "--max-turns",
@@ -66,23 +72,26 @@ export async function claudeCodeChat(
         stderr: "pipe",
       });
 
-      const stdout = await new Response(proc.stdout).text();
+      const idle = new IdleTimeoutController(DEFAULT_REQUEST_TIMEOUT_MS);
+
+      // Kill the subprocess if the idle timeout fires
+      const onAbort = () => proc.kill();
+      idle.signal.addEventListener("abort", onAbort, { once: true });
+
+      const deltas = parseClaudeCodeStream(proc.stdout as ReadableStream<Uint8Array>);
+      const accumulated = await accumulateStream(deltas, idle);
+
+      idle.signal.removeEventListener("abort", onAbort);
       await proc.exited;
 
       if (proc.exitCode !== 0) {
         const stderr = await new Response(proc.stderr).text();
         throw new Error(
-          `Claude Code CLI exited with code ${proc.exitCode}: ${stderr || stdout}`,
+          `Claude Code CLI exited with code ${proc.exitCode}: ${stderr || accumulated.text}`,
         );
       }
 
-      const envelope = JSON.parse(stdout) as {
-        result?: string;
-        content?: string;
-        text?: string;
-      };
-      const innerText = envelope.result ?? envelope.content ?? envelope.text ?? "";
-      const cleanedText = stripMarkdownFences(innerText);
+      const cleanedText = stripMarkdownFences(accumulated.text);
       const parsed = tryParseJSON(cleanedText);
 
       if (typeof parsed === "string") {
@@ -95,9 +104,9 @@ export async function claudeCodeChat(
 
       return {
         content: parsed as Record<string, unknown>,
-        text: innerText,
+        text: accumulated.text,
         usage: { ...ZERO_USAGE },
-        raw: envelope,
+        raw: accumulated.text,
       };
     } catch (err) {
       lastError = err;

@@ -11,6 +11,12 @@ import {
   createProviderError,
   ensureJsonResponseFormat,
 } from "./base.ts";
+import {
+  IdleTimeoutController,
+  frameSse,
+  parseAnthropicSse,
+  accumulateStream,
+} from "./stream-accumulator.ts";
 import { ProviderJsonParseError } from "./types.ts";
 import type { AnthropicOptions, AdapterResponse } from "./types.ts";
 
@@ -75,75 +81,12 @@ export async function anthropicChat(
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
-      const signal = AbortSignal.timeout(requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS);
-      const response = await fetch(ANTHROPIC_API_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "anthropic-version": ANTHROPIC_VERSION,
-          "x-api-key": apiKey ?? "",
-        },
-        body: JSON.stringify(body),
-        signal,
-      });
-
-      if (!response.ok) {
-        let errorBody: unknown;
-        try {
-          errorBody = await response.json();
-        } catch {
-          errorBody = await response.text();
-        }
-
-        const err = createProviderError(
-          response.status,
-          errorBody,
-          `Anthropic API error: ${response.status}`,
-        );
-
-        // 401 is never retried
-        if (response.status === 401) {
-          throw err;
-        }
-
-        throw err;
-      }
-
-      const data = (await response.json()) as {
-        content: Array<{ type: string; text: string }>;
-        usage: { input_tokens: number; output_tokens: number };
-      };
-
-      const rawText =
-        data.content
-          .filter((block) => block.type === "text")
-          .map((block) => block.text)
-          .join("") || "";
-
-      const stripped = stripMarkdownFences(rawText);
-      const parsed = tryParseJSON(stripped);
-
-      // In JSON mode, if tryParseJSON returns a string, the response is unparseable JSON
-      if (typeof parsed === "string") {
-        throw new ProviderJsonParseError(
-          "anthropic",
-          model,
-          parsed.slice(0, 200),
-        );
-      }
-
-      const usage = {
-        prompt_tokens: data.usage.input_tokens,
-        completion_tokens: data.usage.output_tokens,
-        total_tokens: data.usage.input_tokens + data.usage.output_tokens,
-      };
-
-      return {
-        content: parsed as Record<string, unknown>,
-        text: rawText,
-        usage,
-        raw: data,
-      };
+      return await anthropicStreamChat(
+        body,
+        model,
+        apiKey ?? "",
+        requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS,
+      );
     } catch (err) {
       lastError = err;
 
@@ -158,4 +101,67 @@ export async function anthropicChat(
   }
 
   throw lastError;
+}
+
+/** Streams an Anthropic request, accumulates the response, and parses JSON. */
+async function anthropicStreamChat(
+  body: Record<string, unknown>,
+  model: string,
+  apiKey: string,
+  timeoutMs: number,
+): Promise<AdapterResponse> {
+  const idle = new IdleTimeoutController(timeoutMs);
+
+  const response = await fetch(ANTHROPIC_API_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "anthropic-version": ANTHROPIC_VERSION,
+      "x-api-key": apiKey,
+    },
+    body: JSON.stringify({ ...body, stream: true }),
+    signal: idle.signal,
+  });
+
+  if (!response.ok) {
+    let errorBody: unknown;
+    try {
+      errorBody = await response.json();
+    } catch {
+      errorBody = await response.text();
+    }
+
+    const err = createProviderError(
+      response.status,
+      errorBody,
+      `Anthropic API error: ${response.status}`,
+    );
+
+    if (response.status === 401) {
+      throw err;
+    }
+
+    throw err;
+  }
+
+  const frames = frameSse(response.body!);
+  const deltas = parseAnthropicSse(frames);
+  const { text: rawText, usage } = await accumulateStream(deltas, idle);
+
+  const stripped = stripMarkdownFences(rawText);
+  const parsed = tryParseJSON(stripped);
+
+  if (typeof parsed === "string") {
+    throw new ProviderJsonParseError(
+      "anthropic",
+      model,
+      parsed.slice(0, 200),
+    );
+  }
+
+  return {
+    content: parsed as Record<string, unknown>,
+    text: rawText,
+    usage,
+  };
 }

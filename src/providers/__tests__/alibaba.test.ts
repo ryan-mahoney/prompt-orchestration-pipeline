@@ -4,24 +4,65 @@ import { ProviderJsonParseError } from "../types.ts";
 import type { AlibabaOptions } from "../types.ts";
 import type { Mock } from "vitest";
 
-function makeAlibabaResponse(
-  content: string,
-  promptTokens = 10,
-  completionTokens = 20,
-) {
-  return {
-    choices: [{ message: { content } }],
-    usage: {
-      prompt_tokens: promptTokens,
-      completion_tokens: completionTokens,
-      total_tokens: promptTokens + completionTokens,
+/**
+ * Creates a mock ReadableStream that yields SSE-formatted data.
+ */
+function makeSSEStream(events: string[]): ReadableStream<Uint8Array> {
+  const encoder = new TextEncoder();
+  const chunks = events.map((e) => encoder.encode(e));
+  let index = 0;
+
+  return new ReadableStream({
+    pull(controller) {
+      if (index < chunks.length) {
+        controller.enqueue(chunks[index]!);
+        index++;
+      } else {
+        controller.close();
+      }
     },
-  };
+  });
 }
 
-function mockFetchResponse(body: unknown, status = 200) {
+/**
+ * Builds SSE events for an OpenAI-compatible streaming response.
+ */
+function makeOpenAiSseEvents(
+  textChunks: string[],
+  usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number },
+): string[] {
+  const events: string[] = [];
+  for (const chunk of textChunks) {
+    events.push(
+      `data: ${JSON.stringify({ choices: [{ delta: { content: chunk } }] })}\n\n`,
+    );
+  }
+  if (usage) {
+    events.push(
+      `data: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: "stop" }], usage })}\n\n`,
+    );
+  } else {
+    events.push(
+      `data: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: "stop" }] })}\n\n`,
+    );
+  }
+  events.push("data: [DONE]\n\n");
+  return events;
+}
+
+function mockStreamingResponse(events: string[], status = 200) {
   return {
     ok: status >= 200 && status < 300,
+    status,
+    body: makeSSEStream(events),
+    json: vi.fn(),
+    text: vi.fn(),
+  } as unknown as Response;
+}
+
+function mockErrorResponse(body: unknown, status: number) {
+  return {
+    ok: false,
     status,
     json: vi.fn().mockResolvedValue(body),
     text: vi.fn().mockResolvedValue(JSON.stringify(body)),
@@ -56,11 +97,11 @@ describe("alibabaChat", () => {
 
   it("returns parsed JSON content with usage on success", async () => {
     const jsonPayload = { result: "success", count: 42 };
-    fetchMock.mockResolvedValue(
-      mockFetchResponse(
-        makeAlibabaResponse(JSON.stringify(jsonPayload), 15, 25),
-      ),
+    const events = makeOpenAiSseEvents(
+      [JSON.stringify(jsonPayload)],
+      { prompt_tokens: 15, completion_tokens: 25, total_tokens: 40 },
     );
+    fetchMock.mockResolvedValue(mockStreamingResponse(events));
 
     const result = await alibabaChat(baseOptions);
 
@@ -70,14 +111,25 @@ describe("alibabaChat", () => {
       completion_tokens: 25,
       total_tokens: 40,
     });
-    expect(result.raw).toBeDefined();
+  });
+
+  it("sends stream: true and stream_options in request body", async () => {
+    const events = makeOpenAiSseEvents([JSON.stringify({ ok: true })]);
+    fetchMock.mockResolvedValue(mockStreamingResponse(events));
+
+    await alibabaChat(baseOptions);
+
+    const body = JSON.parse(
+      (fetchMock.mock.calls[0] as [string, RequestInit])[1].body as string,
+    );
+    expect(body.stream).toBe(true);
+    expect(body.stream_options).toEqual({ include_usage: true });
   });
 
   it("throws ProviderJsonParseError on invalid JSON when responseFormat is json_object", async () => {
     const nonJsonText = "This is plain text, not JSON at all.";
-    fetchMock.mockResolvedValue(
-      mockFetchResponse(makeAlibabaResponse(nonJsonText)),
-    );
+    const events = makeOpenAiSseEvents([nonJsonText]);
+    fetchMock.mockResolvedValue(mockStreamingResponse(events));
 
     try {
       await alibabaChat(baseOptions);
@@ -93,18 +145,15 @@ describe("alibabaChat", () => {
 
   it("retries on HTTP 500 with exponential backoff", async () => {
     const jsonPayload = { retried: true };
+    const events = makeOpenAiSseEvents([JSON.stringify(jsonPayload)]);
     fetchMock
       .mockResolvedValueOnce(
-        mockFetchResponse({ error: { message: "Server error" } }, 500),
+        mockErrorResponse({ error: { message: "Server error" } }, 500),
       )
       .mockResolvedValueOnce(
-        mockFetchResponse({ error: { message: "Server error" } }, 500),
+        mockErrorResponse({ error: { message: "Server error" } }, 500),
       )
-      .mockResolvedValueOnce(
-        mockFetchResponse(
-          makeAlibabaResponse(JSON.stringify(jsonPayload)),
-        ),
-      );
+      .mockResolvedValueOnce(mockStreamingResponse(events));
 
     const result = await alibabaChat({ ...baseOptions, maxRetries: 3 });
 
@@ -114,7 +163,7 @@ describe("alibabaChat", () => {
 
   it("does NOT retry on HTTP 401", async () => {
     fetchMock.mockResolvedValue(
-      mockFetchResponse({ error: { message: "Unauthorized" } }, 401),
+      mockErrorResponse({ error: { message: "Unauthorized" } }, 401),
     );
 
     await expect(
@@ -126,10 +175,8 @@ describe("alibabaChat", () => {
 
   it("uses ALIBABA_BASE_URL env var when set", async () => {
     process.env["ALIBABA_BASE_URL"] = "https://custom.api.example.com";
-    const jsonPayload = { ok: true };
-    fetchMock.mockResolvedValue(
-      mockFetchResponse(makeAlibabaResponse(JSON.stringify(jsonPayload))),
-    );
+    const events = makeOpenAiSseEvents([JSON.stringify({ ok: true })]);
+    fetchMock.mockResolvedValue(mockStreamingResponse(events));
 
     await alibabaChat(baseOptions);
 
@@ -140,10 +187,8 @@ describe("alibabaChat", () => {
   });
 
   it("passes frequencyPenalty and presencePenalty in request body", async () => {
-    const jsonPayload = { ok: true };
-    fetchMock.mockResolvedValue(
-      mockFetchResponse(makeAlibabaResponse(JSON.stringify(jsonPayload))),
-    );
+    const events = makeOpenAiSseEvents([JSON.stringify({ ok: true })]);
+    fetchMock.mockResolvedValue(mockStreamingResponse(events));
 
     await alibabaChat({
       ...baseOptions,
@@ -158,10 +203,9 @@ describe("alibabaChat", () => {
     expect(body.presence_penalty).toBe(0.2);
   });
 
-  it("passes an AbortSignal to fetch", async () => {
-    fetchMock.mockResolvedValue(
-      mockFetchResponse(makeAlibabaResponse(JSON.stringify({ ok: true }))),
-    );
+  it("passes an AbortSignal to fetch (IdleTimeoutController)", async () => {
+    const events = makeOpenAiSseEvents([JSON.stringify({ ok: true })]);
+    fetchMock.mockResolvedValue(mockStreamingResponse(events));
 
     await alibabaChat(baseOptions);
 
@@ -169,22 +213,9 @@ describe("alibabaChat", () => {
     expect(init.signal).toBeInstanceOf(AbortSignal);
   });
 
-  it("uses custom requestTimeoutMs for the abort signal", async () => {
-    const timeoutSpy = vi.spyOn(AbortSignal, "timeout");
-    fetchMock.mockResolvedValue(
-      mockFetchResponse(makeAlibabaResponse(JSON.stringify({ ok: true }))),
-    );
-
-    await alibabaChat({ ...baseOptions, requestTimeoutMs: 5000 });
-
-    expect(timeoutSpy).toHaveBeenCalledWith(5000);
-    timeoutSpy.mockRestore();
-  });
-
   it("sends enable_thinking true by default", async () => {
-    fetchMock.mockResolvedValue(
-      mockFetchResponse(makeAlibabaResponse(JSON.stringify({ ok: true }))),
-    );
+    const events = makeOpenAiSseEvents([JSON.stringify({ ok: true })]);
+    fetchMock.mockResolvedValue(mockStreamingResponse(events));
 
     await alibabaChat(baseOptions);
 
@@ -195,9 +226,8 @@ describe("alibabaChat", () => {
   });
 
   it("sends enable_thinking false when thinking is disabled", async () => {
-    fetchMock.mockResolvedValue(
-      mockFetchResponse(makeAlibabaResponse(JSON.stringify({ ok: true }))),
-    );
+    const events = makeOpenAiSseEvents([JSON.stringify({ ok: true })]);
+    fetchMock.mockResolvedValue(mockStreamingResponse(events));
 
     await alibabaChat({ ...baseOptions, thinking: "disabled" });
 
@@ -205,5 +235,68 @@ describe("alibabaChat", () => {
       (fetchMock.mock.calls[0] as [string, RequestInit])[1].body as string,
     );
     expect(body.enable_thinking).toBe(false);
+  });
+
+  describe("streaming accumulation", () => {
+    it("accumulates text across multiple SSE chunks", async () => {
+      const events = [
+        'data: {"choices":[{"delta":{"content":"{\\"he"}}]}\n\n',
+        'data: {"choices":[{"delta":{"content":"llo\\":\\"world\\"}"}}]}\n\n',
+        'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n\n',
+        "data: [DONE]\n\n",
+      ];
+
+      fetchMock.mockResolvedValue(mockStreamingResponse(events));
+
+      const result = await alibabaChat(baseOptions);
+      expect(result.content).toEqual({ hello: "world" });
+    });
+
+    it("captures usage from the final streaming chunk", async () => {
+      const events = makeOpenAiSseEvents(
+        [JSON.stringify({ ok: true })],
+        { prompt_tokens: 50, completion_tokens: 30, total_tokens: 80 },
+      );
+
+      fetchMock.mockResolvedValue(mockStreamingResponse(events));
+
+      const result = await alibabaChat(baseOptions);
+      expect(result.usage).toEqual({
+        prompt_tokens: 50,
+        completion_tokens: 30,
+        total_tokens: 80,
+      });
+    });
+
+    it("defaults usage to zeros when stream provides no usage", async () => {
+      const events = makeOpenAiSseEvents([JSON.stringify({ ok: true })]);
+
+      fetchMock.mockResolvedValue(mockStreamingResponse(events));
+
+      const result = await alibabaChat(baseOptions);
+      expect(result.usage).toEqual({
+        prompt_tokens: 0,
+        completion_tokens: 0,
+        total_tokens: 0,
+      });
+    });
+
+    it("retries on timeout then succeeds on second attempt", async () => {
+      const events = makeOpenAiSseEvents([JSON.stringify({ ok: true })]);
+
+      fetchMock
+        .mockRejectedValueOnce(
+          new DOMException("signal timed out", "TimeoutError"),
+        )
+        .mockResolvedValueOnce(mockStreamingResponse(events));
+
+      const result = await alibabaChat({
+        ...baseOptions,
+        maxRetries: 1,
+      });
+
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(result.content).toEqual({ ok: true });
+    });
   });
 });

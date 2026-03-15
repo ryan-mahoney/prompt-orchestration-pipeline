@@ -4,24 +4,65 @@ import { ProviderJsonParseError } from "../types.ts";
 import type { MoonshotOptions } from "../types.ts";
 import type { Mock } from "vitest";
 
-function makeMoonshotResponse(
-  content: string,
-  promptTokens = 10,
-  completionTokens = 20,
-) {
-  return {
-    choices: [{ message: { content } }],
-    usage: {
-      prompt_tokens: promptTokens,
-      completion_tokens: completionTokens,
-      total_tokens: promptTokens + completionTokens,
+/**
+ * Creates a mock ReadableStream that yields SSE-formatted data.
+ */
+function makeSSEStream(events: string[]): ReadableStream<Uint8Array> {
+  const encoder = new TextEncoder();
+  const chunks = events.map((e) => encoder.encode(e));
+  let index = 0;
+
+  return new ReadableStream({
+    pull(controller) {
+      if (index < chunks.length) {
+        controller.enqueue(chunks[index]!);
+        index++;
+      } else {
+        controller.close();
+      }
     },
-  };
+  });
 }
 
-function mockFetchResponse(body: unknown, status = 200) {
+/**
+ * Builds SSE events for an OpenAI-compatible streaming response.
+ */
+function makeOpenAiSseEvents(
+  textChunks: string[],
+  usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number },
+): string[] {
+  const events: string[] = [];
+  for (const chunk of textChunks) {
+    events.push(
+      `data: ${JSON.stringify({ choices: [{ delta: { content: chunk } }] })}\n\n`,
+    );
+  }
+  if (usage) {
+    events.push(
+      `data: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: "stop" }], usage })}\n\n`,
+    );
+  } else {
+    events.push(
+      `data: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: "stop" }] })}\n\n`,
+    );
+  }
+  events.push("data: [DONE]\n\n");
+  return events;
+}
+
+function mockStreamingResponse(events: string[], status = 200) {
   return {
     ok: status >= 200 && status < 300,
+    status,
+    body: makeSSEStream(events),
+    json: vi.fn(),
+    text: vi.fn(),
+  } as unknown as Response;
+}
+
+function mockErrorResponse(body: unknown, status: number) {
+  return {
+    ok: false,
     status,
     json: vi.fn().mockResolvedValue(body),
     text: vi.fn().mockResolvedValue(JSON.stringify(body)),
@@ -54,13 +95,13 @@ describe("moonshotChat", () => {
     delete process.env["DEEPSEEK_API_KEY"];
   });
 
-  it("returns parsed JSON content with usage", async () => {
+  it("returns parsed JSON content with usage from streaming response", async () => {
     const jsonPayload = { result: "success", count: 42 };
-    fetchMock.mockResolvedValue(
-      mockFetchResponse(
-        makeMoonshotResponse(JSON.stringify(jsonPayload), 15, 25),
-      ),
+    const events = makeOpenAiSseEvents(
+      [JSON.stringify(jsonPayload)],
+      { prompt_tokens: 15, completion_tokens: 25, total_tokens: 40 },
     );
+    fetchMock.mockResolvedValue(mockStreamingResponse(events));
 
     const result = await moonshotChat(baseOptions);
 
@@ -70,14 +111,11 @@ describe("moonshotChat", () => {
       completion_tokens: 25,
       total_tokens: 40,
     });
-    expect(result.raw).toBeDefined();
   });
 
   it("includes thinking parameter in request body", async () => {
-    const jsonPayload = { ok: true };
-    fetchMock.mockResolvedValue(
-      mockFetchResponse(makeMoonshotResponse(JSON.stringify(jsonPayload))),
-    );
+    const events = makeOpenAiSseEvents([JSON.stringify({ ok: true })]);
+    fetchMock.mockResolvedValue(mockStreamingResponse(events));
 
     await moonshotChat(baseOptions);
 
@@ -87,11 +125,9 @@ describe("moonshotChat", () => {
     expect(body.thinking).toEqual({ type: "enabled" });
   });
 
-  it("uses default model, maxTokens, and thinking values", async () => {
-    const jsonPayload = { defaults: true };
-    fetchMock.mockResolvedValue(
-      mockFetchResponse(makeMoonshotResponse(JSON.stringify(jsonPayload))),
-    );
+  it("sends stream: true and omits response_format in request body", async () => {
+    const events = makeOpenAiSseEvents([JSON.stringify({ defaults: true })]);
+    fetchMock.mockResolvedValue(mockStreamingResponse(events));
 
     await moonshotChat({ messages: baseOptions.messages });
 
@@ -101,7 +137,8 @@ describe("moonshotChat", () => {
     expect(body.model).toBe("kimi-k2.5");
     expect(body.max_tokens).toBe(32768);
     expect(body.thinking).toEqual({ type: "enabled" });
-    expect(body.response_format).toEqual({ type: "json_object" });
+    expect(body.stream).toBe(true);
+    expect(body.response_format).toBeUndefined();
   });
 
   it("throws before fetch when messages are empty", async () => {
@@ -113,10 +150,8 @@ describe("moonshotChat", () => {
   });
 
   it("sends correct headers with Bearer token", async () => {
-    const jsonPayload = { ok: true };
-    fetchMock.mockResolvedValue(
-      mockFetchResponse(makeMoonshotResponse(JSON.stringify(jsonPayload))),
-    );
+    const events = makeOpenAiSseEvents([JSON.stringify({ ok: true })]);
+    fetchMock.mockResolvedValue(mockStreamingResponse(events));
 
     await moonshotChat(baseOptions);
 
@@ -127,25 +162,9 @@ describe("moonshotChat", () => {
     expect(headers["Content-Type"]).toBe("application/json");
   });
 
-  it("always sends json_object response format", async () => {
-    const jsonPayload = { ok: true };
-    fetchMock.mockResolvedValue(
-      mockFetchResponse(makeMoonshotResponse(JSON.stringify(jsonPayload))),
-    );
-
-    await moonshotChat(baseOptions);
-
-    const body = JSON.parse(
-      (fetchMock.mock.calls[0] as [string, RequestInit])[1].body as string,
-    );
-    expect(body.response_format).toEqual({ type: "json_object" });
-  });
-
   it("does not include temperature, topP, frequencyPenalty, or presencePenalty in request body", async () => {
-    const jsonPayload = { ok: true };
-    fetchMock.mockResolvedValue(
-      mockFetchResponse(makeMoonshotResponse(JSON.stringify(jsonPayload))),
-    );
+    const events = makeOpenAiSseEvents([JSON.stringify({ ok: true })]);
+    fetchMock.mockResolvedValue(mockStreamingResponse(events));
 
     await moonshotChat(baseOptions);
 
@@ -168,21 +187,11 @@ describe("moonshotChat", () => {
       const deepseekPayload = { fallback: true };
 
       // First call: Moonshot returns 400 content-filter
-      // Second call: DeepSeek returns success
+      // Second call: DeepSeek returns success (also streaming now)
+      const deepseekEvents = makeOpenAiSseEvents([JSON.stringify(deepseekPayload)]);
       fetchMock
-        .mockResolvedValueOnce(mockFetchResponse(contentFilterError, 400))
-        .mockResolvedValueOnce(
-          mockFetchResponse({
-            choices: [
-              { message: { content: JSON.stringify(deepseekPayload) } },
-            ],
-            usage: {
-              prompt_tokens: 5,
-              completion_tokens: 10,
-              total_tokens: 15,
-            },
-          }),
-        );
+        .mockResolvedValueOnce(mockErrorResponse(contentFilterError, 400))
+        .mockResolvedValueOnce(mockStreamingResponse(deepseekEvents));
 
       const result = await moonshotChat({
         ...baseOptions,
@@ -206,20 +215,10 @@ describe("moonshotChat", () => {
       };
       const deepseekPayload = { fallback: true };
 
+      const deepseekEvents = makeOpenAiSseEvents([JSON.stringify(deepseekPayload)]);
       fetchMock
-        .mockResolvedValueOnce(mockFetchResponse(contentFilterError, 400))
-        .mockResolvedValueOnce(
-          mockFetchResponse({
-            choices: [
-              { message: { content: JSON.stringify(deepseekPayload) } },
-            ],
-            usage: {
-              prompt_tokens: 5,
-              completion_tokens: 10,
-              total_tokens: 15,
-            },
-          }),
-        );
+        .mockResolvedValueOnce(mockErrorResponse(contentFilterError, 400))
+        .mockResolvedValueOnce(mockStreamingResponse(deepseekEvents));
 
       const result = await moonshotChat({
         ...baseOptions,
@@ -242,7 +241,7 @@ describe("moonshotChat", () => {
       };
 
       fetchMock.mockResolvedValue(
-        mockFetchResponse(contentFilterError, 400),
+        mockErrorResponse(contentFilterError, 400),
       );
 
       await expect(
@@ -259,25 +258,15 @@ describe("moonshotChat", () => {
       process.env["DEEPSEEK_API_KEY"] = "test-deepseek-key";
 
       const deepseekPayload = { ok: true };
+      const deepseekEvents = makeOpenAiSseEvents([JSON.stringify(deepseekPayload)]);
       fetchMock
         .mockResolvedValueOnce(
-          mockFetchResponse(
+          mockErrorResponse(
             { error: { message: "This content has HIGH RISK" } },
             400,
           ),
         )
-        .mockResolvedValueOnce(
-          mockFetchResponse({
-            choices: [
-              { message: { content: JSON.stringify(deepseekPayload) } },
-            ],
-            usage: {
-              prompt_tokens: 5,
-              completion_tokens: 10,
-              total_tokens: 15,
-            },
-          }),
-        );
+        .mockResolvedValueOnce(mockStreamingResponse(deepseekEvents));
 
       const result = await moonshotChat(baseOptions);
       expect(result.content).toEqual(deepseekPayload);
@@ -287,7 +276,7 @@ describe("moonshotChat", () => {
   describe("error handling", () => {
     it("throws immediately on 401 without retrying", async () => {
       fetchMock.mockResolvedValue(
-        mockFetchResponse({ error: { message: "Unauthorized" } }, 401),
+        mockErrorResponse({ error: { message: "Unauthorized" } }, 401),
       );
 
       await expect(
@@ -299,15 +288,12 @@ describe("moonshotChat", () => {
 
     it("retries on 429 then succeeds on 200", async () => {
       const jsonPayload = { retried: true };
+      const events = makeOpenAiSseEvents([JSON.stringify(jsonPayload)]);
       fetchMock
         .mockResolvedValueOnce(
-          mockFetchResponse({ error: { message: "Rate limited" } }, 429),
+          mockErrorResponse({ error: { message: "Rate limited" } }, 429),
         )
-        .mockResolvedValueOnce(
-          mockFetchResponse(
-            makeMoonshotResponse(JSON.stringify(jsonPayload)),
-          ),
-        );
+        .mockResolvedValueOnce(mockStreamingResponse(events));
 
       const result = await moonshotChat({ ...baseOptions, maxRetries: 3 });
 
@@ -317,9 +303,8 @@ describe("moonshotChat", () => {
 
     it("does not retry ProviderJsonParseError", async () => {
       const nonJsonText = "This is plain text, not JSON at all.";
-      fetchMock.mockResolvedValue(
-        mockFetchResponse(makeMoonshotResponse(nonJsonText)),
-      );
+      const events = makeOpenAiSseEvents([nonJsonText]);
+      fetchMock.mockResolvedValue(mockStreamingResponse(events));
 
       try {
         await moonshotChat({ ...baseOptions, maxRetries: 3 });
@@ -338,10 +323,8 @@ describe("moonshotChat", () => {
   });
 
   it("uses custom thinking parameter", async () => {
-    const jsonPayload = { ok: true };
-    fetchMock.mockResolvedValue(
-      mockFetchResponse(makeMoonshotResponse(JSON.stringify(jsonPayload))),
-    );
+    const events = makeOpenAiSseEvents([JSON.stringify({ ok: true })]);
+    fetchMock.mockResolvedValue(mockStreamingResponse(events));
 
     await moonshotChat({ ...baseOptions, thinking: "disabled" });
 
@@ -353,18 +336,16 @@ describe("moonshotChat", () => {
 
   it("handles markdown-fenced JSON responses", async () => {
     const fencedJson = '```json\n{"fenced": true}\n```';
-    fetchMock.mockResolvedValue(
-      mockFetchResponse(makeMoonshotResponse(fencedJson)),
-    );
+    const events = makeOpenAiSseEvents([fencedJson]);
+    fetchMock.mockResolvedValue(mockStreamingResponse(events));
 
     const result = await moonshotChat(baseOptions);
     expect(result.content).toEqual({ fenced: true });
   });
 
-  it("passes an AbortSignal to fetch", async () => {
-    fetchMock.mockResolvedValue(
-      mockFetchResponse(makeMoonshotResponse(JSON.stringify({ ok: true }))),
-    );
+  it("passes an AbortSignal to fetch (IdleTimeoutController)", async () => {
+    const events = makeOpenAiSseEvents([JSON.stringify({ ok: true })]);
+    fetchMock.mockResolvedValue(mockStreamingResponse(events));
 
     await moonshotChat(baseOptions);
 
@@ -372,15 +353,53 @@ describe("moonshotChat", () => {
     expect(init.signal).toBeInstanceOf(AbortSignal);
   });
 
-  it("uses custom requestTimeoutMs for the abort signal", async () => {
-    const timeoutSpy = vi.spyOn(AbortSignal, "timeout");
-    fetchMock.mockResolvedValue(
-      mockFetchResponse(makeMoonshotResponse(JSON.stringify({ ok: true }))),
-    );
+  describe("streaming accumulation", () => {
+    it("accumulates text across multiple SSE chunks", async () => {
+      const events = [
+        'data: {"choices":[{"delta":{"content":"{\\"he"}}]}\n\n',
+        'data: {"choices":[{"delta":{"content":"llo\\":\\"world\\"}"}}]}\n\n',
+        'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n\n',
+        "data: [DONE]\n\n",
+      ];
 
-    await moonshotChat({ ...baseOptions, requestTimeoutMs: 5000 });
+      fetchMock.mockResolvedValue(mockStreamingResponse(events));
 
-    expect(timeoutSpy).toHaveBeenCalledWith(5000);
-    timeoutSpy.mockRestore();
+      const result = await moonshotChat(baseOptions);
+      expect(result.content).toEqual({ hello: "world" });
+    });
+
+    it("captures usage from the final streaming chunk", async () => {
+      const events = makeOpenAiSseEvents(
+        [JSON.stringify({ ok: true })],
+        { prompt_tokens: 50, completion_tokens: 30, total_tokens: 80 },
+      );
+
+      fetchMock.mockResolvedValue(mockStreamingResponse(events));
+
+      const result = await moonshotChat(baseOptions);
+      expect(result.usage).toEqual({
+        prompt_tokens: 50,
+        completion_tokens: 30,
+        total_tokens: 80,
+      });
+    });
+
+    it("retries on timeout then succeeds on second attempt", async () => {
+      const events = makeOpenAiSseEvents([JSON.stringify({ ok: true })]);
+
+      fetchMock
+        .mockRejectedValueOnce(
+          new DOMException("signal timed out", "TimeoutError"),
+        )
+        .mockResolvedValueOnce(mockStreamingResponse(events));
+
+      const result = await moonshotChat({
+        ...baseOptions,
+        maxRetries: 1,
+      });
+
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(result.content).toEqual({ ok: true });
+    });
   });
 });

@@ -4,20 +4,66 @@ import { ProviderJsonModeError, ProviderJsonParseError } from "../types.ts";
 import type { AnthropicOptions } from "../types.ts";
 import type { Mock } from "vitest";
 
-function makeAnthropicResponse(
+/**
+ * Creates a mock ReadableStream that yields SSE-formatted data.
+ */
+function makeSSEStream(events: string[]): ReadableStream<Uint8Array> {
+  const encoder = new TextEncoder();
+  const chunks = events.map((e) => encoder.encode(e));
+  let index = 0;
+
+  return new ReadableStream({
+    pull(controller) {
+      if (index < chunks.length) {
+        controller.enqueue(chunks[index]!);
+        index++;
+      } else {
+        controller.close();
+      }
+    },
+  });
+}
+
+/**
+ * Builds SSE events for an Anthropic streaming response.
+ */
+function makeAnthropicSseEvents(
   text: string,
   inputTokens = 10,
   outputTokens = 20,
-) {
-  return {
-    content: [{ type: "text", text }],
-    usage: { input_tokens: inputTokens, output_tokens: outputTokens },
-  };
+): string[] {
+  return [
+    `event: message_start\ndata: ${JSON.stringify({
+      type: "message_start",
+      message: { usage: { input_tokens: inputTokens } },
+    })}\n\n`,
+    `event: content_block_delta\ndata: ${JSON.stringify({
+      type: "content_block_delta",
+      delta: { text },
+    })}\n\n`,
+    `event: message_delta\ndata: ${JSON.stringify({
+      type: "message_delta",
+      usage: { output_tokens: outputTokens },
+    })}\n\n`,
+    `event: message_stop\ndata: ${JSON.stringify({
+      type: "message_stop",
+    })}\n\n`,
+  ];
 }
 
-function mockFetchResponse(body: unknown, status = 200) {
+function mockStreamingResponse(events: string[], status = 200) {
   return {
     ok: status >= 200 && status < 300,
+    status,
+    body: makeSSEStream(events),
+    json: vi.fn(),
+    text: vi.fn(),
+  } as unknown as Response;
+}
+
+function mockErrorResponse(body: unknown, status: number) {
+  return {
+    ok: false,
     status,
     json: vi.fn().mockResolvedValue(body),
     text: vi.fn().mockResolvedValue(JSON.stringify(body)),
@@ -51,9 +97,12 @@ describe("anthropicChat", () => {
 
   it("returns parsed JSON content, correct usage, and text for a valid response", async () => {
     const jsonPayload = { result: "success", count: 42 };
-    fetchMock.mockResolvedValue(
-      mockFetchResponse(makeAnthropicResponse(JSON.stringify(jsonPayload), 15, 25)),
+    const events = makeAnthropicSseEvents(
+      JSON.stringify(jsonPayload),
+      15,
+      25,
     );
+    fetchMock.mockResolvedValue(mockStreamingResponse(events));
 
     const result = await anthropicChat(baseOptions);
 
@@ -64,12 +113,11 @@ describe("anthropicChat", () => {
       completion_tokens: 25,
       total_tokens: 40,
     });
-    expect(result.raw).toBeDefined();
   });
 
   it("throws immediately on 401 without retrying", async () => {
     fetchMock.mockResolvedValue(
-      mockFetchResponse({ error: { message: "Unauthorized" } }, 401),
+      mockErrorResponse({ error: { message: "Unauthorized" } }, 401),
     );
 
     await expect(
@@ -82,13 +130,12 @@ describe("anthropicChat", () => {
 
   it("retries on 429 then succeeds on 200", async () => {
     const jsonPayload = { retried: true };
+    const events = makeAnthropicSseEvents(JSON.stringify(jsonPayload));
     fetchMock
       .mockResolvedValueOnce(
-        mockFetchResponse({ error: { message: "Rate limited" } }, 429),
+        mockErrorResponse({ error: { message: "Rate limited" } }, 429),
       )
-      .mockResolvedValueOnce(
-        mockFetchResponse(makeAnthropicResponse(JSON.stringify(jsonPayload))),
-      );
+      .mockResolvedValueOnce(mockStreamingResponse(events));
 
     const result = await anthropicChat({
       ...baseOptions,
@@ -110,9 +157,8 @@ describe("anthropicChat", () => {
 
   it("defaults to json responseFormat when responseFormat is omitted", async () => {
     const jsonPayload = { defaultFormat: true };
-    fetchMock.mockResolvedValue(
-      mockFetchResponse(makeAnthropicResponse(JSON.stringify(jsonPayload))),
-    );
+    const events = makeAnthropicSseEvents(JSON.stringify(jsonPayload));
+    fetchMock.mockResolvedValue(mockStreamingResponse(events));
 
     // responseFormat defaults to "json" — should not throw
     const result = await anthropicChat({
@@ -123,9 +169,8 @@ describe("anthropicChat", () => {
 
   it("throws ProviderJsonParseError for non-JSON text in JSON mode", async () => {
     const nonJsonText = "This is plain text, not JSON at all.";
-    fetchMock.mockResolvedValue(
-      mockFetchResponse(makeAnthropicResponse(nonJsonText)),
-    );
+    const events = makeAnthropicSseEvents(nonJsonText);
+    fetchMock.mockResolvedValue(mockStreamingResponse(events));
 
     try {
       await anthropicChat(baseOptions);
@@ -140,10 +185,8 @@ describe("anthropicChat", () => {
   });
 
   it("sends correct headers including anthropic-version and x-api-key", async () => {
-    const jsonPayload = { ok: true };
-    fetchMock.mockResolvedValue(
-      mockFetchResponse(makeAnthropicResponse(JSON.stringify(jsonPayload))),
-    );
+    const events = makeAnthropicSseEvents(JSON.stringify({ ok: true }));
+    fetchMock.mockResolvedValue(mockStreamingResponse(events));
 
     await anthropicChat(baseOptions);
 
@@ -155,11 +198,21 @@ describe("anthropicChat", () => {
     expect(headers["Content-Type"]).toBe("application/json");
   });
 
-  it("constructs the request body with system and messages in conversation order", async () => {
-    const jsonPayload = { ok: true };
-    fetchMock.mockResolvedValue(
-      mockFetchResponse(makeAnthropicResponse(JSON.stringify(jsonPayload))),
+  it("sends stream: true in the request body", async () => {
+    const events = makeAnthropicSseEvents(JSON.stringify({ ok: true }));
+    fetchMock.mockResolvedValue(mockStreamingResponse(events));
+
+    await anthropicChat(baseOptions);
+
+    const body = JSON.parse(
+      (fetchMock.mock.calls[0] as [string, RequestInit])[1].body as string,
     );
+    expect(body.stream).toBe(true);
+  });
+
+  it("constructs the request body with system and messages in conversation order", async () => {
+    const events = makeAnthropicSseEvents(JSON.stringify({ ok: true }));
+    fetchMock.mockResolvedValue(mockStreamingResponse(events));
 
     await anthropicChat({
       messages: [
@@ -186,10 +239,8 @@ describe("anthropicChat", () => {
   });
 
   it("uses custom model, temperature, and maxTokens when provided", async () => {
-    const jsonPayload = { custom: true };
-    fetchMock.mockResolvedValue(
-      mockFetchResponse(makeAnthropicResponse(JSON.stringify(jsonPayload))),
-    );
+    const events = makeAnthropicSseEvents(JSON.stringify({ custom: true }));
+    fetchMock.mockResolvedValue(mockStreamingResponse(events));
 
     await anthropicChat({
       ...baseOptions,
@@ -207,9 +258,8 @@ describe("anthropicChat", () => {
   });
 
   it("passes topP and stop sequences when provided", async () => {
-    fetchMock.mockResolvedValue(
-      mockFetchResponse(makeAnthropicResponse(JSON.stringify({ ok: true }))),
-    );
+    const events = makeAnthropicSseEvents(JSON.stringify({ ok: true }));
+    fetchMock.mockResolvedValue(mockStreamingResponse(events));
 
     await anthropicChat({
       ...baseOptions,
@@ -224,10 +274,9 @@ describe("anthropicChat", () => {
     expect(body.stop_sequences).toEqual(["END", "STOP"]);
   });
 
-  it("passes an AbortSignal to fetch", async () => {
-    fetchMock.mockResolvedValue(
-      mockFetchResponse(makeAnthropicResponse(JSON.stringify({ ok: true }))),
-    );
+  it("passes an AbortSignal to fetch (IdleTimeoutController)", async () => {
+    const events = makeAnthropicSseEvents(JSON.stringify({ ok: true }));
+    fetchMock.mockResolvedValue(mockStreamingResponse(events));
 
     await anthropicChat(baseOptions);
 
@@ -235,25 +284,66 @@ describe("anthropicChat", () => {
     expect(init.signal).toBeInstanceOf(AbortSignal);
   });
 
-  it("uses custom requestTimeoutMs for the abort signal", async () => {
-    const timeoutSpy = vi.spyOn(AbortSignal, "timeout");
-    fetchMock.mockResolvedValue(
-      mockFetchResponse(makeAnthropicResponse(JSON.stringify({ ok: true }))),
-    );
-
-    await anthropicChat({ ...baseOptions, requestTimeoutMs: 5000 });
-
-    expect(timeoutSpy).toHaveBeenCalledWith(5000);
-    timeoutSpy.mockRestore();
-  });
-
   it("handles markdown-fenced JSON responses", async () => {
     const fencedJson = '```json\n{"fenced": true}\n```';
-    fetchMock.mockResolvedValue(
-      mockFetchResponse(makeAnthropicResponse(fencedJson)),
-    );
+    const events = makeAnthropicSseEvents(fencedJson);
+    fetchMock.mockResolvedValue(mockStreamingResponse(events));
 
     const result = await anthropicChat(baseOptions);
     expect(result.content).toEqual({ fenced: true });
+  });
+
+  describe("streaming accumulation", () => {
+    it("accumulates text across multiple content_block_delta events", async () => {
+      const events = [
+        `event: message_start\ndata: ${JSON.stringify({
+          type: "message_start",
+          message: { usage: { input_tokens: 10 } },
+        })}\n\n`,
+        `event: content_block_delta\ndata: ${JSON.stringify({
+          type: "content_block_delta",
+          delta: { text: '{"he' },
+        })}\n\n`,
+        `event: content_block_delta\ndata: ${JSON.stringify({
+          type: "content_block_delta",
+          delta: { text: 'llo":"world"}' },
+        })}\n\n`,
+        `event: message_delta\ndata: ${JSON.stringify({
+          type: "message_delta",
+          usage: { output_tokens: 5 },
+        })}\n\n`,
+        `event: message_stop\ndata: ${JSON.stringify({
+          type: "message_stop",
+        })}\n\n`,
+      ];
+
+      fetchMock.mockResolvedValue(mockStreamingResponse(events));
+
+      const result = await anthropicChat(baseOptions);
+      expect(result.content).toEqual({ hello: "world" });
+      expect(result.usage).toEqual({
+        prompt_tokens: 10,
+        completion_tokens: 5,
+        total_tokens: 15,
+      });
+    });
+
+    it("retries on timeout then succeeds on second attempt", async () => {
+      const events = makeAnthropicSseEvents(JSON.stringify({ ok: true }));
+
+      fetchMock
+        .mockRejectedValueOnce(
+          new DOMException("signal timed out", "TimeoutError"),
+        )
+        .mockResolvedValueOnce(mockStreamingResponse(events));
+
+      const result = await anthropicChat({
+        ...baseOptions,
+        maxRetries: 1,
+      });
+
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(result.content).toEqual({ ok: true });
+    });
   });
 });
