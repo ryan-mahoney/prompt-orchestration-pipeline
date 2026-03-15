@@ -128,6 +128,9 @@ export async function deepseekChat(
     presencePenalty,
     stream = false,
   } = options;
+  const retryLimit = Number.isFinite(maxRetries)
+    ? Math.max(0, Math.trunc(maxRetries))
+    : DEFAULT_MAX_RETRIES;
 
   const jsonMode = !stream && isJsonMode(responseFormat);
 
@@ -175,7 +178,7 @@ export async function deepseekChat(
   if (stream) {
     let lastStreamError: unknown;
 
-    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    for (let attempt = 0; attempt <= retryLimit; attempt++) {
       try {
         const signal = AbortSignal.timeout(requestTimeoutMs);
         const response = await fetch(DEEPSEEK_API_URL, {
@@ -218,7 +221,7 @@ export async function deepseekChat(
       } catch (err) {
         lastStreamError = err;
 
-        if (!isRetryableError(err) || attempt >= maxRetries) {
+        if (!isRetryableError(err) || attempt >= retryLimit) {
           throw err;
         }
 
@@ -233,7 +236,7 @@ export async function deepseekChat(
   // Non-streaming mode: retry loop
   let lastError: unknown;
 
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+  for (let attempt = 0; attempt <= retryLimit; attempt++) {
     try {
       const signal = AbortSignal.timeout(requestTimeoutMs);
       const response = await fetch(DEEPSEEK_API_URL, {
@@ -309,7 +312,7 @@ export async function deepseekChat(
     } catch (err) {
       lastError = err;
 
-      if (!isRetryableError(err) || attempt >= maxRetries) {
+      if (!isRetryableError(err) || attempt >= retryLimit) {
         throw err;
       }
 

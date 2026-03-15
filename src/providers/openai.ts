@@ -21,27 +21,55 @@ const DEFAULT_RESPONSE_FORMAT = "json_object";
 const DEFAULT_MAX_RETRIES = 3;
 const GPT5_PATTERN = /^gpt-5/i;
 
-const clientCache = new Map<string, OpenAI>();
+interface ClientConfig {
+  apiKey: string | undefined;
+  organization: string | undefined;
+  baseURL: string | undefined;
+}
+
+let defaultClient: OpenAI | null = null;
+let defaultClientConfig: ClientConfig | null = null;
+
+function createClient(timeoutMs: number, config: ClientConfig): OpenAI {
+  return new OpenAI({
+    apiKey: config.apiKey,
+    organization: config.organization,
+    baseURL: config.baseURL,
+    maxRetries: 0,
+    timeout: timeoutMs,
+  });
+}
 
 function getClient(timeoutMs: number): OpenAI {
-  const key = `${process.env["OPENAI_API_KEY"] ?? ""}:${process.env["OPENAI_ORGANIZATION"] ?? ""}:${process.env["OPENAI_BASE_URL"] ?? ""}:${timeoutMs}`;
-  let cached = clientCache.get(key);
-  if (!cached) {
-    cached = new OpenAI({
-      apiKey: process.env["OPENAI_API_KEY"],
-      organization: process.env["OPENAI_ORGANIZATION"],
-      baseURL: process.env["OPENAI_BASE_URL"],
-      maxRetries: 0,
-      timeout: timeoutMs,
-    });
-    clientCache.set(key, cached);
+  const config: ClientConfig = {
+    apiKey: process.env["OPENAI_API_KEY"],
+    organization: process.env["OPENAI_ORGANIZATION"],
+    baseURL: process.env["OPENAI_BASE_URL"],
+  };
+
+  // Avoid an unbounded cache: only the default timeout is cached.
+  if (timeoutMs !== DEFAULT_REQUEST_TIMEOUT_MS) {
+    return createClient(timeoutMs, config);
   }
-  return cached;
+
+  const configChanged =
+    !defaultClientConfig ||
+    defaultClientConfig.apiKey !== config.apiKey ||
+    defaultClientConfig.organization !== config.organization ||
+    defaultClientConfig.baseURL !== config.baseURL;
+
+  if (!defaultClient || configChanged) {
+    defaultClient = createClient(timeoutMs, config);
+    defaultClientConfig = config;
+  }
+
+  return defaultClient;
 }
 
 /** Visible for testing — resets the client cache so tests get a fresh client. */
 export function _resetClient(): void {
-  clientCache.clear();
+  defaultClient = null;
+  defaultClientConfig = null;
 }
 
 async function callResponsesAPI(

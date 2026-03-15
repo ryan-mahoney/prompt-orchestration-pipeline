@@ -313,6 +313,17 @@ describe("deepseekChat", () => {
       ).rejects.toMatchObject({ status: 500, message: "Server error" });
     });
 
+    it("normalizes negative maxRetries to zero in streaming mode", async () => {
+      fetchMock.mockResolvedValue(
+        mockFetchResponse({ error: { message: "Server error" } }, 500),
+      );
+
+      await expect(
+        deepseekChat({ ...baseOptions, stream: true, maxRetries: -2 }),
+      ).rejects.toMatchObject({ status: 500, message: "Server error" });
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
     it("skips SSE lines that are comments or empty", async () => {
       const sseEvents = [
         ": this is a comment\n\n",
