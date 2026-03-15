@@ -10,12 +10,17 @@ const baseOptions: ClaudeCodeOptions = {
   responseFormat: "json",
 };
 
-function makeEnvelope(innerText: string) {
-  return JSON.stringify({ result: innerText });
-}
-
-function createMockProc(stdout: string, exitCode = 0, stderr = "") {
-  const stdoutBlob = new Blob([stdout]);
+/**
+ * Creates a mock proc whose stdout is a stream-json formatted stream.
+ * Claude Code stream-json emits newline-delimited JSON objects.
+ */
+function createMockProc(
+  streamEvents: Array<Record<string, unknown>>,
+  exitCode = 0,
+  stderr = "",
+) {
+  const lines = streamEvents.map((e) => JSON.stringify(e)).join("\n") + "\n";
+  const stdoutBlob = new Blob([lines]);
   const stderrBlob = new Blob([stderr]);
   return {
     stdout: stdoutBlob.stream(),
@@ -27,6 +32,17 @@ function createMockProc(stdout: string, exitCode = 0, stderr = "") {
     ref: vi.fn(),
     unref: vi.fn(),
   };
+}
+
+/**
+ * Legacy helper for backward compat — wraps text in assistant + result events.
+ */
+function createMockProcFromText(text: string, exitCode = 0, stderr = "") {
+  const events = [
+    { type: "assistant", content: [{ type: "text", text }] },
+    { type: "result" },
+  ];
+  return createMockProc(events, exitCode, stderr);
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -49,10 +65,11 @@ describe("claudeCodeChat", () => {
     vi.restoreAllMocks();
   });
 
-  it("invokes claude CLI with --output-format json and parses response", async () => {
+  it("invokes claude CLI with --output-format stream-json and parses response", async () => {
     const jsonPayload = { result: "success", count: 42 };
-    const envelope = makeEnvelope(JSON.stringify(jsonPayload));
-    spawnMock.mockReturnValue(createMockProc(envelope));
+    spawnMock.mockReturnValue(
+      createMockProcFromText(JSON.stringify(jsonPayload)),
+    );
 
     const result = await claudeCodeChat(baseOptions);
 
@@ -60,19 +77,19 @@ describe("claudeCodeChat", () => {
     const callArgs = spawnMock.mock.calls[0]![0] as string[];
     expect(callArgs).toContain("claude");
     expect(callArgs).toContain("--output-format");
-    expect(callArgs[callArgs.indexOf("--output-format") + 1]).toBe("json");
+    expect(callArgs[callArgs.indexOf("--output-format") + 1]).toBe("stream-json");
     expect(callArgs).toContain("--model");
     expect(callArgs[callArgs.indexOf("--model") + 1]).toBe("sonnet");
     expect(callArgs).toContain("--max-turns");
     expect(callArgs[callArgs.indexOf("--max-turns") + 1]).toBe("1");
 
     expect(result.content).toEqual(jsonPayload);
-    expect(result.text).toBe(JSON.stringify(jsonPayload));
   });
 
   it("reports usage as zeros", async () => {
-    const envelope = makeEnvelope(JSON.stringify({ ok: true }));
-    spawnMock.mockReturnValue(createMockProc(envelope));
+    spawnMock.mockReturnValue(
+      createMockProcFromText(JSON.stringify({ ok: true })),
+    );
 
     const result = await claudeCodeChat(baseOptions);
 
@@ -84,8 +101,9 @@ describe("claudeCodeChat", () => {
   });
 
   it("uses custom model and maxTurns when provided", async () => {
-    const envelope = makeEnvelope(JSON.stringify({ custom: true }));
-    spawnMock.mockReturnValue(createMockProc(envelope));
+    spawnMock.mockReturnValue(
+      createMockProcFromText(JSON.stringify({ custom: true })),
+    );
 
     await claudeCodeChat({
       ...baseOptions,
@@ -99,28 +117,16 @@ describe("claudeCodeChat", () => {
   });
 
   it("throws on non-zero exit code", async () => {
-    spawnMock.mockReturnValue(createMockProc("", 1, "CLI error"));
+    spawnMock.mockReturnValue(createMockProc([], 1, "CLI error"));
 
     await expect(claudeCodeChat(baseOptions)).rejects.toThrow(
       /Claude Code CLI exited with code 1/,
     );
   });
 
-  it("returns raw envelope and text field", async () => {
-    const inner = JSON.stringify({ data: "value" });
-    const envelope = makeEnvelope(inner);
-    spawnMock.mockReturnValue(createMockProc(envelope));
-
-    const result = await claudeCodeChat(baseOptions);
-
-    expect(result.raw).toEqual({ result: inner });
-    expect(result.text).toBe(inner);
-  });
-
-  it("throws ProviderJsonParseError when inner text is not valid JSON", async () => {
+  it("throws ProviderJsonParseError when accumulated text is not valid JSON", async () => {
     const plainText = "This is not JSON";
-    const envelope = makeEnvelope(plainText);
-    spawnMock.mockReturnValue(createMockProc(envelope));
+    spawnMock.mockReturnValue(createMockProcFromText(plainText));
 
     await expect(claudeCodeChat(baseOptions)).rejects.toBeInstanceOf(
       ProviderJsonParseError,
@@ -128,8 +134,9 @@ describe("claudeCodeChat", () => {
   });
 
   it("combines system and user messages into the prompt", async () => {
-    const envelope = makeEnvelope(JSON.stringify({ ok: true }));
-    spawnMock.mockReturnValue(createMockProc(envelope));
+    spawnMock.mockReturnValue(
+      createMockProcFromText(JSON.stringify({ ok: true })),
+    );
 
     await claudeCodeChat({
       messages: [
@@ -146,8 +153,9 @@ describe("claudeCodeChat", () => {
   });
 
   it("passes maxTokens to the CLI when provided", async () => {
-    const envelope = makeEnvelope(JSON.stringify({ ok: true }));
-    spawnMock.mockReturnValue(createMockProc(envelope));
+    spawnMock.mockReturnValue(
+      createMockProcFromText(JSON.stringify({ ok: true })),
+    );
 
     await claudeCodeChat({
       ...baseOptions,
@@ -165,6 +173,32 @@ describe("claudeCodeChat", () => {
         responseFormat: "text",
       }),
     ).rejects.toBeInstanceOf(ProviderJsonModeError);
+  });
+
+  describe("streaming accumulation", () => {
+    it("accumulates text across multiple assistant events", async () => {
+      const events = [
+        { type: "assistant", content: [{ type: "text", text: '{"he' }] },
+        { type: "assistant", content: [{ type: "text", text: 'llo":"world"}' }] },
+        { type: "result" },
+      ];
+      spawnMock.mockReturnValue(createMockProc(events));
+
+      const result = await claudeCodeChat(baseOptions);
+      expect(result.content).toEqual({ hello: "world" });
+    });
+
+    it("handles delta-style assistant events", async () => {
+      const events = [
+        { type: "assistant", delta: { text: '{"ok' } },
+        { type: "assistant", delta: { text: '":true}' } },
+        { type: "result" },
+      ];
+      spawnMock.mockReturnValue(createMockProc(events));
+
+      const result = await claudeCodeChat(baseOptions);
+      expect(result.content).toEqual({ ok: true });
+    });
   });
 });
 

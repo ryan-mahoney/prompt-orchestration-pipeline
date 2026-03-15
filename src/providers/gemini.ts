@@ -11,6 +11,7 @@ import {
   createProviderError,
   ensureJsonResponseFormat,
 } from "./base.ts";
+import { IdleTimeoutController, parseGeminiSse, accumulateStream } from "./stream-accumulator.ts";
 import { ProviderJsonParseError } from "./types.ts";
 import type {
   GeminiOptions,
@@ -130,7 +131,7 @@ export async function geminiChat(
   const baseUrl =
     process.env["GEMINI_BASE_URL"] ?? DEFAULT_BASE_URL;
   const apiKey = process.env["GEMINI_API_KEY"] ?? "";
-  const url = `${baseUrl}/models/${model}:generateContent?key=${apiKey}`;
+  const url = `${baseUrl}/models/${model}:streamGenerateContent?alt=sse&key=${apiKey}`;
 
   const body: Record<string, unknown> = {
     contents,
@@ -146,12 +147,12 @@ export async function geminiChat(
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
-      const signal = AbortSignal.timeout(requestTimeoutMs);
+      const idle = new IdleTimeoutController(requestTimeoutMs);
       const response = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
-        signal,
+        signal: idle.signal,
       });
 
       if (!response.ok) {
@@ -176,21 +177,8 @@ export async function geminiChat(
         throw err;
       }
 
-      const data = (await response.json()) as {
-        candidates: Array<{
-          content: { parts: Array<{ text: string }> };
-        }>;
-        usageMetadata?: {
-          promptTokenCount: number;
-          candidatesTokenCount: number;
-          totalTokenCount: number;
-        };
-      };
-
-      const rawText =
-        data.candidates?.[0]?.content?.parts
-          ?.map((p) => p.text)
-          .join("") ?? "";
+      const deltas = parseGeminiSse(response.body!);
+      const { text: rawText, usage: streamUsage } = await accumulateStream(deltas, idle);
 
       const stripped = stripMarkdownFences(rawText);
       const parsed = tryParseJSON(stripped);
@@ -204,18 +192,16 @@ export async function geminiChat(
         );
       }
 
-      const usageMeta = data.usageMetadata;
-      const usage = {
-        prompt_tokens: usageMeta?.promptTokenCount ?? 0,
-        completion_tokens: usageMeta?.candidatesTokenCount ?? 0,
-        total_tokens: usageMeta?.totalTokenCount ?? 0,
+      const usage = streamUsage ?? {
+        prompt_tokens: 0,
+        completion_tokens: 0,
+        total_tokens: 0,
       };
 
       return {
         content: typeof parsed === "string" ? parsed : (parsed as Record<string, unknown>),
         text: rawText,
         usage,
-        raw: data,
       };
     } catch (err) {
       lastError = err;

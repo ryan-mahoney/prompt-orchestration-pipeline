@@ -12,6 +12,12 @@ import {
   tryParseJSON,
   createProviderError,
 } from "./base.ts";
+import {
+  IdleTimeoutController,
+  frameSse,
+  parseOpenAiSse,
+  accumulateStream,
+} from "./stream-accumulator.ts";
 import { ProviderJsonParseError } from "./types.ts";
 import type {
   AlibabaOptions,
@@ -39,6 +45,113 @@ function isJsonMode(
     responseFormat.type === "json_object" ||
     responseFormat.json_schema != null
   );
+}
+
+/**
+ * Checks whether an error indicates response_format is unsupported in
+ * streaming mode.
+ */
+function isResponseFormatStreamError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  const msg = err.message.toLowerCase();
+  return msg.includes("response_format") && msg.includes("stream");
+}
+
+/**
+ * Performs a non-streaming fetch and returns the parsed AdapterResponse.
+ */
+async function fetchNonStreaming(
+  endpoint: string,
+  apiKey: string,
+  body: Record<string, unknown>,
+  requestTimeoutMs: number,
+  jsonMode: boolean,
+  model: string,
+): Promise<AdapterResponse> {
+  const nonStreamBody = { ...body };
+  delete nonStreamBody["stream"];
+  delete nonStreamBody["stream_options"];
+
+  const signal = AbortSignal.timeout(requestTimeoutMs);
+  const response = await fetch(endpoint, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify(nonStreamBody),
+    signal,
+  });
+
+  if (!response.ok) {
+    let errorBody: unknown;
+    try {
+      errorBody = await response.json();
+    } catch {
+      errorBody = await response.text();
+    }
+    throw createProviderError(
+      response.status,
+      errorBody,
+      `Alibaba API error: ${response.status}`,
+    );
+  }
+
+  const data = (await response.json()) as {
+    choices: Array<{ message: { content: string } }>;
+    usage?: {
+      prompt_tokens: number;
+      completion_tokens: number;
+      total_tokens: number;
+    };
+  };
+
+  return parseResponseData(data, jsonMode, model);
+}
+
+/**
+ * Parses the standard OpenAI-compatible response shape into an
+ * AdapterResponse.
+ */
+function parseResponseData(
+  data: {
+    choices: Array<{ message: { content: string } }>;
+    usage?: {
+      prompt_tokens: number;
+      completion_tokens: number;
+      total_tokens: number;
+    };
+  },
+  jsonMode: boolean,
+  model: string,
+): AdapterResponse {
+  const rawText = data.choices?.[0]?.message?.content ?? "";
+  const stripped = stripMarkdownFences(rawText);
+  const parsed = tryParseJSON(stripped);
+
+  if (jsonMode && typeof parsed === "string") {
+    throw new ProviderJsonParseError(
+      "alibaba",
+      model,
+      parsed.slice(0, 200),
+    );
+  }
+
+  const usage = data.usage ?? {
+    prompt_tokens: 0,
+    completion_tokens: 0,
+    total_tokens: 0,
+  };
+
+  return {
+    content:
+      typeof parsed === "string"
+        ? parsed
+        : (parsed as Record<string, unknown>),
+    text: rawText,
+    usage,
+    raw: data,
+  };
 }
 
 export async function alibabaChat(
@@ -83,7 +196,7 @@ export async function alibabaChat(
     apiMessages.push({ role: m.role, content: m.content });
   }
 
-  const apiKey = process.env["ALIBABA_API_KEY"];
+  const apiKey = process.env["ALIBABA_API_KEY"] ?? "";
 
   const endpoint = `${process.env["ALIBABA_BASE_URL"] ?? "https://dashscope-us.aliyuncs.com/compatible-mode/v1"}/chat/completions`;
 
@@ -91,6 +204,8 @@ export async function alibabaChat(
     model,
     messages: apiMessages,
     temperature,
+    stream: true,
+    stream_options: { include_usage: true },
   };
 
   if (maxTokens != null) body["max_tokens"] = maxTokens;
@@ -109,15 +224,15 @@ export async function alibabaChat(
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
-      const signal = AbortSignal.timeout(requestTimeoutMs);
+      const idle = new IdleTimeoutController(requestTimeoutMs);
       const response = await fetch(endpoint, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${apiKey ?? ""}`,
+          Authorization: `Bearer ${apiKey}`,
         },
         body: JSON.stringify(body),
-        signal,
+        signal: idle.signal,
       });
 
       if (!response.ok) {
@@ -142,22 +257,14 @@ export async function alibabaChat(
         throw err;
       }
 
-      const data = (await response.json()) as {
-        choices: Array<{
-          message: { content: string };
-        }>;
-        usage?: {
-          prompt_tokens: number;
-          completion_tokens: number;
-          total_tokens: number;
-        };
-      };
+      const frames = frameSse(response.body!);
+      const deltas = parseOpenAiSse(frames);
+      const accumulated = await accumulateStream(deltas, idle);
 
-      const rawText = data.choices?.[0]?.message?.content ?? "";
+      const rawText = accumulated.text;
       const stripped = stripMarkdownFences(rawText);
       const parsed = tryParseJSON(stripped);
 
-      // In JSON mode, if tryParseJSON returns a string, the response is unparseable
       if (jsonMode && typeof parsed === "string") {
         throw new ProviderJsonParseError(
           "alibaba",
@@ -166,7 +273,7 @@ export async function alibabaChat(
         );
       }
 
-      const usage = data.usage ?? {
+      const usage = accumulated.usage ?? {
         prompt_tokens: 0,
         completion_tokens: 0,
         total_tokens: 0,
@@ -179,9 +286,22 @@ export async function alibabaChat(
             : (parsed as Record<string, unknown>),
         text: rawText,
         usage,
-        raw: data,
+        raw: accumulated,
       };
     } catch (err) {
+      // Fallback: if response_format is unsupported in stream mode,
+      // retry this attempt without streaming.
+      if (isResponseFormatStreamError(err)) {
+        return fetchNonStreaming(
+          endpoint,
+          apiKey,
+          body,
+          requestTimeoutMs,
+          jsonMode,
+          model,
+        );
+      }
+
       lastError = err;
 
       if (!isRetryableError(err) || attempt >= maxRetries) {

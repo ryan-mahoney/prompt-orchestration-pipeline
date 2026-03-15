@@ -11,6 +11,12 @@ import {
   createProviderError,
   ensureJsonResponseFormat,
 } from "./base.ts";
+import {
+  IdleTimeoutController,
+  frameSse,
+  parseOpenAiSse,
+  accumulateStream,
+} from "./stream-accumulator.ts";
 import { ProviderJsonParseError } from "./types.ts";
 import type { ProviderOptions, AdapterResponse, ResponseFormatObject } from "./types.ts";
 
@@ -120,11 +126,14 @@ export async function zaiChat(
     body["response_format"] = { type: "json_object" };
   }
 
+  // Enable streaming
+  body["stream"] = true;
+
   let lastError: unknown;
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
-      const signal = AbortSignal.timeout(requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS);
+      const idle = new IdleTimeoutController(requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS);
       const response = await fetch(ZAI_API_URL, {
         method: "POST",
         headers: {
@@ -132,7 +141,7 @@ export async function zaiChat(
           Authorization: `Bearer ${apiKey ?? ""}`,
         },
         body: JSON.stringify(body),
-        signal,
+        signal: idle.signal,
       });
 
       if (!response.ok) {
@@ -157,18 +166,11 @@ export async function zaiChat(
         throw err;
       }
 
-      const data = (await response.json()) as {
-        choices: Array<{
-          message: { role: string; content: string };
-        }>;
-        usage?: {
-          prompt_tokens: number;
-          completion_tokens: number;
-          total_tokens: number;
-        };
-      };
+      const frames = frameSse(response.body!);
+      const deltas = parseOpenAiSse(frames);
+      const accumulated = await accumulateStream(deltas, idle);
 
-      const rawText = data.choices?.[0]?.message?.content ?? "";
+      const rawText = accumulated.text;
       const stripped = stripMarkdownFences(rawText);
       const parsed = tryParseJSON(stripped);
 
@@ -182,16 +184,16 @@ export async function zaiChat(
       }
 
       const usage = {
-        prompt_tokens: data.usage?.prompt_tokens ?? 0,
-        completion_tokens: data.usage?.completion_tokens ?? 0,
-        total_tokens: data.usage?.total_tokens ?? 0,
+        prompt_tokens: accumulated.usage?.prompt_tokens ?? 0,
+        completion_tokens: accumulated.usage?.completion_tokens ?? 0,
+        total_tokens: accumulated.usage?.total_tokens ?? 0,
       };
 
       return {
         content: typeof parsed === "string" ? parsed : (parsed as Record<string, unknown>),
         text: rawText,
         usage,
-        raw: data,
+        raw: accumulated,
       };
     } catch (err) {
       lastError = err;

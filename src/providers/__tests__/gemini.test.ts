@@ -4,32 +4,63 @@ import { ProviderJsonModeError, ProviderJsonParseError } from "../types.ts";
 import type { GeminiOptions } from "../types.ts";
 import type { Mock } from "vitest";
 
-function makeGeminiResponse(
+/**
+ * Creates a mock ReadableStream that yields SSE-formatted data.
+ */
+function makeSSEStream(events: string[]): ReadableStream<Uint8Array> {
+  const encoder = new TextEncoder();
+  const chunks = events.map((e) => encoder.encode(e));
+  let index = 0;
+
+  return new ReadableStream({
+    pull(controller) {
+      if (index < chunks.length) {
+        controller.enqueue(chunks[index]!);
+        index++;
+      } else {
+        controller.close();
+      }
+    },
+  });
+}
+
+/**
+ * Builds SSE events for a Gemini streaming response.
+ */
+function makeGeminiSseEvents(
   text: string,
   promptTokens = 10,
   candidatesTokens = 20,
   totalTokens = 30,
-) {
-  return {
-    candidates: [
-      {
-        content: {
-          parts: [{ text }],
-          role: "model",
-        },
+): string[] {
+  return [
+    `data: ${JSON.stringify({
+      candidates: [{ content: { parts: [{ text }], role: "model" } }],
+    })}\n\n`,
+    `data: ${JSON.stringify({
+      candidates: [{ content: { parts: [{ text: "" }], role: "model" }, finishReason: "STOP" }],
+      usageMetadata: {
+        promptTokenCount: promptTokens,
+        candidatesTokenCount: candidatesTokens,
+        totalTokenCount: totalTokens,
       },
-    ],
-    usageMetadata: {
-      promptTokenCount: promptTokens,
-      candidatesTokenCount: candidatesTokens,
-      totalTokenCount: totalTokens,
-    },
-  };
+    })}\n\n`,
+  ];
 }
 
-function mockFetchResponse(body: unknown, status = 200) {
+function mockStreamingResponse(events: string[], status = 200) {
   return {
     ok: status >= 200 && status < 300,
+    status,
+    body: makeSSEStream(events),
+    json: vi.fn(),
+    text: vi.fn(),
+  } as unknown as Response;
+}
+
+function mockErrorResponse(body: unknown, status: number) {
+  return {
+    ok: false,
     status,
     json: vi.fn().mockResolvedValue(body),
     text: vi.fn().mockResolvedValue(JSON.stringify(body)),
@@ -64,11 +95,13 @@ describe("geminiChat", () => {
 
   it("returns parsed JSON content, correct usage, and text for a valid response", async () => {
     const jsonPayload = { result: "success", count: 42 };
-    fetchMock.mockResolvedValue(
-      mockFetchResponse(
-        makeGeminiResponse(JSON.stringify(jsonPayload), 15, 25, 40),
-      ),
+    const events = makeGeminiSseEvents(
+      JSON.stringify(jsonPayload),
+      15,
+      25,
+      40,
     );
+    fetchMock.mockResolvedValue(mockStreamingResponse(events));
 
     const result = await geminiChat(baseOptions);
 
@@ -79,14 +112,11 @@ describe("geminiChat", () => {
       completion_tokens: 25,
       total_tokens: 40,
     });
-    expect(result.raw).toBeDefined();
   });
 
   it("includes safetySettings with BLOCK_NONE for all four categories", async () => {
-    const jsonPayload = { ok: true };
-    fetchMock.mockResolvedValue(
-      mockFetchResponse(makeGeminiResponse(JSON.stringify(jsonPayload))),
-    );
+    const events = makeGeminiSseEvents(JSON.stringify({ ok: true }));
+    fetchMock.mockResolvedValue(mockStreamingResponse(events));
 
     await geminiChat(baseOptions);
 
@@ -113,10 +143,8 @@ describe("geminiChat", () => {
   });
 
   it("constructs contents and systemInstruction in Gemini format", async () => {
-    const jsonPayload = { ok: true };
-    fetchMock.mockResolvedValue(
-      mockFetchResponse(makeGeminiResponse(JSON.stringify(jsonPayload))),
-    );
+    const events = makeGeminiSseEvents(JSON.stringify({ ok: true }));
+    fetchMock.mockResolvedValue(mockStreamingResponse(events));
 
     await geminiChat({
       messages: [
@@ -148,10 +176,8 @@ describe("geminiChat", () => {
       type: "object",
       properties: { name: { type: "string" } },
     };
-    const jsonPayload = { name: "test" };
-    fetchMock.mockResolvedValue(
-      mockFetchResponse(makeGeminiResponse(JSON.stringify(jsonPayload))),
-    );
+    const events = makeGeminiSseEvents(JSON.stringify({ name: "test" }));
+    fetchMock.mockResolvedValue(mockStreamingResponse(events));
 
     await geminiChat({
       messages: [
@@ -173,10 +199,8 @@ describe("geminiChat", () => {
 
   it("creates systemInstruction from schema alone when no system message exists", async () => {
     const schema = { type: "object" };
-    const jsonPayload = {};
-    fetchMock.mockResolvedValue(
-      mockFetchResponse(makeGeminiResponse(JSON.stringify(jsonPayload))),
-    );
+    const events = makeGeminiSseEvents(JSON.stringify({}));
+    fetchMock.mockResolvedValue(mockStreamingResponse(events));
 
     await geminiChat({
       messages: [{ role: "user", content: "Do something." }],
@@ -193,12 +217,13 @@ describe("geminiChat", () => {
   });
 
   it("normalizes usage from Gemini's usageMetadata format", async () => {
-    const jsonPayload = { ok: true };
-    fetchMock.mockResolvedValue(
-      mockFetchResponse(
-        makeGeminiResponse(JSON.stringify(jsonPayload), 100, 50, 150),
-      ),
+    const events = makeGeminiSseEvents(
+      JSON.stringify({ ok: true }),
+      100,
+      50,
+      150,
     );
+    fetchMock.mockResolvedValue(mockStreamingResponse(events));
 
     const result = await geminiChat(baseOptions);
 
@@ -209,26 +234,19 @@ describe("geminiChat", () => {
     });
   });
 
-  it("uses default model gemini-2.5-flash and temperature 0.7", async () => {
-    const jsonPayload = { ok: true };
-    fetchMock.mockResolvedValue(
-      mockFetchResponse(makeGeminiResponse(JSON.stringify(jsonPayload))),
-    );
+  it("uses streamGenerateContent URL with alt=sse", async () => {
+    const events = makeGeminiSseEvents(JSON.stringify({ ok: true }));
+    fetchMock.mockResolvedValue(mockStreamingResponse(events));
 
     await geminiChat(baseOptions);
 
-    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-    expect(url).toContain("/models/gemini-2.5-flash:generateContent");
-
-    const body = JSON.parse(init.body as string);
-    expect(body.generationConfig.temperature).toBe(0.7);
+    const [url] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toContain("/models/gemini-2.5-flash:streamGenerateContent?alt=sse");
   });
 
   it("passes API key as query parameter", async () => {
-    const jsonPayload = { ok: true };
-    fetchMock.mockResolvedValue(
-      mockFetchResponse(makeGeminiResponse(JSON.stringify(jsonPayload))),
-    );
+    const events = makeGeminiSseEvents(JSON.stringify({ ok: true }));
+    fetchMock.mockResolvedValue(mockStreamingResponse(events));
 
     await geminiChat(baseOptions);
 
@@ -238,10 +256,8 @@ describe("geminiChat", () => {
 
   it("uses GEMINI_BASE_URL env var when set", async () => {
     process.env["GEMINI_BASE_URL"] = "https://custom.api.example.com/v1";
-    const jsonPayload = { ok: true };
-    fetchMock.mockResolvedValue(
-      mockFetchResponse(makeGeminiResponse(JSON.stringify(jsonPayload))),
-    );
+    const events = makeGeminiSseEvents(JSON.stringify({ ok: true }));
+    fetchMock.mockResolvedValue(mockStreamingResponse(events));
 
     await geminiChat(baseOptions);
 
@@ -251,7 +267,7 @@ describe("geminiChat", () => {
 
   it("throws immediately on 401 without retrying", async () => {
     fetchMock.mockResolvedValue(
-      mockFetchResponse({ error: { message: "Unauthorized" } }, 401),
+      mockErrorResponse({ error: { message: "Unauthorized" } }, 401),
     );
 
     await expect(
@@ -263,13 +279,12 @@ describe("geminiChat", () => {
 
   it("retries on 429 then succeeds on 200", async () => {
     const jsonPayload = { retried: true };
+    const events = makeGeminiSseEvents(JSON.stringify(jsonPayload));
     fetchMock
       .mockResolvedValueOnce(
-        mockFetchResponse({ error: { message: "Rate limited" } }, 429),
+        mockErrorResponse({ error: { message: "Rate limited" } }, 429),
       )
-      .mockResolvedValueOnce(
-        mockFetchResponse(makeGeminiResponse(JSON.stringify(jsonPayload))),
-      );
+      .mockResolvedValueOnce(mockStreamingResponse(events));
 
     const result = await geminiChat({
       ...baseOptions,
@@ -291,9 +306,8 @@ describe("geminiChat", () => {
 
   it("throws ProviderJsonParseError for non-JSON text in JSON mode", async () => {
     const nonJsonText = "This is plain text, not JSON at all.";
-    fetchMock.mockResolvedValue(
-      mockFetchResponse(makeGeminiResponse(nonJsonText)),
-    );
+    const events = makeGeminiSseEvents(nonJsonText);
+    fetchMock.mockResolvedValue(mockStreamingResponse(events));
 
     try {
       await geminiChat(baseOptions);
@@ -309,9 +323,13 @@ describe("geminiChat", () => {
 
   it("returns plain text content when responseFormat is not specified", async () => {
     const plainText = "Hello, this is a plain text response.";
-    fetchMock.mockResolvedValue(
-      mockFetchResponse(makeGeminiResponse(plainText)),
-    );
+    // For non-JSON mode, single chunk with finishReason
+    const events = [
+      `data: ${JSON.stringify({
+        candidates: [{ content: { parts: [{ text: plainText }], role: "model" }, finishReason: "STOP" }],
+      })}\n\n`,
+    ];
+    fetchMock.mockResolvedValue(mockStreamingResponse(events));
 
     const result = await geminiChat({
       messages: [{ role: "user", content: "Say hello." }],
@@ -322,10 +340,8 @@ describe("geminiChat", () => {
   });
 
   it("discards frequencyPenalty and presencePenalty without error", async () => {
-    const jsonPayload = { ok: true };
-    fetchMock.mockResolvedValue(
-      mockFetchResponse(makeGeminiResponse(JSON.stringify(jsonPayload))),
-    );
+    const events = makeGeminiSseEvents(JSON.stringify({ ok: true }));
+    fetchMock.mockResolvedValue(mockStreamingResponse(events));
 
     const result = await geminiChat({
       ...baseOptions,
@@ -333,7 +349,7 @@ describe("geminiChat", () => {
       presencePenalty: 0.8,
     });
 
-    expect(result.content).toEqual(jsonPayload);
+    expect(result.content).toEqual({ ok: true });
 
     // Verify they don't appear in the request body
     const body = JSON.parse(
@@ -345,10 +361,9 @@ describe("geminiChat", () => {
     expect(body.generationConfig.presencePenalty).toBeUndefined();
   });
 
-  it("passes an AbortSignal to fetch", async () => {
-    fetchMock.mockResolvedValue(
-      mockFetchResponse(makeGeminiResponse(JSON.stringify({ ok: true }))),
-    );
+  it("passes an AbortSignal to fetch (IdleTimeoutController)", async () => {
+    const events = makeGeminiSseEvents(JSON.stringify({ ok: true }));
+    fetchMock.mockResolvedValue(mockStreamingResponse(events));
 
     await geminiChat(baseOptions);
 
@@ -356,26 +371,14 @@ describe("geminiChat", () => {
     expect(init.signal).toBeInstanceOf(AbortSignal);
   });
 
-  it("uses custom requestTimeoutMs for the abort signal", async () => {
-    const timeoutSpy = vi.spyOn(AbortSignal, "timeout");
-    fetchMock.mockResolvedValue(
-      mockFetchResponse(makeGeminiResponse(JSON.stringify({ ok: true }))),
-    );
-
-    await geminiChat({ ...baseOptions, requestTimeoutMs: 5000 });
-
-    expect(timeoutSpy).toHaveBeenCalledWith(5000);
-    timeoutSpy.mockRestore();
-  });
-
   it("handles missing usageMetadata by defaulting to zeros", async () => {
-    const jsonPayload = { ok: true };
-    const responseWithoutUsage = {
-      candidates: [
-        { content: { parts: [{ text: JSON.stringify(jsonPayload) }] } },
-      ],
-    };
-    fetchMock.mockResolvedValue(mockFetchResponse(responseWithoutUsage));
+    // Stream without usageMetadata
+    const events = [
+      `data: ${JSON.stringify({
+        candidates: [{ content: { parts: [{ text: JSON.stringify({ ok: true }) }], role: "model" }, finishReason: "STOP" }],
+      })}\n\n`,
+    ];
+    fetchMock.mockResolvedValue(mockStreamingResponse(events));
 
     const result = await geminiChat(baseOptions);
 
@@ -383,6 +386,48 @@ describe("geminiChat", () => {
       prompt_tokens: 0,
       completion_tokens: 0,
       total_tokens: 0,
+    });
+  });
+
+  describe("streaming accumulation", () => {
+    it("accumulates text across multiple SSE chunks", async () => {
+      const events = [
+        `data: ${JSON.stringify({
+          candidates: [{ content: { parts: [{ text: '{"he' }], role: "model" } }],
+        })}\n\n`,
+        `data: ${JSON.stringify({
+          candidates: [{ content: { parts: [{ text: 'llo":"world"}' }], role: "model" }, finishReason: "STOP" }],
+          usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5, totalTokenCount: 15 },
+        })}\n\n`,
+      ];
+
+      fetchMock.mockResolvedValue(mockStreamingResponse(events));
+
+      const result = await geminiChat(baseOptions);
+      expect(result.content).toEqual({ hello: "world" });
+      expect(result.usage).toEqual({
+        prompt_tokens: 10,
+        completion_tokens: 5,
+        total_tokens: 15,
+      });
+    });
+
+    it("retries on timeout then succeeds on second attempt", async () => {
+      const events = makeGeminiSseEvents(JSON.stringify({ ok: true }));
+
+      fetchMock
+        .mockRejectedValueOnce(
+          new DOMException("signal timed out", "TimeoutError"),
+        )
+        .mockResolvedValueOnce(mockStreamingResponse(events));
+
+      const result = await geminiChat({
+        ...baseOptions,
+        maxRetries: 1,
+      });
+
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(result.content).toEqual({ ok: true });
     });
   });
 });

@@ -4,30 +4,6 @@ import { ProviderJsonParseError } from "../types.ts";
 import type { DeepSeekOptions } from "../types.ts";
 import type { Mock } from "vitest";
 
-function makeDeepSeekResponse(
-  content: string,
-  promptTokens = 10,
-  completionTokens = 20,
-) {
-  return {
-    choices: [{ message: { content } }],
-    usage: {
-      prompt_tokens: promptTokens,
-      completion_tokens: completionTokens,
-      total_tokens: promptTokens + completionTokens,
-    },
-  };
-}
-
-function mockFetchResponse(body: unknown, status = 200) {
-  return {
-    ok: status >= 200 && status < 300,
-    status,
-    json: vi.fn().mockResolvedValue(body),
-    text: vi.fn().mockResolvedValue(JSON.stringify(body)),
-  } as unknown as Response;
-}
-
 /**
  * Creates a mock ReadableStream that yields SSE-formatted data.
  */
@@ -48,14 +24,49 @@ function makeSSEStream(events: string[]): ReadableStream<Uint8Array> {
   });
 }
 
-function mockStreamingResponse(events: string[]) {
+function mockStreamingResponse(events: string[], status = 200) {
   return {
-    ok: true,
-    status: 200,
+    ok: status >= 200 && status < 300,
+    status,
     body: makeSSEStream(events),
     json: vi.fn(),
     text: vi.fn(),
   } as unknown as Response;
+}
+
+function mockErrorResponse(body: unknown, status: number) {
+  return {
+    ok: false,
+    status,
+    json: vi.fn().mockResolvedValue(body),
+    text: vi.fn().mockResolvedValue(JSON.stringify(body)),
+  } as unknown as Response;
+}
+
+/**
+ * Builds SSE events for an OpenAI-compatible streaming response.
+ */
+function makeOpenAiSseEvents(
+  textChunks: string[],
+  usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number },
+): string[] {
+  const events: string[] = [];
+  for (const chunk of textChunks) {
+    events.push(
+      `data: ${JSON.stringify({ choices: [{ delta: { content: chunk } }] })}\n\n`,
+    );
+  }
+  if (usage) {
+    events.push(
+      `data: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: "stop" }], usage })}\n\n`,
+    );
+  } else {
+    events.push(
+      `data: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: "stop" }] })}\n\n`,
+    );
+  }
+  events.push("data: [DONE]\n\n");
+  return events;
 }
 
 const baseOptions: DeepSeekOptions = {
@@ -83,329 +94,278 @@ describe("deepseekChat", () => {
     delete process.env["DEEPSEEK_API_KEY"];
   });
 
-  describe("non-streaming", () => {
-    it("returns parsed JSON content with usage", async () => {
-      const jsonPayload = { result: "success", count: 42 };
-      fetchMock.mockResolvedValue(
-        mockFetchResponse(
-          makeDeepSeekResponse(JSON.stringify(jsonPayload), 15, 25),
-        ),
-      );
+  it("returns parsed JSON content with usage from streaming response", async () => {
+    const jsonPayload = { result: "success", count: 42 };
+    const jsonStr = JSON.stringify(jsonPayload);
+    const events = makeOpenAiSseEvents(
+      [jsonStr],
+      { prompt_tokens: 15, completion_tokens: 25, total_tokens: 40 },
+    );
+    fetchMock.mockResolvedValue(mockStreamingResponse(events));
 
-      const result = await deepseekChat(baseOptions);
+    const result = await deepseekChat(baseOptions);
 
-      expect(result.content).toEqual(jsonPayload);
-      expect(result.usage).toEqual({
-        prompt_tokens: 15,
-        completion_tokens: 25,
-        total_tokens: 40,
-      });
-      expect(result.raw).toBeDefined();
-    });
-
-    it("sends correct headers with Bearer token", async () => {
-      const jsonPayload = { ok: true };
-      fetchMock.mockResolvedValue(
-        mockFetchResponse(makeDeepSeekResponse(JSON.stringify(jsonPayload))),
-      );
-
-      await deepseekChat(baseOptions);
-
-      const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-      expect(url).toBe("https://api.deepseek.com/chat/completions");
-      const headers = init.headers as Record<string, string>;
-      expect(headers["Authorization"]).toBe("Bearer test-key");
-      expect(headers["Content-Type"]).toBe("application/json");
-    });
-
-    it("includes response_format in non-streaming request body", async () => {
-      const jsonPayload = { ok: true };
-      fetchMock.mockResolvedValue(
-        mockFetchResponse(makeDeepSeekResponse(JSON.stringify(jsonPayload))),
-      );
-
-      await deepseekChat(baseOptions);
-
-      const body = JSON.parse(
-        (fetchMock.mock.calls[0] as [string, RequestInit])[1].body as string,
-      );
-      expect(body.response_format).toEqual({ type: "json_object" });
-      expect(body.stream).toBe(false);
-    });
-
-    it("throws immediately on 401 without retrying", async () => {
-      fetchMock.mockResolvedValue(
-        mockFetchResponse({ error: { message: "Unauthorized" } }, 401),
-      );
-
-      await expect(
-        deepseekChat({ ...baseOptions, maxRetries: 3 }),
-      ).rejects.toMatchObject({ status: 401, message: "Unauthorized" });
-
-      expect(fetchMock).toHaveBeenCalledTimes(1);
-    });
-
-    it("retries on 429 then succeeds on 200", async () => {
-      const jsonPayload = { retried: true };
-      fetchMock
-        .mockResolvedValueOnce(
-          mockFetchResponse({ error: { message: "Rate limited" } }, 429),
-        )
-        .mockResolvedValueOnce(
-          mockFetchResponse(
-            makeDeepSeekResponse(JSON.stringify(jsonPayload)),
-          ),
-        );
-
-      const result = await deepseekChat({ ...baseOptions, maxRetries: 3 });
-
-      expect(fetchMock).toHaveBeenCalledTimes(2);
-      expect(result.content).toEqual(jsonPayload);
-    });
-
-    it("throws ProviderJsonParseError for non-JSON text in JSON mode", async () => {
-      const nonJsonText = "This is plain text, not JSON at all.";
-      fetchMock.mockResolvedValue(
-        mockFetchResponse(makeDeepSeekResponse(nonJsonText)),
-      );
-
-      try {
-        await deepseekChat(baseOptions);
-        expect.unreachable("should have thrown");
-      } catch (err) {
-        expect(err).toBeInstanceOf(ProviderJsonParseError);
-        const parseErr = err as ProviderJsonParseError;
-        expect(parseErr.provider).toBe("deepseek");
-        expect(parseErr.model).toBe("deepseek-chat");
-        expect(parseErr.sample).toBeTruthy();
-      }
-    });
-
-    it("handles markdown-fenced JSON responses", async () => {
-      const fencedJson = '```json\n{"fenced": true}\n```';
-      fetchMock.mockResolvedValue(
-        mockFetchResponse(makeDeepSeekResponse(fencedJson)),
-      );
-
-      const result = await deepseekChat(baseOptions);
-      expect(result.content).toEqual({ fenced: true });
-    });
-
-    it("uses default model and temperature", async () => {
-      const jsonPayload = { defaults: true };
-      fetchMock.mockResolvedValue(
-        mockFetchResponse(makeDeepSeekResponse(JSON.stringify(jsonPayload))),
-      );
-
-      await deepseekChat({
-        messages: baseOptions.messages,
-      });
-
-      const body = JSON.parse(
-        (fetchMock.mock.calls[0] as [string, RequestInit])[1].body as string,
-      );
-      expect(body.model).toBe("deepseek-chat");
-      expect(body.temperature).toBe(0.7);
-    });
-
-    it("passes optional parameters when provided", async () => {
-      const jsonPayload = { ok: true };
-      fetchMock.mockResolvedValue(
-        mockFetchResponse(makeDeepSeekResponse(JSON.stringify(jsonPayload))),
-      );
-
-      await deepseekChat({
-        ...baseOptions,
-        model: "deepseek-reasoner",
-        temperature: 0.3,
-        maxTokens: 4096,
-        topP: 0.9,
-        frequencyPenalty: 0.5,
-        presencePenalty: 0.2,
-      });
-
-      const body = JSON.parse(
-        (fetchMock.mock.calls[0] as [string, RequestInit])[1].body as string,
-      );
-      expect(body.model).toBe("deepseek-reasoner");
-      expect(body.temperature).toBe(0.3);
-      expect(body.max_tokens).toBe(4096);
-      expect(body.top_p).toBe(0.9);
-      expect(body.frequency_penalty).toBe(0.5);
-      expect(body.presence_penalty).toBe(0.2);
-    });
-
-    it("passes an AbortSignal to fetch", async () => {
-      fetchMock.mockResolvedValue(
-        mockFetchResponse(makeDeepSeekResponse(JSON.stringify({ ok: true }))),
-      );
-
-      await deepseekChat(baseOptions);
-
-      const init = (fetchMock.mock.calls[0] as [string, RequestInit])[1];
-      expect(init.signal).toBeInstanceOf(AbortSignal);
-    });
-
-    it("uses custom requestTimeoutMs for the abort signal", async () => {
-      const timeoutSpy = vi.spyOn(AbortSignal, "timeout");
-      fetchMock.mockResolvedValue(
-        mockFetchResponse(makeDeepSeekResponse(JSON.stringify({ ok: true }))),
-      );
-
-      await deepseekChat({ ...baseOptions, requestTimeoutMs: 5000 });
-
-      expect(timeoutSpy).toHaveBeenCalledWith(5000);
-      timeoutSpy.mockRestore();
+    expect(result.content).toEqual(jsonPayload);
+    expect(result.usage).toEqual({
+      prompt_tokens: 15,
+      completion_tokens: 25,
+      total_tokens: 40,
     });
   });
 
-  describe("streaming", () => {
-    it("returns an async generator that yields chunks from SSE", async () => {
-      const sseEvents = [
-        'data: {"choices":[{"delta":{"content":"Hello"}}]}\n\n',
-        'data: {"choices":[{"delta":{"content":" world"}}]}\n\n',
+  it("sends correct headers with Bearer token", async () => {
+    const events = makeOpenAiSseEvents([JSON.stringify({ ok: true })]);
+    fetchMock.mockResolvedValue(mockStreamingResponse(events));
+
+    await deepseekChat(baseOptions);
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("https://api.deepseek.com/chat/completions");
+    const headers = init.headers as Record<string, string>;
+    expect(headers["Authorization"]).toBe("Bearer test-key");
+    expect(headers["Content-Type"]).toBe("application/json");
+  });
+
+  it("always sends stream: true and omits response_format", async () => {
+    const events = makeOpenAiSseEvents([JSON.stringify({ ok: true })]);
+    fetchMock.mockResolvedValue(mockStreamingResponse(events));
+
+    await deepseekChat(baseOptions);
+
+    const body = JSON.parse(
+      (fetchMock.mock.calls[0] as [string, RequestInit])[1].body as string,
+    );
+    expect(body.stream).toBe(true);
+    expect(body.response_format).toBeUndefined();
+  });
+
+  it("throws immediately on 401 without retrying", async () => {
+    fetchMock.mockResolvedValue(
+      mockErrorResponse({ error: { message: "Unauthorized" } }, 401),
+    );
+
+    await expect(
+      deepseekChat({ ...baseOptions, maxRetries: 3 }),
+    ).rejects.toMatchObject({ status: 401, message: "Unauthorized" });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("retries on 429 then succeeds on 200", async () => {
+    const jsonPayload = { retried: true };
+    const events = makeOpenAiSseEvents([JSON.stringify(jsonPayload)]);
+    fetchMock
+      .mockResolvedValueOnce(
+        mockErrorResponse({ error: { message: "Rate limited" } }, 429),
+      )
+      .mockResolvedValueOnce(mockStreamingResponse(events));
+
+    const result = await deepseekChat({ ...baseOptions, maxRetries: 3 });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(result.content).toEqual(jsonPayload);
+  });
+
+  it("throws ProviderJsonParseError for non-JSON text in JSON mode", async () => {
+    const nonJsonText = "This is plain text, not JSON at all.";
+    const events = makeOpenAiSseEvents([nonJsonText]);
+    fetchMock.mockResolvedValue(mockStreamingResponse(events));
+
+    try {
+      await deepseekChat(baseOptions);
+      expect.unreachable("should have thrown");
+    } catch (err) {
+      expect(err).toBeInstanceOf(ProviderJsonParseError);
+      const parseErr = err as ProviderJsonParseError;
+      expect(parseErr.provider).toBe("deepseek");
+      expect(parseErr.model).toBe("deepseek-chat");
+      expect(parseErr.sample).toBeTruthy();
+    }
+  });
+
+  it("handles markdown-fenced JSON responses", async () => {
+    const fencedJson = '```json\n{"fenced": true}\n```';
+    const events = makeOpenAiSseEvents([fencedJson]);
+    fetchMock.mockResolvedValue(mockStreamingResponse(events));
+
+    const result = await deepseekChat(baseOptions);
+    expect(result.content).toEqual({ fenced: true });
+  });
+
+  it("uses default model and temperature", async () => {
+    const events = makeOpenAiSseEvents([JSON.stringify({ defaults: true })]);
+    fetchMock.mockResolvedValue(mockStreamingResponse(events));
+
+    await deepseekChat({
+      messages: baseOptions.messages,
+    });
+
+    const body = JSON.parse(
+      (fetchMock.mock.calls[0] as [string, RequestInit])[1].body as string,
+    );
+    expect(body.model).toBe("deepseek-chat");
+    expect(body.temperature).toBe(0.7);
+  });
+
+  it("passes optional parameters when provided", async () => {
+    const events = makeOpenAiSseEvents([JSON.stringify({ ok: true })]);
+    fetchMock.mockResolvedValue(mockStreamingResponse(events));
+
+    await deepseekChat({
+      ...baseOptions,
+      model: "deepseek-reasoner",
+      temperature: 0.3,
+      maxTokens: 4096,
+      topP: 0.9,
+      frequencyPenalty: 0.5,
+      presencePenalty: 0.2,
+    });
+
+    const body = JSON.parse(
+      (fetchMock.mock.calls[0] as [string, RequestInit])[1].body as string,
+    );
+    expect(body.model).toBe("deepseek-reasoner");
+    expect(body.temperature).toBe(0.3);
+    expect(body.max_tokens).toBe(4096);
+    expect(body.top_p).toBe(0.9);
+    expect(body.frequency_penalty).toBe(0.5);
+    expect(body.presence_penalty).toBe(0.2);
+  });
+
+  it("passes an AbortSignal to fetch (IdleTimeoutController)", async () => {
+    const events = makeOpenAiSseEvents([JSON.stringify({ ok: true })]);
+    fetchMock.mockResolvedValue(mockStreamingResponse(events));
+
+    await deepseekChat(baseOptions);
+
+    const init = (fetchMock.mock.calls[0] as [string, RequestInit])[1];
+    expect(init.signal).toBeInstanceOf(AbortSignal);
+  });
+
+  describe("streaming accumulation", () => {
+    it("accumulates text across multiple SSE chunks", async () => {
+      const events = [
+        'data: {"choices":[{"delta":{"content":"{\\"hello"}}]}\n\n',
+        'data: {"choices":[{"delta":{"content":"\\":\\"world\\"}"}}]}\n\n',
+        'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n\n',
         "data: [DONE]\n\n",
       ];
 
-      fetchMock.mockResolvedValue(mockStreamingResponse(sseEvents));
+      fetchMock.mockResolvedValue(mockStreamingResponse(events));
 
-      const generator = await deepseekChat({
-        ...baseOptions,
-        stream: true,
-      });
-
-      const chunks: string[] = [];
-      for await (const chunk of generator) {
-        chunks.push(chunk.content);
-      }
-
-      expect(chunks).toEqual(["Hello", " world"]);
+      const result = await deepseekChat(baseOptions);
+      expect(result.content).toEqual({ hello: "world" });
     });
 
-    it("omits response_format when stream is true", async () => {
-      const sseEvents = [
-        'data: {"choices":[{"delta":{"content":"hi"}}]}\n\n',
+    it("captures usage from the final streaming chunk", async () => {
+      const events = [
+        'data: {"choices":[{"delta":{"content":"{\\"ok\\":true}"}}]}\n\n',
+        `data: ${JSON.stringify({
+          choices: [{ delta: {}, finish_reason: "stop" }],
+          usage: { prompt_tokens: 50, completion_tokens: 30, total_tokens: 80 },
+        })}\n\n`,
         "data: [DONE]\n\n",
       ];
 
-      fetchMock.mockResolvedValue(mockStreamingResponse(sseEvents));
+      fetchMock.mockResolvedValue(mockStreamingResponse(events));
 
-      await deepseekChat({
-        ...baseOptions,
-        stream: true,
-        responseFormat: "json_object",
+      const result = await deepseekChat(baseOptions);
+      expect(result.usage).toEqual({
+        prompt_tokens: 50,
+        completion_tokens: 30,
+        total_tokens: 80,
       });
-
-      const body = JSON.parse(
-        (fetchMock.mock.calls[0] as [string, RequestInit])[1].body as string,
-      );
-      expect(body.response_format).toBeUndefined();
-      expect(body.stream).toBe(true);
     });
 
-    it("throws on non-ok streaming response", async () => {
-      fetchMock.mockResolvedValue(
-        mockFetchResponse({ error: { message: "Server error" } }, 500),
-      );
+    it("defaults usage to zeros when stream provides no usage", async () => {
+      const events = [
+        'data: {"choices":[{"delta":{"content":"{\\"ok\\":true}"}}]}\n\n',
+        'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n\n',
+        "data: [DONE]\n\n",
+      ];
 
-      await expect(
-        deepseekChat({ ...baseOptions, stream: true, maxRetries: 0 }),
-      ).rejects.toMatchObject({ status: 500, message: "Server error" });
+      fetchMock.mockResolvedValue(mockStreamingResponse(events));
+
+      const result = await deepseekChat(baseOptions);
+      expect(result.usage).toEqual({
+        prompt_tokens: 0,
+        completion_tokens: 0,
+        total_tokens: 0,
+      });
     });
 
-    it("normalizes negative maxRetries to zero in streaming mode", async () => {
-      fetchMock.mockResolvedValue(
-        mockFetchResponse({ error: { message: "Server error" } }, 500),
-      );
-
-      await expect(
-        deepseekChat({ ...baseOptions, stream: true, maxRetries: -2 }),
-      ).rejects.toMatchObject({ status: 500, message: "Server error" });
-      expect(fetchMock).toHaveBeenCalledTimes(1);
-    });
-
-    it("skips SSE lines that are comments or empty", async () => {
-      const sseEvents = [
+    it("skips SSE comment lines and empty lines", async () => {
+      const events = [
         ": this is a comment\n\n",
         "\n",
-        'data: {"choices":[{"delta":{"content":"only"}}]}\n\n',
+        'data: {"choices":[{"delta":{"content":"{\\"only\\":true}"}}]}\n\n',
+        'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n\n',
         "data: [DONE]\n\n",
       ];
 
-      fetchMock.mockResolvedValue(mockStreamingResponse(sseEvents));
+      fetchMock.mockResolvedValue(mockStreamingResponse(events));
 
-      const generator = await deepseekChat({
-        ...baseOptions,
-        stream: true,
-      });
+      const result = await deepseekChat(baseOptions);
+      expect(result.content).toEqual({ only: true });
+    });
 
-      const chunks: string[] = [];
-      for await (const chunk of generator) {
-        chunks.push(chunk.content);
-      }
+    it("skips chunks with no content in delta", async () => {
+      const events = [
+        'data: {"choices":[{"delta":{}}]}\n\n',
+        'data: {"choices":[{"delta":{"content":"{\\"real\\":true}"}}]}\n\n',
+        'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n\n',
+        "data: [DONE]\n\n",
+      ];
 
-      expect(chunks).toEqual(["only"]);
+      fetchMock.mockResolvedValue(mockStreamingResponse(events));
+
+      const result = await deepseekChat(baseOptions);
+      expect(result.content).toEqual({ real: true });
     });
 
     it("retries on timeout then succeeds on second attempt", async () => {
-      const sseEvents = [
-        'data: {"choices":[{"delta":{"content":"ok"}}]}\n\n',
-        "data: [DONE]\n\n",
-      ];
+      const events = makeOpenAiSseEvents([JSON.stringify({ ok: true })]);
 
       fetchMock
         .mockRejectedValueOnce(
           new DOMException("signal timed out", "TimeoutError"),
         )
-        .mockResolvedValueOnce(mockStreamingResponse(sseEvents));
+        .mockResolvedValueOnce(mockStreamingResponse(events));
 
-      const generator = await deepseekChat({
+      const result = await deepseekChat({
         ...baseOptions,
-        stream: true,
         maxRetries: 1,
       });
 
-      const chunks: string[] = [];
-      for await (const chunk of generator) {
-        chunks.push(chunk.content);
-      }
-
       expect(fetchMock).toHaveBeenCalledTimes(2);
-      expect(chunks).toEqual(["ok"]);
+      expect(result.content).toEqual({ ok: true });
     });
 
-    it("throws immediately on 401 without retrying", async () => {
+    it("normalizes negative maxRetries to zero", async () => {
       fetchMock.mockResolvedValue(
-        mockFetchResponse({ error: { message: "Unauthorized" } }, 401),
+        mockErrorResponse({ error: { message: "Server error" } }, 500),
       );
 
       await expect(
-        deepseekChat({ ...baseOptions, stream: true, maxRetries: 3 }),
-      ).rejects.toMatchObject({ status: 401, message: "Unauthorized" });
-
+        deepseekChat({ ...baseOptions, maxRetries: -2 }),
+      ).rejects.toMatchObject({ status: 500, message: "Server error" });
       expect(fetchMock).toHaveBeenCalledTimes(1);
     });
 
-    it("skips chunks with no content in delta", async () => {
-      const sseEvents = [
-        'data: {"choices":[{"delta":{}}]}\n\n',
-        'data: {"choices":[{"delta":{"content":"real"}}]}\n\n',
+    it("throws on malformed JSON in SSE data", async () => {
+      const events = [
+        "data: {not valid json\n\n",
+        'data: {"choices":[{"delta":{"content":"not json"}}]}\n\n',
+        'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n\n',
         "data: [DONE]\n\n",
       ];
 
-      fetchMock.mockResolvedValue(mockStreamingResponse(sseEvents));
+      fetchMock.mockResolvedValue(mockStreamingResponse(events));
 
-      const generator = await deepseekChat({
-        ...baseOptions,
-        stream: true,
-      });
-
-      const chunks: string[] = [];
-      for await (const chunk of generator) {
-        chunks.push(chunk.content);
-      }
-
-      expect(chunks).toEqual(["real"]);
+      // Malformed SSE data lines are skipped, but the accumulated text may fail JSON parse
+      await expect(deepseekChat(baseOptions)).rejects.toBeInstanceOf(
+        ProviderJsonParseError,
+      );
     });
   });
 });
