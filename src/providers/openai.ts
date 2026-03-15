@@ -3,6 +3,7 @@
 
 import OpenAI from "openai";
 import {
+  DEFAULT_REQUEST_TIMEOUT_MS,
   extractMessages,
   isRetryableError,
   sleep,
@@ -20,23 +21,55 @@ const DEFAULT_RESPONSE_FORMAT = "json_object";
 const DEFAULT_MAX_RETRIES = 3;
 const GPT5_PATTERN = /^gpt-5/i;
 
-let client: OpenAI | null = null;
-
-function getClient(): OpenAI {
-  if (!client) {
-    client = new OpenAI({
-      apiKey: process.env["OPENAI_API_KEY"],
-      organization: process.env["OPENAI_ORGANIZATION"],
-      baseURL: process.env["OPENAI_BASE_URL"],
-      maxRetries: 0,
-    });
-  }
-  return client;
+interface ClientConfig {
+  apiKey: string | undefined;
+  organization: string | undefined;
+  baseURL: string | undefined;
 }
 
-/** Visible for testing — resets the singleton so tests get a fresh client. */
+let defaultClient: OpenAI | null = null;
+let defaultClientConfig: ClientConfig | null = null;
+
+function createClient(timeoutMs: number, config: ClientConfig): OpenAI {
+  return new OpenAI({
+    apiKey: config.apiKey,
+    organization: config.organization,
+    baseURL: config.baseURL,
+    maxRetries: 0,
+    timeout: timeoutMs,
+  });
+}
+
+function getClient(timeoutMs: number): OpenAI {
+  const config: ClientConfig = {
+    apiKey: process.env["OPENAI_API_KEY"],
+    organization: process.env["OPENAI_ORGANIZATION"],
+    baseURL: process.env["OPENAI_BASE_URL"],
+  };
+
+  // Avoid an unbounded cache: only the default timeout is cached.
+  if (timeoutMs !== DEFAULT_REQUEST_TIMEOUT_MS) {
+    return createClient(timeoutMs, config);
+  }
+
+  const configChanged =
+    !defaultClientConfig ||
+    defaultClientConfig.apiKey !== config.apiKey ||
+    defaultClientConfig.organization !== config.organization ||
+    defaultClientConfig.baseURL !== config.baseURL;
+
+  if (!defaultClient || configChanged) {
+    defaultClient = createClient(timeoutMs, config);
+    defaultClientConfig = config;
+  }
+
+  return defaultClient;
+}
+
+/** Visible for testing — resets the client cache so tests get a fresh client. */
 export function _resetClient(): void {
-  client = null;
+  defaultClient = null;
+  defaultClientConfig = null;
 }
 
 async function callResponsesAPI(
@@ -175,6 +208,7 @@ export async function openaiChat(
     presencePenalty,
     topP,
     stop,
+    requestTimeoutMs,
     // Destructure and discard max_tokens to prevent ...rest leakage
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     max_tokens: _discardedMaxTokens,
@@ -195,7 +229,8 @@ export async function openaiChat(
       : undefined;
 
   const { systemMsg, userMsg } = extractMessages(messages);
-  const openai = getClient();
+  const timeoutMs = requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
+  const openai = getClient(timeoutMs);
   const useResponsesAPI = GPT5_PATTERN.test(model);
 
   let lastError: unknown;

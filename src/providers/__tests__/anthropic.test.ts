@@ -224,6 +224,29 @@ describe("anthropicChat", () => {
     expect(body.stop_sequences).toEqual(["END", "STOP"]);
   });
 
+  it("passes an AbortSignal to fetch", async () => {
+    fetchMock.mockResolvedValue(
+      mockFetchResponse(makeAnthropicResponse(JSON.stringify({ ok: true }))),
+    );
+
+    await anthropicChat(baseOptions);
+
+    const init = (fetchMock.mock.calls[0] as [string, RequestInit])[1];
+    expect(init.signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it("uses custom requestTimeoutMs for the abort signal", async () => {
+    const timeoutSpy = vi.spyOn(AbortSignal, "timeout");
+    fetchMock.mockResolvedValue(
+      mockFetchResponse(makeAnthropicResponse(JSON.stringify({ ok: true }))),
+    );
+
+    await anthropicChat({ ...baseOptions, requestTimeoutMs: 5000 });
+
+    expect(timeoutSpy).toHaveBeenCalledWith(5000);
+    timeoutSpy.mockRestore();
+  });
+
   it("handles markdown-fenced JSON responses", async () => {
     const fencedJson = '```json\n{"fenced": true}\n```';
     fetchMock.mockResolvedValue(

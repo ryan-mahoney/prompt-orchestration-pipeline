@@ -297,7 +297,40 @@ describe("openaiChat", () => {
       organization: "org_test",
       baseURL: "https://example.test/v1",
       maxRetries: 0,
+      timeout: 120_000,
     });
+  });
+
+  it("constructs the client with custom requestTimeoutMs", async () => {
+    mockChatCompletionsCreate.mockResolvedValue(
+      makeChatCompletion(JSON.stringify({ ok: true })),
+    );
+
+    await openaiChat({
+      ...baseOptions,
+      model: "gpt-4o",
+      requestTimeoutMs: 30_000,
+    });
+
+    expect(MockOpenAI).toHaveBeenCalledWith(
+      expect.objectContaining({ timeout: 30_000 }),
+    );
+  });
+
+  it("creates separate client instances for different timeout values", async () => {
+    mockChatCompletionsCreate.mockResolvedValue(
+      makeChatCompletion(JSON.stringify({ ok: true })),
+    );
+
+    await openaiChat({ ...baseOptions, model: "gpt-4o", requestTimeoutMs: 10_000 });
+    await openaiChat({ ...baseOptions, model: "gpt-4o", requestTimeoutMs: 60_000 });
+
+    // Two distinct timeout values should produce two client constructions
+    const timeouts = MockOpenAI.mock.calls.map(
+      (call: unknown[]) => (call[0] as { timeout: number }).timeout,
+    );
+    expect(timeouts).toContain(10_000);
+    expect(timeouts).toContain(60_000);
   });
 
   it("passes json_schema to the Responses API when provided", async () => {

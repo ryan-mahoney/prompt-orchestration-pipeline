@@ -158,6 +158,29 @@ describe("alibabaChat", () => {
     expect(body.presence_penalty).toBe(0.2);
   });
 
+  it("passes an AbortSignal to fetch", async () => {
+    fetchMock.mockResolvedValue(
+      mockFetchResponse(makeAlibabaResponse(JSON.stringify({ ok: true }))),
+    );
+
+    await alibabaChat(baseOptions);
+
+    const init = (fetchMock.mock.calls[0] as [string, RequestInit])[1];
+    expect(init.signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it("uses custom requestTimeoutMs for the abort signal", async () => {
+    const timeoutSpy = vi.spyOn(AbortSignal, "timeout");
+    fetchMock.mockResolvedValue(
+      mockFetchResponse(makeAlibabaResponse(JSON.stringify({ ok: true }))),
+    );
+
+    await alibabaChat({ ...baseOptions, requestTimeoutMs: 5000 });
+
+    expect(timeoutSpy).toHaveBeenCalledWith(5000);
+    timeoutSpy.mockRestore();
+  });
+
   it("sends enable_thinking true by default", async () => {
     fetchMock.mockResolvedValue(
       mockFetchResponse(makeAlibabaResponse(JSON.stringify({ ok: true }))),

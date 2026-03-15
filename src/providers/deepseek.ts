@@ -2,6 +2,7 @@
 // DeepSeek adapter with streaming support via async generator.
 
 import {
+  DEFAULT_REQUEST_TIMEOUT_MS,
   extractMessages,
   isRetryableError,
   sleep,
@@ -122,10 +123,14 @@ export async function deepseekChat(
     topP,
     stop,
     maxRetries = DEFAULT_MAX_RETRIES,
+    requestTimeoutMs = DEFAULT_REQUEST_TIMEOUT_MS,
     frequencyPenalty,
     presencePenalty,
     stream = false,
   } = options;
+  const retryLimit = Number.isFinite(maxRetries)
+    ? Math.max(0, Math.trunc(maxRetries))
+    : DEFAULT_MAX_RETRIES;
 
   const jsonMode = !stream && isJsonMode(responseFormat);
 
@@ -169,43 +174,71 @@ export async function deepseekChat(
     body["response_format"] = responseFormatPayload;
   }
 
-  // Streaming mode: single fetch, return async generator
+  // Streaming mode: retry loop around the initial HTTP request
   if (stream) {
-    const response = await fetch(DEEPSEEK_API_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey ?? ""}`,
-      },
-      body: JSON.stringify(body),
-    });
+    let lastStreamError: unknown;
 
-    if (!response.ok) {
-      let errorBody: unknown;
+    for (let attempt = 0; attempt <= retryLimit; attempt++) {
       try {
-        errorBody = await response.json();
-      } catch {
-        errorBody = await response.text();
+        const signal = AbortSignal.timeout(requestTimeoutMs);
+        const response = await fetch(DEEPSEEK_API_URL, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${apiKey ?? ""}`,
+          },
+          body: JSON.stringify(body),
+          signal,
+        });
+
+        if (!response.ok) {
+          let errorBody: unknown;
+          try {
+            errorBody = await response.json();
+          } catch {
+            errorBody = await response.text();
+          }
+
+          const err = createProviderError(
+            response.status,
+            errorBody,
+            `DeepSeek API error: ${response.status}`,
+          );
+
+          // 401 is never retried
+          if (response.status === 401) {
+            throw err;
+          }
+
+          throw err;
+        }
+
+        if (!response.body) {
+          throw new Error("DeepSeek streaming response has no body");
+        }
+
+        return parseSSEStream(response.body);
+      } catch (err) {
+        lastStreamError = err;
+
+        if (!isRetryableError(err) || attempt >= retryLimit) {
+          throw err;
+        }
+
+        // Exponential backoff: 2^attempt * 1000ms
+        await sleep(Math.pow(2, attempt) * 1000);
       }
-      throw createProviderError(
-        response.status,
-        errorBody,
-        `DeepSeek API error: ${response.status}`,
-      );
     }
 
-    if (!response.body) {
-      throw new Error("DeepSeek streaming response has no body");
-    }
-
-    return parseSSEStream(response.body);
+    throw lastStreamError;
   }
 
   // Non-streaming mode: retry loop
   let lastError: unknown;
 
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+  for (let attempt = 0; attempt <= retryLimit; attempt++) {
     try {
+      const signal = AbortSignal.timeout(requestTimeoutMs);
       const response = await fetch(DEEPSEEK_API_URL, {
         method: "POST",
         headers: {
@@ -213,6 +246,7 @@ export async function deepseekChat(
           Authorization: `Bearer ${apiKey ?? ""}`,
         },
         body: JSON.stringify(body),
+        signal,
       });
 
       if (!response.ok) {
@@ -278,7 +312,7 @@ export async function deepseekChat(
     } catch (err) {
       lastError = err;
 
-      if (!isRetryableError(err) || attempt >= maxRetries) {
+      if (!isRetryableError(err) || attempt >= retryLimit) {
         throw err;
       }
 

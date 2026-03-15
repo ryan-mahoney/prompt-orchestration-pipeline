@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   createProviderError,
+  DEFAULT_REQUEST_TIMEOUT_MS,
   ensureJsonResponseFormat,
   extractMessages,
   isRetryableError,
@@ -154,6 +155,18 @@ describe("isRetryableError", () => {
       cause: new Error("something else"),
     });
     expect(isRetryableError(err)).toBe(false);
+  });
+
+  it("returns true for TimeoutError (AbortSignal/fetch timeout)", () => {
+    const err = new DOMException("signal timed out", "TimeoutError");
+    expect(err.name).toBe("TimeoutError");
+    expect(isRetryableError(err)).toBe(true);
+  });
+});
+
+describe("DEFAULT_REQUEST_TIMEOUT_MS", () => {
+  it("is 120 000 ms", () => {
+    expect(DEFAULT_REQUEST_TIMEOUT_MS).toBe(120_000);
   });
 });
 

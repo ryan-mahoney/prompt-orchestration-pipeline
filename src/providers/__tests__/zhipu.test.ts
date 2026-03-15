@@ -365,6 +365,29 @@ describe("zhipuChat", () => {
     expect(body.stop).toBe("DONE");
   });
 
+  it("passes an AbortSignal to fetch", async () => {
+    fetchMock.mockResolvedValue(
+      mockFetchResponse(makeZhipuResponse(JSON.stringify({ ok: true }))),
+    );
+
+    await zhipuChat(baseOptions);
+
+    const init = (fetchMock.mock.calls[0] as [string, RequestInit])[1];
+    expect(init.signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it("uses custom requestTimeoutMs for the abort signal", async () => {
+    const timeoutSpy = vi.spyOn(AbortSignal, "timeout");
+    fetchMock.mockResolvedValue(
+      mockFetchResponse(makeZhipuResponse(JSON.stringify({ ok: true }))),
+    );
+
+    await zhipuChat({ ...baseOptions, requestTimeoutMs: 5000 });
+
+    expect(timeoutSpy).toHaveBeenCalledWith(5000);
+    timeoutSpy.mockRestore();
+  });
+
   it("exports zaiChat as the canonical adapter", () => {
     expect(zaiChat).toBe(zhipuChat);
   });
