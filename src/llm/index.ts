@@ -92,43 +92,43 @@ function inferJsonFormat(options: ChatOptions): ChatOptions {
 async function callAdapter(
   options: ChatOptions,
 ): Promise<AdapterResponse> {
-  const { provider, messages, model, temperature, maxTokens, responseFormat, topP, stop, maxRetries } = options;
+  const { provider, messages, model, temperature, maxTokens, responseFormat, topP, stop, maxRetries, requestTimeoutMs } = options;
 
   switch (provider) {
     case "alibaba":
       return alibabaChat({
-        messages, model, temperature, maxTokens, responseFormat, topP, stop, maxRetries,
+        messages, model, temperature, maxTokens, responseFormat, topP, stop, maxRetries, requestTimeoutMs,
         frequencyPenalty: options.frequencyPenalty,
         presencePenalty: options.presencePenalty,
       });
     case "anthropic":
-      return anthropicChat({ messages, model, temperature, maxTokens, responseFormat, topP, stop, maxRetries });
+      return anthropicChat({ messages, model, temperature, maxTokens, responseFormat, topP, stop, maxRetries, requestTimeoutMs });
     case "openai":
       return openaiChat({
-        messages, model, temperature, maxTokens, responseFormat, topP, stop, maxRetries,
+        messages, model, temperature, maxTokens, responseFormat, topP, stop, maxRetries, requestTimeoutMs,
         seed: undefined,
         frequencyPenalty: options.frequencyPenalty,
         presencePenalty: options.presencePenalty,
       });
     case "gemini":
       return geminiChat({
-        messages, model, temperature, maxTokens, responseFormat, topP, stop, maxRetries,
+        messages, model, temperature, maxTokens, responseFormat, topP, stop, maxRetries, requestTimeoutMs,
         frequencyPenalty: options.frequencyPenalty,
         presencePenalty: options.presencePenalty,
       });
     case "deepseek":
       return deepseekChat({
-        messages, model, temperature, maxTokens, responseFormat, topP, stop, maxRetries,
+        messages, model, temperature, maxTokens, responseFormat, topP, stop, maxRetries, requestTimeoutMs,
         frequencyPenalty: options.frequencyPenalty,
         presencePenalty: options.presencePenalty,
       });
     case "moonshot":
-      return moonshotChat({ messages, model, maxTokens, responseFormat, maxRetries });
+      return moonshotChat({ messages, model, maxTokens, responseFormat, maxRetries, requestTimeoutMs });
     case "zai":
     case "zhipu":
-      return zaiChat({ messages, model, temperature, maxTokens, responseFormat, topP, stop, maxRetries });
+      return zaiChat({ messages, model, temperature, maxTokens, responseFormat, topP, stop, maxRetries, requestTimeoutMs });
     case "claudecode":
-      return claudeCodeChat({ messages, model, maxTokens, responseFormat, maxRetries });
+      return claudeCodeChat({ messages, model, maxTokens, responseFormat, maxRetries, requestTimeoutMs });
     case "mock": {
       if (!mockProvider) {
         throw new Error("No mock provider registered. Call registerMockProvider() first.");
@@ -180,7 +180,11 @@ async function writeDebugLog(options: ChatOptions, response: ChatResponse): Prom
 
 export async function chat(options: ChatOptions): Promise<ChatResponse> {
   ensureMessagesPresent(options.messages, options.provider);
-  const opts = inferJsonFormat(options);
+  const configTimeout = getConfig().taskRunner.llmRequestTimeout;
+  const opts = inferJsonFormat({
+    ...options,
+    requestTimeoutMs: options.requestTimeoutMs ?? configTimeout,
+  });
   const id = `llm-${++requestCounter}-${Date.now()}`;
   const model = opts.model ?? "";
   const startTime = Date.now();

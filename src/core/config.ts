@@ -94,7 +94,7 @@ export const defaultConfig = {
   taskRunner: {
     maxRefinementAttempts: 3,
     stageTimeout: 300000,
-    llmRequestTimeout: 120000,
+    llmRequestTimeout: 3600000,
   },
   llm: {
     defaultProvider: "openai",

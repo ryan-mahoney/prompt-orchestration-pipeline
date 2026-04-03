@@ -117,6 +117,7 @@ export async function moonshotChat(
               messages,
               model: deepseekModel,
               responseFormat: responseFormat ?? "json_object",
+              requestTimeoutMs,
             });
           }
         }

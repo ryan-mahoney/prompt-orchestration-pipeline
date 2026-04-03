@@ -134,6 +134,7 @@ export interface ClaudeCodeOptions {
   maxTurns?: number;
   responseFormat?: string | ResponseFormatObject;
   maxRetries?: number;
+  requestTimeoutMs?: number;
 }
 
 /** Telemetry event: request start. */
