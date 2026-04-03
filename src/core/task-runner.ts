@@ -245,6 +245,16 @@ export function deriveModelKeyAndTokens(metric: Record<string, unknown>): TokenU
   return [modelKey, inputTokens, outputTokens, cost];
 }
 
+// ─── Safe clone ─────────────────────────────────────────────────────────────
+
+function safeClone<T>(value: T): T {
+  try {
+    return structuredClone(value);
+  } catch {
+    return JSON.parse(JSON.stringify(value));
+  }
+}
+
 // ─── Error normalization ──────────────────────────────────────────────────────
 
 /**
@@ -630,15 +640,18 @@ export async function runPipeline(
         // Best-effort: swallow status write errors
       }
 
-      // Clone data, flags, output via structuredClone into StageContext
+      // Clone data, flags, output into StageContext.
+      // structuredClone throws on non-cloneable values (functions, streams,
+      // class instances with internal slots). Fall back to JSON round-trip
+      // which silently strips those fields.
       const stageContext: StageContext = {
         io,
         llm,
         meta: context.meta,
-        data: structuredClone(context.data),
-        flags: structuredClone(context.flags),
+        data: safeClone(context.data),
+        flags: safeClone(context.flags),
         currentStage: stageName,
-        output: structuredClone(lastStageOutput),
+        output: safeClone(lastStageOutput),
         previousStage,
         validators: context.validators,
       };
