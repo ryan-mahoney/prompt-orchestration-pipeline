@@ -6,7 +6,7 @@ import type { Subprocess } from "bun";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { initPATHS, resetPATHS } from "../config-bridge-node";
-import { handleJobStop } from "../endpoints/job-control-endpoints";
+import { handleJobRestart, handleJobStop } from "../endpoints/job-control-endpoints";
 import { readJobStatus } from "../../../core/status-writer";
 
 const tempRoots: string[] = [];
@@ -198,5 +198,82 @@ describe("handleJobStop", () => {
 
     const snapshot = await readJobStatus(jobDir);
     expect(snapshot!.state).toBe("pending");
+  });
+});
+
+describe("handleJobRestart", () => {
+  it("returns 409 when runner PID is alive", async () => {
+    const root = await makeTempRoot();
+    initPATHS(root);
+
+    const proc = spawnSleeper();
+
+    await setupJob(root, "restart-1", {
+      id: "restart-1",
+      state: "running",
+      current: "research",
+      currentStage: "prompt",
+      tasks: {
+        research: { state: "running", currentStage: "prompt" },
+      },
+      files: { artifacts: [], logs: [], tmp: [] },
+    }, proc.pid);
+
+    const req = new Request("http://localhost/api/jobs/restart-1/restart", { method: "POST" });
+    const res = await handleJobRestart(req, "restart-1", root);
+    const body = await res.json() as Record<string, unknown>;
+
+    expect(res.status).toBe(409);
+    expect(body["code"]).toBe("job_running");
+  });
+
+  it("returns 409 when PID is stale but tasks are still running", async () => {
+    const root = await makeTempRoot();
+    initPATHS(root);
+
+    // PID 999999 is almost certainly dead
+    await setupJob(root, "restart-2", {
+      id: "restart-2",
+      state: "running",
+      current: "research",
+      currentStage: "prompt",
+      tasks: {
+        research: { state: "running", currentStage: "prompt" },
+      },
+      files: { artifacts: [], logs: [], tmp: [] },
+    }, 999999);
+
+    const req = new Request("http://localhost/api/jobs/restart-2/restart", { method: "POST" });
+    const res = await handleJobRestart(req, "restart-2", root);
+    const body = await res.json() as Record<string, unknown>;
+
+    expect(res.status).toBe(409);
+    expect(body["code"]).toBe("job_running");
+  });
+
+  it("proceeds when PID is missing and no tasks are running", async () => {
+    const root = await makeTempRoot();
+    initPATHS(root);
+
+    // No PID file, stale state=running but tasks are done/pending
+    await setupJob(root, "restart-3", {
+      id: "restart-3",
+      state: "running",
+      current: "research",
+      currentStage: "prompt",
+      tasks: {
+        research: { state: "done", currentStage: null },
+        analysis: { state: "pending", currentStage: null },
+      },
+      files: { artifacts: [], logs: [], tmp: [] },
+    });
+
+    const req = new Request("http://localhost/api/jobs/restart-3/restart", { method: "POST" });
+    const res = await handleJobRestart(req, "restart-3", root);
+    const body = await res.json() as Record<string, unknown>;
+
+    expect(res.status).toBe(202);
+    expect(body["ok"]).toBe(true);
+    expect(body["mode"]).toBe("clean-slate");
   });
 });

@@ -6,6 +6,7 @@ import { Constants } from "../config-bridge-node";
 import { readJob } from "../job-reader";
 import { sendJson } from "../utils/http-utils";
 import { getJobDirectoryPath } from "../../../config/paths";
+import { deriveJobStatusFromTasks } from "../../../config/statuses";
 import { readJobStatus, resetJobToCleanSlate, resetSingleTask, writeJobStatus } from "../../../core/status-writer";
 
 const RUNNER_PATH = path.resolve(import.meta.dir, "../../../core/pipeline-runner.ts");
@@ -171,10 +172,19 @@ export async function handleJobRestart(
 
     let jobDir = getJobDirectoryPath(dataDir, jobId, lifecycle as "current" | "complete");
 
-    // Read status to check if the job is currently running
+    // Check if the job is actually running via PID liveness, then task-derived status
+    const pid = await readRunnerPid(jobDir);
+    if (pid !== null && isProcessAlive(pid)) {
+      return sendJson(409, createErrorResponse("job_running", "Job is currently running (process alive)"));
+    }
+
     const status = await readJobStatus(jobDir);
-    if (status?.state === "running") {
-      return sendJson(409, createErrorResponse("job_running", "Job is currently running"));
+    if (status) {
+      const taskEntries = Object.values(status.tasks);
+      const derivedStatus = deriveJobStatusFromTasks(taskEntries);
+      if (derivedStatus === "running") {
+        return sendJson(409, createErrorResponse("job_running", "Job is currently running (task-level running)"));
+      }
     }
 
     // If the job is in complete/, move it back to current/
