@@ -369,7 +369,7 @@ export async function handleJobStop(
       }
 
       snapshot.state = "pending";
-      snapshot.current = resetTask ?? null;
+      snapshot.current = resetTask ?? snapshot.current;
       snapshot.currentStage = null;
       snapshot.progress = getProgressPercent(snapshot);
     });
