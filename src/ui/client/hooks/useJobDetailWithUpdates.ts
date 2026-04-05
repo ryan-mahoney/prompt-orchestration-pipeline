@@ -22,15 +22,21 @@ export function extractJobDetail(payload: unknown): Record<string, unknown> | nu
   return null;
 }
 
+function getPipelineTaskCount(detail: NormalizedJobDetail): number | null {
+  const config = detail.pipelineConfig;
+  if (config && Array.isArray(config["tasks"])) return config["tasks"].length;
+  return null;
+}
+
 function recomputeProgress(detail: NormalizedJobDetail): NormalizedJobDetail {
   const tasks = Object.values(detail.tasks);
   const doneCount = tasks.filter((task) => task.state === "done").length;
-  const taskCount = tasks.length;
+  const taskCount = getPipelineTaskCount(detail) ?? tasks.length;
   return {
     ...detail,
     doneCount,
     taskCount,
-    progress: taskCount === 0 ? 0 : Math.floor((doneCount / taskCount) * 100),
+    progress: taskCount === 0 ? 0 : Math.min(100, Math.floor((doneCount / taskCount) * 100)),
     updatedAt: new Date().toISOString(),
   };
 }

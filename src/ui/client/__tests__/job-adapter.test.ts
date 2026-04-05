@@ -102,6 +102,32 @@ describe("job adapter", () => {
     expect(job.doneCount).toBe(1);
   });
 
+  it("computes progress from pipelineConfig taskCount, ignoring api progress", () => {
+    const job = adaptJobSummary({
+      jobId: "job-1",
+      progress: 100,
+      tasks: {
+        build: { state: "done" },
+        test: { state: "done" },
+        lint: { state: "done" },
+      },
+      pipelineConfig: {
+        tasks: [
+          { name: "build" },
+          { name: "test" },
+          { name: "lint" },
+          { name: "deploy" },
+          { name: "verify" },
+          { name: "publish" },
+        ],
+      },
+    });
+
+    expect(job.taskCount).toBe(6);
+    expect(job.doneCount).toBe(3);
+    expect(job.progress).toBe(50);
+  });
+
   it("falls back to taskList length when pipelineConfig is absent", () => {
     const job = adaptJobSummary({
       jobId: "job-1",

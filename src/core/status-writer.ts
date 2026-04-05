@@ -212,13 +212,10 @@ export function resetJobFromTask(jobDir: string, fromTask: string, options?: Res
 
   return writeJobStatus(jobDir, (snapshot) => {
     const taskKeys = Object.keys(snapshot.tasks);
-    const totalCount = taskKeys.length;
-    const doneCount = taskKeys.filter((k) => snapshot.tasks[k]!.state === "done").length;
 
     snapshot.state = "pending";
     snapshot.current = null;
     snapshot.currentStage = null;
-    snapshot.progress = totalCount > 0 ? (doneCount / totalCount) * 100 : 0;
 
     const fromIndex = taskKeys.indexOf(fromTask);
     const resetKeys = fromIndex === -1 ? [] : taskKeys.slice(fromIndex);

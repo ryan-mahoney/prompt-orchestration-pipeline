@@ -732,13 +732,27 @@ describe("resetJobFromTask", () => {
     expect(snapshot.tasks["D"]!.refinementAttempts).toBe(0);
   });
 
-  test("progress reflects done count before any reset", async () => {
+  test("does not recompute or stomp progress from snapshot task-map size", async () => {
     const dir = await makeTempDir();
     await setupSnapshot(dir);
 
-    // Before reset: A=done, B=done, C=failed, D=pending → 2 done out of 4 = 50%
+    // setupSnapshot does not set progress, so it remains undefined.
+    // resetJobFromTask must not derive progress from the snapshot task map.
     const snapshot = await resetJobFromTask(dir, "C");
-    expect(snapshot.progress).toBe(50);
+    expect(snapshot.progress).toBeUndefined();
+  });
+
+  test("preserves existing progress value without overwriting", async () => {
+    const dir = await makeTempDir();
+    await setupSnapshot(dir);
+
+    // Set an explicit progress value before reset
+    await writeJobStatus(dir, (s) => {
+      s.progress = 25;
+    });
+
+    const snapshot = await resetJobFromTask(dir, "C");
+    expect(snapshot.progress).toBe(25);
   });
 
   test("files arrays on all tasks are preserved", async () => {

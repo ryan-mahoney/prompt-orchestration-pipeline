@@ -68,6 +68,49 @@ describe("useJobDetailWithUpdates helpers", () => {
     expect(extractJobDetail({ ok: true, data: { jobId: "job-1" } })).toEqual({ jobId: "job-1" });
   });
 
+  it("uses pipelineConfig.tasks.length as authoritative denominator", () => {
+    const detail: NormalizedJobDetail = {
+      ...makeDetail("job-1"),
+      pipelineConfig: {
+        tasks: ["a", "b", "c", "d", "e", "f"],
+      },
+      taskCount: 6,
+      tasks: {
+        a: { name: "a", state: "done", startedAt: null, endedAt: null, files: { artifacts: [], logs: [], tmp: [] } },
+        b: { name: "b", state: "done", startedAt: null, endedAt: null, files: { artifacts: [], logs: [], tmp: [] } },
+        c: { name: "c", state: "done", startedAt: null, endedAt: null, files: { artifacts: [], logs: [], tmp: [] } },
+        d: { name: "d", state: "running", startedAt: null, endedAt: null, files: { artifacts: [], logs: [], tmp: [] } },
+      },
+    };
+
+    const next = applyDetailEvent(detail, {
+      type: "task:updated",
+      data: { jobId: "job-1", taskName: "d", task: { state: "running" } },
+    });
+
+    expect(next.taskCount).toBe(6);
+    expect(next.doneCount).toBe(3);
+    expect(next.progress).toBe(50);
+  });
+
+  it("falls back to local task list length without pipelineConfig", () => {
+    const detail: NormalizedJobDetail = {
+      ...makeDetail("job-1"),
+      pipelineConfig: undefined,
+    };
+
+    const next = applyDetailEvent(detail, {
+      type: "task:updated",
+      data: { jobId: "job-1", taskName: "build", task: { state: "done" } },
+    });
+
+    expect(next.taskCount).toBe(2);
+    expect(next.doneCount).toBe(1);
+    expect(next.progress).toBe(50);
+    expect(next.progress).toBeGreaterThanOrEqual(0);
+    expect(next.progress).toBeLessThanOrEqual(100);
+  });
+
   it("exports the detail debounce constant", () => {
     expect(REFRESH_DEBOUNCE_MS).toBe(200);
   });
