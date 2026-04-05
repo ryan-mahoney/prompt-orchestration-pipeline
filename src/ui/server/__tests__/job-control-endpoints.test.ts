@@ -83,9 +83,36 @@ describe("handleJobStop", () => {
 
     const snapshot = await readJobStatus(jobDir);
     expect(snapshot!.state).toBe("pending");
-    expect(snapshot!.current).toBeNull();
+    expect(snapshot!.current).toBe("analysis");
     expect(snapshot!.currentStage).toBeNull();
     expect(snapshot!.tasks["research"]!.state).toBe("pending");
+  });
+
+  it("locates the job using the explicit dataDir even when PATHS was not pre-initialized", async () => {
+    const root = await makeTempRoot();
+
+    await setupJob(root, "job-rootless", {
+      id: "job-rootless",
+      state: "running",
+      current: "analysis",
+      currentStage: null,
+      tasks: {
+        analysis: { state: "running", currentStage: null },
+      },
+      files: { artifacts: [], logs: [], tmp: [] },
+    });
+
+    const req = new Request("http://localhost/api/jobs/job-rootless/stop", { method: "POST" });
+    const res = await handleJobStop(req, "job-rootless", root);
+    const body = await res.json() as Record<string, unknown>;
+
+    expect(res.status).toBe(202);
+    expect(body["ok"]).toBe(true);
+
+    const snapshot = await readJobStatus(path.join(root, "pipeline-data", "current", "job-rootless"));
+    expect(snapshot!.state).toBe("pending");
+    expect(snapshot!.current).toBe("analysis");
+    expect(snapshot!.tasks["analysis"]!.state).toBe("pending");
   });
 
   it("escalates to SIGKILL when process ignores SIGTERM", async () => {
@@ -157,7 +184,7 @@ describe("handleJobStop", () => {
 
     const snapshot = await readJobStatus(jobDir);
     expect(snapshot!.state).toBe("pending");
-    expect(snapshot!.current).toBeNull();
+    expect(snapshot!.current).toBe("analysis");
     expect(snapshot!.currentStage).toBeNull();
 
     // Done task stays done
@@ -172,6 +199,51 @@ describe("handleJobStop", () => {
     expect(analysis.attempts).toBe(0);
     expect(analysis.refinementAttempts).toBe(0);
     expect(analysis.tokenUsage).toEqual([]);
+  });
+
+  it("recovers a stale job by resetting the first non-terminal task after partial progress", async () => {
+    const root = await makeTempRoot();
+    initPATHS(root);
+
+    const jobDir = await setupJob(root, "job-5", {
+      id: "job-5",
+      state: "pending",
+      current: null,
+      currentStage: null,
+      tasks: {
+        research: { state: "done", endedAt: "2026-04-01T10:00:00.000Z" },
+        analysis: {
+          state: "pending",
+          startedAt: "2026-04-01T10:01:00.000Z",
+          endedAt: "2026-04-01T10:01:30.000Z",
+          attempts: 2,
+          refinementAttempts: 1,
+          tokenUsage: [{ tokens: 100 }],
+        },
+        synthesis: { state: "pending" },
+      },
+      files: { artifacts: [], logs: [], tmp: [] },
+    });
+
+    const req = new Request("http://localhost/api/jobs/job-5/stop", { method: "POST" });
+    const res = await handleJobStop(req, "job-5", root);
+    const body = await res.json() as Record<string, unknown>;
+
+    expect(res.status).toBe(202);
+    expect(body["stopped"]).toBe(false);
+    expect(body["resetTask"]).toBe("analysis");
+
+    const snapshot = await readJobStatus(jobDir);
+    expect(snapshot!.state).toBe("pending");
+    expect(snapshot!.current).toBe("analysis");
+    expect(snapshot!.currentStage).toBeNull();
+    expect(snapshot!.progress).toBe(33);
+    expect(snapshot!.tasks["analysis"]!.state).toBe("pending");
+    expect(snapshot!.tasks["analysis"]!.startedAt).toBeUndefined();
+    expect(snapshot!.tasks["analysis"]!.endedAt).toBeUndefined();
+    expect(snapshot!.tasks["analysis"]!.attempts).toBe(0);
+    expect(snapshot!.tasks["analysis"]!.refinementAttempts).toBe(0);
+    expect(snapshot!.tasks["analysis"]!.tokenUsage).toEqual([]);
   });
 
   it("handles already-dead PID gracefully", async () => {

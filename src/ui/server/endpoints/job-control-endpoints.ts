@@ -3,11 +3,17 @@ import path from "node:path";
 
 import { createErrorResponse } from "../config-bridge";
 import { Constants } from "../config-bridge-node";
-import { readJob } from "../job-reader";
 import { sendJson } from "../utils/http-utils";
 import { getJobDirectoryPath } from "../../../config/paths";
 import { deriveJobStatusFromTasks } from "../../../config/statuses";
-import { readJobStatus, resetJobToCleanSlate, resetSingleTask, writeJobStatus } from "../../../core/status-writer";
+import {
+  readJobStatus,
+  resetJobToCleanSlate,
+  resetSingleTask,
+  writeJobStatus,
+  type StatusSnapshot,
+} from "../../../core/status-writer";
+import { readFileWithRetry } from "../file-reader";
 
 const RUNNER_PATH = path.resolve(import.meta.dir, "../../../core/pipeline-runner.ts");
 
@@ -59,6 +65,59 @@ function isProcessAlive(pid: number): boolean {
 const KILL_GRACE_MS = 1500;
 const KILL_POLL_MS = 100;
 
+function isTerminalTaskState(state: unknown): boolean {
+  return state === "done" || state === "failed";
+}
+
+function isNonTerminalTaskState(state: unknown): boolean {
+  return state === "pending" || state === "running";
+}
+
+function isTaskLikelyInProgress(task: Record<string, unknown>): boolean {
+  const state = task["state"];
+  const nonTerminal = isNonTerminalTaskState(state);
+  const startedAt = typeof task["startedAt"] === "string" && task["startedAt"].trim().length > 0;
+  const endedAt = typeof task["endedAt"] === "string" && task["endedAt"].trim().length > 0;
+  if (nonTerminal && startedAt && !endedAt) return true;
+  if (nonTerminal && startedAt && endedAt) return true;
+  return typeof task["currentStage"] === "string" && task["currentStage"].trim().length > 0;
+}
+
+function getProgressPercent(snapshot: StatusSnapshot): number {
+  const tasks = Object.values(snapshot.tasks);
+  if (tasks.length === 0) return 0;
+  const doneCount = tasks.filter((task) => task.state === "done").length;
+  return Math.floor((doneCount / tasks.length) * 100);
+}
+
+function findRecoveryTask(snapshot: StatusSnapshot): string | null {
+  const taskIds = Object.keys(snapshot.tasks);
+  if (taskIds.length === 0) return null;
+
+  // Prefer the task that appears to be mid-flight by timestamp or stage.
+  for (const taskId of taskIds) {
+    const task = snapshot.tasks[taskId];
+    if (!task || typeof task !== "object") continue;
+    if (isTaskLikelyInProgress(task as Record<string, unknown>)) return taskId;
+  }
+
+  const pendingFallback = taskIds.find((taskId) => isNonTerminalTaskState(snapshot.tasks[taskId]!.state));
+  if (pendingFallback) return pendingFallback;
+
+  // Then, for partially completed pipelines, reset the first task after the final
+  // terminal task; this repairs jobs that lost task state updates mid-run.
+  const terminalIndex = taskIds.reduce<number>((current, taskId, index) => {
+    const state = snapshot.tasks[taskId]!.state;
+    return isTerminalTaskState(state) ? index : current;
+  }, -1);
+
+  if (terminalIndex < 0) return null;
+  return taskIds.slice(terminalIndex + 1).find((taskId) => {
+    const state = snapshot.tasks[taskId]!.state;
+    return !isTerminalTaskState(state);
+  }) ?? null;
+}
+
 async function killProcess(pid: number): Promise<{ killed: boolean; signal: string | null; exited: boolean }> {
   try {
     process.kill(pid, 15); // SIGTERM
@@ -99,10 +158,23 @@ async function cleanupRunnerPid(jobDir: string): Promise<void> {
   }
 }
 
-export async function resolveJobLifecycle(dataDir: string, jobId: string): Promise<string | null> {
-  const result = await readJob(jobId);
-  if (!result.ok) return null;
-  return result.location;
+const READ_LOCATIONS = ["current", "complete"] as const;
+
+export async function resolveJobLifecycle(
+  dataDir: string,
+  jobId: string,
+): Promise<"current" | "complete" | null> {
+  for (const location of READ_LOCATIONS) {
+    const statusPath = path.join(dataDir, "pipeline-data", location, jobId, "tasks-status.json");
+    const result = await readFileWithRetry(statusPath);
+    if (!result.ok) {
+      if (result.code === Constants.ERROR_CODES.NOT_FOUND) continue;
+      return null;
+    }
+    return location;
+  }
+
+  return null;
 }
 
 export function isRestartInProgress(jobId: string): boolean {
@@ -274,22 +346,32 @@ export async function handleJobStop(
         }
       }
 
+      if (!resetTask) {
+        resetTask = findRecoveryTask(snapshot);
+      }
+
       if (resetTask) {
         const task = snapshot.tasks[resetTask];
         if (task) {
           task.state = "pending";
           task.currentStage = null;
+          delete task.endedAt;
+          delete task.startedAt;
           delete task.failedStage;
           delete task.error;
           task.attempts = 0;
           task.refinementAttempts = 0;
           task.tokenUsage = [];
         }
+      } else if (snapshot.current === null && snapshot.state === "pending" && Object.keys(snapshot.tasks).length > 0) {
+        const taskIds = Object.keys(snapshot.tasks);
+        snapshot.current = taskIds[0] ?? null;
       }
 
       snapshot.state = "pending";
-      snapshot.current = null;
+      snapshot.current = resetTask ?? null;
       snapshot.currentStage = null;
+      snapshot.progress = getProgressPercent(snapshot);
     });
 
     return sendJson(202, {
