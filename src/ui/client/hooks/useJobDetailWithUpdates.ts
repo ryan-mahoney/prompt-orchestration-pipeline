@@ -36,7 +36,7 @@ function recomputeProgress(detail: NormalizedJobDetail): NormalizedJobDetail {
     ...detail,
     doneCount,
     taskCount,
-    progress: taskCount === 0 ? 0 : Math.floor((doneCount / taskCount) * 100),
+    progress: taskCount === 0 ? 0 : Math.min(100, Math.floor((doneCount / taskCount) * 100)),
     updatedAt: new Date().toISOString(),
   };
 }

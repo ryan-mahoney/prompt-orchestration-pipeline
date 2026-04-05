@@ -140,10 +140,10 @@ function adaptBaseJob(apiJob: Record<string, unknown>): NormalizedJobSummary {
   const inferredStatus = deriveJobStatusFromTasks(taskList);
   const status = normalizeJobStatus(apiJob["status"] ?? inferredStatus);
   const progress = pipelineTaskArray
-    ? (taskCount === 0 ? 0 : Math.floor((doneCount / taskCount) * 100))
+    ? (taskCount === 0 ? 0 : Math.min(100, Math.floor((doneCount / taskCount) * 100)))
     : typeof apiJob["progress"] === "number"
       ? apiJob["progress"]
-      : taskCount === 0 ? 0 : Math.floor((doneCount / taskCount) * 100);
+      : taskCount === 0 ? 0 : Math.min(100, Math.floor((doneCount / taskCount) * 100));
 
   return {
     id: typeof apiJob["id"] === "string" ? apiJob["id"] : String(apiJob["jobId"] ?? ""),
