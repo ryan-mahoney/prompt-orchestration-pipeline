@@ -83,7 +83,7 @@ describe("handleJobStop", () => {
 
     const snapshot = await readJobStatus(jobDir);
     expect(snapshot!.state).toBe("pending");
-    expect(snapshot!.current).toBe("analysis");
+    expect(snapshot!.current).toBe("research");
     expect(snapshot!.currentStage).toBeNull();
     expect(snapshot!.tasks["research"]!.state).toBe("pending");
   });
