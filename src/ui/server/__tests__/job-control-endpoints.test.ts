@@ -277,3 +277,166 @@ describe("handleJobRestart", () => {
     expect(body["mode"]).toBe("clean-slate");
   });
 });
+
+describe("stop → restart integration", () => {
+  it("stop moves running to pending, then restart proceeds without 409", async () => {
+    const root = await makeTempRoot();
+    initPATHS(root);
+
+    const proc = spawnSleeper();
+    const jobDir = await setupJob(root, "integ-1", {
+      id: "integ-1",
+      state: "running",
+      current: "research",
+      currentStage: "prompt",
+      tasks: {
+        research: { state: "running", currentStage: "prompt" },
+        analysis: { state: "pending", currentStage: null },
+      },
+      files: { artifacts: [], logs: [], tmp: [] },
+    }, proc.pid);
+
+    // Stop the running job
+    const stopReq = new Request("http://localhost/api/jobs/integ-1/stop", { method: "POST" });
+    const stopRes = await handleJobStop(stopReq, "integ-1", root);
+    expect(stopRes.status).toBe(202);
+
+    // Verify status file reflects pending after stop
+    const snapshot = await readJobStatus(jobDir);
+    expect(snapshot!.state).toBe("pending");
+    expect(snapshot!.tasks["research"]!.state).toBe("pending");
+
+    // Restart should now succeed (no 409 deadlock)
+    const restartReq = new Request("http://localhost/api/jobs/integ-1/restart", { method: "POST" });
+    const restartRes = await handleJobRestart(restartReq, "integ-1", root);
+    const restartBody = await restartRes.json() as Record<string, unknown>;
+
+    expect(restartRes.status).toBe(202);
+    expect(restartBody["ok"]).toBe(true);
+    expect(restartBody["mode"]).toBe("clean-slate");
+  });
+
+  it("restart proceeds when PID is stale and status says running but tasks are not", async () => {
+    const root = await makeTempRoot();
+    initPATHS(root);
+
+    // Simulate a stale state: status file says running, PID is dead, but tasks are done/pending
+    await setupJob(root, "integ-2", {
+      id: "integ-2",
+      state: "running",
+      current: "research",
+      currentStage: "prompt",
+      tasks: {
+        research: { state: "done", currentStage: null },
+        analysis: { state: "pending", currentStage: null },
+      },
+      files: { artifacts: [], logs: [], tmp: [] },
+    }, 999999);
+
+    const req = new Request("http://localhost/api/jobs/integ-2/restart", { method: "POST" });
+    const res = await handleJobRestart(req, "integ-2", root);
+    const body = await res.json() as Record<string, unknown>;
+
+    expect(res.status).toBe(202);
+    expect(body["ok"]).toBe(true);
+  });
+
+  it("restart is blocked when PID is alive even after a prior stop attempt", async () => {
+    const root = await makeTempRoot();
+    initPATHS(root);
+
+    const proc = spawnSleeper();
+
+    // Write status as pending (as if stop ran) but keep a live PID file
+    await setupJob(root, "integ-3", {
+      id: "integ-3",
+      state: "pending",
+      current: null,
+      currentStage: null,
+      tasks: {
+        research: { state: "pending", currentStage: null },
+      },
+      files: { artifacts: [], logs: [], tmp: [] },
+    }, proc.pid);
+
+    const req = new Request("http://localhost/api/jobs/integ-3/restart", { method: "POST" });
+    const res = await handleJobRestart(req, "integ-3", root);
+    const body = await res.json() as Record<string, unknown>;
+
+    expect(res.status).toBe(409);
+    expect(body["code"]).toBe("job_running");
+  });
+
+  it("restart is blocked when task-derived state is running despite dead PID", async () => {
+    const root = await makeTempRoot();
+    initPATHS(root);
+
+    // PID dead (999999), but a task is still marked as running
+    await setupJob(root, "integ-4", {
+      id: "integ-4",
+      state: "running",
+      current: "analysis",
+      currentStage: "stage-1",
+      tasks: {
+        research: { state: "done", currentStage: null },
+        analysis: { state: "running", currentStage: "stage-1" },
+      },
+      files: { artifacts: [], logs: [], tmp: [] },
+    }, 999999);
+
+    const req = new Request("http://localhost/api/jobs/integ-4/restart", { method: "POST" });
+    const res = await handleJobRestart(req, "integ-4", root);
+    const body = await res.json() as Record<string, unknown>;
+
+    expect(res.status).toBe(409);
+    expect(body["code"]).toBe("job_running");
+  });
+
+  it("full cycle: stop clears running task, restart resets all tasks to pending", async () => {
+    const root = await makeTempRoot();
+    initPATHS(root);
+
+    const proc = spawnSleeper();
+    const jobDir = await setupJob(root, "integ-5", {
+      id: "integ-5",
+      state: "running",
+      current: "analysis",
+      currentStage: "stage-2",
+      tasks: {
+        research: { state: "done", currentStage: null },
+        analysis: { state: "running", currentStage: "stage-2", attempts: 2 },
+        synthesis: { state: "pending", currentStage: null },
+      },
+      files: { artifacts: [], logs: [], tmp: [] },
+    }, proc.pid);
+
+    // Stop
+    const stopReq = new Request("http://localhost/api/jobs/integ-5/stop", { method: "POST" });
+    const stopRes = await handleJobStop(stopReq, "integ-5", root);
+    const stopBody = await stopRes.json() as Record<string, unknown>;
+    expect(stopRes.status).toBe(202);
+    expect(stopBody["resetTask"]).toBe("analysis");
+
+    // Verify intermediate state after stop
+    const afterStop = await readJobStatus(jobDir);
+    expect(afterStop!.state).toBe("pending");
+    expect(afterStop!.tasks["research"]!.state).toBe("done");
+    expect(afterStop!.tasks["analysis"]!.state).toBe("pending");
+    expect(afterStop!.tasks["analysis"]!.attempts).toBe(0);
+    expect(afterStop!.tasks["synthesis"]!.state).toBe("pending");
+
+    // Restart with clean-slate resets everything
+    const restartReq = new Request("http://localhost/api/jobs/integ-5/restart", { method: "POST" });
+    const restartRes = await handleJobRestart(restartReq, "integ-5", root);
+    const restartBody = await restartRes.json() as Record<string, unknown>;
+    expect(restartRes.status).toBe(202);
+    expect(restartBody["mode"]).toBe("clean-slate");
+
+    // Verify final state: all tasks reset
+    const afterRestart = await readJobStatus(jobDir);
+    expect(afterRestart!.state).toBe("pending");
+    expect(afterRestart!.tasks["research"]!.state).toBe("pending");
+    expect(afterRestart!.tasks["analysis"]!.state).toBe("pending");
+    expect(afterRestart!.tasks["synthesis"]!.state).toBe("pending");
+  });
+});
