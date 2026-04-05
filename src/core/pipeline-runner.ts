@@ -346,7 +346,9 @@ export async function runPipelineJob(jobId: string): Promise<void> {
 
     // Update status to RUNNING
     await writeJobStatus(config.workDir, (snapshot) => {
+      snapshot.state = "running";
       snapshot.current = taskName;
+      snapshot.currentStage = null;
       const taskEntry = snapshot.tasks[taskName] ?? {};
       taskEntry.state = "running";
       taskEntry.startedAt = new Date().toISOString();
@@ -452,6 +454,8 @@ export async function runPipelineJob(jobId: string): Promise<void> {
 
       // Update status to FAILED
       await writeJobStatus(config.workDir, (snapshot) => {
+        snapshot.state = "failed";
+        snapshot.current = taskName;
         const raw = (snapshot.tasks[taskName] ?? {}) as Record<string, unknown>;
         raw["state"] = TaskState.FAILED;
         raw["endedAt"] = new Date().toISOString();
@@ -471,6 +475,11 @@ export async function runPipelineJob(jobId: string): Promise<void> {
 
   // On full pipeline completion (not single-task mode), finalize the job
   if (!runSingleTask) {
+    await writeJobStatus(config.workDir, (snapshot) => {
+      snapshot.state = "done";
+      snapshot.current = null;
+      snapshot.currentStage = null;
+    });
     const finalStatusText = await Bun.file(config.statusPath).text();
     const finalStatus = JSON.parse(finalStatusText) as JobStatus;
     await completeJob(config, finalStatus, pipelineArtifacts);

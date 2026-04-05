@@ -238,8 +238,15 @@ describe("runPipelineJob — full lifecycle integration", () => {
     process.env["PO_PIPELINE_PATH"] = join(pipelineDir, "pipeline.json");
     process.env["PO_TASK_REGISTRY"] = join(pipelineDir, "tasks", "index.js");
 
-    // Reset call counts so assertions are fresh
+    // Reset mocks so assertions are fresh and implementations are restored
     mockRunPipeline.mockClear();
+    mockRunPipeline.mockImplementation(async (_modulePath: string, _ctx: unknown) => ({
+      ok: true as const,
+      logs: [{ stage: "generate", ok: true as const, ms: 100 }],
+      context: { data: {} as Record<string, unknown> },
+      llmMetrics: [],
+    }));
+    mockWriteJobStatusReal.mockClear();
     mockCleanupTaskSymlinks.mockClear();
   });
 
@@ -252,6 +259,110 @@ describe("runPipelineJob — full lifecycle integration", () => {
         process.env[key] = savedEnv[key];
       }
     }
+  });
+
+  test("multi-task pipeline: snapshot.state transitions through running then done", async () => {
+    const completedJobDir = join(tmpDir, "complete", jobId);
+
+    // Track job-level state values by inspecting each writeJobStatus call
+    const stateSequence: string[] = [];
+    const origImpl = mockWriteJobStatusReal.getMockImplementation()!;
+    mockWriteJobStatusReal.mockImplementation(async (dir: string, updateFn: (snapshot: Record<string, unknown>) => void) => {
+      const result = await origImpl(dir, updateFn);
+      const snap = result as { state?: string };
+      if (snap.state) stateSequence.push(snap.state);
+      return result;
+    });
+
+    const exitSpy = spyOn(process, "exit").mockImplementation(() => {
+      throw new Error("process.exit called unexpectedly");
+    });
+
+    try {
+      await runPipelineJob(jobId);
+    } finally {
+      exitSpy.mockRestore();
+      // Restore original implementation so subsequent tests are unaffected
+      mockWriteJobStatusReal.mockImplementation(origImpl);
+    }
+
+    // State sequence should include running entries (one per task start) and end with done
+    expect(stateSequence.filter((s) => s === "running").length).toBeGreaterThanOrEqual(2);
+    expect(stateSequence[stateSequence.length - 1]).toBe("done");
+
+    // "done" should only appear after all tasks have finished
+    const lastRunningIdx = stateSequence.lastIndexOf("running");
+    const firstDoneIdx = stateSequence.indexOf("done");
+    expect(firstDoneIdx).toBeGreaterThan(lastRunningIdx);
+  });
+
+  test("runSingleTask mode: job-level state is not forced to done", async () => {
+    const jobDir = join(tmpDir, "current", jobId);
+    const statusPath = join(jobDir, "tasks-status.json");
+
+    // Use existing 2-task pipeline, run only task-a
+    process.env["PO_START_FROM_TASK"] = "task-a";
+    process.env["PO_RUN_SINGLE_TASK"] = "true";
+
+    const exitSpy = spyOn(process, "exit").mockImplementation(() => {
+      throw new Error("process.exit called unexpectedly");
+    });
+
+    try {
+      await runPipelineJob(jobId);
+    } finally {
+      exitSpy.mockRestore();
+    }
+
+    // Read final status — job should NOT be "done" since only one task ran
+    const statusText = await readFile(statusPath, "utf-8");
+    const status = JSON.parse(statusText) as { state?: string };
+    expect(status.state).not.toBe("done");
+  });
+
+  test("task failure path: job-level state is set to failed", async () => {
+    // Make task-a fail
+    mockRunPipeline.mockImplementation(async (_modulePath: string, _ctx: unknown) => ({
+      ok: false as const,
+      failedStage: "generate",
+      error: {
+        name: "Error",
+        message: "task-a generation failed",
+        stack: "Error: task-a generation failed\n    at ...",
+        debug: {
+          stage: "generate",
+          previousStage: "seed",
+          logPath: "/tmp/log",
+          snapshotPath: "/tmp/snap",
+          dataHasSeed: true,
+          seedHasData: false,
+          flagsKeys: [],
+        },
+      },
+      logs: [{ stage: "generate", ok: false as const, ms: 50, error: new Error("task-a generation failed") }],
+      context: {} as Record<string, unknown>,
+    }));
+
+    const jobDir = join(tmpDir, "current", jobId);
+    const statusPath = join(jobDir, "tasks-status.json");
+
+    const exitSpy = spyOn(process, "exit").mockImplementation((code?: number) => {
+      // Swallow exit — do not throw so writeJobStatus completes
+      throw new Error("process.exit called");
+    });
+
+    try {
+      await runPipelineJob(jobId);
+    } catch (e) {
+      expect((e as Error).message).toBe("process.exit called");
+    } finally {
+      exitSpy.mockRestore();
+    }
+
+    // Read final status — job-level state should be "failed"
+    const statusText = await readFile(statusPath, "utf-8");
+    const status = JSON.parse(statusText) as { state?: string };
+    expect(status.state).toBe("failed");
   });
 
   test("full lifecycle: tasks run, directory moves, runs.jsonl written, PID cleaned up", async () => {
