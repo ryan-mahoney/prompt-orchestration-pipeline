@@ -29,7 +29,5 @@ export function computeActiveIndex(items: DagItem[]): number {
   if (running >= 0) return running;
   const failed = items.findIndex((item) => item.status === "failed");
   if (failed >= 0) return failed;
-  const pending = items.findIndex((item) => item.status === "pending");
-  if (pending >= 0) return pending;
-  return Math.max(0, items.length - 1);
+  return -1;
 }

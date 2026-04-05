@@ -19,7 +19,8 @@ export default function UploadSeed({
 }) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [isUploading, setIsUploading] = useState(false);
+  const [pendingUploads, setPendingUploads] = useState(0);
+  const isUploading = pendingUploads > 0;
   const [isDragging, setIsDragging] = useState(false);
 
   const hint = useMemo(() => (isDragging ? "Drop seed file" : "Upload JSON or ZIP seed"), [isDragging]);
@@ -33,7 +34,7 @@ export default function UploadSeed({
     const formData = new FormData();
     formData.append("file", file);
 
-    setIsUploading(true);
+    setPendingUploads((n) => n + 1);
     setError(null);
     try {
       const response = await fetch("/api/upload/seed", {
@@ -49,7 +50,7 @@ export default function UploadSeed({
     } catch (uploadError) {
       setError(normalizeUploadError(uploadError));
     } finally {
-      setIsUploading(false);
+      setPendingUploads((n) => n - 1);
     }
   };
 
@@ -68,8 +69,8 @@ export default function UploadSeed({
         onDrop={(event) => {
           event.preventDefault();
           setIsDragging(false);
-          const file = event.dataTransfer.files[0];
-          if (file) void uploadFile(file);
+          const files = Array.from(event.dataTransfer.files);
+          for (const file of files) void uploadFile(file);
         }}
       >
         <p>{hint}</p>
@@ -80,10 +81,11 @@ export default function UploadSeed({
           ref={inputRef}
           type="file"
           hidden
+          multiple
           accept=".json,.zip,application/json,application/zip"
           onChange={(event) => {
-            const file = event.target.files?.[0];
-            if (file) void uploadFile(file);
+            const files = Array.from(event.target.files ?? []);
+            for (const file of files) void uploadFile(file);
           }}
         />
       </div>

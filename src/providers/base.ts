@@ -13,7 +13,8 @@ const RETRYABLE_ERROR_CODES = new Set([
   "ETIMEDOUT",
   "ECONNREFUSED",
 ]);
-const RETRYABLE_MESSAGE_PATTERN = /network|timeout|connection|socket|protocol|read ECONNRESET|fetch failed/i;
+const RETRYABLE_MESSAGE_PATTERN =
+  /network|timeout|connection|socket|protocol|read ECONNRESET|fetch failed/i;
 
 /**
  * Splits a messages array into system, user, and assistant parts.

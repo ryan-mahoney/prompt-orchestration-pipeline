@@ -433,6 +433,72 @@ describe("handleSeedAdd — job scaffolding", () => {
   });
 });
 
+describe("handleSeedAdd — artifact initialization", () => {
+  const tmpDirs: string[] = [];
+
+  afterEach(async () => {
+    for (const dir of tmpDirs.splice(0)) {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  async function makeTmpDirWithDirs(): Promise<{ base: string; dirs: ReturnType<typeof resolveDirs> }> {
+    const base = await mkdtemp(join(tmpdir(), "orchestrator-artifacts-test-"));
+    tmpDirs.push(base);
+    const dirs = resolveDirs(base);
+    await mkdir(dirs.pending, { recursive: true });
+    await mkdir(dirs.current, { recursive: true });
+    await mkdir(dirs.complete, { recursive: true });
+    return { base, dirs };
+  }
+
+  const baseOpts: OrchestratorOptions = { dataDir: "/tmp/does-not-matter" };
+
+  test("persists files.artifacts in tasks-status.json when artifacts exist", async () => {
+    const { dirs } = await makeTmpDirWithDirs();
+    const { logger } = makeMockLogger();
+    const running = new Map();
+
+    const seedPath = join(dirs.pending, "myjob-seed.json");
+    await writeFile(seedPath, JSON.stringify({ pipeline: "my-pipeline", name: "My Job" }));
+
+    // Pre-create artifacts directory with files before handleSeedAdd runs
+    const jobDir = join(dirs.current, "myjob");
+    const artifactsDir = join(jobDir, "files", "artifacts");
+    await mkdir(artifactsDir, { recursive: true });
+    await writeFile(join(artifactsDir, "doc.pdf"), "fake-pdf");
+    await writeFile(join(artifactsDir, "image.png"), "fake-png");
+
+    await handleSeedAdd(seedPath, dirs, running, logger, baseOpts);
+
+    const statusPath = join(jobDir, "tasks-status.json");
+    const status = JSON.parse(await Bun.file(statusPath).text()) as Record<string, unknown>;
+    const files = status["files"] as Record<string, unknown>;
+    const artifacts = files["artifacts"] as string[];
+    expect(artifacts).toContain("doc.pdf");
+    expect(artifacts).toContain("image.png");
+  });
+
+  test("no-ops cleanly when artifacts directory is absent", async () => {
+    const { dirs } = await makeTmpDirWithDirs();
+    const { logger } = makeMockLogger();
+    const running = new Map();
+
+    const seedPath = join(dirs.pending, "myjob-seed.json");
+    await writeFile(seedPath, JSON.stringify({ pipeline: "my-pipeline", name: "My Job" }));
+
+    await handleSeedAdd(seedPath, dirs, running, logger, baseOpts);
+
+    const jobDir = join(dirs.current, "myjob");
+    const statusPath = join(jobDir, "tasks-status.json");
+    const status = JSON.parse(await Bun.file(statusPath).text()) as Record<string, unknown>;
+
+    // Status file should exist and be valid even without artifacts dir
+    expect(status["id"]).toBe("myjob");
+    expect(status["state"]).toBe("pending");
+  });
+});
+
 describe("handleSeedAdd — start log writing", () => {
   const tmpDirs: string[] = [];
 

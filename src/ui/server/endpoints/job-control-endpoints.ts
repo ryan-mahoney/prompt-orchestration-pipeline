@@ -3,10 +3,17 @@ import path from "node:path";
 
 import { createErrorResponse } from "../config-bridge";
 import { Constants } from "../config-bridge-node";
-import { readJob } from "../job-reader";
 import { sendJson } from "../utils/http-utils";
 import { getJobDirectoryPath } from "../../../config/paths";
-import { readJobStatus, resetJobToCleanSlate, resetSingleTask, writeJobStatus } from "../../../core/status-writer";
+import { deriveJobStatusFromTasks } from "../../../config/statuses";
+import {
+  readJobStatus,
+  resetJobToCleanSlate,
+  resetSingleTask,
+  writeJobStatus,
+  type StatusSnapshot,
+} from "../../../core/status-writer";
+import { readFileWithRetry } from "../file-reader";
 
 const RUNNER_PATH = path.resolve(import.meta.dir, "../../../core/pipeline-runner.ts");
 
@@ -46,35 +53,101 @@ async function readRunnerPid(jobDir: string): Promise<number | null> {
   }
 }
 
-async function killProcess(pid: number): Promise<{ killed: boolean; signal: string | null }> {
+function isProcessAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+const KILL_GRACE_MS = 1500;
+const KILL_POLL_MS = 100;
+
+function isTerminalTaskState(state: unknown): boolean {
+  return state === "done" || state === "failed";
+}
+
+function isNonTerminalTaskState(state: unknown): boolean {
+  return state === "pending" || state === "running";
+}
+
+function isTaskLikelyInProgress(task: Record<string, unknown>): boolean {
+  const state = task["state"];
+  const nonTerminal = isNonTerminalTaskState(state);
+  const startedAt = typeof task["startedAt"] === "string" && task["startedAt"].trim().length > 0;
+  const endedAt = typeof task["endedAt"] === "string" && task["endedAt"].trim().length > 0;
+  if (nonTerminal && startedAt && !endedAt) return true;
+  if (nonTerminal && startedAt && endedAt) return true;
+  return typeof task["currentStage"] === "string" && task["currentStage"].trim().length > 0;
+}
+
+function getProgressPercent(snapshot: StatusSnapshot): number {
+  const tasks = Object.values(snapshot.tasks);
+  if (tasks.length === 0) return 0;
+  const doneCount = tasks.filter((task) => task.state === "done").length;
+  return Math.floor((doneCount / tasks.length) * 100);
+}
+
+function findRecoveryTask(snapshot: StatusSnapshot): string | null {
+  const taskIds = Object.keys(snapshot.tasks);
+  if (taskIds.length === 0) return null;
+
+  // Prefer the task that appears to be mid-flight by timestamp or stage.
+  for (const taskId of taskIds) {
+    const task = snapshot.tasks[taskId];
+    if (!task || typeof task !== "object") continue;
+    if (isTaskLikelyInProgress(task as Record<string, unknown>)) return taskId;
+  }
+
+  const pendingFallback = taskIds.find((taskId) => isNonTerminalTaskState(snapshot.tasks[taskId]!.state));
+  if (pendingFallback) return pendingFallback;
+
+  // Then, for partially completed pipelines, reset the first task after the final
+  // terminal task; this repairs jobs that lost task state updates mid-run.
+  const terminalIndex = taskIds.reduce<number>((current, taskId, index) => {
+    const state = snapshot.tasks[taskId]!.state;
+    return isTerminalTaskState(state) ? index : current;
+  }, -1);
+
+  if (terminalIndex < 0) return null;
+  return taskIds.slice(terminalIndex + 1).find((taskId) => {
+    const state = snapshot.tasks[taskId]!.state;
+    return !isTerminalTaskState(state);
+  }) ?? null;
+}
+
+async function killProcess(pid: number): Promise<{ killed: boolean; signal: string | null; exited: boolean }> {
   try {
     process.kill(pid, 15); // SIGTERM
   } catch (err: unknown) {
     if ((err as NodeJS.ErrnoException).code === "ESRCH") {
-      return { killed: false, signal: null };
+      return { killed: false, signal: null, exited: true };
     }
     throw err;
   }
 
-  // Do not hold the HTTP request open while waiting for shutdown.
-  const timer = setTimeout(() => {
-    try {
-      process.kill(pid, 0);
-    } catch {
-      return;
-    }
+  // Poll for graceful exit within the grace period.
+  const deadline = Date.now() + KILL_GRACE_MS;
+  while (Date.now() < deadline) {
+    if (!isProcessAlive(pid)) return { killed: true, signal: "SIGTERM", exited: true };
+    await new Promise((r) => setTimeout(r, KILL_POLL_MS));
+  }
 
-    try {
-      process.kill(pid, 9); // SIGKILL
-    } catch (err: unknown) {
-      if ((err as NodeJS.ErrnoException).code !== "ESRCH") {
-        console.error(`[handleJobStop] Failed to SIGKILL pid ${pid}:`, err);
-      }
+  // Still alive — escalate to SIGKILL.
+  try {
+    process.kill(pid, 9);
+  } catch (err: unknown) {
+    if ((err as NodeJS.ErrnoException).code === "ESRCH") {
+      return { killed: true, signal: "SIGTERM", exited: true };
     }
-  }, 1500);
-  timer.unref();
+    throw err;
+  }
 
-  return { killed: true, signal: "SIGTERM" };
+  // Brief wait for SIGKILL to take effect.
+  await new Promise((r) => setTimeout(r, KILL_POLL_MS));
+  return { killed: true, signal: "SIGKILL", exited: !isProcessAlive(pid) };
 }
 
 async function cleanupRunnerPid(jobDir: string): Promise<void> {
@@ -85,10 +158,23 @@ async function cleanupRunnerPid(jobDir: string): Promise<void> {
   }
 }
 
-export async function resolveJobLifecycle(dataDir: string, jobId: string): Promise<string | null> {
-  const result = await readJob(jobId);
-  if (!result.ok) return null;
-  return result.location;
+const READ_LOCATIONS = ["current", "complete"] as const;
+
+export async function resolveJobLifecycle(
+  dataDir: string,
+  jobId: string,
+): Promise<"current" | "complete" | null> {
+  for (const location of READ_LOCATIONS) {
+    const statusPath = path.join(dataDir, "pipeline-data", location, jobId, "tasks-status.json");
+    const result = await readFileWithRetry(statusPath);
+    if (!result.ok) {
+      if (result.code === Constants.ERROR_CODES.NOT_FOUND) continue;
+      return null;
+    }
+    return location;
+  }
+
+  return null;
 }
 
 export function isRestartInProgress(jobId: string): boolean {
@@ -158,10 +244,19 @@ export async function handleJobRestart(
 
     let jobDir = getJobDirectoryPath(dataDir, jobId, lifecycle as "current" | "complete");
 
-    // Read status to check if the job is currently running
+    // Check if the job is actually running via PID liveness, then task-derived status
+    const pid = await readRunnerPid(jobDir);
+    if (pid !== null && isProcessAlive(pid)) {
+      return sendJson(409, createErrorResponse("job_running", "Job is currently running (process alive)"));
+    }
+
     const status = await readJobStatus(jobDir);
-    if (status?.state === "running") {
-      return sendJson(409, createErrorResponse("job_running", "Job is currently running"));
+    if (status) {
+      const taskEntries = Object.values(status.tasks).filter((t): t is typeof t & { state: unknown } => "state" in t);
+      const derivedStatus = deriveJobStatusFromTasks(taskEntries);
+      if (derivedStatus === "running") {
+        return sendJson(409, createErrorResponse("job_running", "Job is currently running (task-level running)"));
+      }
     }
 
     // If the job is in complete/, move it back to current/
@@ -251,21 +346,32 @@ export async function handleJobStop(
         }
       }
 
+      if (!resetTask) {
+        resetTask = findRecoveryTask(snapshot);
+      }
+
       if (resetTask) {
         const task = snapshot.tasks[resetTask];
         if (task) {
           task.state = "pending";
           task.currentStage = null;
+          delete task.endedAt;
+          delete task.startedAt;
           delete task.failedStage;
           delete task.error;
           task.attempts = 0;
           task.refinementAttempts = 0;
           task.tokenUsage = [];
         }
+      } else if (snapshot.current === null && snapshot.state === "pending" && Object.keys(snapshot.tasks).length > 0) {
+        const taskIds = Object.keys(snapshot.tasks);
+        snapshot.current = taskIds[0] ?? null;
       }
 
-      snapshot.current = null;
+      snapshot.state = "pending";
+      snapshot.current = resetTask ?? snapshot.current;
       snapshot.currentStage = null;
+      snapshot.progress = getProgressPercent(snapshot);
     });
 
     return sendJson(202, {

@@ -102,6 +102,8 @@ import { createTaskFileIO, generateLogName } from "./file-io";
 import { LogEvent, LogFileExtension } from "../config/log-events";
 import { getConfig, getPipelineConfig } from "./config";
 import { buildReexecArgs } from "../cli/self-reexec";
+import { writeJobStatus } from "./status-writer";
+import { initializeStatusFromArtifacts } from "./status-initializer";
 
 /**
  * Normalize any path that may already include `pipeline-data` (or subdirs
@@ -291,11 +293,10 @@ export async function handleSeedAdd(
     JSON.stringify(status, null, 2)
   );
 
+  const normalizedPipelineTasks = pipelineTasks.map((name) => ({ id: name }));
   try {
-    const mod = await import("./status-initializer");
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
-    const fn = (mod as unknown as { initializeStatusFromArtifacts: (jobDir: string, status: JobStatusInit) => Promise<void> }).initializeStatusFromArtifacts;
-    await fn(jobDir, status);
+    const applyArtifacts = await initializeStatusFromArtifacts({ jobDir, pipeline: { tasks: normalizedPipelineTasks } });
+    await writeJobStatus(jobDir, applyArtifacts);
   } catch {
     logger.warn(`status-initializer unavailable or failed for job ${jobId}; proceeding with base status`);
   }

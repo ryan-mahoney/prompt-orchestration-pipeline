@@ -4,7 +4,7 @@
 import { mkdir } from "node:fs/promises";
 import { dirname, isAbsolute, join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { KNOWN_STAGES, computeDeterministicProgress } from "./progress";
+import { KNOWN_STAGES } from "./progress";
 import type { StageName } from "./progress";
 import { createTaskFileIO, generateLogName, trackFile } from "./file-io";
 import type { TaskFileIO } from "./file-io";
@@ -629,9 +629,6 @@ export async function runPipeline(
       // Write stage-start status (swallow errors)
       try {
         await writeJobStatus(jobDir, (snapshot: StatusSnapshot) => {
-          snapshot.state = TaskState.RUNNING;
-          snapshot.current = taskName;
-          snapshot.currentStage = stageName;
           if (!snapshot.tasks[taskName]) snapshot.tasks[taskName] = {};
           snapshot.tasks[taskName]!.state = TaskState.RUNNING;
           snapshot.tasks[taskName]!.currentStage = stageName;
@@ -705,15 +702,9 @@ export async function runPipeline(
       context.logs.push(auditEntry);
       returnedLogs.push(auditEntry);
 
-      // Write stage-completion status with progress (swallow errors)
+      // Write stage-completion status (swallow errors)
       try {
-        const progress = computeDeterministicProgress(
-          pipelineTasks ?? [taskName],
-          taskName,
-          stageName,
-        );
         await writeJobStatus(jobDir, (snapshot: StatusSnapshot) => {
-          snapshot.progress = progress;
           if (!snapshot.tasks[taskName]) snapshot.tasks[taskName] = {};
           snapshot.tasks[taskName]!.currentStage = stageName;
         });
@@ -769,7 +760,6 @@ export async function runPipeline(
       // Write failure status (swallow errors)
       try {
         await writeJobStatus(jobDir, (snapshot: StatusSnapshot) => {
-          snapshot.state = TaskState.FAILED;
           if (!snapshot.tasks[taskName]) snapshot.tasks[taskName] = {};
           snapshot.tasks[taskName]!.state = TaskState.FAILED;
           snapshot.tasks[taskName]!.failedStage = stageName;
@@ -806,10 +796,6 @@ export async function runPipeline(
   // Write done status (best-effort)
   try {
     await writeJobStatus(jobDir, (snapshot: StatusSnapshot) => {
-      snapshot.state = TaskState.DONE;
-      snapshot.progress = 100;
-      snapshot.current = null;
-      snapshot.currentStage = null;
       if (!snapshot.tasks[taskName]) snapshot.tasks[taskName] = {};
       snapshot.tasks[taskName]!.state = TaskState.DONE;
       snapshot.tasks[taskName]!.currentStage = null;
