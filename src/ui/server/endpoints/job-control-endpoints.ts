@@ -46,35 +46,48 @@ async function readRunnerPid(jobDir: string): Promise<number | null> {
   }
 }
 
-async function killProcess(pid: number): Promise<{ killed: boolean; signal: string | null }> {
+function isProcessAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+const KILL_GRACE_MS = 1500;
+const KILL_POLL_MS = 100;
+
+async function killProcess(pid: number): Promise<{ killed: boolean; signal: string | null; exited: boolean }> {
   try {
     process.kill(pid, 15); // SIGTERM
   } catch (err: unknown) {
     if ((err as NodeJS.ErrnoException).code === "ESRCH") {
-      return { killed: false, signal: null };
+      return { killed: false, signal: null, exited: true };
     }
     throw err;
   }
 
-  // Do not hold the HTTP request open while waiting for shutdown.
-  const timer = setTimeout(() => {
-    try {
-      process.kill(pid, 0);
-    } catch {
-      return;
-    }
+  // Poll for graceful exit within the grace period.
+  const deadline = Date.now() + KILL_GRACE_MS;
+  while (Date.now() < deadline) {
+    if (!isProcessAlive(pid)) return { killed: true, signal: "SIGTERM", exited: true };
+    await new Promise((r) => setTimeout(r, KILL_POLL_MS));
+  }
 
-    try {
-      process.kill(pid, 9); // SIGKILL
-    } catch (err: unknown) {
-      if ((err as NodeJS.ErrnoException).code !== "ESRCH") {
-        console.error(`[handleJobStop] Failed to SIGKILL pid ${pid}:`, err);
-      }
+  // Still alive — escalate to SIGKILL.
+  try {
+    process.kill(pid, 9);
+  } catch (err: unknown) {
+    if ((err as NodeJS.ErrnoException).code === "ESRCH") {
+      return { killed: true, signal: "SIGTERM", exited: true };
     }
-  }, 1500);
-  timer.unref();
+    throw err;
+  }
 
-  return { killed: true, signal: "SIGTERM" };
+  // Brief wait for SIGKILL to take effect.
+  await new Promise((r) => setTimeout(r, KILL_POLL_MS));
+  return { killed: true, signal: "SIGKILL", exited: !isProcessAlive(pid) };
 }
 
 async function cleanupRunnerPid(jobDir: string): Promise<void> {
@@ -264,6 +277,7 @@ export async function handleJobStop(
         }
       }
 
+      snapshot.state = "pending";
       snapshot.current = null;
       snapshot.currentStage = null;
     });
