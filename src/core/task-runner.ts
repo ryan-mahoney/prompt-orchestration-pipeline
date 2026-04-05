@@ -795,7 +795,17 @@ export async function runPipeline(
 
   // Write done status (best-effort)
   try {
+    const lastStage = KNOWN_STAGES[KNOWN_STAGES.length - 1];
+    const doneProgress = computeDeterministicProgress(
+      pipelineTasks ?? [taskName],
+      taskName,
+      lastStage,
+    );
     await writeJobStatus(jobDir, (snapshot: StatusSnapshot) => {
+      snapshot.state = TaskState.DONE;
+      snapshot.progress = doneProgress;
+      snapshot.current = null;
+      snapshot.currentStage = null;
       if (!snapshot.tasks[taskName]) snapshot.tasks[taskName] = {};
       snapshot.tasks[taskName]!.state = TaskState.DONE;
       snapshot.tasks[taskName]!.currentStage = null;

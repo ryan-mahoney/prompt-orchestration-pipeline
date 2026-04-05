@@ -16,6 +16,7 @@ import {
   runPipeline,
   runPipelineWithModelRouting,
   decideTransition,
+  computeDeterministicProgress,
   KNOWN_STAGES,
 } from "../../src/core/task-runner";
 import type {
@@ -592,6 +593,54 @@ describe("runPipeline", () => {
     const failure = result as PipelineFailure;
     expect(failure.failedStage).toBe("inference");
     expect(failure.error.message).toMatch(/type conflict/);
+  });
+
+  test("non-final task completion writes deterministic progress less than 100", async () => {
+    modulePath = await writeTaskModule(`
+      export async function ingestion(ctx) {
+        return { output: "data", flags: {} };
+      }
+    `);
+
+    const pipelineTasks = ["test-task", "task2", "task3", "task4"];
+    const result = await runPipeline(modulePath, makeContext({ pipelineTasks }));
+    expect(result.ok).toBe(true);
+
+    const lastStage = KNOWN_STAGES[KNOWN_STAGES.length - 1];
+    const expected = computeDeterministicProgress(pipelineTasks, "test-task", lastStage);
+    expect(expected).toBeLessThan(100);
+
+    const snapshot = await Bun.file(statusPath).json();
+    expect(snapshot.progress).toBe(expected);
+  });
+
+  test("final task completion writes progress exactly 100", async () => {
+    modulePath = await writeTaskModule(`
+      export async function ingestion(ctx) {
+        return { output: "data", flags: {} };
+      }
+    `);
+
+    const pipelineTasks = ["task1", "task2", "task3", "test-task"];
+    const result = await runPipeline(modulePath, makeContext({ pipelineTasks }));
+    expect(result.ok).toBe(true);
+
+    const snapshot = await Bun.file(statusPath).json();
+    expect(snapshot.progress).toBe(100);
+  });
+
+  test("single-task pipeline completion writes progress exactly 100", async () => {
+    modulePath = await writeTaskModule(`
+      export async function ingestion(ctx) {
+        return { output: "data", flags: {} };
+      }
+    `);
+
+    const result = await runPipeline(modulePath, makeContext({ pipelineTasks: ["test-task"] }));
+    expect(result.ok).toBe(true);
+
+    const snapshot = await Bun.file(statusPath).json();
+    expect(snapshot.progress).toBe(100);
   });
 });
 
