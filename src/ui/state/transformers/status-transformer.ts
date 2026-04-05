@@ -52,8 +52,7 @@ function getStatusValue(status: string): string {
   return status === "failed" ? "error" : status;
 }
 
-function getProgress(tasks: CanonicalTask[], existingProgress?: number): number {
-  if (typeof existingProgress === "number") return existingProgress;
+function getProgress(tasks: CanonicalTask[]): number {
   if (tasks.length === 0) return 0;
 
   const done = tasks.filter((task) => task.state === "done").length;
@@ -100,7 +99,7 @@ function getCosts(raw: Record<string, unknown>): Record<string, unknown> {
   return { totalCost, totalTokens, totalInputTokens, totalOutputTokens };
 }
 
-export function computeJobStatus(tasksInput: unknown, existingProgress?: number): ComputedStatus {
+export function computeJobStatus(tasksInput: unknown): ComputedStatus {
   const tasks = Object.values(transformTasks(tasksInput));
   if (tasks.length === 0) {
     return { status: "pending", progress: 0 };
@@ -108,7 +107,7 @@ export function computeJobStatus(tasksInput: unknown, existingProgress?: number)
 
   return {
     status: getStatusValue(deriveJobStatusFromTasks(tasks)),
-    progress: getProgress(tasks, existingProgress),
+    progress: getProgress(tasks),
   };
 }
 
@@ -139,7 +138,7 @@ export function transformJobStatus(raw: unknown, jobId: string, location: string
   }
 
   const tasks = transformTasks(record["tasks"]);
-  const computed = computeJobStatus(tasks, typeof record["progress"] === "number" ? record["progress"] : undefined);
+  const computed = computeJobStatus(tasks);
   const title = getTitle(record, jobId);
 
   return {

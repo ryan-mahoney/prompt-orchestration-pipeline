@@ -52,6 +52,39 @@ describe("status-transformer", () => {
     warn.mockRestore();
   });
 
+  it("computes progress from tasks alone, ignoring any previously persisted value", () => {
+    const result = computeJobStatus({
+      a: { state: "done" },
+      b: { state: "done" },
+      c: { state: "running" },
+      d: { state: "pending" },
+    });
+
+    expect(result).toEqual({ status: "running", progress: 50 });
+  });
+
+  it("returns pending with zero progress for empty task list", () => {
+    expect(computeJobStatus([])).toEqual({ status: "pending", progress: 0 });
+  });
+
+  it("transformJobStatus derives progress from tasks, not record.progress", () => {
+    const job = transformJobStatus(
+      {
+        title: "Test",
+        progress: 100,
+        tasks: {
+          a: { state: "done" },
+          b: { state: "running" },
+        },
+      },
+      "job-1",
+      "current",
+    );
+
+    expect(job?.progress).toBe(50);
+    expect(job?.status).toBe("running");
+  });
+
   it("filters failed reads and computes transformation stats", () => {
     const transformed = transformMultipleJobs([
       { ok: true, data: { tasks: { a: { state: "done" } } }, jobId: "job-1", location: "current" },
