@@ -180,7 +180,7 @@ export async function handleJobRestart(
 
     const status = await readJobStatus(jobDir);
     if (status) {
-      const taskEntries = Object.values(status.tasks);
+      const taskEntries = Object.values(status.tasks).filter((t): t is typeof t & { state: unknown } => "state" in t);
       const derivedStatus = deriveJobStatusFromTasks(taskEntries);
       if (derivedStatus === "running") {
         return sendJson(409, createErrorResponse("job_running", "Job is currently running (task-level running)"));
