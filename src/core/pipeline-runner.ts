@@ -268,9 +268,6 @@ export async function runPipelineJob(jobId: string): Promise<void> {
   const pipeline = await loadPipeline(config.pipelineJsonPath);
   const taskRegistry = await loadTaskRegistry(config.taskRegistryPath);
 
-  const statusText = await Bun.file(config.statusPath).text();
-  const status = JSON.parse(statusText) as { tasks: Record<string, { state?: string }> };
-
   const { startFromTask, runSingleTask } = config;
 
   // ─── Validate startFromTask / runSingleTask config ───────────────────────
@@ -293,6 +290,9 @@ export async function runPipelineJob(jobId: string): Promise<void> {
 
   for (const task of pipeline.tasks) {
     const taskName = getTaskName(task);
+
+    const statusText = await Bun.file(config.statusPath).text();
+    const status = JSON.parse(statusText) as { tasks: Record<string, { state?: string }> };
 
     // Skip tasks before startFromTask
     if (!reachedStartFrom) {
@@ -485,9 +485,32 @@ export async function runPipelineJob(jobId: string): Promise<void> {
     await completeJob(config, finalStatus, pipelineArtifacts);
   }
   } catch (err) {
-    console.error("Unhandled error in runPipelineJob:", err);
+    const normalized = normalizeError(err);
+    console.error(normalized.message);
     if (workDir !== undefined) {
-      await cleanupPidFile(workDir);
+      try {
+        const failureIO = createTaskFileIO({
+          workDir,
+          taskName: "orchestrator",
+          trackTaskFiles: false,
+          getStage: () => "runPipelineJob",
+          statusPath: join(workDir, "tasks-status.json"),
+        });
+        const failureLogName = generateLogName(
+          "orchestrator",
+          "runPipelineJob",
+          LogEvent.FAILURE_DETAILS,
+          LogFileExtension.JSON,
+        );
+        await failureIO.writeLog(failureLogName, JSON.stringify(normalized, null, 2));
+      } catch {
+        // Do not mask the original failure if log-write fails
+      }
+      try {
+        await cleanupPidFile(workDir);
+      } catch {
+        // Do not mask the original failure if PID cleanup fails
+      }
     }
     process.exitCode = 1;
     setTimeout(() => process.exit(1), 5000).unref();
