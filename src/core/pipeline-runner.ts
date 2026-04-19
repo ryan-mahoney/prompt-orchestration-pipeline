@@ -485,8 +485,26 @@ export async function runPipelineJob(jobId: string): Promise<void> {
     await completeJob(config, finalStatus, pipelineArtifacts);
   }
   } catch (err) {
-    console.error("Unhandled error in runPipelineJob:", err);
+    const normalized = normalizeError(err);
+    console.error(normalized.message);
     if (workDir !== undefined) {
+      try {
+        const failureIO = createTaskFileIO({
+          workDir,
+          taskName: "orchestrator",
+          getStage: () => "runPipelineJob",
+          statusPath: join(workDir, "tasks-status.json"),
+        });
+        const failureLogName = generateLogName(
+          "orchestrator",
+          "runPipelineJob",
+          LogEvent.FAILURE_DETAILS,
+          LogFileExtension.JSON,
+        );
+        await failureIO.writeLog(failureLogName, JSON.stringify(normalized, null, 2));
+      } catch {
+        // Do not mask the original failure if log-write fails
+      }
       await cleanupPidFile(workDir);
     }
     process.exitCode = 1;
