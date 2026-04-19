@@ -268,9 +268,6 @@ export async function runPipelineJob(jobId: string): Promise<void> {
   const pipeline = await loadPipeline(config.pipelineJsonPath);
   const taskRegistry = await loadTaskRegistry(config.taskRegistryPath);
 
-  const statusText = await Bun.file(config.statusPath).text();
-  const status = JSON.parse(statusText) as { tasks: Record<string, { state?: string }> };
-
   const { startFromTask, runSingleTask } = config;
 
   // ─── Validate startFromTask / runSingleTask config ───────────────────────
@@ -293,6 +290,9 @@ export async function runPipelineJob(jobId: string): Promise<void> {
 
   for (const task of pipeline.tasks) {
     const taskName = getTaskName(task);
+
+    const statusText = await Bun.file(config.statusPath).text();
+    const status = JSON.parse(statusText) as { tasks: Record<string, { state?: string }> };
 
     // Skip tasks before startFromTask
     if (!reachedStartFrom) {
