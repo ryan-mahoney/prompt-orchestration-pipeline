@@ -277,6 +277,7 @@ describe("runPipelineJob — outer-catch failure surfacing", () => {
   const cleanupDirs: string[] = [];
 
   beforeEach(() => {
+    for (const key of Object.keys(savedEnv)) delete savedEnv[key];
     for (const key of PO_ENV_KEYS) {
       savedEnv[key] = process.env[key];
       delete process.env[key];
@@ -307,9 +308,10 @@ describe("runPipelineJob — outer-catch failure surfacing", () => {
     const fixture = await setupMultiTaskFixture(["task-a"]);
     cleanupDirs.push(fixture.tmpDir);
 
-    mockLoadFreshModule.mockImplementation(async (_path: string) => ({
-      default: {} as Record<string, string>,
-    }));
+    const injectedMessage = "injected-outer-catch-failure";
+    mockLoadFreshModule.mockImplementation(async (_path: string) => {
+      throw new Error(injectedMessage);
+    });
 
     const exitCalls: Array<number | undefined> = [];
     const exitSpy = spyOn(process, "exit").mockImplementation(((code?: number) => {
@@ -317,16 +319,10 @@ describe("runPipelineJob — outer-catch failure surfacing", () => {
       throw new Error(`__test_exit__:${String(code)}`);
     }) as typeof process.exit);
 
-    const originalSetTimeout = globalThis.setTimeout;
-    const setTimeoutSpy = spyOn(globalThis, "setTimeout").mockImplementation(((
-      _fn: (...a: unknown[]) => void,
-      _ms?: number,
-      ...args: unknown[]
-    ) => {
-      const handle = originalSetTimeout(() => {}, 0, ...args);
-      clearTimeout(handle);
-      return handle;
-    }) as typeof setTimeout);
+    const fakeTimer = { unref: () => fakeTimer, ref: () => fakeTimer };
+    const setTimeoutSpy = spyOn(globalThis, "setTimeout").mockImplementation(
+      (() => fakeTimer as unknown as ReturnType<typeof setTimeout>) as typeof setTimeout,
+    );
 
     const consoleErrorMessages: unknown[][] = [];
     const consoleErrorSpy = spyOn(console, "error").mockImplementation((...args: unknown[]) => {
@@ -355,10 +351,10 @@ describe("runPipelineJob — outer-catch failure surfacing", () => {
     const failureText = await readFile(failurePath, "utf-8");
     const failure = JSON.parse(failureText) as { message?: unknown };
     expect(typeof failure.message).toBe("string");
-    expect(failure.message).toMatch(/Task not registered/);
+    expect(failure.message).toContain(injectedMessage);
 
     const stderrContainsMessage = consoleErrorMessages.some((args) =>
-      args.some((a) => typeof a === "string" && /Task not registered/.test(a)),
+      args.some((a) => typeof a === "string" && a.includes(injectedMessage)),
     );
     expect(stderrContainsMessage).toBe(true);
   });
