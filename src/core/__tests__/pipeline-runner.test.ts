@@ -271,3 +271,95 @@ describe("runPipelineJob — multi-task success regression", () => {
     expect(exitCalls).toEqual([]);
   });
 });
+
+describe("runPipelineJob — outer-catch failure surfacing", () => {
+  const savedEnv: Record<string, string | undefined> = {};
+  const cleanupDirs: string[] = [];
+
+  beforeEach(() => {
+    for (const key of PO_ENV_KEYS) {
+      savedEnv[key] = process.env[key];
+      delete process.env[key];
+    }
+
+    mockRunPipeline.mockClear();
+    mockEnsureTaskSymlinkBridge.mockClear();
+    mockValidateTaskSymlinks.mockClear();
+    mockRepairTaskSymlinks.mockClear();
+    mockCleanupTaskSymlinks.mockClear();
+    mockLoadFreshModule.mockClear();
+  });
+
+  afterEach(async () => {
+    for (const key of PO_ENV_KEYS) {
+      if (savedEnv[key] === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = savedEnv[key];
+      }
+    }
+    process.exitCode = 0;
+
+    await Promise.all(cleanupDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
+  });
+
+  test("unhandled error: sets exitCode=1, writes orchestrator failure log, stderr includes message", async () => {
+    const fixture = await setupMultiTaskFixture(["task-a"]);
+    cleanupDirs.push(fixture.tmpDir);
+
+    mockLoadFreshModule.mockImplementation(async (_path: string) => ({
+      default: {} as Record<string, string>,
+    }));
+
+    const exitCalls: Array<number | undefined> = [];
+    const exitSpy = spyOn(process, "exit").mockImplementation(((code?: number) => {
+      exitCalls.push(code);
+      throw new Error(`__test_exit__:${String(code)}`);
+    }) as typeof process.exit);
+
+    const originalSetTimeout = globalThis.setTimeout;
+    const setTimeoutSpy = spyOn(globalThis, "setTimeout").mockImplementation(((
+      _fn: (...a: unknown[]) => void,
+      _ms?: number,
+      ...args: unknown[]
+    ) => {
+      const handle = originalSetTimeout(() => {}, 0, ...args);
+      clearTimeout(handle);
+      return handle;
+    }) as typeof setTimeout);
+
+    const consoleErrorMessages: unknown[][] = [];
+    const consoleErrorSpy = spyOn(console, "error").mockImplementation((...args: unknown[]) => {
+      consoleErrorMessages.push(args);
+    });
+
+    try {
+      await runPipelineJob(fixture.jobId);
+    } catch (e) {
+      if (!(e instanceof Error) || !/^__test_exit__:/.test(e.message)) throw e;
+    } finally {
+      exitSpy.mockRestore();
+      setTimeoutSpy.mockRestore();
+      consoleErrorSpy.mockRestore();
+    }
+
+    expect(process.exitCode).toBe(1);
+    expect(exitCalls).toContain(1);
+
+    const failurePath = join(
+      fixture.jobDir,
+      "files",
+      "logs",
+      "orchestrator-runPipelineJob-failure-details.json",
+    );
+    const failureText = await readFile(failurePath, "utf-8");
+    const failure = JSON.parse(failureText) as { message?: unknown };
+    expect(typeof failure.message).toBe("string");
+    expect(failure.message).toMatch(/Task not registered/);
+
+    const stderrContainsMessage = consoleErrorMessages.some((args) =>
+      args.some((a) => typeof a === "string" && /Task not registered/.test(a)),
+    );
+    expect(stderrContainsMessage).toBe(true);
+  });
+});
