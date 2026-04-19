@@ -492,6 +492,7 @@ export async function runPipelineJob(jobId: string): Promise<void> {
         const failureIO = createTaskFileIO({
           workDir,
           taskName: "orchestrator",
+          trackTaskFiles: false,
           getStage: () => "runPipelineJob",
           statusPath: join(workDir, "tasks-status.json"),
         });
@@ -505,7 +506,11 @@ export async function runPipelineJob(jobId: string): Promise<void> {
       } catch {
         // Do not mask the original failure if log-write fails
       }
-      await cleanupPidFile(workDir);
+      try {
+        await cleanupPidFile(workDir);
+      } catch {
+        // Do not mask the original failure if PID cleanup fails
+      }
     }
     process.exitCode = 1;
     setTimeout(() => process.exit(1), 5000).unref();
