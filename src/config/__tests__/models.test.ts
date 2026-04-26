@@ -15,7 +15,7 @@ import {
 } from "../models";
 import type { ModelConfigEntry } from "../models";
 
-const MODEL_COUNT = 41;
+const MODEL_COUNT = 48;
 const PROVIDER_COUNT = 8;
 
 describe("ModelAlias", () => {
@@ -110,8 +110,8 @@ describe("DEFAULT_MODEL_BY_PROVIDER", () => {
 });
 
 describe("aliasToFunctionName", () => {
-  it('converts "openai:gpt-5.2" to "gpt52"', () => {
-    expect(aliasToFunctionName("openai:gpt-5.2")).toBe("gpt52");
+  it('converts "openai:gpt-5.4" to "gpt54"', () => {
+    expect(aliasToFunctionName("openai:gpt-5.4")).toBe("gpt54");
   });
 
   it('converts "gemini:flash-2.5-lite" to "flash25Lite"', () => {
@@ -137,8 +137,8 @@ describe("aliasToFunctionName", () => {
 });
 
 describe("getProviderFromAlias", () => {
-  it('returns "openai" for "openai:gpt-5.2"', () => {
-    expect(getProviderFromAlias("openai:gpt-5.2")).toBe("openai");
+  it('returns "openai" for "openai:gpt-5.4"', () => {
+    expect(getProviderFromAlias("openai:gpt-5.4")).toBe("openai");
   });
 
   it("throws for non-string input", () => {
@@ -152,8 +152,8 @@ describe("getProviderFromAlias", () => {
 });
 
 describe("getModelFromAlias", () => {
-  it('returns "gpt-5.2" for "openai:gpt-5.2"', () => {
-    expect(getModelFromAlias("openai:gpt-5.2")).toBe("gpt-5.2");
+  it('returns "gpt-5.4" for "openai:gpt-5.4"', () => {
+    expect(getModelFromAlias("openai:gpt-5.4")).toBe("gpt-5.4");
   });
 
   it("handles multiple colons by rejoining segments after first", () => {
@@ -171,8 +171,8 @@ describe("getModelFromAlias", () => {
 });
 
 describe("getModelConfig", () => {
-  it('returns config for "openai:gpt-5.2" with provider "openai"', () => {
-    const config = getModelConfig("openai:gpt-5.2");
+  it('returns config for "openai:gpt-5.4" with provider "openai"', () => {
+    const config = getModelConfig("openai:gpt-5.4");
     expect(config).not.toBeNull();
     expect(config!.provider).toBe("openai");
   });
@@ -184,10 +184,20 @@ describe("getModelConfig", () => {
 
   it("returns null for removed aliases", () => {
     expect(getModelConfig("openai:gpt-4")).toBeNull();
+    expect(getModelConfig("openai:gpt-4o")).toBeNull();
+    expect(getModelConfig("openai:gpt-4o-mini")).toBeNull();
+    expect(getModelConfig("openai:gpt-5.2")).toBeNull();
+    expect(getModelConfig("openai:gpt-5.2-pro")).toBeNull();
+    expect(getModelConfig("openai:o3-mini")).toBeNull();
+    expect(getModelConfig("anthropic:haiku-4-6")).toBeNull();
+    expect(getModelConfig("deepseek:deepseek-chat")).toBeNull();
+    expect(getModelConfig("deepseek:deepseek-reasoner")).toBeNull();
     expect(getModelConfig("deepseek:r1")).toBeNull();
+    expect(getModelConfig("moonshot:kimi-k1.5")).toBeNull();
     expect(getModelConfig("moonshot:kimi-moonshot-v1-128k")).toBeNull();
     expect(getModelConfig("gemini:flash-3")).toBeNull();
     expect(getModelConfig("gemini:pro-3")).toBeNull();
+    expect(getModelConfig("zai:glm-5-code")).toBeNull();
     expect(getModelConfig("zai:glm-4-plus")).toBeNull();
   });
 });
@@ -201,8 +211,8 @@ describe("FUNCTION_NAME_BY_ALIAS", () => {
     expect(Object.isFrozen(FUNCTION_NAME_BY_ALIAS)).toBe(true);
   });
 
-  it("has correct value for openai:gpt-5.2", () => {
-    expect(FUNCTION_NAME_BY_ALIAS["openai:gpt-5.2"]).toBe("gpt52");
+  it("has correct value for openai:gpt-5.4", () => {
+    expect(FUNCTION_NAME_BY_ALIAS["openai:gpt-5.4"]).toBe("gpt54");
   });
 
   it("has correct value for gemini:flash-2.5-lite", () => {
