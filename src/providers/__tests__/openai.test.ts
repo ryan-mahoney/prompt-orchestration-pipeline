@@ -352,7 +352,7 @@ describe("openaiChat", () => {
       organization: "org_test",
       baseURL: "https://example.test/v1",
       maxRetries: 0,
-      timeout: 120_000,
+      timeout: 3_600_000,
     });
   });
 
