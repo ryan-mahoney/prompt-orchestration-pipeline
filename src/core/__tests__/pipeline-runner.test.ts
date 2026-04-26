@@ -321,7 +321,7 @@ describe("runPipelineJob — outer-catch failure surfacing", () => {
 
     const fakeTimer = { unref: () => fakeTimer, ref: () => fakeTimer };
     const setTimeoutSpy = spyOn(globalThis, "setTimeout").mockImplementation(
-      (() => fakeTimer as unknown as ReturnType<typeof setTimeout>) as typeof setTimeout,
+      ((() => fakeTimer as unknown as ReturnType<typeof setTimeout>) as unknown) as typeof setTimeout,
     );
 
     const consoleErrorMessages: unknown[][] = [];

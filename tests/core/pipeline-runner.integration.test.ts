@@ -259,6 +259,7 @@ describe("runPipelineJob — full lifecycle integration", () => {
         process.env[key] = savedEnv[key];
       }
     }
+    process.exitCode = 0;
   });
 
   test("multi-task pipeline: snapshot.state transitions through running then done", async () => {
