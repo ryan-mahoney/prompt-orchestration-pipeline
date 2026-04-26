@@ -41,12 +41,12 @@ export const ModelAlias = Object.freeze({
   OPENAI_GPT_4_1: "openai:gpt-4-1",
   OPENAI_GPT_4_1_MINI: "openai:gpt-4-1-mini",
   OPENAI_GPT_4_1_NANO: "openai:gpt-4-1-nano",
-  OPENAI_GPT_4O: "openai:gpt-4o",
-  OPENAI_GPT_4O_MINI: "openai:gpt-4o-mini",
-  OPENAI_GPT_5_2: "openai:gpt-5.2",
-  OPENAI_GPT_5_2_PRO: "openai:gpt-5.2-pro",
+  OPENAI_GPT_5_4: "openai:gpt-5.4",
+  OPENAI_GPT_5_4_MINI: "openai:gpt-5.4-mini",
+  OPENAI_GPT_5_4_NANO: "openai:gpt-5.4-nano",
+  OPENAI_GPT_5_5: "openai:gpt-5.5",
+  OPENAI_GPT_5_5_PRO: "openai:gpt-5.5-pro",
   OPENAI_O3: "openai:o3",
-  OPENAI_O3_MINI: "openai:o3-mini",
   OPENAI_O4_MINI: "openai:o4-mini",
   // Anthropic
   ANTHROPIC_OPUS_4_5: "anthropic:opus-4-5",
@@ -54,33 +54,40 @@ export const ModelAlias = Object.freeze({
   ANTHROPIC_HAIKU_4_5: "anthropic:haiku-4-5",
   ANTHROPIC_OPUS_4_6: "anthropic:opus-4-6",
   ANTHROPIC_SONNET_4_6: "anthropic:sonnet-4-6",
-  ANTHROPIC_HAIKU_4_6: "anthropic:haiku-4-6",
+  ANTHROPIC_OPUS_4_7: "anthropic:opus-4-7",
   // Gemini
   GEMINI_FLASH_2_5: "gemini:flash-2.5",
   GEMINI_FLASH_2_5_LITE: "gemini:flash-2.5-lite",
   GEMINI_PRO_2_5: "gemini:pro-2.5",
-  // DeepSeek — cache miss prices
-  DEEPSEEK_CHAT: "deepseek:deepseek-chat",
-  DEEPSEEK_REASONER: "deepseek:deepseek-reasoner",
+  GEMINI_PRO_3_1_PREVIEW: "gemini:pro-3.1-preview",
+  GEMINI_FLASH_3_PREVIEW: "gemini:flash-3-preview",
+  GEMINI_FLASH_3_1_LITE_PREVIEW: "gemini:flash-3.1-lite-preview",
+  // DeepSeek
+  DEEPSEEK_V4_FLASH: "deepseek:v4-flash",
+  DEEPSEEK_V4_PRO: "deepseek:v4-pro",
   // Moonshot / Kimi
   MOONSHOT_KIMI_K2_5: "moonshot:kimi-k2.5",
-  MOONSHOT_KIMI_K1_5: "moonshot:kimi-k1.5",
+  MOONSHOT_KIMI_K2_6: "moonshot:kimi-k2.6",
   // Claude Code — subscription-based, zero token cost
   CLAUDE_CODE_SONNET: "claude-code:sonnet",
   CLAUDE_CODE_OPUS: "claude-code:opus",
   CLAUDE_CODE_HAIKU: "claude-code:haiku",
   // Z.ai
+  ZAI_GLM_5_1: "zai:glm-5-1",
   ZAI_GLM_5: "zai:glm-5",
-  ZAI_GLM_5_CODE: "zai:glm-5-code",
+  ZAI_GLM_5_TURBO: "zai:glm-5-turbo",
   ZAI_GLM_4_7: "zai:glm-4-7",
   ZAI_GLM_4_7_FLASH_X: "zai:glm-4-7-flash-x",
   ZAI_GLM_4_6: "zai:glm-4-6",
   ZAI_GLM_4_5: "zai:glm-4-5",
+  ZAI_GLM_4_5_X: "zai:glm-4-5-x",
   ZAI_GLM_4_5_AIR: "zai:glm-4-5-air",
   ZAI_GLM_4_5_AIR_X: "zai:glm-4-5-air-x",
-  // Alibaba (Qwen via DashScope)
+  // Alibaba (Qwen via DashScope, international/Singapore deployment)
   ALIBABA_QWEN3_MAX: "alibaba:qwen3-max",
+  ALIBABA_QWEN3_6_PLUS: "alibaba:qwen3.6-plus",
   ALIBABA_QWEN3_5_PLUS: "alibaba:qwen3.5-plus",
+  ALIBABA_QWEN3_5_FLASH: "alibaba:qwen3.5-flash",
   ALIBABA_QWEN_PLUS: "alibaba:qwen-plus",
   ALIBABA_QWEN_FLASH: "alibaba:qwen-flash",
   ALIBABA_QWQ_PLUS: "alibaba:qwq-plus",
@@ -112,41 +119,41 @@ const MODEL_CONFIG_RAW: Record<ModelAliasKey, ModelConfigEntry> = {
     tokenCostInPerMillion: 0.1,
     tokenCostOutPerMillion: 0.4,
   },
-  "openai:gpt-4o": {
+  "openai:gpt-5.4": {
     provider: "openai",
-    model: "gpt-4o",
+    model: "gpt-5.4",
     tokenCostInPerMillion: 2.5,
-    tokenCostOutPerMillion: 10,
+    tokenCostOutPerMillion: 15,
   },
-  "openai:gpt-4o-mini": {
+  "openai:gpt-5.4-mini": {
     provider: "openai",
-    model: "gpt-4o-mini",
-    tokenCostInPerMillion: 0.15,
-    tokenCostOutPerMillion: 0.6,
+    model: "gpt-5.4-mini",
+    tokenCostInPerMillion: 0.75,
+    tokenCostOutPerMillion: 4.5,
   },
-  "openai:gpt-5.2": {
+  "openai:gpt-5.4-nano": {
     provider: "openai",
-    model: "gpt-5.2",
-    tokenCostInPerMillion: 2,
-    tokenCostOutPerMillion: 10,
+    model: "gpt-5.4-nano",
+    tokenCostInPerMillion: 0.2,
+    tokenCostOutPerMillion: 1.25,
   },
-  "openai:gpt-5.2-pro": {
+  "openai:gpt-5.5": {
     provider: "openai",
-    model: "gpt-5.2-pro",
-    tokenCostInPerMillion: 15,
-    tokenCostOutPerMillion: 60,
+    model: "gpt-5.5",
+    tokenCostInPerMillion: 5,
+    tokenCostOutPerMillion: 30,
+  },
+  "openai:gpt-5.5-pro": {
+    provider: "openai",
+    model: "gpt-5.5-pro",
+    tokenCostInPerMillion: 30,
+    tokenCostOutPerMillion: 180,
   },
   "openai:o3": {
     provider: "openai",
     model: "o3",
-    tokenCostInPerMillion: 10,
-    tokenCostOutPerMillion: 40,
-  },
-  "openai:o3-mini": {
-    provider: "openai",
-    model: "o3-mini",
-    tokenCostInPerMillion: 1.1,
-    tokenCostOutPerMillion: 4.4,
+    tokenCostInPerMillion: 2,
+    tokenCostOutPerMillion: 8,
   },
   "openai:o4-mini": {
     provider: "openai",
@@ -185,13 +192,13 @@ const MODEL_CONFIG_RAW: Record<ModelAliasKey, ModelConfigEntry> = {
     tokenCostInPerMillion: 3,
     tokenCostOutPerMillion: 15,
   },
-  "anthropic:haiku-4-6": {
+  "anthropic:opus-4-7": {
     provider: "anthropic",
-    model: "claude-haiku-4-6",
-    tokenCostInPerMillion: 1,
-    tokenCostOutPerMillion: 5,
+    model: "claude-opus-4-7",
+    tokenCostInPerMillion: 5,
+    tokenCostOutPerMillion: 25,
   },
-  // Gemini
+  // Gemini — base (≤200k context) pricing for tiered models
   "gemini:flash-2.5": {
     provider: "gemini",
     model: "gemini-2.5-flash",
@@ -210,31 +217,49 @@ const MODEL_CONFIG_RAW: Record<ModelAliasKey, ModelConfigEntry> = {
     tokenCostInPerMillion: 1.25,
     tokenCostOutPerMillion: 10,
   },
+  "gemini:pro-3.1-preview": {
+    provider: "gemini",
+    model: "gemini-3.1-pro-preview",
+    tokenCostInPerMillion: 2,
+    tokenCostOutPerMillion: 12,
+  },
+  "gemini:flash-3-preview": {
+    provider: "gemini",
+    model: "gemini-3-flash-preview",
+    tokenCostInPerMillion: 0.5,
+    tokenCostOutPerMillion: 3,
+  },
+  "gemini:flash-3.1-lite-preview": {
+    provider: "gemini",
+    model: "gemini-3.1-flash-lite-preview",
+    tokenCostInPerMillion: 0.25,
+    tokenCostOutPerMillion: 1.5,
+  },
   // DeepSeek — cache miss prices
-  "deepseek:deepseek-chat": {
+  "deepseek:v4-flash": {
     provider: "deepseek",
-    model: "deepseek-chat",
-    tokenCostInPerMillion: 0.28,
-    tokenCostOutPerMillion: 0.42,
+    model: "deepseek-v4-flash",
+    tokenCostInPerMillion: 0.14,
+    tokenCostOutPerMillion: 0.28,
   },
-  "deepseek:deepseek-reasoner": {
+  "deepseek:v4-pro": {
     provider: "deepseek",
-    model: "deepseek-reasoner",
-    tokenCostInPerMillion: 0.28,
-    tokenCostOutPerMillion: 0.42,
+    model: "deepseek-v4-pro",
+    tokenCostInPerMillion: 1.74,
+    tokenCostOutPerMillion: 3.48,
   },
-  // Moonshot / Kimi
+  // Moonshot / Kimi — cache miss prices
   "moonshot:kimi-k2.5": {
     provider: "moonshot",
     model: "kimi-k2.5",
-    tokenCostInPerMillion: 0.5,
+    tokenCostInPerMillion: 0.6,
     tokenCostOutPerMillion: 2.5,
   },
-  "moonshot:kimi-k1.5": {
+  "moonshot:kimi-k2.6": {
     provider: "moonshot",
-    model: "kimi-k1.5",
-    tokenCostInPerMillion: 0.5,
-    tokenCostOutPerMillion: 2.5,
+    model: "kimi-k2.6",
+    tokenCostInPerMillion: 0.95,
+    tokenCostOutPerMillion: 4,
   },
   // Claude Code — subscription-based, zero token cost
   "claude-code:sonnet": {
@@ -256,17 +281,23 @@ const MODEL_CONFIG_RAW: Record<ModelAliasKey, ModelConfigEntry> = {
     tokenCostOutPerMillion: 0,
   },
   // Z.ai
+  "zai:glm-5-1": {
+    provider: "zai",
+    model: "glm-5.1",
+    tokenCostInPerMillion: 1.4,
+    tokenCostOutPerMillion: 4.4,
+  },
   "zai:glm-5": {
     provider: "zai",
     model: "glm-5",
     tokenCostInPerMillion: 1,
     tokenCostOutPerMillion: 3.2,
   },
-  "zai:glm-5-code": {
+  "zai:glm-5-turbo": {
     provider: "zai",
-    model: "glm-5-code",
+    model: "glm-5-turbo",
     tokenCostInPerMillion: 1.2,
-    tokenCostOutPerMillion: 5,
+    tokenCostOutPerMillion: 4,
   },
   "zai:glm-4-7": {
     provider: "zai",
@@ -292,6 +323,12 @@ const MODEL_CONFIG_RAW: Record<ModelAliasKey, ModelConfigEntry> = {
     tokenCostInPerMillion: 0.6,
     tokenCostOutPerMillion: 2.2,
   },
+  "zai:glm-4-5-x": {
+    provider: "zai",
+    model: "glm-4.5-x",
+    tokenCostInPerMillion: 2.2,
+    tokenCostOutPerMillion: 8.9,
+  },
   "zai:glm-4-5-air": {
     provider: "zai",
     model: "glm-4.5-air",
@@ -304,30 +341,42 @@ const MODEL_CONFIG_RAW: Record<ModelAliasKey, ModelConfigEntry> = {
     tokenCostInPerMillion: 1.1,
     tokenCostOutPerMillion: 4.5,
   },
-  // Alibaba (Qwen via DashScope)
+  // Alibaba (Qwen via DashScope, international/Singapore deployment, base tier)
   "alibaba:qwen3-max": {
     provider: "alibaba",
     model: "qwen3-max",
-    tokenCostInPerMillion: 0.359,
-    tokenCostOutPerMillion: 1.434,
+    tokenCostInPerMillion: 1.2,
+    tokenCostOutPerMillion: 6,
+  },
+  "alibaba:qwen3.6-plus": {
+    provider: "alibaba",
+    model: "qwen3.6-plus",
+    tokenCostInPerMillion: 0.276,
+    tokenCostOutPerMillion: 1.651,
   },
   "alibaba:qwen3.5-plus": {
     provider: "alibaba",
     model: "qwen3.5-plus",
-    tokenCostInPerMillion: 0.115,
-    tokenCostOutPerMillion: 0.688,
+    tokenCostInPerMillion: 0.4,
+    tokenCostOutPerMillion: 2.4,
+  },
+  "alibaba:qwen3.5-flash": {
+    provider: "alibaba",
+    model: "qwen3.5-flash",
+    tokenCostInPerMillion: 0.1,
+    tokenCostOutPerMillion: 0.4,
   },
   "alibaba:qwen-plus": {
     provider: "alibaba",
     model: "qwen-plus",
-    tokenCostInPerMillion: 0.115,
-    tokenCostOutPerMillion: 0.287,
+    tokenCostInPerMillion: 0.4,
+    tokenCostOutPerMillion: 1.2,
   },
   "alibaba:qwen-flash": {
     provider: "alibaba",
     model: "qwen-flash",
-    tokenCostInPerMillion: 0.022,
-    tokenCostOutPerMillion: 0.216,
+    tokenCostInPerMillion: 0.05,
+    tokenCostOutPerMillion: 0.4,
   },
   "alibaba:qwq-plus": {
     provider: "alibaba",
@@ -338,14 +387,14 @@ const MODEL_CONFIG_RAW: Record<ModelAliasKey, ModelConfigEntry> = {
   "alibaba:qwen3-coder-plus": {
     provider: "alibaba",
     model: "qwen3-coder-plus",
-    tokenCostInPerMillion: 0.574,
-    tokenCostOutPerMillion: 2.294,
+    tokenCostInPerMillion: 1,
+    tokenCostOutPerMillion: 5,
   },
   "alibaba:qwen3-coder-flash": {
     provider: "alibaba",
     model: "qwen3-coder-flash",
-    tokenCostInPerMillion: 0.144,
-    tokenCostOutPerMillion: 0.574,
+    tokenCostInPerMillion: 0.3,
+    tokenCostOutPerMillion: 1.5,
   },
 };
 
@@ -397,13 +446,13 @@ export function getModelConfig(alias: string): ModelConfigEntry | null {
 
 export const DEFAULT_MODEL_BY_PROVIDER: Readonly<Record<ProviderName, ModelAliasKey>> =
   Object.freeze({
-    openai: "openai:gpt-5.2",
+    openai: "openai:gpt-5.4",
     anthropic: "anthropic:sonnet-4-6",
     gemini: "gemini:flash-2.5",
-    deepseek: "deepseek:deepseek-chat",
-    moonshot: "moonshot:kimi-k2.5",
+    deepseek: "deepseek:v4-flash",
+    moonshot: "moonshot:kimi-k2.6",
     "claude-code": "claude-code:sonnet",
-    zai: "zai:glm-5",
+    zai: "zai:glm-5-1",
     alibaba: "alibaba:qwen3-max",
   } as const);
 
