@@ -4,7 +4,7 @@
 import { mkdir } from "node:fs/promises";
 import { dirname, isAbsolute, join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { KNOWN_STAGES } from "./progress";
+import { KNOWN_STAGES, computeDeterministicProgress } from "./progress";
 import type { StageName } from "./progress";
 import { createTaskFileIO, generateLogName, trackFile } from "./file-io";
 import type { TaskFileIO } from "./file-io";
@@ -795,17 +795,14 @@ export async function runPipeline(
 
   // Write done status (best-effort)
   try {
-    const lastStage = KNOWN_STAGES[KNOWN_STAGES.length - 1];
+    const lastStage = KNOWN_STAGES[KNOWN_STAGES.length - 1]!;
     const doneProgress = computeDeterministicProgress(
       pipelineTasks ?? [taskName],
       taskName,
       lastStage,
     );
     await writeJobStatus(jobDir, (snapshot: StatusSnapshot) => {
-      snapshot.state = TaskState.DONE;
       snapshot.progress = doneProgress;
-      snapshot.current = null;
-      snapshot.currentStage = null;
       if (!snapshot.tasks[taskName]) snapshot.tasks[taskName] = {};
       snapshot.tasks[taskName]!.state = TaskState.DONE;
       snapshot.tasks[taskName]!.currentStage = null;
