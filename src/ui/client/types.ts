@@ -185,6 +185,36 @@ export interface AllowedActions {
   restart: boolean;
 }
 
+export interface JobConcurrencyApiStatus {
+  limit: number;
+  runningCount: number;
+  availableSlots: number;
+  queuedCount: number;
+  activeJobs: Array<{
+    jobId: string;
+    pid: number | null;
+    acquiredAt: string;
+    source: "orchestrator" | "restart" | "task-start";
+  }>;
+  queuedJobs: Array<{
+    jobId: string;
+    queuedAt: string | null;
+    name: string | null;
+    pipeline: string | null;
+  }>;
+  staleSlots: Array<{
+    jobId: string;
+    reason: "missing_current_job" | "missing_pid" | "dead_pid" | "invalid_json";
+  }>;
+}
+
+export interface UseConcurrencyStatusResult {
+  loading: boolean;
+  data: JobConcurrencyApiStatus | null;
+  error: ApiError | null;
+  refetch: () => void;
+}
+
 export interface SseJobEvent {
   type: SseEventType;
   data: Record<string, unknown>;

@@ -2,6 +2,7 @@ import type {
   ApiError,
   ApiErrorCode,
   ApiOkResponse,
+  JobConcurrencyApiStatus,
   RestartJobOptions,
 } from "./types";
 
@@ -169,4 +170,44 @@ export async function startTask(jobId: string, taskId: string): Promise<ApiOkRes
 
 export async function stopJob(jobId: string): Promise<ApiOkResponse> {
   return postJson(`/api/jobs/${jobId}/stop`, {}, getStopErrorMessage);
+}
+
+export async function fetchConcurrencyStatus(
+  signal?: AbortSignal,
+): Promise<JobConcurrencyApiStatus> {
+  let response: Response;
+
+  try {
+    response = await fetch("/api/concurrency", { signal });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") throw error;
+    throw {
+      code: "network_error",
+      message: error instanceof Error ? error.message : "Network request failed",
+    } satisfies ApiError;
+  }
+
+  const payload = await parseJson(response);
+
+  if (!response.ok) {
+    throw toApiError(
+      response.status,
+      getMessage(payload) ?? getErrorMessageFromStatus(response.status),
+      payload,
+    );
+  }
+
+  if (
+    isRecord(payload) &&
+    payload["ok"] === true &&
+    isRecord(payload["data"])
+  ) {
+    return payload["data"] as unknown as JobConcurrencyApiStatus;
+  }
+
+  throw {
+    code: "unknown_error",
+    message: "Malformed concurrency status response",
+    status: response.status,
+  } satisfies ApiError;
 }

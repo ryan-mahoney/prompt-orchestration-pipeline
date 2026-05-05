@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { restartJob, stopJob } from "../api";
+import { fetchConcurrencyStatus, restartJob, stopJob } from "../api";
+import type { JobConcurrencyApiStatus } from "../types";
 
 const fetchMock = vi.fn<typeof fetch>();
 const originalFetch = globalThis.fetch;
@@ -57,6 +58,65 @@ describe("ui client api", () => {
     await expect(stopJob("job-1")).rejects.toMatchObject({
       code: "network_error",
       message: "offline",
+    });
+  });
+
+  describe("fetchConcurrencyStatus", () => {
+    const sampleStatus: JobConcurrencyApiStatus = {
+      limit: 3,
+      runningCount: 1,
+      availableSlots: 2,
+      queuedCount: 1,
+      activeJobs: [
+        { jobId: "job-1", pid: 1234, acquiredAt: "2024-01-01T00:00:00Z", source: "orchestrator" },
+      ],
+      queuedJobs: [
+        { jobId: "job-2", queuedAt: "2024-01-01T00:00:01Z", name: "second", pipeline: "demo" },
+      ],
+      staleSlots: [],
+    };
+
+    it("parses a successful response and unwraps data", async () => {
+      fetchMock.mockResolvedValue(
+        new Response(JSON.stringify({ ok: true, data: sampleStatus }), { status: 200 }),
+      );
+      globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+      await expect(fetchConcurrencyStatus()).resolves.toEqual(sampleStatus);
+      expect(fetchMock).toHaveBeenCalledWith("/api/concurrency", expect.objectContaining({}));
+    });
+
+    it("maps network failures to network_error", async () => {
+      fetchMock.mockRejectedValue(new Error("offline"));
+      globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+      await expect(fetchConcurrencyStatus()).rejects.toMatchObject({
+        code: "network_error",
+        message: "offline",
+      });
+    });
+
+    it("propagates abort signals to fetch", async () => {
+      fetchMock.mockImplementation((_url, init) => {
+        return new Promise((_resolve, reject) => {
+          const signal = (init as RequestInit | undefined)?.signal;
+          if (signal?.aborted) {
+            reject(new DOMException("Aborted", "AbortError"));
+            return;
+          }
+          signal?.addEventListener("abort", () => {
+            reject(new DOMException("Aborted", "AbortError"));
+          });
+        });
+      });
+      globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+      const controller = new AbortController();
+      const promise = fetchConcurrencyStatus(controller.signal);
+      controller.abort();
+
+      await expect(promise).rejects.toMatchObject({ name: "AbortError" });
+      expect(fetchMock.mock.calls[0]?.[1]?.signal).toBe(controller.signal);
     });
   });
 });
