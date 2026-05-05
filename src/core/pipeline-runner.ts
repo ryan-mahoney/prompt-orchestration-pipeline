@@ -2,13 +2,13 @@ import { join, dirname, resolve, basename } from "node:path";
 import { pathToFileURL } from "node:url";
 import { unlink, mkdir, rename, appendFile } from "node:fs/promises";
 import { unlinkSync } from "node:fs";
-import { getPipelineConfig } from "./config";
+import { getConfig, getPipelineConfig } from "./config";
 import { validatePipelineOrThrow } from "./validation";
 import { loadFreshModule } from "./module-loader";
 import { writeJobStatus } from "./status-writer";
 import { decideTransition } from "./lifecycle-policy";
 import { runPipeline } from "./task-runner";
-import type { AuditLogEntry } from "./task-runner";
+import type { AuditLogEntry, PipelineResult } from "./task-runner";
 import { ensureTaskSymlinkBridge } from "./symlink-bridge";
 import { validateTaskSymlinks, repairTaskSymlinks, cleanupTaskSymlinks } from "./symlink-utils";
 import { createTaskFileIO, generateLogName } from "./file-io";
@@ -257,6 +257,10 @@ export async function loadTaskRegistry(registryPath: string): Promise<TaskRegist
 
 // ─── Pipeline job entry point ─────────────────────────────────────────────────
 
+const INITIAL_RETRY_DELAY_MS = 2_000;
+const MAX_RETRY_DELAY_MS = 30_000;
+const RETRY_BACKOFF_MULTIPLIER = 2;
+
 /** Runs a pipeline job end-to-end for the given job ID. */
 export async function runPipelineJob(jobId: string): Promise<void> {
   let workDir: string | undefined;
@@ -415,8 +419,37 @@ export async function runPipelineJob(jobId: string): Promise<void> {
       },
     };
 
-    // Delegate to task runner
-    const result = await runPipeline(relocatedEntryPath, taskExecutionContext);
+    // Delegate to task runner with bounded retry loop.
+    // Guard against test mocks that may return a non-integer maxAttempts.
+    const configuredMaxAttempts = getConfig().taskRunner.maxAttempts;
+    const maxAttempts = Number.isInteger(configuredMaxAttempts) ? configuredMaxAttempts : 3;
+    const cap = Math.max(1, maxAttempts);
+
+    let result: PipelineResult | undefined;
+    for (let attempt = 1; attempt <= cap; attempt++) {
+      result = await runPipeline(relocatedEntryPath, taskExecutionContext);
+      if (result.ok) break;
+      if (attempt >= cap) break;
+
+      const delay = Math.min(
+        INITIAL_RETRY_DELAY_MS * RETRY_BACKOFF_MULTIPLIER ** (attempt - 1),
+        MAX_RETRY_DELAY_MS,
+      );
+
+      await writeJobStatus(config.workDir, (snapshot) => {
+        const entry = (snapshot.tasks[taskName] ?? {}) as Record<string, unknown>;
+        entry["state"] = "running";
+        entry["attempts"] = ((entry["attempts"] as number | undefined) ?? 1) + 1;
+        entry["restartCount"] = ((entry["restartCount"] as number | undefined) ?? 0) + 1;
+        delete entry["failedStage"];
+        delete entry["error"];
+        snapshot.tasks[taskName] = entry as typeof snapshot.tasks[string];
+      });
+
+      await Bun.sleep(delay);
+    }
+
+    if (!result) throw new Error("Retry loop produced no result");
 
     if (result.ok) {
       // Compute execution time from logs

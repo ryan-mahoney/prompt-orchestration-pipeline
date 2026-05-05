@@ -9,12 +9,14 @@ import { join } from "node:path";
 // deterministic no-ops; config/validation/module-loader are replaced so we
 // don't need a real pipelines directory on disk.
 
+const mockGetConfig = mock(() => ({ taskRunner: { maxAttempts: 3 } }));
+
 mock.module("../config", () => ({
   getPipelineConfig: mock((_slug: string) => ({
     pipelineJsonPath: "/mock/pipeline.json",
     tasksDir: "/mock/tasks",
   })),
-  getConfig: mock(() => ({})),
+  getConfig: mockGetConfig,
   loadConfig: mock(async () => ({})),
   resetConfig: mock(() => {}),
 }));
@@ -95,6 +97,7 @@ const PO_ENV_KEYS = [
   "PO_TASK_REGISTRY",
   "PO_START_FROM_TASK",
   "PO_RUN_SINGLE_TASK",
+  "PO_TASK_MAX_ATTEMPTS",
 ] as const;
 
 interface MultiTaskFixture {
@@ -357,5 +360,221 @@ describe("runPipelineJob — outer-catch failure surfacing", () => {
       args.some((a) => typeof a === "string" && a.includes(injectedMessage)),
     );
     expect(stderrContainsMessage).toBe(true);
+  });
+});
+
+describe("runPipelineJob — bounded retry loop", () => {
+  const savedEnv: Record<string, string | undefined> = {};
+  const cleanupDirs: string[] = [];
+  let originalSleep: typeof Bun.sleep;
+  let sleepDelays: number[];
+
+  beforeEach(() => {
+    for (const key of Object.keys(savedEnv)) delete savedEnv[key];
+    for (const key of PO_ENV_KEYS) {
+      savedEnv[key] = process.env[key];
+      delete process.env[key];
+    }
+
+    mockRunPipeline.mockClear();
+    mockEnsureTaskSymlinkBridge.mockClear();
+    mockValidateTaskSymlinks.mockClear();
+    mockRepairTaskSymlinks.mockClear();
+    mockCleanupTaskSymlinks.mockClear();
+    mockLoadFreshModule.mockClear();
+    mockGetConfig.mockReset();
+    mockGetConfig.mockImplementation(() => ({ taskRunner: { maxAttempts: 3 } }));
+
+    sleepDelays = [];
+    originalSleep = Bun.sleep;
+    (Bun as unknown as { sleep: (ms: number) => Promise<void> }).sleep = async (ms: number) => {
+      sleepDelays.push(ms);
+    };
+  });
+
+  afterEach(async () => {
+    (Bun as unknown as { sleep: typeof Bun.sleep }).sleep = originalSleep;
+
+    for (const key of PO_ENV_KEYS) {
+      if (savedEnv[key] === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = savedEnv[key];
+      }
+    }
+    process.exitCode = 0;
+
+    await Promise.all(cleanupDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
+  });
+
+  function makeFailureResult() {
+    return {
+      ok: false as const,
+      failedStage: "generate",
+      error: {
+        name: "TaskFailure",
+        message: "stub failure",
+        stack: "stack",
+        debug: { stage: "generate", logPath: "/tmp/log" },
+      },
+      logs: [{ stage: "generate", ok: false as const, ms: 5, error: "stub" }],
+      context: {} as Record<string, unknown>,
+    };
+  }
+
+  function makeSuccessResult() {
+    return {
+      ok: true as const,
+      logs: [{ stage: "generate", ok: true as const, ms: 5 }],
+      context: {} as Record<string, unknown>,
+      llmMetrics: [],
+    };
+  }
+
+  test("maxAttempts: 1 — failing task runs once and exits non-zero", async () => {
+    mockGetConfig.mockImplementation(() => ({ taskRunner: { maxAttempts: 1 } }));
+    const fixture = await setupMultiTaskFixture(["task-a"]);
+    cleanupDirs.push(fixture.tmpDir);
+
+    mockRunPipeline.mockImplementation(async () => makeFailureResult() as never);
+
+    const exitCalls: Array<number | undefined> = [];
+    const exitSpy = spyOn(process, "exit").mockImplementation(((code?: number) => {
+      exitCalls.push(code);
+      throw new Error(`__test_exit__:${String(code)}`);
+    }) as typeof process.exit);
+
+    try {
+      await runPipelineJob(fixture.jobId);
+    } catch (e) {
+      if (!(e instanceof Error) || !/^__test_exit__:/.test(e.message)) throw e;
+    } finally {
+      exitSpy.mockRestore();
+    }
+
+    expect(mockRunPipeline.mock.calls.length).toBe(1);
+    expect(sleepDelays).toEqual([]);
+    expect(exitCalls).toContain(1);
+
+    const statusText = await readFile(join(fixture.jobDir, "tasks-status.json"), "utf-8");
+    const status = JSON.parse(statusText) as {
+      tasks: Record<string, { state?: string; restartCount?: number }>;
+    };
+    expect(status.tasks["task-a"]?.state).toBe("failed");
+    const rc = status.tasks["task-a"]?.restartCount;
+    expect(rc === undefined || rc === 0).toBe(true);
+  });
+
+  test("maxAttempts: 3 — fails twice then succeeds: three calls, restartCount=2, exits zero", async () => {
+    mockGetConfig.mockImplementation(() => ({ taskRunner: { maxAttempts: 3 } }));
+    const fixture = await setupMultiTaskFixture(["task-a"]);
+    cleanupDirs.push(fixture.tmpDir);
+
+    let call = 0;
+    mockRunPipeline.mockImplementation(async () => {
+      call += 1;
+      return (call <= 2 ? makeFailureResult() : makeSuccessResult()) as never;
+    });
+
+    const exitCalls: Array<number | undefined> = [];
+    const exitSpy = spyOn(process, "exit").mockImplementation(((code?: number) => {
+      exitCalls.push(code);
+      throw new Error(`__test_exit__:${String(code)}`);
+    }) as typeof process.exit);
+
+    try {
+      await runPipelineJob(fixture.jobId);
+    } catch (e) {
+      if (!(e instanceof Error) || !/^__test_exit__:/.test(e.message)) throw e;
+    } finally {
+      exitSpy.mockRestore();
+    }
+
+    expect(mockRunPipeline.mock.calls.length).toBe(3);
+    expect(sleepDelays).toEqual([2000, 4000]);
+    expect(exitCalls).toEqual([]);
+
+    const statusText = await readFile(fixture.statusPath, "utf-8");
+    const status = JSON.parse(statusText) as {
+      tasks: Record<string, { state?: string; restartCount?: number }>;
+    };
+    expect(status.tasks["task-a"]?.state).toBe("done");
+    expect(status.tasks["task-a"]?.restartCount).toBe(2);
+  });
+
+  test("maxAttempts: 3 — always fails: three calls, restartCount=2, exits non-zero", async () => {
+    mockGetConfig.mockImplementation(() => ({ taskRunner: { maxAttempts: 3 } }));
+    const fixture = await setupMultiTaskFixture(["task-a"]);
+    cleanupDirs.push(fixture.tmpDir);
+
+    mockRunPipeline.mockImplementation(async () => makeFailureResult() as never);
+
+    const exitCalls: Array<number | undefined> = [];
+    const exitSpy = spyOn(process, "exit").mockImplementation(((code?: number) => {
+      exitCalls.push(code);
+      throw new Error(`__test_exit__:${String(code)}`);
+    }) as typeof process.exit);
+
+    try {
+      await runPipelineJob(fixture.jobId);
+    } catch (e) {
+      if (!(e instanceof Error) || !/^__test_exit__:/.test(e.message)) throw e;
+    } finally {
+      exitSpy.mockRestore();
+    }
+
+    expect(mockRunPipeline.mock.calls.length).toBe(3);
+    expect(sleepDelays).toEqual([2000, 4000]);
+    expect(exitCalls).toContain(1);
+
+    const statusText = await readFile(join(fixture.jobDir, "tasks-status.json"), "utf-8");
+    const status = JSON.parse(statusText) as {
+      tasks: Record<string, { state?: string; restartCount?: number }>;
+    };
+    expect(status.tasks["task-a"]?.state).toBe("failed");
+    expect(status.tasks["task-a"]?.restartCount).toBe(2);
+  });
+
+  test("interim status between attempts: state=running, no failedStage/error, restartCount incremented", async () => {
+    mockGetConfig.mockImplementation(() => ({ taskRunner: { maxAttempts: 3 } }));
+    const fixture = await setupMultiTaskFixture(["task-a"]);
+    cleanupDirs.push(fixture.tmpDir);
+
+    let call = 0;
+    let interimSnapshot: { state?: string; failedStage?: unknown; error?: unknown; restartCount?: number } | undefined;
+
+    // Capture the snapshot from disk *during* the second call (after the first failure
+    // and the interim writeJobStatus). At call #2 we read tasks-status.json, then
+    // return success so the test ends cleanly.
+    mockRunPipeline.mockImplementation(async () => {
+      call += 1;
+      if (call === 2) {
+        const text = await readFile(join(fixture.jobDir, "tasks-status.json"), "utf-8");
+        const parsed = JSON.parse(text) as {
+          tasks: Record<string, { state?: string; failedStage?: unknown; error?: unknown; restartCount?: number }>;
+        };
+        interimSnapshot = parsed.tasks["task-a"];
+        return makeSuccessResult() as never;
+      }
+      return makeFailureResult() as never;
+    });
+
+    const exitSpy = spyOn(process, "exit").mockImplementation(((code?: number) => {
+      throw new Error(`__test_exit__:${String(code)}`);
+    }) as typeof process.exit);
+
+    try {
+      await runPipelineJob(fixture.jobId);
+    } catch (e) {
+      if (!(e instanceof Error) || !/^__test_exit__:/.test(e.message)) throw e;
+    } finally {
+      exitSpy.mockRestore();
+    }
+
+    expect(interimSnapshot).toBeDefined();
+    expect(interimSnapshot?.state).toBe("running");
+    expect(interimSnapshot?.failedStage).toBeUndefined();
+    expect(interimSnapshot?.error).toBeUndefined();
+    expect(interimSnapshot?.restartCount).toBe(1);
   });
 });
