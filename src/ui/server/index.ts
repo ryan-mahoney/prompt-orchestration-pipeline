@@ -1,6 +1,8 @@
 import path from "node:path";
 
+import { getConfig } from "../../core/config";
 import { loadEnvironment } from "../../core/environment";
+import { getConcurrencyRuntimePaths } from "../../core/job-concurrency";
 import { createLogger } from "../../core/logger";
 import * as state from "../state";
 import type { JobChange, WatcherHandle, WatcherOptions } from "../state/types";
@@ -32,8 +34,13 @@ interface WatcherInternals extends WatcherOptions {
 
 export async function initializeWatcher(dataDir: string): Promise<void> {
   const paths = resolvePipelinePaths(dataDir);
+  const runtime = getConcurrencyRuntimePaths(path.join(dataDir, "pipeline-data"));
+  const orchestrator = getConfig().orchestrator;
   const watcherOptions: WatcherOptions & WatcherInternals = {
     baseDir: dataDir,
+    debounceMs: orchestrator.watchDebounce,
+    stabilityThresholdMs: orchestrator.watchStabilityThreshold,
+    pollIntervalMs: orchestrator.watchPollInterval,
     __routeJobChange(change: JobChange) {
       if (change.filePath.endsWith("tasks-status.json")) {
         sseEnhancer.handleJobChange(change);
@@ -41,7 +48,7 @@ export async function initializeWatcher(dataDir: string): Promise<void> {
     },
   };
   activeWatcher = startWatcher(
-    [paths.current, paths.complete],
+    [paths.current, paths.complete, paths.pending, runtime.runningJobsDir],
     async () => {
       broadcastStateUpdate(getState());
     },
