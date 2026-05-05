@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { fetchConcurrencyStatus, restartJob, stopJob } from "../api";
+import { fetchConcurrencyStatus, restartJob, startTask, stopJob } from "../api";
 import type { JobConcurrencyApiStatus } from "../types";
 
 const fetchMock = vi.fn<typeof fetch>();
@@ -41,6 +41,46 @@ describe("ui client api", () => {
     await expect(restartJob("job-1")).rejects.toMatchObject({
       code: "job_running",
       status: 409,
+    });
+  });
+
+  it("preserves concurrency_limit_reached on restart and surfaces capacity message", async () => {
+    fetchMock.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          ok: false,
+          code: "concurrency_limit_reached",
+          message: "concurrency limit reached",
+        }),
+        { status: 409 },
+      ),
+    );
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    await expect(restartJob("job-1")).rejects.toMatchObject({
+      code: "concurrency_limit_reached",
+      status: 409,
+      message: "Capacity reached. Wait for a job to finish, then try again.",
+    });
+  });
+
+  it("preserves concurrency_limit_reached on task start and surfaces capacity message", async () => {
+    fetchMock.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          ok: false,
+          code: "concurrency_limit_reached",
+          message: "concurrency limit reached",
+        }),
+        { status: 409 },
+      ),
+    );
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    await expect(startTask("job-1", "task-1")).rejects.toMatchObject({
+      code: "concurrency_limit_reached",
+      status: 409,
+      message: "Capacity reached. Wait for a job to finish, then try again.",
     });
   });
 

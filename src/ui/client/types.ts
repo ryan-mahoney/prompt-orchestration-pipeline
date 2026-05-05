@@ -8,7 +8,8 @@ export type ApiErrorCode =
   | "dependencies_not_satisfied"
   | "unsupported_lifecycle"
   | "task_not_found"
-  | "task_not_pending";
+  | "task_not_pending"
+  | "concurrency_limit_reached";
 
 export interface ApiError {
   code: ApiErrorCode;

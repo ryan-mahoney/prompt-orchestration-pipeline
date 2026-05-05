@@ -26,7 +26,8 @@ function normalizeBackendErrorCode(errorData: unknown, status: number): ApiError
     code === "dependencies_not_satisfied" ||
     code === "unsupported_lifecycle" ||
     code === "task_not_found" ||
-    code === "task_not_pending"
+    code === "task_not_pending" ||
+    code === "concurrency_limit_reached"
   ) {
     return code;
   }
@@ -73,6 +74,9 @@ export function getRestartErrorMessage(errorData: unknown, status: number): stri
   if (isRecord(errorData) && errorData["code"] === "spawn_failed") {
     return "Failed to spawn the restarted job";
   }
+  if (isRecord(errorData) && errorData["code"] === "concurrency_limit_reached") {
+    return "Capacity reached. Wait for a job to finish, then try again.";
+  }
   return getMessage(errorData) ?? getErrorMessageFromStatus(status);
 }
 
@@ -85,6 +89,9 @@ export function getStartTaskErrorMessage(errorData: unknown, status: number): st
   }
   if (isRecord(errorData) && errorData["code"] === "task_not_pending") {
     return "Only pending tasks can be started";
+  }
+  if (isRecord(errorData) && errorData["code"] === "concurrency_limit_reached") {
+    return "Capacity reached. Wait for a job to finish, then try again.";
   }
   return getMessage(errorData) ?? getErrorMessageFromStatus(status);
 }
