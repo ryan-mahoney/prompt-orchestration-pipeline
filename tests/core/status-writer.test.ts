@@ -732,6 +732,23 @@ describe("resetJobFromTask", () => {
     expect(snapshot.tasks["D"]!.refinementAttempts).toBe(0);
   });
 
+  test("sets restartCount: 0 on fromTask and subsequent tasks but not earlier tasks", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "status-writer-reset-from-rc-"));
+    await writeJobStatus(dir, (s) => {
+      s.tasks["t1"] = { state: "done", restartCount: 4 };
+      s.tasks["t2"] = { state: "failed", restartCount: 2 };
+      s.tasks["t3"] = { state: "pending", restartCount: 1 };
+      s.tasks["t4"] = { state: "pending", restartCount: 3 };
+    });
+
+    const snapshot = await resetJobFromTask(dir, "t2");
+
+    expect(snapshot.tasks["t1"]!.restartCount).toBe(4);
+    expect(snapshot.tasks["t2"]!.restartCount).toBe(0);
+    expect(snapshot.tasks["t3"]!.restartCount).toBe(0);
+    expect(snapshot.tasks["t4"]!.restartCount).toBe(0);
+  });
+
   test("does not recompute or stomp progress from snapshot task-map size", async () => {
     const dir = await makeTempDir();
     await setupSnapshot(dir);
@@ -861,6 +878,21 @@ describe("resetJobToCleanSlate", () => {
     }
   });
 
+  test("sets restartCount: 0 on every task, including those previously at restartCount: 5", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "status-writer-clean-slate-rc-"));
+    await writeJobStatus(dir, (s) => {
+      s.tasks["A"] = { state: "done", restartCount: 5 };
+      s.tasks["B"] = { state: "failed", restartCount: 2 };
+      s.tasks["C"] = { state: "pending" };
+    });
+
+    const snapshot = await resetJobToCleanSlate(dir);
+
+    expect(snapshot.tasks["A"]!.restartCount).toBe(0);
+    expect(snapshot.tasks["B"]!.restartCount).toBe(0);
+    expect(snapshot.tasks["C"]!.restartCount).toBe(0);
+  });
+
   test("files arrays on all tasks are preserved", async () => {
     const dir = await makeTempDir();
     await setupSnapshot(dir);
@@ -950,6 +982,22 @@ describe("resetSingleTask", () => {
     // task-c is unchanged
     expect(snapshot.tasks["task-c"]!.state).toBe("pending");
     expect(snapshot.tasks["task-c"]!.attempts).toBe(0);
+  });
+
+  test("sets restartCount: 0 on the targeted task and leaves restartCount on other tasks unchanged", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "status-writer-single-task-rc-"));
+
+    await writeJobStatus(dir, (s) => {
+      s.tasks["t1"] = { state: "done", restartCount: 3 };
+      s.tasks["t2"] = { state: "failed", restartCount: 4 };
+      s.tasks["t3"] = { state: "pending", restartCount: 2 };
+    });
+
+    const snapshot = await resetSingleTask(dir, "t2");
+
+    expect(snapshot.tasks["t1"]!.restartCount).toBe(3);
+    expect(snapshot.tasks["t2"]!.restartCount).toBe(0);
+    expect(snapshot.tasks["t3"]!.restartCount).toBe(2);
   });
 
   test("resetting a non-existent task creates it with pending state", async () => {

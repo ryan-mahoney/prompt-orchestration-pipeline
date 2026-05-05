@@ -14,6 +14,7 @@ export interface TaskEntry {
   failedStage?: string;
   error?: string;
   attempts?: number;
+  restartCount?: number;
   refinementAttempts?: number;
   tokenUsage?: unknown[];
   startedAt?: string;
@@ -227,6 +228,7 @@ export function resetJobFromTask(jobDir: string, fromTask: string, options?: Res
       delete task.failedStage;
       delete task.error;
       task.attempts = 0;
+      task.restartCount = 0;
       task.refinementAttempts = 0;
       if (options?.clearTokenUsage !== false) {
         task.tokenUsage = [];
@@ -253,6 +255,7 @@ export function resetJobToCleanSlate(jobDir: string, options?: ResetOptions): Pr
       delete task.failedStage;
       delete task.error;
       task.attempts = 0;
+      task.restartCount = 0;
       task.refinementAttempts = 0;
       if (options?.clearTokenUsage !== false) {
         task.tokenUsage = [];
@@ -280,6 +283,7 @@ export function resetSingleTask(jobDir: string, taskId: string, options?: ResetO
     delete task.failedStage;
     delete task.error;
     task.attempts = 0;
+    task.restartCount = 0;
     task.refinementAttempts = 0;
     if (options?.clearTokenUsage !== false) {
       task.tokenUsage = [];
