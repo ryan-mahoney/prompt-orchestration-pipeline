@@ -3,7 +3,7 @@ import { mkdtemp, mkdir, writeFile, utimes, rm, readdir } from "node:fs/promises
 import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { drainPendingQueue } from "../orchestrator";
+import { drainPendingQueue, handleChildExit } from "../orchestrator";
 import {
   getConcurrencyRuntimePaths,
   getJobConcurrencyStatus,
@@ -150,6 +150,119 @@ describe("drainPendingQueue", () => {
       expect(existsSync(join(runningJobsDir, "job-bad.json"))).toBe(false);
       const status = await getJobConcurrencyStatus(dir, 2, 1000);
       expect(status.activeJobs).toEqual([]);
+    } finally {
+      await rm(dir, { recursive: true });
+    }
+  });
+});
+
+describe("handleChildExit", () => {
+  test("releases the exited job's slot and triggers a drain that promotes the next pending seed", async () => {
+    const dir = await setupDir("exit-promotes-");
+    try {
+      await writeSeed(dir, "job-a", { pipeline: "p" }, 1700000000);
+      await writeSeed(dir, "job-b", { pipeline: "p" }, 1700000100);
+      const pids = new Map<string, number>();
+      const spawn = fakeSpawnRunner(pids);
+
+      const first = await drainPendingQueue({
+        dataDir: dir,
+        maxConcurrentJobs: 1,
+        lockTimeoutMs: 1000,
+        spawnRunner: spawn,
+      });
+      expect(first.promoted).toEqual(["job-a"]);
+      expect(first.remaining).toBe(1);
+
+      let drainResult: { promoted: string[]; remaining: number } | null = null;
+      const triggerDrain = (): void => {
+        void drainPendingQueue({
+          dataDir: dir,
+          maxConcurrentJobs: 1,
+          lockTimeoutMs: 1000,
+          spawnRunner: spawn,
+        }).then((r) => {
+          drainResult = r;
+        });
+      };
+
+      await handleChildExit({ dataDir: dir, jobId: "job-a", triggerDrain });
+
+      // Wait for the triggered drain to complete.
+      while (drainResult === null) {
+        await new Promise((r) => setTimeout(r, 5));
+      }
+      expect(drainResult!.promoted).toEqual(["job-b"]);
+      expect(existsSync(join(dir, "current", "job-b", "seed.json"))).toBe(true);
+      const status = await getJobConcurrencyStatus(dir, 1, 1000);
+      expect(status.activeJobs.map((l) => l.jobId)).toEqual(["job-b"]);
+    } finally {
+      await rm(dir, { recursive: true });
+    }
+  });
+
+  test("handleChildExit on an already-released slot is a no-op", async () => {
+    const dir = await setupDir("exit-idempotent-");
+    try {
+      let called = 0;
+      await handleChildExit({
+        dataDir: dir,
+        jobId: "job-missing",
+        triggerDrain: () => {
+          called++;
+        },
+      });
+      expect(called).toBe(1);
+      const { runningJobsDir } = getConcurrencyRuntimePaths(dir);
+      expect(existsSync(join(runningJobsDir, "job-missing.json"))).toBe(false);
+    } finally {
+      await rm(dir, { recursive: true });
+    }
+  });
+});
+
+describe("drainPendingQueue concurrency", () => {
+  test("overlapping drain calls do not double-promote (limit 2, four seeds → exactly 2 promoted overall)", async () => {
+    const dir = await setupDir("drain-overlap-");
+    try {
+      await writeSeed(dir, "job-a", { pipeline: "p" }, 1700000000);
+      await writeSeed(dir, "job-b", { pipeline: "p" }, 1700000100);
+      await writeSeed(dir, "job-c", { pipeline: "p" }, 1700000200);
+      await writeSeed(dir, "job-d", { pipeline: "p" }, 1700000300);
+      const pids = new Map<string, number>();
+      const spawn = fakeSpawnRunner(pids);
+
+      const results = await Promise.allSettled([
+        drainPendingQueue({
+          dataDir: dir,
+          maxConcurrentJobs: 2,
+          lockTimeoutMs: 1000,
+          spawnRunner: spawn,
+        }),
+        drainPendingQueue({
+          dataDir: dir,
+          maxConcurrentJobs: 2,
+          lockTimeoutMs: 1000,
+          spawnRunner: spawn,
+        }),
+      ]);
+
+      const promotedUnion = new Set<string>();
+      for (const r of results) {
+        if (r.status === "fulfilled") {
+          for (const id of r.value.promoted) promotedUnion.add(id);
+        }
+      }
+      // Exactly 2 distinct promotions across all overlapping drains.
+      expect(promotedUnion.size).toBe(2);
+
+      const status = await getJobConcurrencyStatus(dir, 2, 1000);
+      expect(status.activeJobs.length).toBe(2);
+      expect(status.runningCount).toBe(2);
+
+      // Two seeds remain in pending (the two not promoted).
+      const remainingPending = (await readdir(join(dir, "pending"))).sort();
+      expect(remainingPending.length).toBe(2);
     } finally {
       await rm(dir, { recursive: true });
     }

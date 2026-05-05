@@ -171,7 +171,8 @@ export async function spawnRunner(
   dirs: ResolvedDirs,
   running: Map<string, ChildHandle>,
   logger: ReturnType<typeof createLogger>,
-  spawnFn: SpawnFn
+  spawnFn: SpawnFn,
+  onExit?: (jobId: string) => void | Promise<void>,
 ): Promise<void> {
   if (!seed.pipeline) {
     throw new Error(`seed.pipeline is required for job ${jobId}`);
@@ -213,14 +214,26 @@ export async function spawnRunner(
 
   running.set(jobId, child);
 
-  void child.exited.then((result) => {
+  void child.exited.then(async (result) => {
     running.delete(jobId);
     logger.log(`job ${jobId} exited`, {
       code: result.code,
       signal: result.signal,
       completionType: result.completionType,
     });
+    if (onExit) await onExit(jobId);
   });
+}
+
+export interface HandleChildExitOptions {
+  dataDir: string;
+  jobId: string;
+  triggerDrain: () => void;
+}
+
+export async function handleChildExit(opts: HandleChildExitOptions): Promise<void> {
+  await releaseJobSlot(opts.dataDir, opts.jobId);
+  opts.triggerDrain();
 }
 
 async function scaffoldJobDir(
@@ -476,17 +489,6 @@ export function startOrchestrator(opts: OrchestratorOptions): Promise<Orchestrat
       const running = new Map<string, ChildHandle>();
       const spawnFn = opts.spawn ?? createDefaultSpawn();
 
-      const spawnRunnerForJob = async (jobId: string): Promise<{ pid: number }> => {
-        const seedPath = join(dirs.current, jobId, "seed.json");
-        const raw = await Bun.file(seedPath).text();
-        const seed = JSON.parse(raw) as SeedData;
-        await scaffoldJobDir(jobId, seed, dirs, logger);
-        await spawnRunner(jobId, seed, dirs, running, logger, spawnFn);
-        const child = running.get(jobId);
-        if (!child) throw new Error(`spawnRunner did not register child for ${jobId}`);
-        return { pid: child.pid };
-      };
-
       let isDraining = false;
       let pendingDrain = false;
       const triggerDrain = (): void => {
@@ -512,6 +514,20 @@ export function startOrchestrator(opts: OrchestratorOptions): Promise<Orchestrat
             isDraining = false;
           }
         })();
+      };
+
+      const onChildExit = (jobId: string): Promise<void> =>
+        handleChildExit({ dataDir: dirs.dataDir, jobId, triggerDrain });
+
+      const spawnRunnerForJob = async (jobId: string): Promise<{ pid: number }> => {
+        const seedPath = join(dirs.current, jobId, "seed.json");
+        const raw = await Bun.file(seedPath).text();
+        const seed = JSON.parse(raw) as SeedData;
+        await scaffoldJobDir(jobId, seed, dirs, logger);
+        await spawnRunner(jobId, seed, dirs, running, logger, spawnFn, onChildExit);
+        const child = running.get(jobId);
+        if (!child) throw new Error(`spawnRunner did not register child for ${jobId}`);
+        return { pid: child.pid };
       };
 
       const watcher = factory(join(dirs.pending, "*.json"), {
