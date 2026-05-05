@@ -192,7 +192,8 @@ describe("handleChildExit", () => {
       while (drainResult === null) {
         await new Promise((r) => setTimeout(r, 5));
       }
-      expect(drainResult!.promoted).toEqual(["job-b"]);
+      const finalResult = drainResult as { promoted: string[]; remaining: number };
+      expect(finalResult.promoted).toEqual(["job-b"]);
       expect(existsSync(join(dir, "current", "job-b", "seed.json"))).toBe(true);
       const status = await getJobConcurrencyStatus(dir, 1, 1000);
       expect(status.activeJobs.map((l) => l.jobId)).toEqual(["job-b"]);

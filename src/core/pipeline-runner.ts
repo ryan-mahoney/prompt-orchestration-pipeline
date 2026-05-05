@@ -14,6 +14,7 @@ import { validateTaskSymlinks, repairTaskSymlinks, cleanupTaskSymlinks } from ".
 import { createTaskFileIO, generateLogName } from "./file-io";
 import { LogEvent, LogFileExtension } from "../config/log-events";
 import { TaskState } from "../config/statuses";
+import { releaseJobSlot } from "./job-concurrency";
 
 // ─── Type definitions ─────────────────────────────────────────────────────────
 
@@ -224,16 +225,16 @@ export function cleanupPidFileSync(workDir: string): void {
   }
 }
 
-/** Registers SIGINT, SIGTERM, and process exit handlers to clean up the PID file. */
-export function installSignalHandlers(workDir: string): void {
-  process.on("SIGINT", () => {
+/** Registers SIGINT, SIGTERM, SIGHUP, and process exit handlers to release the job slot and clean up the PID file. */
+export function installSignalHandlers(workDir: string, dataDir: string, jobId: string): void {
+  const handle = async () => {
+    await releaseJobSlot(dataDir, jobId);
     cleanupPidFileSync(workDir);
     process.exit();
-  });
-  process.on("SIGTERM", () => {
-    cleanupPidFileSync(workDir);
-    process.exit();
-  });
+  };
+  process.on("SIGINT", handle);
+  process.on("SIGTERM", handle);
+  process.on("SIGHUP", handle);
   process.on("exit", () => {
     cleanupPidFileSync(workDir);
   });
@@ -264,11 +265,13 @@ const RETRY_BACKOFF_MULTIPLIER = 2;
 /** Runs a pipeline job end-to-end for the given job ID. */
 export async function runPipelineJob(jobId: string): Promise<void> {
   let workDir: string | undefined;
+  let dataDir: string | undefined;
   try {
   const config = await resolveJobConfig(jobId);
   workDir = config.workDir;
+  dataDir = resolve(config.poRoot, config.dataDir);
   await writePidFile(config.workDir);
-  installSignalHandlers(config.workDir);
+  installSignalHandlers(config.workDir, dataDir, jobId);
 
   const pipeline = await loadPipeline(config.pipelineJsonPath);
   const taskRegistry = await loadTaskRegistry(config.taskRegistryPath);
@@ -501,6 +504,7 @@ export async function runPipelineJob(jobId: string): Promise<void> {
         snapshot.tasks[taskName] = raw as typeof snapshot.tasks[string];
       });
 
+      await releaseJobSlot(dataDir, jobId);
       process.exit(1);
     }
 
@@ -519,6 +523,7 @@ export async function runPipelineJob(jobId: string): Promise<void> {
     const finalStatus = JSON.parse(finalStatusText) as JobStatus;
     await completeJob(config, finalStatus, pipelineArtifacts);
   }
+  await releaseJobSlot(dataDir, jobId);
   } catch (err) {
     const normalized = normalizeError(err);
     console.error(normalized.message);
@@ -546,6 +551,9 @@ export async function runPipelineJob(jobId: string): Promise<void> {
       } catch {
         // Do not mask the original failure if PID cleanup fails
       }
+    }
+    if (dataDir !== undefined) {
+      await releaseJobSlot(dataDir, jobId);
     }
     process.exitCode = 1;
     setTimeout(() => process.exit(1), 5000).unref();
