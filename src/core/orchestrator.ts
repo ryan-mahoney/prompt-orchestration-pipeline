@@ -95,7 +95,7 @@ interface ChildHandle {
 export const SEED_PATTERN = /^([A-Za-z0-9-_]+)-seed\.json$/;
 
 import { join, basename, dirname, resolve } from "node:path";
-import { mkdir, rename } from "node:fs/promises";
+import { mkdir, rename, stat } from "node:fs/promises";
 import { watch } from "chokidar";
 import { createLogger } from "./logger";
 import { createTaskFileIO, generateLogName } from "./file-io";
@@ -104,6 +104,12 @@ import { getConfig, getPipelineConfig } from "./config";
 import { buildReexecArgs } from "../cli/self-reexec";
 import { writeJobStatus } from "./status-writer";
 import { initializeStatusFromArtifacts } from "./status-initializer";
+import {
+  listQueuedSeeds,
+  releaseJobSlot,
+  tryAcquireJobSlot,
+  updateJobSlotPid,
+} from "./job-concurrency";
 
 /**
  * Normalize any path that may already include `pipeline-data` (or subdirs
@@ -217,53 +223,13 @@ export async function spawnRunner(
   });
 }
 
-export async function handleSeedAdd(
-  filePath: string,
+async function scaffoldJobDir(
+  jobId: string,
+  seed: SeedData,
   dirs: ResolvedDirs,
-  running: Map<string, ChildHandle>,
   logger: ReturnType<typeof createLogger>,
-  opts: OrchestratorOptions
 ): Promise<void> {
-  const filename = basename(filePath);
-  const match = filename.match(SEED_PATTERN);
-
-  if (!match) {
-    logger.warn(`ignoring non-seed file: ${filename}`);
-    return;
-  }
-
-  const jobId = match[1]!;
-
-  let raw: string;
-  try {
-    raw = await Bun.file(filePath).text();
-  } catch (err) {
-    logger.warn(`failed to read ${filename}`, err);
-    return;
-  }
-
-  let seed: SeedData;
-  try {
-    seed = JSON.parse(raw) as SeedData;
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    logger.warn(`invalid JSON in ${filename}: ${message}`);
-    return;
-  }
-
-  if (running.has(jobId)) return;
-
   const jobDir = join(dirs.current, jobId);
-  const seedDest = join(jobDir, "seed.json");
-  if (await Bun.file(seedDest).exists()) return;
-
-  await mkdir(jobDir, { recursive: true });
-  try {
-    await rename(filePath, seedDest);
-  } catch (err) {
-    logger.error(`failed to move seed file for job ${jobId}`, err);
-    throw err;
-  }
   await mkdir(join(jobDir, "tasks"), { recursive: true });
 
   let pipelineTasks: string[] = [];
@@ -322,6 +288,56 @@ export async function handleSeedAdd(
 
   const logName = generateLogName("orchestrator", "init", LogEvent.START, LogFileExtension.JSON);
   await fileIO.writeLog(logName, JSON.stringify(startLog, null, 2), { mode: "replace" });
+}
+
+export async function handleSeedAdd(
+  filePath: string,
+  dirs: ResolvedDirs,
+  running: Map<string, ChildHandle>,
+  logger: ReturnType<typeof createLogger>,
+  opts: OrchestratorOptions
+): Promise<void> {
+  const filename = basename(filePath);
+  const match = filename.match(SEED_PATTERN);
+
+  if (!match) {
+    logger.warn(`ignoring non-seed file: ${filename}`);
+    return;
+  }
+
+  const jobId = match[1]!;
+
+  let raw: string;
+  try {
+    raw = await Bun.file(filePath).text();
+  } catch (err) {
+    logger.warn(`failed to read ${filename}`, err);
+    return;
+  }
+
+  let seed: SeedData;
+  try {
+    seed = JSON.parse(raw) as SeedData;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.warn(`invalid JSON in ${filename}: ${message}`);
+    return;
+  }
+
+  if (running.has(jobId)) return;
+
+  const jobDir = join(dirs.current, jobId);
+  const seedDest = join(jobDir, "seed.json");
+  if (await Bun.file(seedDest).exists()) return;
+
+  await mkdir(jobDir, { recursive: true });
+  try {
+    await rename(filePath, seedDest);
+  } catch (err) {
+    logger.error(`failed to move seed file for job ${jobId}`, err);
+    throw err;
+  }
+  await scaffoldJobDir(jobId, seed, dirs, logger);
 
   const spawnFn = opts.spawn ?? createDefaultSpawn();
   try {
@@ -364,18 +380,139 @@ export async function stopChildren(
   running.clear();
 }
 
+export interface DrainPendingQueueOptions {
+  dataDir: string;
+  maxConcurrentJobs: number;
+  lockTimeoutMs: number;
+  spawnRunner: (jobId: string) => Promise<{ pid: number }>;
+}
+
+export interface DrainPendingQueueResult {
+  promoted: string[];
+  remaining: number;
+}
+
+async function dirExists(path: string): Promise<boolean> {
+  try {
+    const s = await stat(path);
+    return s.isDirectory();
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return false;
+    throw err;
+  }
+}
+
+async function promoteSeedFile(
+  pendingSeedPath: string,
+  currentJobDir: string,
+): Promise<void> {
+  await mkdir(currentJobDir, { recursive: true });
+  await rename(pendingSeedPath, join(currentJobDir, "seed.json"));
+}
+
+export async function drainPendingQueue(
+  opts: DrainPendingQueueOptions,
+): Promise<DrainPendingQueueResult> {
+  const { dataDir, maxConcurrentJobs, spawnRunner } = opts;
+  const logger = createLogger("orchestrator");
+  const queued = await listQueuedSeeds(dataDir);
+  const promoted: string[] = [];
+
+  for (let i = 0; i < queued.length; i++) {
+    const { jobId, seedPath } = queued[i]!;
+    const acquired = await tryAcquireJobSlot({
+      dataDir,
+      jobId,
+      maxConcurrentJobs,
+      source: "orchestrator",
+    });
+    if (!acquired.ok) {
+      return { promoted, remaining: queued.length - promoted.length };
+    }
+
+    const currentJobDir = join(dataDir, "current", jobId);
+    if (await dirExists(currentJobDir)) {
+      await releaseJobSlot(dataDir, jobId);
+      logger.warn(`current job directory already exists for ${jobId}; skipping promotion`);
+      continue;
+    }
+
+    try {
+      await promoteSeedFile(seedPath, currentJobDir);
+    } catch (err) {
+      await releaseJobSlot(dataDir, jobId);
+      throw err;
+    }
+
+    let pid: number;
+    try {
+      ({ pid } = await spawnRunner(jobId));
+    } catch (err) {
+      await releaseJobSlot(dataDir, jobId);
+      throw err;
+    }
+
+    await updateJobSlotPid(dataDir, jobId, pid);
+    promoted.push(jobId);
+  }
+
+  return { promoted, remaining: queued.length - promoted.length };
+}
+
 export function startOrchestrator(opts: OrchestratorOptions): Promise<OrchestratorHandle> {
   if (!opts.dataDir) throw new Error("dataDir is required");
 
   const dirs = resolveDirs(opts.dataDir);
   const factory = opts.watcherFactory ?? ((path, options) => watch(path, options) as unknown as Watcher);
   const logger = createLogger("orchestrator");
+  const cfg = getConfig();
+  const maxConcurrentJobs = cfg.orchestrator.maxConcurrentJobs;
+  const lockTimeoutMs = cfg.orchestrator.lockFileTimeout;
 
   return mkdir(dirs.pending, { recursive: true })
     .then(() => mkdir(dirs.current, { recursive: true }))
     .then(() => mkdir(dirs.complete, { recursive: true }))
     .then(() => new Promise<OrchestratorHandle>((resolve, reject) => {
       const running = new Map<string, ChildHandle>();
+      const spawnFn = opts.spawn ?? createDefaultSpawn();
+
+      const spawnRunnerForJob = async (jobId: string): Promise<{ pid: number }> => {
+        const seedPath = join(dirs.current, jobId, "seed.json");
+        const raw = await Bun.file(seedPath).text();
+        const seed = JSON.parse(raw) as SeedData;
+        await scaffoldJobDir(jobId, seed, dirs, logger);
+        await spawnRunner(jobId, seed, dirs, running, logger, spawnFn);
+        const child = running.get(jobId);
+        if (!child) throw new Error(`spawnRunner did not register child for ${jobId}`);
+        return { pid: child.pid };
+      };
+
+      let isDraining = false;
+      let pendingDrain = false;
+      const triggerDrain = (): void => {
+        if (isDraining) {
+          pendingDrain = true;
+          return;
+        }
+        isDraining = true;
+        void (async () => {
+          try {
+            do {
+              pendingDrain = false;
+              await drainPendingQueue({
+                dataDir: dirs.dataDir,
+                maxConcurrentJobs,
+                lockTimeoutMs,
+                spawnRunner: spawnRunnerForJob,
+              });
+            } while (pendingDrain);
+          } catch (err) {
+            logger.error("drainPendingQueue failed", err);
+          } finally {
+            isDraining = false;
+          }
+        })();
+      };
 
       const watcher = factory(join(dirs.pending, "*.json"), {
         ignoreInitial: false,
@@ -389,11 +526,7 @@ export function startOrchestrator(opts: OrchestratorOptions): Promise<Orchestrat
       };
 
       watcher
-        .on("add", (filePath) => {
-          handleSeedAdd(filePath, dirs, running, logger, opts).catch((err: unknown) => {
-            logger.error(`unhandled error processing seed file ${filePath}`, err);
-          });
-        })
+        .on("add", () => triggerDrain())
         .on("error", reject)
         .on("ready", () => resolve({ stop }));
     }));
