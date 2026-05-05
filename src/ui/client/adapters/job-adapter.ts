@@ -49,6 +49,7 @@ function normalizeTask(name: string, rawTask: unknown): NormalizedTask {
     startedAt: toStringOrNull(task["startedAt"]),
     endedAt: toStringOrNull(task["endedAt"]),
     attempts: typeof task["attempts"] === "number" ? task["attempts"] : undefined,
+    restartCount: typeof task["restartCount"] === "number" ? task["restartCount"] : undefined,
     executionTimeMs: typeof task["executionTimeMs"] === "number" ? task["executionTimeMs"] : undefined,
     currentStage: typeof task["currentStage"] === "string" ? task["currentStage"] : undefined,
     failedStage: typeof task["failedStage"] === "string" ? task["failedStage"] : undefined,

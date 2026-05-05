@@ -30,6 +30,18 @@ describe("job adapter", () => {
     expect(normalizeTasks(null)).toEqual({});
   });
 
+  it("maps numeric restartCount onto the normalized task", () => {
+    expect(normalizeTasks({ t1: { state: "done", restartCount: 2 } })["t1"]?.restartCount).toBe(2);
+  });
+
+  it("treats null restartCount as undefined", () => {
+    expect(normalizeTasks({ t1: { state: "done", restartCount: null } })["t1"]?.restartCount).toBeUndefined();
+  });
+
+  it("leaves restartCount undefined when absent", () => {
+    expect(normalizeTasks({ t1: { state: "done" } })["t1"]?.restartCount).toBeUndefined();
+  });
+
   it("adapts summary jobs with defaults", () => {
     const job = adaptJobSummary({
       jobId: "job-1",
