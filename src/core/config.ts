@@ -188,7 +188,14 @@ function loadFromEnvironment(config: AppConfig): AppConfig {
 
   const maxAttemptsRaw = process.env["PO_TASK_MAX_ATTEMPTS"];
   if (maxAttemptsRaw) {
-    overrides["taskRunner"] = { maxAttempts: parseInt(maxAttemptsRaw, 10) };
+    const maxAttempts = Number(maxAttemptsRaw);
+    if (!Number.isInteger(maxAttempts) || maxAttempts < 1) {
+      throw new Error(`PO_TASK_MAX_ATTEMPTS must be an integer >= 1, got ${maxAttemptsRaw}`);
+    }
+    overrides["taskRunner"] = {
+      ...((overrides["taskRunner"] as PlainObject | undefined) ?? {}),
+      maxAttempts,
+    };
   }
 
   const shutdownTimeoutRaw = process.env["PO_SHUTDOWN_TIMEOUT"];
@@ -234,8 +241,8 @@ function validateConfig(config: AppConfig): void {
   if (config.taskRunner.maxRefinementAttempts < 1) {
     errors.push(`taskRunner.maxRefinementAttempts must be >= 1, got ${config.taskRunner.maxRefinementAttempts}`);
   }
-  if (config.taskRunner.maxAttempts < 1) {
-    errors.push(`taskRunner.maxAttempts must be >= 1, got ${config.taskRunner.maxAttempts}`);
+  if (!Number.isInteger(config.taskRunner.maxAttempts) || config.taskRunner.maxAttempts < 1) {
+    errors.push(`taskRunner.maxAttempts must be an integer >= 1, got ${config.taskRunner.maxAttempts}`);
   }
   if (!(VALID_LOG_LEVELS as readonly string[]).includes(config.logging.level)) {
     errors.push(`logging.level must be one of ${VALID_LOG_LEVELS.join(", ")}, got ${config.logging.level}`);

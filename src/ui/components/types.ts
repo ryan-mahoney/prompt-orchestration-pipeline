@@ -43,7 +43,7 @@ export interface TaskStateObject {
   artifacts?: string[];
   tokenUsage?: Record<string, unknown>;
   attempts?: number;
-  restartCount?: number | null;
+  restartCount?: number;
   executionTimeMs?: number;
 }
 
