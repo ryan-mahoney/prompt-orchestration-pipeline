@@ -43,7 +43,8 @@ export default function JobDetail({
         prior.stage === item.stage &&
         prior.title === item.title &&
         prior.subtitle === item.subtitle &&
-        prior.body === item.body
+        prior.body === item.body &&
+        prior.restartCount === item.restartCount
       ) {
         return prior;
       }

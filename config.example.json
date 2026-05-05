@@ -10,7 +10,8 @@
   "taskRunner": {
     "maxRefinementAttempts": 2,
     "stageTimeout": 300000,
-    "llmRequestTimeout": 60000
+    "llmRequestTimeout": 60000,
+    "maxAttempts": 3
   },
   "llm": {
     "defaultProvider": "deepseek",

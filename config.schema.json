@@ -67,6 +67,12 @@
           "description": "Timeout in milliseconds for LLM requests",
           "minimum": 1000,
           "default": 60000
+        },
+        "maxAttempts": {
+          "type": "integer",
+          "description": "Maximum total attempts for a failing task (1 = no retry).",
+          "minimum": 1,
+          "default": 3
         }
       }
     },

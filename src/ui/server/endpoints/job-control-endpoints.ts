@@ -418,6 +418,7 @@ export async function handleJobStop(
           delete task.failedStage;
           delete task.error;
           task.attempts = 0;
+          task.restartCount = 0;
           task.refinementAttempts = 0;
           task.tokenUsage = [];
         }

@@ -221,6 +221,73 @@ describe("handleJobStop", () => {
     expect(analysis.tokenUsage).toEqual([]);
   });
 
+  it("resets restartCount on the running task that gets reset to pending", async () => {
+    const root = await makeTempRoot();
+    initPATHS(root);
+
+    const jobDir = await setupJob(root, "job-restart-count", {
+      id: "job-restart-count",
+      state: "running",
+      current: "analysis",
+      currentStage: "stage-2",
+      tasks: {
+        research: { state: "done", currentStage: null },
+        analysis: {
+          state: "running",
+          currentStage: "stage-2",
+          attempts: 1,
+          restartCount: 2,
+        },
+      },
+      files: { artifacts: [], logs: [], tmp: [] },
+    });
+
+    const req = new Request("http://localhost/api/jobs/job-restart-count/stop", { method: "POST" });
+    const res = await handleJobStop(req, "job-restart-count", root);
+    const body = await res.json() as Record<string, unknown>;
+
+    expect(res.status).toBe(202);
+    expect(body["resetTask"]).toBe("analysis");
+
+    const snapshot = await readJobStatus(jobDir);
+    const analysis = snapshot!.tasks["analysis"]!;
+    expect(analysis.state).toBe("pending");
+    expect(analysis.restartCount).toBe(0);
+  });
+
+  it("does not modify restartCount on tasks that are not reset", async () => {
+    const root = await makeTempRoot();
+    initPATHS(root);
+
+    const jobDir = await setupJob(root, "job-restart-count-untouched", {
+      id: "job-restart-count-untouched",
+      state: "running",
+      current: "analysis",
+      currentStage: "stage-2",
+      tasks: {
+        research: { state: "done", currentStage: null, restartCount: 4 },
+        analysis: {
+          state: "running",
+          currentStage: "stage-2",
+          attempts: 1,
+          restartCount: 1,
+        },
+      },
+      files: { artifacts: [], logs: [], tmp: [] },
+    });
+
+    const req = new Request("http://localhost/api/jobs/job-restart-count-untouched/stop", { method: "POST" });
+    const res = await handleJobStop(req, "job-restart-count-untouched", root);
+    const body = await res.json() as Record<string, unknown>;
+
+    expect(res.status).toBe(202);
+    expect(body["resetTask"]).toBe("analysis");
+
+    const snapshot = await readJobStatus(jobDir);
+    expect(snapshot!.tasks["research"]!.restartCount).toBe(4);
+    expect(snapshot!.tasks["analysis"]!.restartCount).toBe(0);
+  });
+
   it("recovers a stale job by resetting the first non-terminal task after partial progress", async () => {
     const root = await makeTempRoot();
     initPATHS(root);
@@ -778,6 +845,94 @@ describe("stop → restart integration", () => {
 
     expect(res.status).toBe(409);
     expect(body["code"]).toBe("job_running");
+  });
+
+  it("restart returns 409 job_running while runner is mid-retry-sleep (alive PID, task running, restartCount > 0)", async () => {
+    const root = await makeTempRoot();
+    initPATHS(root);
+
+    // Simulate the runner being asleep between automatic retries: the runner
+    // process is alive, the task it owns is still in "running" state, and
+    // restartCount has already been incremented by the prior failed attempt.
+    const proc = spawnSleeper();
+
+    await setupJob(root, "retry-sleep-restart", {
+      id: "retry-sleep-restart",
+      state: "running",
+      current: "research",
+      currentStage: null,
+      tasks: {
+        research: {
+          state: "running",
+          currentStage: null,
+          attempts: 2,
+          restartCount: 1,
+        },
+      },
+      files: { artifacts: [], logs: [], tmp: [] },
+    }, proc.pid);
+
+    const req = new Request("http://localhost/api/jobs/retry-sleep-restart/restart", { method: "POST" });
+    const res = await handleJobRestart(req, "retry-sleep-restart", root);
+    const body = await res.json() as Record<string, unknown>;
+
+    // The PID-liveness check fires before any task-state inspection, so the
+    // in-flight Bun.sleep cannot race with a manual restart.
+    expect(res.status).toBe(409);
+    expect(body["code"]).toBe("job_running");
+  });
+
+  it("stop terminates a runner mid-retry-sleep within KILL_GRACE_MS + KILL_POLL_MS via SIGTERM", async () => {
+    const root = await makeTempRoot();
+    initPATHS(root);
+
+    // Same scenario as above: runner alive, task running, retry counter set.
+    // The stop path must signal the runner via the existing PID/SIGTERM contract.
+    const proc = spawnSleeper();
+    const pid = proc.pid;
+
+    const jobDir = await setupJob(root, "retry-sleep-stop", {
+      id: "retry-sleep-stop",
+      state: "running",
+      current: "research",
+      currentStage: null,
+      tasks: {
+        research: {
+          state: "running",
+          currentStage: null,
+          attempts: 2,
+          restartCount: 1,
+        },
+      },
+      files: { artifacts: [], logs: [], tmp: [] },
+    }, pid);
+
+    // KILL_GRACE_MS = 1500, KILL_POLL_MS = 100 in job-control-endpoints.ts.
+    // Allow a generous margin for filesystem and signal-delivery jitter while
+    // still asserting the bound holds.
+    const KILL_BUDGET_MS = 1500 + 100 + 500;
+
+    const start = Date.now();
+    const req = new Request("http://localhost/api/jobs/retry-sleep-stop/stop", { method: "POST" });
+    const res = await handleJobStop(req, "retry-sleep-stop", root);
+    const elapsed = Date.now() - start;
+    const body = await res.json() as Record<string, unknown>;
+
+    expect(res.status).toBe(202);
+    expect(body["ok"]).toBe(true);
+    expect(body["stopped"]).toBe(true);
+    expect(body["signal"]).toBe("SIGTERM");
+    expect(body["resetTask"]).toBe("research");
+    expect(elapsed).toBeLessThan(KILL_BUDGET_MS);
+
+    // PID file is removed by cleanupRunnerPid in handleJobStop.
+    const pidFileExists = await Bun.file(path.join(jobDir, "runner.pid")).exists();
+    expect(pidFileExists).toBe(false);
+
+    // Reset restored the task to pending and zeroed restartCount (criterion 10).
+    const snapshot = await readJobStatus(jobDir);
+    expect(snapshot!.tasks["research"]!.state).toBe("pending");
+    expect(snapshot!.tasks["research"]!.restartCount).toBe(0);
   });
 
   it("full cycle: stop clears running task, restart resets all tasks to pending", async () => {

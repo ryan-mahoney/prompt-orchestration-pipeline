@@ -20,6 +20,7 @@ export function computeDagItems(job: JobDetail, pipeline: Pick<PipelineType, "ta
       body: task?.error?.message ?? null,
       startedAt: task?.startedAt ?? 0,
       endedAt: task?.endedAt ?? null,
+      restartCount: task?.restartCount ?? 0,
     } satisfies DagItem;
   });
 }

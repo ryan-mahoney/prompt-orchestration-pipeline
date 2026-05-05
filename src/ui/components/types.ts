@@ -43,6 +43,7 @@ export interface TaskStateObject {
   artifacts?: string[];
   tokenUsage?: Record<string, unknown>;
   attempts?: number;
+  restartCount?: number | null;
   executionTimeMs?: number;
 }
 
@@ -105,6 +106,7 @@ export interface DagItem {
   body: string | null;
   startedAt: string | number;
   endedAt: string | number | null;
+  restartCount?: number;
 }
 
 export interface PipelineTask {

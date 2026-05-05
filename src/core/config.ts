@@ -16,6 +16,7 @@ export interface TaskRunnerConfig {
   maxRefinementAttempts: number;
   stageTimeout: number;
   llmRequestTimeout: number;
+  maxAttempts: number;
 }
 
 export interface LLMConfig {
@@ -95,6 +96,7 @@ export const defaultConfig = {
     maxRefinementAttempts: 3,
     stageTimeout: 300000,
     llmRequestTimeout: 3600000,
+    maxAttempts: 3,
   },
   llm: {
     defaultProvider: "openai",
@@ -184,6 +186,11 @@ function loadFromEnvironment(config: AppConfig): AppConfig {
     overrides["llm"] = { maxConcurrency: parseInt(maxConcurrencyRaw, 10) };
   }
 
+  const maxAttemptsRaw = process.env["PO_TASK_MAX_ATTEMPTS"];
+  if (maxAttemptsRaw) {
+    overrides["taskRunner"] = { maxAttempts: parseInt(maxAttemptsRaw, 10) };
+  }
+
   const shutdownTimeoutRaw = process.env["PO_SHUTDOWN_TIMEOUT"];
   if (shutdownTimeoutRaw) {
     overrides["orchestrator"] = { shutdownTimeout: parseInt(shutdownTimeoutRaw, 10) };
@@ -226,6 +233,9 @@ function validateConfig(config: AppConfig): void {
   }
   if (config.taskRunner.maxRefinementAttempts < 1) {
     errors.push(`taskRunner.maxRefinementAttempts must be >= 1, got ${config.taskRunner.maxRefinementAttempts}`);
+  }
+  if (config.taskRunner.maxAttempts < 1) {
+    errors.push(`taskRunner.maxAttempts must be >= 1, got ${config.taskRunner.maxAttempts}`);
   }
   if (!(VALID_LOG_LEVELS as readonly string[]).includes(config.logging.level)) {
     errors.push(`logging.level must be one of ${VALID_LOG_LEVELS.join(", ")}, got ${config.logging.level}`);

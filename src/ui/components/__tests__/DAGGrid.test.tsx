@@ -117,3 +117,95 @@ test("DAGGrid opens task details from keyboard interaction and renders connector
   expect(view.getByText("Build · done")).toBeTruthy();
   expect(view.container.querySelectorAll('path[marker-end="url(#dag-grid-arrow)"]').length).toBe(1);
 });
+
+test("DAGGrid does not render the restart badge when restartCount is absent or zero", () => {
+  installMatchMedia();
+
+  const view = render(
+    <DAGGrid
+      items={[makeItem({ id: "build", title: "Build", status: "pending" })]}
+      jobId="job-1"
+      taskById={{ build: makeTaskState({ name: "build", state: "pending" }) }}
+      pipelineTasks={["build"]}
+      filesByTypeForItem={() => emptyFiles}
+      geometryAdapter={geometryAdapter}
+    />,
+  );
+
+  expect(view.container.querySelector('[data-role="restart-badge"]')).toBeNull();
+
+  const viewZero = render(
+    <DAGGrid
+      items={[makeItem({ id: "build", title: "Build", status: "pending", restartCount: 0 })]}
+      jobId="job-1"
+      taskById={{ build: makeTaskState({ name: "build", state: "pending" }) }}
+      pipelineTasks={["build"]}
+      filesByTypeForItem={() => emptyFiles}
+      geometryAdapter={geometryAdapter}
+    />,
+  );
+
+  expect(viewZero.container.querySelector('[data-role="restart-badge"]')).toBeNull();
+});
+
+test("DAGGrid renders the restart badge with singular label when restartCount is 1", () => {
+  installMatchMedia();
+
+  const view = render(
+    <DAGGrid
+      items={[makeItem({ id: "build", title: "Build", status: "pending", restartCount: 1 })]}
+      jobId="job-1"
+      taskById={{ build: makeTaskState({ name: "build", state: "pending" }) }}
+      pipelineTasks={["build"]}
+      filesByTypeForItem={() => emptyFiles}
+      geometryAdapter={geometryAdapter}
+    />,
+  );
+
+  const badge = view.container.querySelector('[data-role="restart-badge"]');
+  expect(badge).not.toBeNull();
+  expect(badge!.getAttribute("aria-label")).toBe("Restarted 1 time");
+  expect(badge!.getAttribute("title")).toBe("Restarted 1 time");
+  expect(badge!.textContent).toBe("↻ 1");
+});
+
+test("DAGGrid renders the restart badge with plural label when restartCount is greater than 1", () => {
+  installMatchMedia();
+
+  const view = render(
+    <DAGGrid
+      items={[makeItem({ id: "build", title: "Build", status: "pending", restartCount: 5 })]}
+      jobId="job-1"
+      taskById={{ build: makeTaskState({ name: "build", state: "pending" }) }}
+      pipelineTasks={["build"]}
+      filesByTypeForItem={() => emptyFiles}
+      geometryAdapter={geometryAdapter}
+    />,
+  );
+
+  const badge = view.container.querySelector('[data-role="restart-badge"]');
+  expect(badge).not.toBeNull();
+  expect(badge!.getAttribute("aria-label")).toBe("Restarted 5 times");
+  expect(badge!.textContent).toBe("↻ 5");
+});
+
+test("DAGGrid renders the restart badge as the first child of the card header", () => {
+  installMatchMedia();
+
+  const view = render(
+    <DAGGrid
+      items={[makeItem({ id: "build", title: "Build", status: "pending", restartCount: 2 })]}
+      jobId="job-1"
+      taskById={{ build: makeTaskState({ name: "build", state: "pending" }) }}
+      pipelineTasks={["build"]}
+      filesByTypeForItem={() => emptyFiles}
+      geometryAdapter={geometryAdapter}
+    />,
+  );
+
+  const header = view.container.querySelector('[data-role="card-header"]');
+  expect(header).not.toBeNull();
+  const firstChild = header!.firstElementChild;
+  expect(firstChild).not.toBeNull();
+  expect(firstChild!.getAttribute("data-role")).toBe("restart-badge");
+});

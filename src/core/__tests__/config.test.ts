@@ -1,5 +1,6 @@
 import { describe, test, expect, afterEach } from "bun:test";
 import { defaultConfig, resetConfig, loadConfig, getConfig, getConfigValue, getPipelineConfig } from "../config";
+import type { AppConfig } from "../config";
 import { mkdtemp, writeFile, mkdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -70,6 +71,51 @@ describe("defaultConfig", () => {
     expect(defaultConfig.llm.defaultProvider).toBe("openai");
     expect(defaultConfig.ui.port).toBe(3000);
     expect(defaultConfig.taskRunner.maxRefinementAttempts).toBeGreaterThan(0);
+  });
+
+  test("taskRunner.maxAttempts defaults to 3", () => {
+    expect(defaultConfig.taskRunner.maxAttempts).toBe(3);
+  });
+});
+
+describe("validateConfig (via loadConfig)", () => {
+  afterEach(() => {
+    resetConfig();
+  });
+
+  test("throws when taskRunner.maxAttempts is 0", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "config-test-"));
+    const configDir = join(dir, "pipeline-config", "test");
+    const tasksDir = join(configDir, "tasks");
+    await mkdir(tasksDir, { recursive: true });
+    await writeFile(join(configDir, "pipeline.json"), JSON.stringify({ name: "test", tasks: ["t1"] }));
+    await writeFile(join(dir, "pipeline-config", "registry.json"), JSON.stringify({
+      pipelines: { test: { configDir, tasksDir } }
+    }));
+    const overrideFile = join(dir, "config.json");
+    await writeFile(overrideFile, JSON.stringify({ taskRunner: { maxAttempts: 0 } }));
+    const origRoot = process.env.PO_ROOT;
+    process.env.PO_ROOT = dir;
+    try {
+      await expect(loadConfig({ configPath: overrideFile })).rejects.toThrow("taskRunner.maxAttempts must be >= 1");
+    } finally {
+      if (origRoot) process.env.PO_ROOT = origRoot; else delete process.env.PO_ROOT;
+      await rm(dir, { recursive: true });
+    }
+  });
+});
+
+describe("PO_TASK_MAX_ATTEMPTS env override", () => {
+  afterEach(() => {
+    delete process.env.PO_TASK_MAX_ATTEMPTS;
+    resetConfig();
+  });
+
+  test("getConfig reads PO_TASK_MAX_ATTEMPTS into taskRunner.maxAttempts", () => {
+    process.env.PO_TASK_MAX_ATTEMPTS = "5";
+    resetConfig();
+    const config: AppConfig = getConfig();
+    expect(config.taskRunner.maxAttempts).toBe(5);
   });
 });
 
