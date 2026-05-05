@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import type { Subprocess } from "bun";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { initPATHS, resetPATHS } from "../config-bridge-node";
 import { handleJobRestart, handleJobStop, handleTaskStart } from "../endpoints/job-control-endpoints";
@@ -34,6 +34,25 @@ async function setupJob(
   return jobDir;
 }
 
+async function setupPipelineConfig(root: string, slug: string, tasks: string[]): Promise<void> {
+  const configDir = path.join(root, "pipeline-config", slug);
+  await mkdir(configDir, { recursive: true });
+  await writeFile(path.join(configDir, "pipeline.json"), JSON.stringify({ name: slug, tasks }));
+  await writeFile(path.join(root, "pipeline-config", "registry.json"), JSON.stringify({
+    pipelines: {
+      [slug]: {},
+    },
+  }));
+}
+
+function mockRunnerSpawn(pid = 424242) {
+  const proc = {
+    pid,
+    unref: vi.fn(),
+  } as unknown as Subprocess;
+  return vi.spyOn(Bun, "spawn").mockReturnValue(proc);
+}
+
 function spawnSleeper(): Subprocess {
   const proc = Bun.spawn(["sleep", "60"], {
     stdout: "ignore",
@@ -45,6 +64,7 @@ function spawnSleeper(): Subprocess {
 }
 
 afterEach(async () => {
+  vi.restoreAllMocks();
   resetPATHS();
   for (const proc of childProcs.splice(0)) {
     try { proc.kill(); } catch {}
@@ -340,6 +360,8 @@ describe("handleJobRestart", () => {
       files: { artifacts: [], logs: [], tmp: [] },
     });
 
+    mockRunnerSpawn();
+
     const req = new Request("http://localhost/api/jobs/restart-3/restart", { method: "POST" });
     const res = await handleJobRestart(req, "restart-3", root);
     const body = await res.json() as Record<string, unknown>;
@@ -494,15 +516,18 @@ describe("handleTaskStart", () => {
   it("returns 202 and spawns runner when target task is pending and dependencies are done", async () => {
     const root = await makeTempRoot();
     initPATHS(root);
+    await setupPipelineConfig(root, "task-start-ok-pipeline", ["research", "analysis"]);
+    const spawnSpy = mockRunnerSpawn(12345);
 
     const jobDir = await setupJob(root, "task-start-ok", {
       id: "task-start-ok",
+      pipeline: "task-start-ok-pipeline",
       state: "pending",
       current: null,
       currentStage: null,
       tasks: {
-        research: { state: "done", currentStage: null },
         analysis: { state: "pending", currentStage: null },
+        research: { state: "done", currentStage: null },
       },
       files: { artifacts: [], logs: [], tmp: [] },
     });
@@ -511,7 +536,18 @@ describe("handleTaskStart", () => {
     const snapshotBefore = await Bun.file(statusPath).text();
 
     const req = new Request("http://localhost/api/jobs/task-start-ok/tasks/analysis/start", { method: "POST" });
-    const res = await handleTaskStart(req, "task-start-ok", "analysis", root);
+    const originalRunSingleTask = process.env["PO_RUN_SINGLE_TASK"];
+    process.env["PO_RUN_SINGLE_TASK"] = "true";
+    let res: Response;
+    try {
+      res = await handleTaskStart(req, "task-start-ok", "analysis", root);
+    } finally {
+      if (originalRunSingleTask === undefined) {
+        delete process.env["PO_RUN_SINGLE_TASK"];
+      } else {
+        process.env["PO_RUN_SINGLE_TASK"] = originalRunSingleTask;
+      }
+    }
     const body = await res.json() as Record<string, unknown>;
 
     expect(res.status).toBe(202);
@@ -526,26 +562,100 @@ describe("handleTaskStart", () => {
 
     const snapshotAfter = await Bun.file(statusPath).text();
     expect(snapshotAfter).toBe(snapshotBefore);
+
+    expect(spawnSpy).toHaveBeenCalledTimes(1);
+    const spawnOptions = spawnSpy.mock.calls[0]![0] as unknown as {
+      cmd: string[];
+      env: Record<string, string | undefined>;
+    };
+    expect(spawnOptions.cmd[0]).toBe("bun");
+    expect(spawnOptions.cmd[1]).toBe("run");
+    expect(spawnOptions.cmd[2]).toContain("pipeline-runner.ts");
+    expect(spawnOptions.cmd[3]).toBe("task-start-ok");
+    expect(spawnOptions.env["PO_ROOT"]).toBe(root);
+    expect(spawnOptions.env["PO_START_FROM_TASK"]).toBe("analysis");
+    expect(spawnOptions.env["PO_RUN_SINGLE_TASK"]).toBeUndefined();
+    await expect(Bun.file(path.join(jobDir, "runner.pid")).text()).resolves.toBe("12345\n");
+  });
+
+  it("returns 409 job_running on an immediate second start after writing runner.pid", async () => {
+    const root = await makeTempRoot();
+    initPATHS(root);
+    await setupPipelineConfig(root, "task-start-duplicate-pipeline", ["research", "analysis"]);
+    const spawnSpy = mockRunnerSpawn(process.pid);
+
+    await setupJob(root, "task-start-duplicate", {
+      id: "task-start-duplicate",
+      pipeline: "task-start-duplicate-pipeline",
+      state: "pending",
+      current: null,
+      currentStage: null,
+      tasks: {
+        research: { state: "done", currentStage: null },
+        analysis: { state: "pending", currentStage: null },
+      },
+      files: { artifacts: [], logs: [], tmp: [] },
+    });
+
+    const firstReq = new Request("http://localhost/api/jobs/task-start-duplicate/tasks/analysis/start", { method: "POST" });
+    const firstRes = await handleTaskStart(firstReq, "task-start-duplicate", "analysis", root);
+    expect(firstRes.status).toBe(202);
+
+    const secondReq = new Request("http://localhost/api/jobs/task-start-duplicate/tasks/analysis/start", { method: "POST" });
+    const secondRes = await handleTaskStart(secondReq, "task-start-duplicate", "analysis", root);
+    const secondBody = await secondRes.json() as Record<string, unknown>;
+
+    expect(secondRes.status).toBe(409);
+    expect(secondBody["code"]).toBe("job_running");
+    expect(spawnSpy).toHaveBeenCalledTimes(1);
   });
 
   it("returns 412 dependencies_not_satisfied when an earlier task is \"pending\"", async () => {
     const root = await makeTempRoot();
     initPATHS(root);
+    await setupPipelineConfig(root, "task-start-deps-pipeline", ["research", "analysis"]);
 
     await setupJob(root, "task-start-deps", {
       id: "task-start-deps",
+      pipeline: "task-start-deps-pipeline",
       state: "pending",
       current: null,
       currentStage: null,
       tasks: {
-        research: { state: "pending", currentStage: null },
         analysis: { state: "pending", currentStage: null },
+        research: { state: "pending", currentStage: null },
       },
       files: { artifacts: [], logs: [], tmp: [] },
     });
 
     const req = new Request("http://localhost/api/jobs/task-start-deps/tasks/analysis/start", { method: "POST" });
     const res = await handleTaskStart(req, "task-start-deps", "analysis", root);
+    const body = await res.json() as Record<string, unknown>;
+
+    expect(res.status).toBe(412);
+    expect(body["code"]).toBe("dependencies_not_satisfied");
+  });
+
+  it("returns 412 dependencies_not_satisfied when an earlier task is \"failed\"", async () => {
+    const root = await makeTempRoot();
+    initPATHS(root);
+    await setupPipelineConfig(root, "task-start-failed-deps-pipeline", ["research", "analysis"]);
+
+    await setupJob(root, "task-start-failed-deps", {
+      id: "task-start-failed-deps",
+      pipeline: "task-start-failed-deps-pipeline",
+      state: "failed",
+      current: null,
+      currentStage: null,
+      tasks: {
+        analysis: { state: "pending", currentStage: null },
+        research: { state: "failed", currentStage: null },
+      },
+      files: { artifacts: [], logs: [], tmp: [] },
+    });
+
+    const req = new Request("http://localhost/api/jobs/task-start-failed-deps/tasks/analysis/start", { method: "POST" });
+    const res = await handleTaskStart(req, "task-start-failed-deps", "analysis", root);
     const body = await res.json() as Record<string, unknown>;
 
     expect(res.status).toBe(412);
@@ -582,6 +692,7 @@ describe("stop → restart integration", () => {
     expect(snapshot!.tasks["research"]!.state).toBe("pending");
 
     // Restart should now succeed (no 409 deadlock)
+    mockRunnerSpawn();
     const restartReq = new Request("http://localhost/api/jobs/integ-1/restart", { method: "POST" });
     const restartRes = await handleJobRestart(restartReq, "integ-1", root);
     const restartBody = await restartRes.json() as Record<string, unknown>;
@@ -607,6 +718,8 @@ describe("stop → restart integration", () => {
       },
       files: { artifacts: [], logs: [], tmp: [] },
     }, 999999);
+
+    mockRunnerSpawn();
 
     const req = new Request("http://localhost/api/jobs/integ-2/restart", { method: "POST" });
     const res = await handleJobRestart(req, "integ-2", root);
@@ -701,6 +814,7 @@ describe("stop → restart integration", () => {
     expect(afterStop!.tasks["synthesis"]!.state).toBe("pending");
 
     // Restart with clean-slate resets everything
+    mockRunnerSpawn();
     const restartReq = new Request("http://localhost/api/jobs/integ-5/restart", { method: "POST" });
     const restartRes = await handleJobRestart(restartReq, "integ-5", root);
     const restartBody = await restartRes.json() as Record<string, unknown>;
