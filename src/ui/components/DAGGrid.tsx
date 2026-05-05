@@ -276,6 +276,16 @@ export default function DAGGrid({
                 data-role="card-header"
                 className={`flex items-center justify-between gap-3 rounded-t-lg border-b px-4 py-2 ${reducedMotion ? "" : "transition-opacity duration-300 ease-in-out"} ${getHeaderClasses(getItemStatus(items[index], index, activeIndex))}`}
               >
+                {(items[index]?.restartCount ?? 0) > 0 ? (
+                  <span
+                    data-role="restart-badge"
+                    className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-sm border border-red-300 bg-red-50 text-red-700 text-[11px] font-medium tabular-nums"
+                    title={`Restarted ${items[index]!.restartCount} time${items[index]!.restartCount === 1 ? "" : "s"}`}
+                    aria-label={`Restarted ${items[index]!.restartCount} time${items[index]!.restartCount === 1 ? "" : "s"}`}
+                  >
+                    ↻ {items[index]!.restartCount}
+                  </span>
+                ) : null}
                 <div className="truncate font-medium">{items[index]?.title ?? formatStepName(items[index]?.id ?? "")}</div>
                 <div className="flex items-center gap-2">
                   {getItemStatus(items[index], index, activeIndex) === "running" ? (
