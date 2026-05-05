@@ -1,6 +1,7 @@
 import path from "node:path";
 
 import { embeddedAssets } from "./embedded-assets";
+import { handleConcurrencyStatus } from "./endpoints/concurrency-endpoint";
 import { handleCreatePipeline } from "./endpoints/create-pipeline-endpoint";
 import { handleTaskFile, handleTaskFileList } from "./endpoints/file-endpoints";
 import {
@@ -91,6 +92,7 @@ export function createRouter(options: RouterOptions): {
   addRoute("POST", "/api/ai/task-plan", (req) => handleTaskPlan(req));
   addRoute("POST", "/api/tasks/create", (req) => handleTaskSave(req));
   addRoute("GET", "/api/state", () => handleApiState());
+  addRoute("GET", "/api/concurrency", () => handleConcurrencyStatus(options.dataDir));
   addRoute("GET", "/api/events", (req) => handleSseEvents(req));
   addRoute("GET", "/api/sse", (req) => handleSseEvents(req));
   addRoute("POST", "/api/upload/seed", (req) => handleSeedUpload(req, options.dataDir));
