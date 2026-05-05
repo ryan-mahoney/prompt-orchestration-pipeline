@@ -227,17 +227,37 @@ export function cleanupPidFileSync(workDir: string): void {
 
 /** Registers SIGINT, SIGTERM, SIGHUP, and process exit handlers to release the job slot and clean up the PID file. */
 export function installSignalHandlers(workDir: string, dataDir: string, jobId: string): void {
+  let shuttingDown = false;
   const handle = async () => {
-    await releaseJobSlot(dataDir, jobId);
-    cleanupPidFileSync(workDir);
-    process.exit();
+    if (shuttingDown) return;
+    shuttingDown = true;
+    try {
+      await releaseJobSlot(dataDir, jobId);
+    } catch (err) {
+      console.error(`failed to release job slot for ${jobId} during shutdown`, err);
+    }
+    try {
+      cleanupPidFileSync(workDir);
+    } catch (err) {
+      console.error(`failed to clean runner pid for ${jobId} during shutdown`, err);
+    } finally {
+      process.exit();
+    }
   };
-  process.on("SIGINT", handle);
-  process.on("SIGTERM", handle);
-  process.on("SIGHUP", handle);
+  process.once("SIGINT", handle);
+  process.once("SIGTERM", handle);
+  process.once("SIGHUP", handle);
   process.on("exit", () => {
     cleanupPidFileSync(workDir);
   });
+}
+
+async function releaseJobSlotBestEffort(dataDir: string, jobId: string): Promise<void> {
+  try {
+    await releaseJobSlot(dataDir, jobId);
+  } catch (err) {
+    console.error(`failed to release job slot for ${jobId}`, err);
+  }
 }
 
 // ─── Pipeline loading ─────────────────────────────────────────────────────────
@@ -265,7 +285,8 @@ const RETRY_BACKOFF_MULTIPLIER = 2;
 /** Runs a pipeline job end-to-end for the given job ID. */
 export async function runPipelineJob(jobId: string): Promise<void> {
   let workDir: string | undefined;
-  let dataDir: string | undefined;
+  const poRoot = resolve(process.env["PO_ROOT"] ?? process.cwd());
+  let dataDir: string | undefined = resolve(poRoot, process.env["PO_DATA_DIR"] ?? "pipeline-data");
   try {
   const config = await resolveJobConfig(jobId);
   workDir = config.workDir;
@@ -504,7 +525,7 @@ export async function runPipelineJob(jobId: string): Promise<void> {
         snapshot.tasks[taskName] = raw as typeof snapshot.tasks[string];
       });
 
-      await releaseJobSlot(dataDir, jobId);
+      await releaseJobSlotBestEffort(dataDir, jobId);
       process.exit(1);
     }
 
@@ -523,7 +544,7 @@ export async function runPipelineJob(jobId: string): Promise<void> {
     const finalStatus = JSON.parse(finalStatusText) as JobStatus;
     await completeJob(config, finalStatus, pipelineArtifacts);
   }
-  await releaseJobSlot(dataDir, jobId);
+  await releaseJobSlotBestEffort(dataDir, jobId);
   } catch (err) {
     const normalized = normalizeError(err);
     console.error(normalized.message);
@@ -553,7 +574,7 @@ export async function runPipelineJob(jobId: string): Promise<void> {
       }
     }
     if (dataDir !== undefined) {
-      await releaseJobSlot(dataDir, jobId);
+      await releaseJobSlotBestEffort(dataDir, jobId);
     }
     process.exitCode = 1;
     setTimeout(() => process.exit(1), 5000).unref();

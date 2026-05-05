@@ -1,5 +1,6 @@
 import path from "node:path";
 
+import { getPipelineDataDir } from "../../config/paths";
 import { getConfig } from "../../core/config";
 import { loadEnvironment } from "../../core/environment";
 import { getConcurrencyRuntimePaths } from "../../core/job-concurrency";
@@ -33,14 +34,18 @@ interface WatcherInternals extends WatcherOptions {
 }
 
 export async function initializeWatcher(dataDir: string): Promise<void> {
+  if (activeWatcher) {
+    await activeWatcher.close();
+    activeWatcher = null;
+  }
   const paths = resolvePipelinePaths(dataDir);
-  const runtime = getConcurrencyRuntimePaths(path.join(dataDir, "pipeline-data"));
+  const runtime = getConcurrencyRuntimePaths(getPipelineDataDir(dataDir));
   const orchestrator = getConfig().orchestrator;
   const watcherOptions: WatcherOptions & WatcherInternals = {
     baseDir: dataDir,
-    debounceMs: orchestrator.watchDebounce,
-    stabilityThresholdMs: orchestrator.watchStabilityThreshold,
-    pollIntervalMs: orchestrator.watchPollInterval,
+    debounceMs: orchestrator?.watchDebounce ?? 500,
+    stabilityThresholdMs: orchestrator?.watchStabilityThreshold ?? 1000,
+    pollIntervalMs: orchestrator?.watchPollInterval ?? 100,
     __routeJobChange(change: JobChange) {
       if (change.filePath.endsWith("tasks-status.json")) {
         sseEnhancer.handleJobChange(change);
@@ -101,7 +106,14 @@ export async function startServer(options: ServerOptions): Promise<ServerHandle>
     new Promise((_, reject) => setTimeout(() => reject(new Error("server startup timed out after 5 seconds")), 5_000)),
   ]);
   await startup;
-  await initializeWatcher(options.dataDir);
+  try {
+    await initializeWatcher(options.dataDir);
+  } catch (error) {
+    if (heartbeat) clearInterval(heartbeat);
+    heartbeat = null;
+    server?.stop();
+    throw error;
+  }
 
   return {
     url: `http://localhost:${port}`,

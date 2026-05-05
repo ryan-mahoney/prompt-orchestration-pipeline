@@ -416,7 +416,7 @@ describe("tryAcquireJobSlot", () => {
     }
   });
 
-  test("throws when a slot is already held for the same jobId", async () => {
+  test("returns already_held when a slot is already held for the same jobId", async () => {
     const dir = await setupJobsDir("acquire-dup-");
     try {
       await makeCurrent(dir, "a");
@@ -427,14 +427,17 @@ describe("tryAcquireJobSlot", () => {
         source: "orchestrator",
         pid: process.pid,
       });
-      await expect(
-        tryAcquireJobSlot({
-          dataDir: dir,
-          jobId: "a",
-          maxConcurrentJobs: 5,
-          source: "orchestrator",
-        }),
-      ).rejects.toThrow(/slot already held/);
+      const duplicate = await tryAcquireJobSlot({
+        dataDir: dir,
+        jobId: "a",
+        maxConcurrentJobs: 5,
+        source: "orchestrator",
+      });
+      expect(duplicate.ok).toBe(false);
+      if (!duplicate.ok) {
+        expect(duplicate.reason).toBe("already_held");
+        expect(duplicate.status.runningCount).toBe(1);
+      }
     } finally {
       await rm(dir, { recursive: true });
     }

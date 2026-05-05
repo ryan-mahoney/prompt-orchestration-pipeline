@@ -140,10 +140,10 @@ describe("handleConcurrencyStatus", () => {
     expect(first["name"]).toBe("First Job");
     expect(first["pipeline"]).toBe("alpha");
     expect(typeof first["queuedAt"]).toBe("string");
-    expect(typeof first["seedPath"]).toBe("string");
+    expect(first).not.toHaveProperty("seedPath");
   });
 
-  it("reports and prunes stale slots without slotPath", async () => {
+  it("reports stale slots without slotPath", async () => {
     const root = await makeTempRoot();
     setMaxConcurrentJobs(2);
 
@@ -164,11 +164,7 @@ describe("handleConcurrencyStatus", () => {
 
     const { runningJobsDir } = getConcurrencyRuntimePaths(path.join(root, "pipeline-data"));
     const stalePath = path.join(runningJobsDir, "stale-job.json");
-    expect(await Bun.file(stalePath).exists()).toBe(false);
-
-    const followup = await handleConcurrencyStatus(root);
-    const followupBody = await followup.json() as { ok: boolean; data: Record<string, unknown> };
-    expect(followupBody.data["staleSlots"]).toEqual([]);
+    expect(await Bun.file(stalePath).exists()).toBe(true);
   });
 
   it("never exposes slotPath in activeJobs or staleSlots", async () => {

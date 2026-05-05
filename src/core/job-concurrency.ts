@@ -1,9 +1,9 @@
-import { mkdir, readdir, readFile, rename, rmdir, stat, unlink, writeFile } from "node:fs/promises";
-import { existsSync } from "node:fs";
+import { mkdir, readdir, readFile, rename, rm, rmdir, stat, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { randomBytes } from "node:crypto";
 
-const SEED_FILENAME_PATTERN = /^([A-Za-z0-9-_]+)-seed\.json$/;
+const SEED_FILENAME_PATTERN = /^([A-Za-z0-9][A-Za-z0-9-_]*)-seed\.json$/;
+const TEMP_LEASE_PATTERN = /\.json\.tmp\.[a-f0-9]+$/;
 const LOCK_POLL_INTERVAL_MS = 25;
 const DEFAULT_STALE_LEASE_TIMEOUT_MS = 30_000;
 
@@ -41,7 +41,7 @@ export interface JobConcurrencyStatus {
 
 export type AcquireJobSlotResult =
   | { ok: true; lease: JobSlotLease }
-  | { ok: false; reason: "limit_reached"; status: JobConcurrencyStatus };
+  | { ok: false; reason: "limit_reached" | "already_held"; status: JobConcurrencyStatus };
 
 export interface AcquireJobSlotOptions {
   dataDir: string;
@@ -49,6 +49,7 @@ export interface AcquireJobSlotOptions {
   maxConcurrentJobs: number;
   source: JobSlotLease["source"];
   pid?: number | null;
+  lockTimeoutMs?: number;
 }
 
 export interface ConcurrencyRuntimePaths {
@@ -85,31 +86,49 @@ async function readPendingSeedEntries(pendingDir: string): Promise<SeedFileEntry
     const match = SEED_FILENAME_PATTERN.exec(name);
     if (!match) continue;
     const seedPath = join(pendingDir, name);
-    const stats = await stat(seedPath);
+    let stats: Awaited<ReturnType<typeof stat>>;
+    try {
+      stats = await stat(seedPath);
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === "ENOENT") continue;
+      throw err;
+    }
     entries.push({ jobId: match[1]!, seedPath, mtime: stats.mtime });
   }
   return entries;
 }
 
-async function readSeedMetadata(seedPath: string): Promise<{ name: string | null; pipeline: string | null }> {
+async function readSeedMetadata(seedPath: string): Promise<{ name: string | null; pipeline: string | null } | null> {
   try {
     const raw = await readFile(seedPath, "utf-8");
     const parsed = JSON.parse(raw) as Record<string, unknown>;
     const name = typeof parsed["name"] === "string" ? (parsed["name"] as string) : null;
     const pipeline = typeof parsed["pipeline"] === "string" ? (parsed["pipeline"] as string) : null;
     return { name, pipeline };
-  } catch {
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return null;
     return { name: null, pipeline: null };
   }
 }
 
 function isProcessAlive(pid: number): boolean {
+  if (!Number.isInteger(pid) || pid <= 0) return false;
   try {
     process.kill(pid, 0);
     return true;
   } catch (err) {
     // EPERM means the process exists but is owned by another user — still alive.
     return (err as NodeJS.ErrnoException).code === "EPERM";
+  }
+}
+
+async function directoryExists(path: string): Promise<boolean> {
+  try {
+    const stats = await stat(path);
+    return stats.isDirectory();
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return false;
+    throw err;
   }
 }
 
@@ -142,12 +161,12 @@ async function classifyLease(
     return { jobId: fallbackJobId, slotPath, reason: "invalid_json" };
   }
   const jobId = typeof parsed.jobId === "string" ? parsed.jobId : fallbackJobId;
-  if (!existsSync(join(dataDir, "current", jobId))) {
+  if (!(await directoryExists(join(dataDir, "current", jobId)))) {
     return { jobId, slotPath, reason: "missing_current_job" };
   }
+  const acquiredMs = Date.parse(parsed.acquiredAt);
   if (parsed.pid === null || parsed.pid === undefined) {
-    const acquiredMs = Date.parse(parsed.acquiredAt);
-    if (Number.isFinite(acquiredMs) && Date.now() - acquiredMs >= lockTimeoutMs) {
+    if (!Number.isFinite(acquiredMs) || Date.now() - acquiredMs >= lockTimeoutMs) {
       return { jobId, slotPath, reason: "missing_pid" };
     }
     return null;
@@ -158,29 +177,70 @@ async function classifyLease(
   return null;
 }
 
-export async function pruneStaleJobSlots(
-  dataDir: string,
-  lockTimeoutMs: number,
-): Promise<StaleJobSlot[]> {
-  const { runningJobsDir } = getConcurrencyRuntimePaths(dataDir);
-  let names: string[];
+async function listRunningJobFileNames(runningJobsDir: string): Promise<string[]> {
   try {
-    names = await readdir(runningJobsDir);
+    const names = await readdir(runningJobsDir);
+    return names.sort();
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === "ENOENT") return [];
     throw err;
   }
-  names.sort();
-  const stale: StaleJobSlot[] = [];
-  for (const name of names) {
+}
+
+async function removeStaleTempLeaseFiles(runningJobsDir: string, names: string[], lockTimeoutMs: number): Promise<void> {
+  await Promise.all(
+    names
+      .filter((name) => TEMP_LEASE_PATTERN.test(name))
+      .map(async (name) => {
+        const tempPath = join(runningJobsDir, name);
+        try {
+          const stats = await stat(tempPath);
+          if (Date.now() - stats.mtimeMs >= lockTimeoutMs) await removeLeaseFile(tempPath);
+        } catch (err) {
+          if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+        }
+      }),
+  );
+}
+
+async function collectLeaseState(
+  dataDir: string,
+  lockTimeoutMs: number,
+  prune: boolean,
+): Promise<{ activeJobs: JobSlotLease[]; staleSlots: StaleJobSlot[] }> {
+  const { runningJobsDir } = getConcurrencyRuntimePaths(dataDir);
+  const names = await listRunningJobFileNames(runningJobsDir);
+  if (prune) await removeStaleTempLeaseFiles(runningJobsDir, names, lockTimeoutMs);
+
+  const staleSlots: StaleJobSlot[] = [];
+  const stalePaths = new Set<string>();
+  await Promise.all(names.map(async (name) => {
+    if (!name.endsWith(".json") || TEMP_LEASE_PATTERN.test(name)) return;
     const slotPath = join(runningJobsDir, name);
     const result = await classifyLease(dataDir, slotPath, name, lockTimeoutMs);
     if (result) {
-      await removeLeaseFile(slotPath);
-      stale.push(result);
+      staleSlots.push(result);
+      stalePaths.add(slotPath);
     }
+  }));
+  staleSlots.sort((a, b) => a.jobId.localeCompare(b.jobId));
+
+  if (prune) {
+    await Promise.all(staleSlots.map((slot) => removeLeaseFile(slot.slotPath)));
   }
-  return stale;
+
+  const activeJobs = await readActiveLeases(runningJobsDir, stalePaths);
+  return { activeJobs, staleSlots };
+}
+
+export async function pruneStaleJobSlots(
+  dataDir: string,
+  lockTimeoutMs: number,
+): Promise<StaleJobSlot[]> {
+  return withRuntimeLock(dataDir, lockTimeoutMs, async () => {
+    const { staleSlots } = await collectLeaseState(dataDir, lockTimeoutMs, true);
+    return staleSlots;
+  });
 }
 
 function delay(ms: number): Promise<void> {
@@ -194,12 +254,18 @@ async function withRuntimeLock<T>(
   fn: () => Promise<T>,
 ): Promise<T> {
   const { lockDir, runtimeDir } = getConcurrencyRuntimePaths(dataDir);
+  const ownerPath = join(lockDir, "owner.json");
   await mkdir(runtimeDir, { recursive: true });
   const start = Date.now();
-  let retriedStale = false;
   while (true) {
     try {
       await mkdir(lockDir, { recursive: false });
+      try {
+        await writeFile(ownerPath, JSON.stringify({ pid: process.pid, acquiredAt: new Date().toISOString() }));
+      } catch (ownerErr) {
+        await rm(lockDir, { recursive: true, force: true });
+        throw ownerErr;
+      }
       break;
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
@@ -207,16 +273,20 @@ async function withRuntimeLock<T>(
         await delay(LOCK_POLL_INTERVAL_MS);
         continue;
       }
-      if (!retriedStale) {
-        retriedStale = true;
-        try {
+      try {
+        const raw = await readFile(ownerPath, "utf-8");
+        const owner = JSON.parse(raw) as { pid?: unknown };
+        if (typeof owner.pid === "number" && !isProcessAlive(owner.pid)) {
+          await rm(lockDir, { recursive: true, force: true });
+          continue;
+        }
+      } catch (ownerErr) {
+        if ((ownerErr as NodeJS.ErrnoException).code === "ENOENT") {
           const stats = await stat(lockDir);
           if (Date.now() - stats.mtimeMs >= lockTimeoutMs) {
-            await rmdir(lockDir).catch(() => undefined);
+            await rm(lockDir, { recursive: true, force: true });
             continue;
           }
-        } catch {
-          continue;
         }
       }
       throw new Error(`failed to acquire runtime lock at ${lockDir} within ${lockTimeoutMs}ms`);
@@ -226,11 +296,35 @@ async function withRuntimeLock<T>(
     return await fn();
   } finally {
     try {
+      await unlink(ownerPath);
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+    }
+    try {
       await rmdir(lockDir);
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
     }
   }
+}
+
+async function buildStatus(
+  dataDir: string,
+  maxConcurrentJobs: number,
+  lockTimeoutMs: number,
+  prune: boolean,
+): Promise<JobConcurrencyStatus> {
+  const { activeJobs, staleSlots } = await collectLeaseState(dataDir, lockTimeoutMs, prune);
+  const queuedJobs = await listQueuedSeeds(dataDir);
+  return {
+    limit: maxConcurrentJobs,
+    runningCount: activeJobs.length,
+    availableSlots: Math.max(0, maxConcurrentJobs - activeJobs.length),
+    queuedCount: queuedJobs.length,
+    activeJobs,
+    queuedJobs,
+    staleSlots,
+  };
 }
 
 async function readLease(slotPath: string): Promise<JobSlotLease | null> {
@@ -249,7 +343,7 @@ async function writeLeaseAtomic(slotPath: string, lease: JobSlotLease): Promise<
   await rename(tmpPath, slotPath);
 }
 
-async function readActiveLeases(runningJobsDir: string): Promise<JobSlotLease[]> {
+async function readActiveLeases(runningJobsDir: string, excludePaths = new Set<string>()): Promise<JobSlotLease[]> {
   let names: string[];
   try {
     names = await readdir(runningJobsDir);
@@ -259,8 +353,9 @@ async function readActiveLeases(runningJobsDir: string): Promise<JobSlotLease[]>
   }
   const leases: JobSlotLease[] = [];
   for (const name of names) {
-    if (!name.endsWith(".json") || name.includes(".tmp.")) continue;
-    const lease = await readLease(join(runningJobsDir, name));
+    const slotPath = join(runningJobsDir, name);
+    if (!name.endsWith(".json") || TEMP_LEASE_PATTERN.test(name) || excludePaths.has(slotPath)) continue;
+    const lease = await readLease(slotPath);
     if (lease) leases.push(lease);
   }
   leases.sort(
@@ -274,26 +369,17 @@ export async function tryAcquireJobSlot(
   options: AcquireJobSlotOptions,
 ): Promise<AcquireJobSlotResult> {
   const { dataDir, jobId, maxConcurrentJobs, source } = options;
+  const lockTimeoutMs = options.lockTimeoutMs ?? DEFAULT_STALE_LEASE_TIMEOUT_MS;
   const { runningJobsDir } = getConcurrencyRuntimePaths(dataDir);
   await mkdir(runningJobsDir, { recursive: true });
-  return withRuntimeLock(dataDir, DEFAULT_STALE_LEASE_TIMEOUT_MS, async () => {
-    const staleSlots = await pruneStaleJobSlots(dataDir, DEFAULT_STALE_LEASE_TIMEOUT_MS);
-    const activeJobs = await readActiveLeases(runningJobsDir);
+  return withRuntimeLock(dataDir, lockTimeoutMs, async () => {
+    const status = await buildStatus(dataDir, maxConcurrentJobs, lockTimeoutMs, true);
+    const activeJobs = status.activeJobs;
     const slotPath = join(runningJobsDir, `${jobId}.json`);
     if (activeJobs.some((l) => l.jobId === jobId)) {
-      throw new Error(`slot already held for job ${jobId}`);
+      return { ok: false, reason: "already_held", status };
     }
     if (activeJobs.length >= maxConcurrentJobs) {
-      const queuedJobs = await listQueuedSeeds(dataDir);
-      const status: JobConcurrencyStatus = {
-        limit: maxConcurrentJobs,
-        runningCount: activeJobs.length,
-        availableSlots: Math.max(0, maxConcurrentJobs - activeJobs.length),
-        queuedCount: queuedJobs.length,
-        activeJobs,
-        queuedJobs,
-        staleSlots,
-      };
       return { ok: false, reason: "limit_reached", status };
     }
     const lease: JobSlotLease = {
@@ -312,9 +398,10 @@ export async function updateJobSlotPid(
   dataDir: string,
   jobId: string,
   pid: number,
+  lockTimeoutMs = DEFAULT_STALE_LEASE_TIMEOUT_MS,
 ): Promise<void> {
   const { runningJobsDir } = getConcurrencyRuntimePaths(dataDir);
-  await withRuntimeLock(dataDir, DEFAULT_STALE_LEASE_TIMEOUT_MS, async () => {
+  await withRuntimeLock(dataDir, lockTimeoutMs, async () => {
     const slotPath = join(runningJobsDir, `${jobId}.json`);
     const lease = await readLease(slotPath);
     if (!lease) throw new Error(`no lease found for job ${jobId}`);
@@ -322,9 +409,13 @@ export async function updateJobSlotPid(
   });
 }
 
-export async function releaseJobSlot(dataDir: string, jobId: string): Promise<void> {
+export async function releaseJobSlot(
+  dataDir: string,
+  jobId: string,
+  lockTimeoutMs = DEFAULT_STALE_LEASE_TIMEOUT_MS,
+): Promise<void> {
   const { runningJobsDir } = getConcurrencyRuntimePaths(dataDir);
-  await withRuntimeLock(dataDir, DEFAULT_STALE_LEASE_TIMEOUT_MS, async () => {
+  await withRuntimeLock(dataDir, lockTimeoutMs, async () => {
     try {
       await unlink(join(runningJobsDir, `${jobId}.json`));
     } catch (err) {
@@ -338,34 +429,24 @@ export async function getJobConcurrencyStatus(
   maxConcurrentJobs: number,
   lockTimeoutMs: number,
 ): Promise<JobConcurrencyStatus> {
-  const { runningJobsDir } = getConcurrencyRuntimePaths(dataDir);
-  const staleSlots = await pruneStaleJobSlots(dataDir, lockTimeoutMs);
-  const activeJobs = await readActiveLeases(runningJobsDir);
-  const queuedJobs = await listQueuedSeeds(dataDir);
-  return {
-    limit: maxConcurrentJobs,
-    runningCount: activeJobs.length,
-    availableSlots: Math.max(0, maxConcurrentJobs - activeJobs.length),
-    queuedCount: queuedJobs.length,
-    activeJobs,
-    queuedJobs,
-    staleSlots,
-  };
+  return withRuntimeLock(dataDir, lockTimeoutMs, () =>
+    buildStatus(dataDir, maxConcurrentJobs, lockTimeoutMs, false),
+  );
 }
 
 export async function listQueuedSeeds(dataDir: string): Promise<QueuedJobSummary[]> {
   const entries = await readPendingSeedEntries(join(dataDir, "pending"));
   entries.sort((a, b) => a.mtime.getTime() - b.mtime.getTime() || a.jobId.localeCompare(b.jobId));
-  const summaries: QueuedJobSummary[] = [];
-  for (const entry of entries) {
-    const { name, pipeline } = await readSeedMetadata(entry.seedPath);
-    summaries.push({
+  const summaries = await Promise.all(entries.map(async (entry): Promise<QueuedJobSummary | null> => {
+    const metadata = await readSeedMetadata(entry.seedPath);
+    if (!metadata) return null;
+    return {
       jobId: entry.jobId,
       seedPath: entry.seedPath,
       queuedAt: entry.mtime.toISOString(),
-      name,
-      pipeline,
-    });
-  }
-  return summaries;
+      name: metadata.name,
+      pipeline: metadata.pipeline,
+    };
+  }));
+  return summaries.filter((summary): summary is QueuedJobSummary => summary !== null);
 }

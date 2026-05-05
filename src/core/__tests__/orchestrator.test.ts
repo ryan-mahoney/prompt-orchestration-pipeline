@@ -131,23 +131,23 @@ describe("drainPendingQueue", () => {
     }
   });
 
-  test("if spawnRunner throws, the slot is released and the error propagates", async () => {
+  test("if spawnRunner throws, the slot is released and the seed remains queued", async () => {
     const dir = await setupDir("drain-spawn-err-");
     try {
       await writeSeed(dir, "job-bad", { pipeline: "p" }, 1700000000);
       const failingSpawn = async (): Promise<{ pid: number }> => {
         throw new Error("boom");
       };
-      await expect(
-        drainPendingQueue({
-          dataDir: dir,
-          maxConcurrentJobs: 2,
-          lockTimeoutMs: 1000,
-          spawnRunner: failingSpawn,
-        }),
-      ).rejects.toThrow(/boom/);
+      const result = await drainPendingQueue({
+        dataDir: dir,
+        maxConcurrentJobs: 2,
+        lockTimeoutMs: 1000,
+        spawnRunner: failingSpawn,
+      });
+      expect(result.promoted).toEqual([]);
       const { runningJobsDir } = getConcurrencyRuntimePaths(dir);
       expect(existsSync(join(runningJobsDir, "job-bad.json"))).toBe(false);
+      expect(existsSync(join(dir, "pending", "job-bad-seed.json"))).toBe(true);
       const status = await getJobConcurrencyStatus(dir, 2, 1000);
       expect(status.activeJobs).toEqual([]);
     } finally {

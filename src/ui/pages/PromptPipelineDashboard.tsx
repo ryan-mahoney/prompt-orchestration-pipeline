@@ -23,7 +23,7 @@ function formatTimestamp(value: string | null | undefined): string {
   if (!value) return "—";
   const ms = Date.parse(value);
   if (Number.isNaN(ms)) return value;
-  return new Date(ms).toISOString().replace("T", " ").replace(/\.\d{3}Z$/, "Z");
+  return new Date(ms).toLocaleString();
 }
 
 function CapacityMetrics({ status }: { status: JobConcurrencyApiStatus }) {
@@ -133,7 +133,7 @@ function StaleSlotWarnings({ slots }: { slots: JobConcurrencyApiStatus["staleSlo
           {slots.map((slot) => (
             <tr key={slot.jobId}>
               <td className="px-4 py-2 font-mono text-xs">{slot.jobId}</td>
-              <td className="px-4 py-2">{STALE_REASON_LABELS[slot.reason] ?? slot.reason}</td>
+              <td className="px-4 py-2">{STALE_REASON_LABELS[slot.reason]}</td>
             </tr>
           ))}
         </tbody>
@@ -145,10 +145,10 @@ function StaleSlotWarnings({ slots }: { slots: JobConcurrencyApiStatus["staleSlo
 function ConcurrencyPanel() {
   const { data, error, loading } = useConcurrencyStatus();
 
-  if (error) {
+  if (error && !data) {
     return (
       <div className="rounded-sm border-l-[3px] border-l-yellow-600 bg-yellow-100 p-3 text-sm text-yellow-700">
-        Unable to load concurrency status
+        Unable to load concurrency status: {error.message}
       </div>
     );
   }
@@ -159,6 +159,11 @@ function ConcurrencyPanel() {
 
   return (
     <div>
+      {error ? (
+        <div className="mb-4 rounded-sm border-l-[3px] border-l-yellow-600 bg-yellow-50 p-3 text-sm text-yellow-700">
+          Showing last known concurrency status: {error.message}
+        </div>
+      ) : null}
       <CapacityMetrics status={data} />
       <StaleSlotWarnings slots={data.staleSlots} />
       <ActiveJobsTable jobs={data.activeJobs} />
@@ -205,6 +210,8 @@ export default function PromptPipelineDashboard() {
     complete: grouped.complete.length,
     concurrency: null,
   };
+  const tabText = (tab: TabKey): string =>
+    `${tabLabels[tab]}${tabCounts[tab] === null ? "" : ` (${tabCounts[tab]})`}`;
 
   return (
     <Layout
@@ -231,7 +238,7 @@ export default function PromptPipelineDashboard() {
             className={`px-4 py-2 text-sm ${activeTab === tab ? "text-[#6d28d9] font-medium border-b-2 border-[#6d28d9]" : "text-gray-500 hover:text-gray-900"}`}
             onClick={() => setActiveTab(tab)}
           >
-            {tabLabels[tab]}{tabCounts[tab] === null ? "" : ` (${tabCounts[tab]})`}
+            {tabText(tab)}
           </button>
         ))}
       </div>

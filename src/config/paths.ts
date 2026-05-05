@@ -8,25 +8,30 @@ export interface PipelinePaths {
   readonly rejected: string;
 }
 
+export function getPipelineDataDir(baseDir: string): string {
+  return join(baseDir, "pipeline-data");
+}
+
 export function resolvePipelinePaths(baseDir: string): PipelinePaths {
+  const dataDir = getPipelineDataDir(baseDir);
   return {
-    pending: join(baseDir, "pipeline-data", "pending"),
-    current: join(baseDir, "pipeline-data", "current"),
-    complete: join(baseDir, "pipeline-data", "complete"),
-    rejected: join(baseDir, "pipeline-data", "rejected"),
+    pending: join(dataDir, "pending"),
+    current: join(dataDir, "current"),
+    complete: join(dataDir, "complete"),
+    rejected: join(dataDir, "rejected"),
   };
 }
 
 export function getPendingSeedPath(baseDir: string, jobId: string): string {
-  return join(baseDir, "pipeline-data", "pending", `${jobId}-seed.json`);
+  return join(getPipelineDataDir(baseDir), "pending", `${jobId}-seed.json`);
 }
 
 export function getCurrentSeedPath(baseDir: string, jobId: string): string {
-  return join(baseDir, "pipeline-data", "current", jobId, "seed.json");
+  return join(getPipelineDataDir(baseDir), "current", jobId, "seed.json");
 }
 
 export function getCompleteSeedPath(baseDir: string, jobId: string): string {
-  return join(baseDir, "pipeline-data", "complete", jobId, "seed.json");
+  return join(getPipelineDataDir(baseDir), "complete", jobId, "seed.json");
 }
 
 export function getJobDirectoryPath(
@@ -34,7 +39,7 @@ export function getJobDirectoryPath(
   jobId: string,
   location: JobLocationValue,
 ): string {
-  return join(baseDir, "pipeline-data", location, jobId);
+  return join(getPipelineDataDir(baseDir), location, jobId);
 }
 
 export function getJobMetadataPath(

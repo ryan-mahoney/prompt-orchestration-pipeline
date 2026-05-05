@@ -1,41 +1,74 @@
-import path from "node:path";
-
+import { getPipelineDataDir } from "../../../config/paths";
 import { getConfig } from "../../../core/config";
 import {
   getJobConcurrencyStatus,
   type JobConcurrencyStatus,
-  type JobSlotLease,
-  type StaleJobSlot,
 } from "../../../core/job-concurrency";
 import { sendJson } from "../utils/http-utils";
 
-type PublicLease = Omit<JobSlotLease, "slotPath">;
-type PublicStaleSlot = Omit<StaleJobSlot, "slotPath">;
-
-interface PublicConcurrencyStatus extends Omit<JobConcurrencyStatus, "activeJobs" | "staleSlots"> {
-  activeJobs: PublicLease[];
-  staleSlots: PublicStaleSlot[];
-}
-
-function stripSlotPath<T extends { slotPath: string }>(entry: T): Omit<T, "slotPath"> {
-  const { slotPath: _slotPath, ...rest } = entry;
-  return rest;
+interface PublicConcurrencyStatus {
+  limit: number;
+  runningCount: number;
+  availableSlots: number;
+  queuedCount: number;
+  activeJobs: Array<{
+    jobId: string;
+    pid: number | null;
+    acquiredAt: string;
+    source: "orchestrator" | "restart" | "task-start";
+  }>;
+  queuedJobs: Array<{
+    jobId: string;
+    queuedAt: string | null;
+    name: string | null;
+    pipeline: string | null;
+  }>;
+  staleSlots: Array<{
+    jobId: string;
+    reason: "missing_current_job" | "missing_pid" | "dead_pid" | "invalid_json";
+  }>;
 }
 
 function toPublicStatus(status: JobConcurrencyStatus): PublicConcurrencyStatus {
   return {
-    ...status,
-    activeJobs: status.activeJobs.map(stripSlotPath),
-    staleSlots: status.staleSlots.map(stripSlotPath),
+    limit: status.limit,
+    runningCount: status.runningCount,
+    availableSlots: status.availableSlots,
+    queuedCount: status.queuedCount,
+    activeJobs: status.activeJobs.map((job) => ({
+      jobId: job.jobId,
+      pid: job.pid,
+      acquiredAt: job.acquiredAt,
+      source: job.source,
+    })),
+    queuedJobs: status.queuedJobs.map((job) => ({
+      jobId: job.jobId,
+      queuedAt: job.queuedAt,
+      name: job.name,
+      pipeline: job.pipeline,
+    })),
+    staleSlots: status.staleSlots.map((slot) => ({
+      jobId: slot.jobId,
+      reason: slot.reason,
+    })),
   };
 }
 
 export async function handleConcurrencyStatus(dataDir: string): Promise<Response> {
-  const { maxConcurrentJobs, lockFileTimeout } = getConfig().orchestrator;
-  const status = await getJobConcurrencyStatus(
-    path.join(dataDir, "pipeline-data"),
-    maxConcurrentJobs,
-    lockFileTimeout,
-  );
-  return sendJson(200, { ok: true, data: toPublicStatus(status) });
+  try {
+    const orchestrator = getConfig().orchestrator;
+    const maxConcurrentJobs = orchestrator?.maxConcurrentJobs ?? 3;
+    const lockFileTimeout = orchestrator?.lockFileTimeout ?? 30_000;
+    const status = await getJobConcurrencyStatus(
+      getPipelineDataDir(dataDir),
+      maxConcurrentJobs,
+      lockFileTimeout,
+    );
+    const response = sendJson(200, { ok: true, data: toPublicStatus(status) });
+    response.headers.set("Cache-Control", "no-store");
+    return response;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Failed to load concurrency status";
+    return sendJson(500, { ok: false, code: "status_unavailable", message });
+  }
 }

@@ -5,6 +5,7 @@ export type ApiErrorCode =
   | "spawn_failed"
   | "unknown_error"
   | "network_error"
+  | "malformed_response"
   | "dependencies_not_satisfied"
   | "unsupported_lifecycle"
   | "task_not_found"

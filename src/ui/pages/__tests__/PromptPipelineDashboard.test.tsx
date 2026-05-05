@@ -1,12 +1,14 @@
 import "../../components/__tests__/test-dom";
 
-import { fireEvent, render } from "@testing-library/react";
+import { fireEvent, render, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, expect, mock, test } from "bun:test";
 
 import type { JobConcurrencyApiStatus } from "../../client/types";
 
 const originalLocalStorage = globalThis.localStorage;
+const originalFetch = globalThis.fetch;
+const originalEventSource = globalThis.EventSource;
 
 mock.module("../../client/hooks/useJobListWithUpdates", () => ({
   useJobListWithUpdates: () => ({
@@ -43,22 +45,8 @@ mock.module("../../client/hooks/useJobListWithUpdates", () => ({
 }));
 
 let concurrencyStatus: JobConcurrencyApiStatus | null = null;
-let concurrencyError: { code: string; message: string } | null = null;
-let concurrencyLoading = false;
-
-mock.module("../../client/hooks/useConcurrencyStatus", () => ({
-  useConcurrencyStatus: () => ({
-    loading: concurrencyLoading,
-    data: concurrencyStatus,
-    error: concurrencyError,
-    refetch: () => {},
-  }),
-}));
-
 function setConcurrency(status: JobConcurrencyApiStatus | null) {
   concurrencyStatus = status;
-  concurrencyError = null;
-  concurrencyLoading = false;
 }
 
 function emptyStatus(): JobConcurrencyApiStatus {
@@ -73,6 +61,21 @@ function emptyStatus(): JobConcurrencyApiStatus {
   };
 }
 
+class MockEventSource {
+  public onerror: ((event: Event) => void) | null = null;
+
+  addEventListener(): void {}
+
+  close(): void {}
+}
+
+function installConcurrencyFetch(): void {
+  globalThis.fetch = mock(() =>
+    Promise.resolve(new Response(JSON.stringify({ ok: true, data: concurrencyStatus }))),
+  ) as unknown as typeof fetch;
+  globalThis.EventSource = MockEventSource as unknown as typeof EventSource;
+}
+
 beforeEach(() => {
   const store: Record<string, string> = {};
   globalThis.localStorage = {
@@ -84,11 +87,14 @@ beforeEach(() => {
     key: (i: number) => Object.keys(store)[i] ?? null,
   } as Storage;
   setConcurrency(emptyStatus());
+  installConcurrencyFetch();
 });
 
 afterEach(() => {
   document.body.innerHTML = "";
   globalThis.localStorage = originalLocalStorage;
+  globalThis.fetch = originalFetch;
+  globalThis.EventSource = originalEventSource;
 });
 
 test("PromptPipelineDashboard renders tabs", async () => {
@@ -139,7 +145,7 @@ test("Concurrency tab renders capacity metrics from the hook", async () => {
     return dt?.parentElement?.querySelector("dd")?.textContent ?? null;
   }
 
-  expect(metricValue("Limit")).toBe("7");
+  await waitFor(() => expect(metricValue("Limit")).toBe("7"));
   expect(metricValue("Running")).toBe("4");
   expect(metricValue("Available")).toBe("3");
   expect(metricValue("Queued")).toBe("5");
@@ -171,7 +177,7 @@ test("Concurrency tab renders active jobs when present", async () => {
 
   fireEvent.click(view.getByText("Concurrency"));
 
-  expect(view.getByText("active-1")).toBeTruthy();
+  await waitFor(() => expect(view.getByText("active-1")).toBeTruthy());
   expect(view.getByText("orchestrator")).toBeTruthy();
   expect(view.getByText("4321")).toBeTruthy();
   expect(view.getByText(/Active jobs \(1\)/)).toBeTruthy();
@@ -203,7 +209,7 @@ test("Concurrency tab renders queued jobs when present", async () => {
 
   fireEvent.click(view.getByText("Concurrency"));
 
-  expect(view.getByText("queued-1")).toBeTruthy();
+  await waitFor(() => expect(view.getByText("queued-1")).toBeTruthy());
   expect(view.getByText("Queued Job")).toBeTruthy();
   expect(view.getByText("demo-pipeline")).toBeTruthy();
   expect(view.getByText(/Queued jobs \(1\)/)).toBeTruthy();
@@ -231,7 +237,7 @@ test("Concurrency tab renders stale slot warnings when present", async () => {
 
   fireEvent.click(view.getByText("Concurrency"));
 
-  expect(view.getByText(/Stale slots \(2\)/)).toBeTruthy();
+  await waitFor(() => expect(view.getByText(/Stale slots \(2\)/)).toBeTruthy());
   expect(view.getByText("stale-1")).toBeTruthy();
   expect(view.getByText("Process no longer running")).toBeTruthy();
   expect(view.getByText("stale-2")).toBeTruthy();

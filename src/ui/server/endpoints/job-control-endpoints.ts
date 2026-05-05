@@ -4,7 +4,7 @@ import path from "node:path";
 import { createErrorResponse } from "../config-bridge";
 import { Constants } from "../config-bridge-node";
 import { sendJson } from "../utils/http-utils";
-import { getJobDirectoryPath } from "../../../config/paths";
+import { getJobDirectoryPath, getPipelineDataDir } from "../../../config/paths";
 import { deriveJobStatusFromTasks } from "../../../config/statuses";
 import { getConfig, getPipelineConfig } from "../../../core/config";
 import {
@@ -27,6 +27,14 @@ const RUNNER_PATH = path.resolve(import.meta.dir, "../../../core/pipeline-runner
 const restartingJobs = new Set<string>();
 const stoppingJobs = new Set<string>();
 const startingJobs = new Set<string>();
+
+function getOrchestratorRuntimeConfig(): { maxConcurrentJobs: number; lockFileTimeout: number } {
+  const orchestrator = getConfig().orchestrator;
+  return {
+    maxConcurrentJobs: orchestrator?.maxConcurrentJobs ?? 3,
+    lockFileTimeout: orchestrator?.lockFileTimeout ?? 30_000,
+  };
+}
 
 function begin(set: Set<string>, jobId: string): boolean {
   if (set.has(jobId)) return false;
@@ -79,23 +87,26 @@ async function spawnRunner(
   return { pid: proc.pid };
 }
 
-function getConcurrencyDataDir(dataDir: string): string {
-  return path.join(dataDir, "pipeline-data");
-}
-
 async function acquireConcurrencySlot(
   dataDir: string,
   jobId: string,
   source: JobSlotLease["source"],
 ): Promise<{ ok: true } | { ok: false; response: Response }> {
-  const maxConcurrentJobs = getConfig().orchestrator.maxConcurrentJobs;
+  const { maxConcurrentJobs, lockFileTimeout } = getOrchestratorRuntimeConfig();
   const result = await tryAcquireJobSlot({
-    dataDir: getConcurrencyDataDir(dataDir),
+    dataDir: getPipelineDataDir(dataDir),
     jobId,
     maxConcurrentJobs,
     source,
+    lockTimeoutMs: lockFileTimeout,
   });
   if (result.ok) return { ok: true };
+  if (result.reason === "already_held") {
+    return {
+      ok: false,
+      response: sendJson(409, createErrorResponse("job_running", "Job already has an active runner slot")),
+    };
+  }
   return {
     ok: false,
     response: sendJson(
@@ -114,15 +125,20 @@ async function spawnWithSlot(
   jobDir: string,
   opts: { startFromTask?: string; runSingleTask?: boolean } = {},
 ): Promise<void> {
-  const concurrencyDataDir = getConcurrencyDataDir(dataDir);
+  const concurrencyDataDir = getPipelineDataDir(dataDir);
+  const { lockFileTimeout } = getOrchestratorRuntimeConfig();
   let pid: number;
   try {
     ({ pid } = await spawnRunner(dataDir, jobId, jobDir, opts));
   } catch (err) {
-    await releaseJobSlot(concurrencyDataDir, jobId);
+    await releaseJobSlot(concurrencyDataDir, jobId, lockFileTimeout);
     throw err;
   }
-  await updateJobSlotPid(concurrencyDataDir, jobId, pid);
+  try {
+    await updateJobSlotPid(concurrencyDataDir, jobId, pid, lockFileTimeout);
+  } catch (err) {
+    console.error(`[spawnWithSlot] Failed to record PID ${pid} for job ${jobId}:`, err);
+  }
 }
 
 async function readRunnerPid(jobDir: string): Promise<number | null> {
@@ -380,31 +396,39 @@ export async function handleJobRestart(
       }
     }
 
-    // If the job is in complete/, move it back to current/
-    if (lifecycle === "complete") {
-      const currentJobDir = getJobDirectoryPath(dataDir, jobId, "current");
-      await mkdir(path.dirname(currentJobDir), { recursive: true });
-      await rename(jobDir, currentJobDir);
-      jobDir = currentJobDir;
-    }
-
-    // Reset job status
-    let mode: string;
-    if (singleTask && fromTask) {
-      await resetSingleTask(jobDir, fromTask);
-      mode = continueAfter ? "single-task-continue" : "single-task";
-    } else {
-      await resetJobToCleanSlate(jobDir);
-      mode = "clean-slate";
-    }
-
     const slot = await acquireConcurrencySlot(dataDir, jobId, "restart");
     if (!slot.ok) return slot.response;
 
-    await spawnWithSlot(dataDir, jobId, jobDir, {
-      startFromTask: fromTask,
-      runSingleTask: Boolean(singleTask && !continueAfter),
-    });
+    let mode: string;
+    let spawned = false;
+    try {
+      // If the job is in complete/, move it back to current/ only after capacity is reserved.
+      if (lifecycle === "complete") {
+        const currentJobDir = getJobDirectoryPath(dataDir, jobId, "current");
+        await mkdir(path.dirname(currentJobDir), { recursive: true });
+        await rename(jobDir, currentJobDir);
+        jobDir = currentJobDir;
+      }
+
+      if (singleTask && fromTask) {
+        await resetSingleTask(jobDir, fromTask);
+        mode = continueAfter ? "single-task-continue" : "single-task";
+      } else {
+        await resetJobToCleanSlate(jobDir);
+        mode = "clean-slate";
+      }
+
+      await spawnWithSlot(dataDir, jobId, jobDir, {
+        startFromTask: fromTask,
+        runSingleTask: Boolean(singleTask && !continueAfter),
+      });
+      spawned = true;
+    } catch (err) {
+      if (!spawned) {
+        await releaseJobSlot(getPipelineDataDir(dataDir), jobId, getOrchestratorRuntimeConfig().lockFileTimeout);
+      }
+      throw err;
+    }
 
     return sendJson(202, { ok: true, jobId, mode, spawned: true });
   } finally {

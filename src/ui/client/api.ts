@@ -6,6 +6,8 @@ import type {
   RestartJobOptions,
 } from "./types";
 
+const CONCURRENCY_LIMIT_MESSAGE = "Capacity reached. Wait for a job to finish, then try again.";
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
@@ -23,6 +25,7 @@ function normalizeBackendErrorCode(errorData: unknown, status: number): ApiError
     code === "spawn_failed" ||
     code === "unknown_error" ||
     code === "network_error" ||
+    code === "malformed_response" ||
     code === "dependencies_not_satisfied" ||
     code === "unsupported_lifecycle" ||
     code === "task_not_found" ||
@@ -47,6 +50,10 @@ function getMessage(value: unknown): string | null {
   return typeof value["message"] === "string" ? value["message"] : null;
 }
 
+function hasBackendCode(errorData: unknown, code: string): boolean {
+  return isRecord(errorData) && errorData["code"] === code;
+}
+
 export function getErrorCodeFromStatus(status: number): ApiErrorCode {
   if (status === 404) return "job_not_found";
   if (status === 409) return "conflict";
@@ -68,30 +75,30 @@ export function getErrorMessageFromStatus(status: number): string {
 }
 
 export function getRestartErrorMessage(errorData: unknown, status: number): string {
-  if (isRecord(errorData) && errorData["code"] === "job_running") {
+  if (hasBackendCode(errorData, "job_running")) {
     return "Cannot restart a job while it is still running";
   }
-  if (isRecord(errorData) && errorData["code"] === "spawn_failed") {
+  if (hasBackendCode(errorData, "spawn_failed")) {
     return "Failed to spawn the restarted job";
   }
-  if (isRecord(errorData) && errorData["code"] === "concurrency_limit_reached") {
-    return "Capacity reached. Wait for a job to finish, then try again.";
+  if (hasBackendCode(errorData, "concurrency_limit_reached")) {
+    return CONCURRENCY_LIMIT_MESSAGE;
   }
   return getMessage(errorData) ?? getErrorMessageFromStatus(status);
 }
 
 export function getStartTaskErrorMessage(errorData: unknown, status: number): string {
-  if (isRecord(errorData) && errorData["code"] === "dependencies_not_satisfied") {
+  if (hasBackendCode(errorData, "dependencies_not_satisfied")) {
     return "Cannot start task before its dependencies are complete";
   }
-  if (isRecord(errorData) && errorData["code"] === "task_not_found") {
+  if (hasBackendCode(errorData, "task_not_found")) {
     return "Task not found";
   }
-  if (isRecord(errorData) && errorData["code"] === "task_not_pending") {
+  if (hasBackendCode(errorData, "task_not_pending")) {
     return "Only pending tasks can be started";
   }
-  if (isRecord(errorData) && errorData["code"] === "concurrency_limit_reached") {
-    return "Capacity reached. Wait for a job to finish, then try again.";
+  if (hasBackendCode(errorData, "concurrency_limit_reached")) {
+    return CONCURRENCY_LIMIT_MESSAGE;
   }
   return getMessage(errorData) ?? getErrorMessageFromStatus(status);
 }
@@ -109,7 +116,8 @@ export function getStopErrorMessage(errorData: unknown, status: number): string 
 async function parseJson(response: Response): Promise<unknown> {
   try {
     return await response.json();
-  } catch {
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") throw error;
     return null;
   }
 }
@@ -183,9 +191,12 @@ export async function fetchConcurrencyStatus(
   signal?: AbortSignal,
 ): Promise<JobConcurrencyApiStatus> {
   let response: Response;
+  let payload: unknown;
 
   try {
     response = await fetch("/api/concurrency", { signal });
+    if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
+    payload = await parseJson(response);
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") throw error;
     throw {
@@ -193,8 +204,6 @@ export async function fetchConcurrencyStatus(
       message: error instanceof Error ? error.message : "Network request failed",
     } satisfies ApiError;
   }
-
-  const payload = await parseJson(response);
 
   if (!response.ok) {
     throw toApiError(
@@ -207,14 +216,27 @@ export async function fetchConcurrencyStatus(
   if (
     isRecord(payload) &&
     payload["ok"] === true &&
-    isRecord(payload["data"])
+    isJobConcurrencyApiStatus(payload["data"])
   ) {
-    return payload["data"] as unknown as JobConcurrencyApiStatus;
+    return payload["data"];
   }
 
   throw {
-    code: "unknown_error",
+    code: "malformed_response",
     message: "Malformed concurrency status response",
     status: response.status,
   } satisfies ApiError;
+}
+
+function isJobConcurrencyApiStatus(value: unknown): value is JobConcurrencyApiStatus {
+  if (!isRecord(value)) return false;
+  return (
+    typeof value["limit"] === "number" &&
+    typeof value["runningCount"] === "number" &&
+    typeof value["availableSlots"] === "number" &&
+    typeof value["queuedCount"] === "number" &&
+    Array.isArray(value["activeJobs"]) &&
+    Array.isArray(value["queuedJobs"]) &&
+    Array.isArray(value["staleSlots"])
+  );
 }

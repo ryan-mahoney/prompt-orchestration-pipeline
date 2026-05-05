@@ -95,7 +95,7 @@ interface ChildHandle {
 export const SEED_PATTERN = /^([A-Za-z0-9-_]+)-seed\.json$/;
 
 import { join, basename, dirname, resolve } from "node:path";
-import { mkdir, rename, stat } from "node:fs/promises";
+import { mkdir, rename, rm, stat } from "node:fs/promises";
 import { watch } from "chokidar";
 import { createLogger } from "./logger";
 import { createTaskFileIO, generateLogName } from "./file-io";
@@ -214,26 +214,39 @@ export async function spawnRunner(
 
   running.set(jobId, child);
 
-  void child.exited.then(async (result) => {
-    running.delete(jobId);
-    logger.log(`job ${jobId} exited`, {
-      code: result.code,
-      signal: result.signal,
-      completionType: result.completionType,
+  void child.exited
+    .then(async (result) => {
+      running.delete(jobId);
+      logger.log(`job ${jobId} exited`, {
+        code: result.code,
+        signal: result.signal,
+        completionType: result.completionType,
+      });
+      if (!onExit) return;
+      try {
+        await onExit(jobId);
+      } catch (err) {
+        logger.error(`child exit cleanup failed for job ${jobId}`, err);
+      }
+    })
+    .catch((err) => {
+      logger.error(`failed while waiting for job ${jobId} exit`, err);
     });
-    if (onExit) await onExit(jobId);
-  });
 }
 
 export interface HandleChildExitOptions {
   dataDir: string;
   jobId: string;
   triggerDrain: () => void;
+  lockTimeoutMs?: number;
 }
 
 export async function handleChildExit(opts: HandleChildExitOptions): Promise<void> {
-  await releaseJobSlot(opts.dataDir, opts.jobId);
-  opts.triggerDrain();
+  try {
+    await releaseJobSlot(opts.dataDir, opts.jobId, opts.lockTimeoutMs);
+  } finally {
+    opts.triggerDrain();
+  }
 }
 
 async function scaffoldJobDir(
@@ -397,7 +410,7 @@ export interface DrainPendingQueueOptions {
   dataDir: string;
   maxConcurrentJobs: number;
   lockTimeoutMs: number;
-  spawnRunner: (jobId: string) => Promise<{ pid: number }>;
+  spawnRunner: (jobId: string, seed: SeedData) => Promise<{ pid: number }>;
 }
 
 export interface DrainPendingQueueResult {
@@ -423,10 +436,43 @@ async function promoteSeedFile(
   await rename(pendingSeedPath, join(currentJobDir, "seed.json"));
 }
 
+async function restoreSeedFile(currentJobDir: string, pendingSeedPath: string): Promise<void> {
+  const currentSeedPath = join(currentJobDir, "seed.json");
+  try {
+    await rename(currentSeedPath, pendingSeedPath);
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+  }
+  await rm(currentJobDir, { recursive: true, force: true });
+}
+
+async function readPendingSeed(seedPath: string): Promise<
+  | { ok: true; seed: SeedData }
+  | { ok: false; reason: "missing" | "invalid"; message: string }
+> {
+  let raw: string;
+  try {
+    raw = await Bun.file(seedPath).text();
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return { ok: false, reason: "missing", message };
+    return { ok: false, reason: "invalid", message };
+  }
+  try {
+    return { ok: true, seed: JSON.parse(raw) as SeedData };
+  } catch (err) {
+    return {
+      ok: false,
+      reason: "invalid",
+      message: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
+
 export async function drainPendingQueue(
   opts: DrainPendingQueueOptions,
 ): Promise<DrainPendingQueueResult> {
-  const { dataDir, maxConcurrentJobs, spawnRunner } = opts;
+  const { dataDir, maxConcurrentJobs, lockTimeoutMs, spawnRunner } = opts;
   const logger = createLogger("orchestrator");
   const queued = await listQueuedSeeds(dataDir);
   const promoted: string[] = [];
@@ -434,11 +480,9 @@ export async function drainPendingQueue(
   for (let i = 0; i < queued.length; i++) {
     const { jobId, seedPath } = queued[i]!;
 
-    try {
-      JSON.parse(await Bun.file(seedPath).text());
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      logger.warn(`invalid JSON in ${jobId}-seed.json: ${message}`);
+    const parsedSeed = await readPendingSeed(seedPath);
+    if (!parsedSeed.ok) {
+      logger.warn(`failed to read queued seed ${jobId}-seed.json (${parsedSeed.reason}): ${parsedSeed.message}`);
       continue;
     }
 
@@ -447,14 +491,19 @@ export async function drainPendingQueue(
       jobId,
       maxConcurrentJobs,
       source: "orchestrator",
+      lockTimeoutMs,
     });
     if (!acquired.ok) {
-      return { promoted, remaining: queued.length - promoted.length };
+      if (acquired.reason === "limit_reached") {
+        return { promoted, remaining: (await listQueuedSeeds(dataDir)).length };
+      }
+      logger.warn(`job slot already held for ${jobId}; skipping queued seed`);
+      continue;
     }
 
     const currentJobDir = join(dataDir, "current", jobId);
     if (await dirExists(currentJobDir)) {
-      await releaseJobSlot(dataDir, jobId);
+      await releaseJobSlot(dataDir, jobId, lockTimeoutMs);
       logger.warn(`current job directory already exists for ${jobId}; skipping promotion`);
       continue;
     }
@@ -462,23 +511,34 @@ export async function drainPendingQueue(
     try {
       await promoteSeedFile(seedPath, currentJobDir);
     } catch (err) {
-      await releaseJobSlot(dataDir, jobId);
-      throw err;
+      await releaseJobSlot(dataDir, jobId, lockTimeoutMs);
+      logger.error(`failed to promote seed file for job ${jobId}`, err);
+      continue;
     }
 
     let pid: number;
     try {
-      ({ pid } = await spawnRunner(jobId));
+      ({ pid } = await spawnRunner(jobId, parsedSeed.seed));
     } catch (err) {
-      await releaseJobSlot(dataDir, jobId);
-      throw err;
+      await releaseJobSlot(dataDir, jobId, lockTimeoutMs);
+      try {
+        await restoreSeedFile(currentJobDir, seedPath);
+      } catch (restoreErr) {
+        logger.error(`failed to restore queued seed after spawn failure for job ${jobId}`, restoreErr);
+      }
+      logger.error(`failed to spawn queued job ${jobId}`, err);
+      continue;
     }
 
-    await updateJobSlotPid(dataDir, jobId, pid);
+    try {
+      await updateJobSlotPid(dataDir, jobId, pid, lockTimeoutMs);
+    } catch (err) {
+      logger.error(`failed to record runner pid for job ${jobId}`, err);
+    }
     promoted.push(jobId);
   }
 
-  return { promoted, remaining: queued.length - promoted.length };
+  return { promoted, remaining: (await listQueuedSeeds(dataDir)).length };
 }
 
 export function startOrchestrator(opts: OrchestratorOptions): Promise<OrchestratorHandle> {
@@ -512,8 +572,8 @@ export function startOrchestrator(opts: OrchestratorOptions): Promise<Orchestrat
         activeDrain = (async () => {
           try {
             do {
-              pendingDrain = false;
               if (stopped) return;
+              pendingDrain = false;
               await drainPendingQueue({
                 dataDir: dirs.dataDir,
                 maxConcurrentJobs,
@@ -532,13 +592,10 @@ export function startOrchestrator(opts: OrchestratorOptions): Promise<Orchestrat
 
       const onChildExit = (jobId: string): Promise<void> => {
         if (stopped) return Promise.resolve();
-        return handleChildExit({ dataDir: dirs.dataDir, jobId, triggerDrain });
+        return handleChildExit({ dataDir: dirs.dataDir, jobId, triggerDrain, lockTimeoutMs });
       };
 
-      const spawnRunnerForJob = async (jobId: string): Promise<{ pid: number }> => {
-        const seedPath = join(dirs.current, jobId, "seed.json");
-        const raw = await Bun.file(seedPath).text();
-        const seed = JSON.parse(raw) as SeedData;
+      const spawnRunnerForJob = async (jobId: string, seed: SeedData): Promise<{ pid: number }> => {
         await scaffoldJobDir(jobId, seed, dirs, logger);
         await spawnRunner(jobId, seed, dirs, running, logger, spawnFn, onChildExit);
         const child = running.get(jobId);
