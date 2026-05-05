@@ -221,6 +221,73 @@ describe("handleJobStop", () => {
     expect(analysis.tokenUsage).toEqual([]);
   });
 
+  it("resets restartCount on the running task that gets reset to pending", async () => {
+    const root = await makeTempRoot();
+    initPATHS(root);
+
+    const jobDir = await setupJob(root, "job-restart-count", {
+      id: "job-restart-count",
+      state: "running",
+      current: "analysis",
+      currentStage: "stage-2",
+      tasks: {
+        research: { state: "done", currentStage: null },
+        analysis: {
+          state: "running",
+          currentStage: "stage-2",
+          attempts: 1,
+          restartCount: 2,
+        },
+      },
+      files: { artifacts: [], logs: [], tmp: [] },
+    });
+
+    const req = new Request("http://localhost/api/jobs/job-restart-count/stop", { method: "POST" });
+    const res = await handleJobStop(req, "job-restart-count", root);
+    const body = await res.json() as Record<string, unknown>;
+
+    expect(res.status).toBe(202);
+    expect(body["resetTask"]).toBe("analysis");
+
+    const snapshot = await readJobStatus(jobDir);
+    const analysis = snapshot!.tasks["analysis"]!;
+    expect(analysis.state).toBe("pending");
+    expect(analysis.restartCount).toBe(0);
+  });
+
+  it("does not modify restartCount on tasks that are not reset", async () => {
+    const root = await makeTempRoot();
+    initPATHS(root);
+
+    const jobDir = await setupJob(root, "job-restart-count-untouched", {
+      id: "job-restart-count-untouched",
+      state: "running",
+      current: "analysis",
+      currentStage: "stage-2",
+      tasks: {
+        research: { state: "done", currentStage: null, restartCount: 4 },
+        analysis: {
+          state: "running",
+          currentStage: "stage-2",
+          attempts: 1,
+          restartCount: 1,
+        },
+      },
+      files: { artifacts: [], logs: [], tmp: [] },
+    });
+
+    const req = new Request("http://localhost/api/jobs/job-restart-count-untouched/stop", { method: "POST" });
+    const res = await handleJobStop(req, "job-restart-count-untouched", root);
+    const body = await res.json() as Record<string, unknown>;
+
+    expect(res.status).toBe(202);
+    expect(body["resetTask"]).toBe("analysis");
+
+    const snapshot = await readJobStatus(jobDir);
+    expect(snapshot!.tasks["research"]!.restartCount).toBe(4);
+    expect(snapshot!.tasks["analysis"]!.restartCount).toBe(0);
+  });
+
   it("recovers a stale job by resetting the first non-terminal task after partial progress", async () => {
     const root = await makeTempRoot();
     initPATHS(root);
