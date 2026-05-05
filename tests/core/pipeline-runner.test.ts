@@ -11,10 +11,11 @@ const mockGetPipelineConfig = mock((_slug: string) => ({
   pipelineJsonPath: "/mock/pipelines/test-pipeline/pipeline.json",
   tasksDir: "/mock/pipelines/test-pipeline/tasks",
 }));
+const mockGetConfig = mock(() => ({ taskRunner: { maxAttempts: 1 } }));
 
 mock.module("../../src/core/config", () => ({
   getPipelineConfig: mockGetPipelineConfig,
-  getConfig: mock(() => ({})),
+  getConfig: mockGetConfig,
   loadConfig: mock(async () => ({})),
   resetConfig: mock(() => {}),
 }));
@@ -600,6 +601,8 @@ describe("runPipelineJob", () => {
     mockWriteJobStatus.mockClear();
     mockDecideTransition.mockClear();
     mockDecideTransition.mockImplementation((_input: unknown) => ({ ok: true as const }));
+    mockGetConfig.mockReset();
+    mockGetConfig.mockImplementation(() => ({ taskRunner: { maxAttempts: 1 } }));
     mockGetPipelineConfig.mockClear();
     mockLoadFreshModule.mockClear();
     mockValidatePipelineOrThrow.mockClear();

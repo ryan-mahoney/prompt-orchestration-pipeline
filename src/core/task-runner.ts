@@ -795,7 +795,7 @@ export async function runPipeline(
 
   // Write done status (best-effort)
   try {
-    const lastStage = KNOWN_STAGES[KNOWN_STAGES.length - 1];
+    const lastStage = KNOWN_STAGES.at(-1)!;
     const doneProgress = computeDeterministicProgress(
       pipelineTasks ?? [taskName],
       taskName,

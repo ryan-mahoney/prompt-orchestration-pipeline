@@ -97,7 +97,28 @@ describe("validateConfig (via loadConfig)", () => {
     const origRoot = process.env.PO_ROOT;
     process.env.PO_ROOT = dir;
     try {
-      await expect(loadConfig({ configPath: overrideFile })).rejects.toThrow("taskRunner.maxAttempts must be >= 1");
+      await expect(loadConfig({ configPath: overrideFile })).rejects.toThrow("taskRunner.maxAttempts must be an integer >= 1");
+    } finally {
+      if (origRoot) process.env.PO_ROOT = origRoot; else delete process.env.PO_ROOT;
+      await rm(dir, { recursive: true });
+    }
+  });
+
+  test("throws when taskRunner.maxAttempts is non-integer", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "config-test-"));
+    const configDir = join(dir, "pipeline-config", "test");
+    const tasksDir = join(configDir, "tasks");
+    await mkdir(tasksDir, { recursive: true });
+    await writeFile(join(configDir, "pipeline.json"), JSON.stringify({ name: "test", tasks: ["t1"] }));
+    await writeFile(join(dir, "pipeline-config", "registry.json"), JSON.stringify({
+      pipelines: { test: { configDir, tasksDir } }
+    }));
+    const overrideFile = join(dir, "config.json");
+    await writeFile(overrideFile, JSON.stringify({ taskRunner: { maxAttempts: 2.5 } }));
+    const origRoot = process.env.PO_ROOT;
+    process.env.PO_ROOT = dir;
+    try {
+      await expect(loadConfig({ configPath: overrideFile })).rejects.toThrow("taskRunner.maxAttempts must be an integer >= 1");
     } finally {
       if (origRoot) process.env.PO_ROOT = origRoot; else delete process.env.PO_ROOT;
       await rm(dir, { recursive: true });
@@ -116,6 +137,18 @@ describe("PO_TASK_MAX_ATTEMPTS env override", () => {
     resetConfig();
     const config: AppConfig = getConfig();
     expect(config.taskRunner.maxAttempts).toBe(5);
+  });
+
+  test("getConfig rejects non-numeric PO_TASK_MAX_ATTEMPTS values", () => {
+    process.env.PO_TASK_MAX_ATTEMPTS = "abc";
+    resetConfig();
+    expect(() => getConfig()).toThrow("PO_TASK_MAX_ATTEMPTS must be an integer >= 1");
+  });
+
+  test("getConfig rejects non-integer PO_TASK_MAX_ATTEMPTS values", () => {
+    process.env.PO_TASK_MAX_ATTEMPTS = "2.5";
+    resetConfig();
+    expect(() => getConfig()).toThrow("PO_TASK_MAX_ATTEMPTS must be an integer >= 1");
   });
 });
 

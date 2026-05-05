@@ -286,7 +286,7 @@ export default function DAGGrid({
                     ↻ {items[index]!.restartCount}
                   </span>
                 ) : null}
-                <div className="truncate font-medium">{items[index]?.title ?? formatStepName(items[index]?.id ?? "")}</div>
+                <div className="min-w-0 flex-1 truncate text-left font-medium">{items[index]?.title ?? formatStepName(items[index]?.id ?? "")}</div>
                 <div className="flex items-center gap-2">
                   {getItemStatus(items[index], index, activeIndex) === "running" ? (
                     <>

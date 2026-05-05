@@ -8,12 +8,14 @@ import { join } from "node:path";
 
 // ─── Mock config ──────────────────────────────────────────────────────────────
 
+const mockGetConfig = mock(() => ({}));
+
 mock.module("../../src/core/config", () => ({
   getPipelineConfig: mock((_slug: string) => ({
     pipelineJsonPath: "/mock/pipeline.json",
     tasksDir: "/mock/tasks",
   })),
-  getConfig: mock(() => ({})),
+  getConfig: mockGetConfig,
   loadConfig: mock(async () => ({})),
   resetConfig: mock(() => {}),
 }));
@@ -181,6 +183,7 @@ const PO_ENV_KEYS = [
   "PO_TASK_REGISTRY",
   "PO_START_FROM_TASK",
   "PO_RUN_SINGLE_TASK",
+  "PO_TASK_MAX_ATTEMPTS",
 ] as const;
 
 // ─── Integration test ─────────────────────────────────────────────────────────
@@ -248,6 +251,8 @@ describe("runPipelineJob — full lifecycle integration", () => {
     }));
     mockWriteJobStatusReal.mockClear();
     mockCleanupTaskSymlinks.mockClear();
+    mockGetConfig.mockReset();
+    mockGetConfig.mockImplementation(() => ({}));
   });
 
   afterEach(() => {
@@ -259,6 +264,7 @@ describe("runPipelineJob — full lifecycle integration", () => {
         process.env[key] = savedEnv[key];
       }
     }
+    process.exitCode = 0;
   });
 
   test("multi-task pipeline: snapshot.state transitions through running then done", async () => {
@@ -321,6 +327,8 @@ describe("runPipelineJob — full lifecycle integration", () => {
   });
 
   test("task failure path: job-level state is set to failed", async () => {
+    mockGetConfig.mockImplementation(() => ({ taskRunner: { maxAttempts: 1 } }));
+
     // Make task-a fail
     mockRunPipeline.mockImplementation(async (_modulePath: string, _ctx: unknown) => ({
       ok: false as const,

@@ -324,7 +324,7 @@ describe("runPipelineJob — outer-catch failure surfacing", () => {
 
     const fakeTimer = { unref: () => fakeTimer, ref: () => fakeTimer };
     const setTimeoutSpy = spyOn(globalThis, "setTimeout").mockImplementation(
-      (() => fakeTimer as unknown as ReturnType<typeof setTimeout>) as typeof setTimeout,
+      ((() => fakeTimer as unknown as ReturnType<typeof setTimeout>) as unknown) as typeof setTimeout,
     );
 
     const consoleErrorMessages: unknown[][] = [];
@@ -458,11 +458,11 @@ describe("runPipelineJob — bounded retry loop", () => {
 
     const statusText = await readFile(join(fixture.jobDir, "tasks-status.json"), "utf-8");
     const status = JSON.parse(statusText) as {
-      tasks: Record<string, { state?: string; restartCount?: number }>;
+      tasks: Record<string, { state?: string; attempts?: number; restartCount?: number }>;
     };
     expect(status.tasks["task-a"]?.state).toBe("failed");
-    const rc = status.tasks["task-a"]?.restartCount;
-    expect(rc === undefined || rc === 0).toBe(true);
+    expect(status.tasks["task-a"]?.restartCount).toBeUndefined();
+    expect(status.tasks["task-a"]?.attempts).toBe(1);
   });
 
   test("maxAttempts: 3 — fails twice then succeeds: three calls, restartCount=2, exits zero", async () => {
@@ -496,9 +496,10 @@ describe("runPipelineJob — bounded retry loop", () => {
 
     const statusText = await readFile(fixture.statusPath, "utf-8");
     const status = JSON.parse(statusText) as {
-      tasks: Record<string, { state?: string; restartCount?: number }>;
+      tasks: Record<string, { state?: string; attempts?: number; restartCount?: number }>;
     };
     expect(status.tasks["task-a"]?.state).toBe("done");
+    expect(status.tasks["task-a"]?.attempts).toBe(3);
     expect(status.tasks["task-a"]?.restartCount).toBe(2);
   });
 
@@ -529,9 +530,10 @@ describe("runPipelineJob — bounded retry loop", () => {
 
     const statusText = await readFile(join(fixture.jobDir, "tasks-status.json"), "utf-8");
     const status = JSON.parse(statusText) as {
-      tasks: Record<string, { state?: string; restartCount?: number }>;
+      tasks: Record<string, { state?: string; attempts?: number; restartCount?: number }>;
     };
     expect(status.tasks["task-a"]?.state).toBe("failed");
+    expect(status.tasks["task-a"]?.attempts).toBe(3);
     expect(status.tasks["task-a"]?.restartCount).toBe(2);
   });
 
@@ -541,7 +543,7 @@ describe("runPipelineJob — bounded retry loop", () => {
     cleanupDirs.push(fixture.tmpDir);
 
     let call = 0;
-    let interimSnapshot: { state?: string; failedStage?: unknown; error?: unknown; restartCount?: number } | undefined;
+    let interimSnapshot: { state?: string; attempts?: number; failedStage?: unknown; error?: unknown; restartCount?: number } | undefined;
 
     // Capture the snapshot from disk *during* the second call (after the first failure
     // and the interim writeJobStatus). At call #2 we read tasks-status.json, then
@@ -551,7 +553,7 @@ describe("runPipelineJob — bounded retry loop", () => {
       if (call === 2) {
         const text = await readFile(join(fixture.jobDir, "tasks-status.json"), "utf-8");
         const parsed = JSON.parse(text) as {
-          tasks: Record<string, { state?: string; failedStage?: unknown; error?: unknown; restartCount?: number }>;
+          tasks: Record<string, { state?: string; attempts?: number; failedStage?: unknown; error?: unknown; restartCount?: number }>;
         };
         interimSnapshot = parsed.tasks["task-a"];
         return makeSuccessResult() as never;
@@ -575,6 +577,52 @@ describe("runPipelineJob — bounded retry loop", () => {
     expect(interimSnapshot?.state).toBe("running");
     expect(interimSnapshot?.failedStage).toBeUndefined();
     expect(interimSnapshot?.error).toBeUndefined();
+    expect(interimSnapshot?.attempts).toBe(2);
     expect(interimSnapshot?.restartCount).toBe(1);
+  });
+
+  test("missing taskRunner config falls back to the default retry cap", async () => {
+    mockGetConfig.mockImplementation(() => ({} as never));
+    const fixture = await setupMultiTaskFixture(["task-a"]);
+    cleanupDirs.push(fixture.tmpDir);
+
+    let call = 0;
+    mockRunPipeline.mockImplementation(async () => {
+      call += 1;
+      return (call === 1 ? makeFailureResult() : makeSuccessResult()) as never;
+    });
+
+    await runPipelineJob(fixture.jobId);
+
+    expect(mockRunPipeline.mock.calls.length).toBe(2);
+    expect(sleepDelays).toEqual([2000]);
+  });
+
+  test("exceptions from runPipeline bypass result retries and surface through outer failure handling", async () => {
+    mockGetConfig.mockImplementation(() => ({ taskRunner: { maxAttempts: 3 } }));
+    const fixture = await setupMultiTaskFixture(["task-a"]);
+    cleanupDirs.push(fixture.tmpDir);
+
+    mockRunPipeline.mockImplementation(async () => {
+      throw new Error("task module exploded");
+    });
+
+    const exitCalls: Array<number | undefined> = [];
+    const exitSpy = spyOn(process, "exit").mockImplementation(((code?: number) => {
+      exitCalls.push(code);
+      throw new Error(`__test_exit__:${String(code)}`);
+    }) as typeof process.exit);
+
+    try {
+      await runPipelineJob(fixture.jobId);
+    } catch (e) {
+      if (!(e instanceof Error) || !/^__test_exit__:/.test(e.message)) throw e;
+    } finally {
+      exitSpy.mockRestore();
+    }
+
+    expect(mockRunPipeline.mock.calls.length).toBe(1);
+    expect(sleepDelays).toEqual([]);
+    expect(exitCalls).toContain(1);
   });
 });

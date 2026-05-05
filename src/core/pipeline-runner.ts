@@ -420,8 +420,8 @@ export async function runPipelineJob(jobId: string): Promise<void> {
     };
 
     // Delegate to task runner with bounded retry loop.
-    // Guard against test mocks that may return a non-integer maxAttempts.
-    const configuredMaxAttempts = getConfig().taskRunner.maxAttempts;
+    // Guard against partial test mocks or malformed runtime config.
+    const configuredMaxAttempts = getConfig().taskRunner?.maxAttempts;
     const maxAttempts = Number.isInteger(configuredMaxAttempts) ? configuredMaxAttempts : 3;
     const cap = Math.max(1, maxAttempts);
 
@@ -437,13 +437,14 @@ export async function runPipelineJob(jobId: string): Promise<void> {
       );
 
       await writeJobStatus(config.workDir, (snapshot) => {
-        const entry = (snapshot.tasks[taskName] ?? {}) as Record<string, unknown>;
-        entry["state"] = "running";
-        entry["attempts"] = ((entry["attempts"] as number | undefined) ?? 1) + 1;
-        entry["restartCount"] = ((entry["restartCount"] as number | undefined) ?? 0) + 1;
-        delete entry["failedStage"];
-        delete entry["error"];
-        snapshot.tasks[taskName] = entry as typeof snapshot.tasks[string];
+        const entry = snapshot.tasks[taskName] ?? {};
+        const currentAttempts = typeof entry.attempts === "number" ? entry.attempts : attempt;
+        entry.state = "running";
+        entry.attempts = currentAttempts + 1;
+        entry.restartCount = (entry.restartCount ?? 0) + 1;
+        delete entry.failedStage;
+        delete entry.error;
+        snapshot.tasks[taskName] = entry;
       });
 
       await Bun.sleep(delay);
