@@ -6,7 +6,13 @@ import { Constants } from "../config-bridge-node";
 import { sendJson } from "../utils/http-utils";
 import { getJobDirectoryPath } from "../../../config/paths";
 import { deriveJobStatusFromTasks } from "../../../config/statuses";
-import { getPipelineConfig } from "../../../core/config";
+import { getConfig, getPipelineConfig } from "../../../core/config";
+import {
+  releaseJobSlot,
+  tryAcquireJobSlot,
+  updateJobSlotPid,
+  type JobSlotLease,
+} from "../../../core/job-concurrency";
 import {
   readJobStatus,
   resetJobToCleanSlate,
@@ -59,7 +65,7 @@ async function spawnRunner(
   jobId: string,
   jobDir: string,
   opts: { startFromTask?: string; runSingleTask?: boolean } = {},
-): Promise<void> {
+): Promise<{ pid: number }> {
   const proc = Bun.spawn({
     cmd: ["bun", "run", RUNNER_PATH, jobId],
     stdout: "ignore",
@@ -70,6 +76,53 @@ async function spawnRunner(
   });
   await Bun.write(path.join(jobDir, "runner.pid"), `${proc.pid}\n`);
   proc.unref();
+  return { pid: proc.pid };
+}
+
+function getConcurrencyDataDir(dataDir: string): string {
+  return path.join(dataDir, "pipeline-data");
+}
+
+async function acquireConcurrencySlot(
+  dataDir: string,
+  jobId: string,
+  source: JobSlotLease["source"],
+): Promise<{ ok: true } | { ok: false; response: Response }> {
+  const maxConcurrentJobs = getConfig().orchestrator.maxConcurrentJobs;
+  const result = await tryAcquireJobSlot({
+    dataDir: getConcurrencyDataDir(dataDir),
+    jobId,
+    maxConcurrentJobs,
+    source,
+  });
+  if (result.ok) return { ok: true };
+  return {
+    ok: false,
+    response: sendJson(
+      409,
+      createErrorResponse(
+        "concurrency_limit_reached",
+        `concurrency limit reached (${maxConcurrentJobs} concurrent jobs)`,
+      ),
+    ),
+  };
+}
+
+async function spawnWithSlot(
+  dataDir: string,
+  jobId: string,
+  jobDir: string,
+  opts: { startFromTask?: string; runSingleTask?: boolean } = {},
+): Promise<void> {
+  const concurrencyDataDir = getConcurrencyDataDir(dataDir);
+  let pid: number;
+  try {
+    ({ pid } = await spawnRunner(dataDir, jobId, jobDir, opts));
+  } catch (err) {
+    await releaseJobSlot(concurrencyDataDir, jobId);
+    throw err;
+  }
+  await updateJobSlotPid(concurrencyDataDir, jobId, pid);
 }
 
 async function readRunnerPid(jobDir: string): Promise<number | null> {
@@ -345,7 +398,10 @@ export async function handleJobRestart(
       mode = "clean-slate";
     }
 
-    await spawnRunner(dataDir, jobId, jobDir, {
+    const slot = await acquireConcurrencySlot(dataDir, jobId, "restart");
+    if (!slot.ok) return slot.response;
+
+    await spawnWithSlot(dataDir, jobId, jobDir, {
       startFromTask: fromTask,
       runSingleTask: Boolean(singleTask && !continueAfter),
     });
@@ -521,7 +577,10 @@ export async function handleTaskStart(
       }
     }
 
-    await spawnRunner(dataDir, jobId, jobDir, { startFromTask: taskId });
+    const slot = await acquireConcurrencySlot(dataDir, jobId, "task-start");
+    if (!slot.ok) return slot.response;
+
+    await spawnWithSlot(dataDir, jobId, jobDir, { startFromTask: taskId });
 
     return sendJson(202, {
       ok: true,
