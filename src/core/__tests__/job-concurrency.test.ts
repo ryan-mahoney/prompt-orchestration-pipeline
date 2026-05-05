@@ -6,10 +6,15 @@ import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import {
   getConcurrencyRuntimePaths,
+  getJobConcurrencyStatus,
   listQueuedSeeds,
   pruneStaleJobSlots,
+  releaseJobSlot,
+  tryAcquireJobSlot,
+  updateJobSlotPid,
   type JobSlotLease,
 } from "../job-concurrency";
+import { readFile } from "node:fs/promises";
 
 describe("getConcurrencyRuntimePaths", () => {
   test("resolves runtime paths under <dataDir>/runtime", () => {
@@ -299,6 +304,222 @@ describe("pruneStaleJobSlots", () => {
       const result = await pruneStaleJobSlots(dir, 1000);
       expect(result).toEqual([]);
       expect(existsSync(slotPath)).toBe(true);
+    } finally {
+      await rm(dir, { recursive: true });
+    }
+  });
+});
+
+async function setupJobsDir(prefix: string): Promise<string> {
+  const dir = await mkdtemp(join(tmpdir(), prefix));
+  const { runningJobsDir } = getConcurrencyRuntimePaths(dir);
+  await mkdir(runningJobsDir, { recursive: true });
+  await mkdir(join(dir, "current"), { recursive: true });
+  return dir;
+}
+
+async function makeCurrent(dir: string, jobId: string): Promise<void> {
+  await mkdir(join(dir, "current", jobId), { recursive: true });
+}
+
+describe("tryAcquireJobSlot", () => {
+  test("succeeds up to maxConcurrentJobs and rejects the next attempt", async () => {
+    const dir = await setupJobsDir("acquire-");
+    try {
+      for (const jobId of ["a", "b"]) {
+        await makeCurrent(dir, jobId);
+        const r = await tryAcquireJobSlot({
+          dataDir: dir,
+          jobId,
+          maxConcurrentJobs: 2,
+          source: "orchestrator",
+          pid: process.pid,
+        });
+        expect(r.ok).toBe(true);
+      }
+      await makeCurrent(dir, "c");
+      const overflow = await tryAcquireJobSlot({
+        dataDir: dir,
+        jobId: "c",
+        maxConcurrentJobs: 2,
+        source: "orchestrator",
+      });
+      expect(overflow.ok).toBe(false);
+      if (!overflow.ok) {
+        expect(overflow.reason).toBe("limit_reached");
+        expect(overflow.status.runningCount).toBe(2);
+        expect(overflow.status.availableSlots).toBe(0);
+      }
+    } finally {
+      await rm(dir, { recursive: true });
+    }
+  });
+
+  test("releaseJobSlot frees capacity", async () => {
+    const dir = await setupJobsDir("release-cap-");
+    try {
+      await makeCurrent(dir, "a");
+      await makeCurrent(dir, "b");
+      const r1 = await tryAcquireJobSlot({
+        dataDir: dir,
+        jobId: "a",
+        maxConcurrentJobs: 1,
+        source: "orchestrator",
+        pid: process.pid,
+      });
+      expect(r1.ok).toBe(true);
+      const r2 = await tryAcquireJobSlot({
+        dataDir: dir,
+        jobId: "b",
+        maxConcurrentJobs: 1,
+        source: "orchestrator",
+      });
+      expect(r2.ok).toBe(false);
+      await releaseJobSlot(dir, "a");
+      const r3 = await tryAcquireJobSlot({
+        dataDir: dir,
+        jobId: "b",
+        maxConcurrentJobs: 1,
+        source: "orchestrator",
+        pid: process.pid,
+      });
+      expect(r3.ok).toBe(true);
+    } finally {
+      await rm(dir, { recursive: true });
+    }
+  });
+
+  test("concurrent acquisition of the last slot yields exactly one winner", async () => {
+    const dir = await setupJobsDir("acquire-race-");
+    try {
+      const limit = 3;
+      const total = 12;
+      const jobIds = Array.from({ length: total }, (_, i) => `job-${i}`);
+      for (const id of jobIds) await makeCurrent(dir, id);
+      const results = await Promise.all(
+        jobIds.map((jobId) =>
+          tryAcquireJobSlot({
+            dataDir: dir,
+            jobId,
+            maxConcurrentJobs: limit,
+            source: "orchestrator",
+            pid: process.pid,
+          }),
+        ),
+      );
+      const winners = results.filter((r) => r.ok).length;
+      const losers = results.filter((r) => !r.ok).length;
+      expect(winners).toBe(limit);
+      expect(losers).toBe(total - limit);
+    } finally {
+      await rm(dir, { recursive: true });
+    }
+  });
+
+  test("throws when a slot is already held for the same jobId", async () => {
+    const dir = await setupJobsDir("acquire-dup-");
+    try {
+      await makeCurrent(dir, "a");
+      await tryAcquireJobSlot({
+        dataDir: dir,
+        jobId: "a",
+        maxConcurrentJobs: 5,
+        source: "orchestrator",
+        pid: process.pid,
+      });
+      await expect(
+        tryAcquireJobSlot({
+          dataDir: dir,
+          jobId: "a",
+          maxConcurrentJobs: 5,
+          source: "orchestrator",
+        }),
+      ).rejects.toThrow(/slot already held/);
+    } finally {
+      await rm(dir, { recursive: true });
+    }
+  });
+});
+
+describe("updateJobSlotPid", () => {
+  test("updates the pid on an existing lease", async () => {
+    const dir = await setupJobsDir("update-pid-");
+    try {
+      await makeCurrent(dir, "a");
+      await tryAcquireJobSlot({
+        dataDir: dir,
+        jobId: "a",
+        maxConcurrentJobs: 1,
+        source: "orchestrator",
+      });
+      await updateJobSlotPid(dir, "a", 12345);
+      const { runningJobsDir } = getConcurrencyRuntimePaths(dir);
+      const raw = await readFile(join(runningJobsDir, "a.json"), "utf-8");
+      const lease = JSON.parse(raw) as JobSlotLease;
+      expect(lease.pid).toBe(12345);
+      expect(lease.jobId).toBe("a");
+    } finally {
+      await rm(dir, { recursive: true });
+    }
+  });
+
+  test("throws when no lease exists for the jobId", async () => {
+    const dir = await setupJobsDir("update-pid-missing-");
+    try {
+      await expect(updateJobSlotPid(dir, "missing", 1)).rejects.toThrow(
+        /no lease found for job missing/,
+      );
+    } finally {
+      await rm(dir, { recursive: true });
+    }
+  });
+});
+
+describe("releaseJobSlot", () => {
+  test("is idempotent when called on a non-existent lease", async () => {
+    const dir = await setupJobsDir("release-idempotent-");
+    try {
+      await releaseJobSlot(dir, "ghost");
+      await releaseJobSlot(dir, "ghost");
+    } finally {
+      await rm(dir, { recursive: true });
+    }
+  });
+});
+
+describe("getJobConcurrencyStatus", () => {
+  test("returns counts including queued seeds and stale slots", async () => {
+    const dir = await setupJobsDir("status-");
+    const { runningJobsDir } = getConcurrencyRuntimePaths(dir);
+    const pendingDir = join(dir, "pending");
+    await mkdir(pendingDir, { recursive: true });
+    try {
+      await makeCurrent(dir, "live");
+      await tryAcquireJobSlot({
+        dataDir: dir,
+        jobId: "live",
+        maxConcurrentJobs: 5,
+        source: "orchestrator",
+        pid: process.pid,
+      });
+      await writeLease(runningJobsDir, "broken", "not json {");
+      await writeSeed(pendingDir, "queued-1", { name: "n", pipeline: "p" }, 1700000000);
+      await writeSeed(pendingDir, "queued-2", { name: "m", pipeline: "p" }, 1700000100);
+
+      const status = await getJobConcurrencyStatus(dir, 5, 1000);
+      expect(status.limit).toBe(5);
+      expect(status.runningCount).toBe(1);
+      expect(status.availableSlots).toBe(4);
+      expect(status.queuedCount).toBe(2);
+      expect(status.activeJobs.map((l) => l.jobId)).toEqual(["live"]);
+      expect(status.queuedJobs.map((q) => q.jobId)).toEqual(["queued-1", "queued-2"]);
+      expect(status.staleSlots).toEqual([
+        {
+          jobId: "broken",
+          slotPath: join(runningJobsDir, "broken.json"),
+          reason: "invalid_json",
+        },
+      ]);
     } finally {
       await rm(dir, { recursive: true });
     }

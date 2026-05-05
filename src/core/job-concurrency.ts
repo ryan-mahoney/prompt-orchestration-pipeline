@@ -1,8 +1,11 @@
-import { readdir, readFile, stat, unlink } from "node:fs/promises";
+import { mkdir, readdir, readFile, rename, rmdir, stat, unlink, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
+import { randomBytes } from "node:crypto";
 
 const SEED_FILENAME_PATTERN = /^([A-Za-z0-9-_]+)-seed\.json$/;
+const LOCK_POLL_INTERVAL_MS = 25;
+const DEFAULT_STALE_LEASE_TIMEOUT_MS = 30_000;
 
 export interface JobSlotLease {
   jobId: string;
@@ -178,6 +181,176 @@ export async function pruneStaleJobSlots(
     }
   }
   return stale;
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// mkdir with recursive:false is atomic — exactly one caller wins the create when racing.
+async function withRuntimeLock<T>(
+  dataDir: string,
+  lockTimeoutMs: number,
+  fn: () => Promise<T>,
+): Promise<T> {
+  const { lockDir, runtimeDir } = getConcurrencyRuntimePaths(dataDir);
+  await mkdir(runtimeDir, { recursive: true });
+  const start = Date.now();
+  let retriedStale = false;
+  while (true) {
+    try {
+      await mkdir(lockDir, { recursive: false });
+      break;
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
+      if (Date.now() - start < lockTimeoutMs) {
+        await delay(LOCK_POLL_INTERVAL_MS);
+        continue;
+      }
+      if (!retriedStale) {
+        retriedStale = true;
+        try {
+          const stats = await stat(lockDir);
+          if (Date.now() - stats.mtimeMs >= lockTimeoutMs) {
+            await rmdir(lockDir).catch(() => undefined);
+            continue;
+          }
+        } catch {
+          continue;
+        }
+      }
+      throw new Error(`failed to acquire runtime lock at ${lockDir} within ${lockTimeoutMs}ms`);
+    }
+  }
+  try {
+    return await fn();
+  } finally {
+    try {
+      await rmdir(lockDir);
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+    }
+  }
+}
+
+async function readLease(slotPath: string): Promise<JobSlotLease | null> {
+  try {
+    const raw = await readFile(slotPath, "utf-8");
+    return JSON.parse(raw) as JobSlotLease;
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw err;
+  }
+}
+
+async function writeLeaseAtomic(slotPath: string, lease: JobSlotLease): Promise<void> {
+  const tmpPath = `${slotPath}.tmp.${randomBytes(8).toString("hex")}`;
+  await writeFile(tmpPath, JSON.stringify(lease));
+  await rename(tmpPath, slotPath);
+}
+
+async function readActiveLeases(runningJobsDir: string): Promise<JobSlotLease[]> {
+  let names: string[];
+  try {
+    names = await readdir(runningJobsDir);
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return [];
+    throw err;
+  }
+  const leases: JobSlotLease[] = [];
+  for (const name of names) {
+    if (!name.endsWith(".json") || name.includes(".tmp.")) continue;
+    const lease = await readLease(join(runningJobsDir, name));
+    if (lease) leases.push(lease);
+  }
+  leases.sort(
+    (a, b) =>
+      Date.parse(a.acquiredAt) - Date.parse(b.acquiredAt) || a.jobId.localeCompare(b.jobId),
+  );
+  return leases;
+}
+
+export async function tryAcquireJobSlot(
+  options: AcquireJobSlotOptions,
+): Promise<AcquireJobSlotResult> {
+  const { dataDir, jobId, maxConcurrentJobs, source } = options;
+  const { runningJobsDir } = getConcurrencyRuntimePaths(dataDir);
+  await mkdir(runningJobsDir, { recursive: true });
+  return withRuntimeLock(dataDir, DEFAULT_STALE_LEASE_TIMEOUT_MS, async () => {
+    const staleSlots = await pruneStaleJobSlots(dataDir, DEFAULT_STALE_LEASE_TIMEOUT_MS);
+    const activeJobs = await readActiveLeases(runningJobsDir);
+    const slotPath = join(runningJobsDir, `${jobId}.json`);
+    if (activeJobs.some((l) => l.jobId === jobId)) {
+      throw new Error(`slot already held for job ${jobId}`);
+    }
+    if (activeJobs.length >= maxConcurrentJobs) {
+      const queuedJobs = await listQueuedSeeds(dataDir);
+      const status: JobConcurrencyStatus = {
+        limit: maxConcurrentJobs,
+        runningCount: activeJobs.length,
+        availableSlots: Math.max(0, maxConcurrentJobs - activeJobs.length),
+        queuedCount: queuedJobs.length,
+        activeJobs,
+        queuedJobs,
+        staleSlots,
+      };
+      return { ok: false, reason: "limit_reached", status };
+    }
+    const lease: JobSlotLease = {
+      jobId,
+      pid: options.pid ?? null,
+      acquiredAt: new Date().toISOString(),
+      source,
+      slotPath,
+    };
+    await writeLeaseAtomic(slotPath, lease);
+    return { ok: true, lease };
+  });
+}
+
+export async function updateJobSlotPid(
+  dataDir: string,
+  jobId: string,
+  pid: number,
+): Promise<void> {
+  const { runningJobsDir } = getConcurrencyRuntimePaths(dataDir);
+  await withRuntimeLock(dataDir, DEFAULT_STALE_LEASE_TIMEOUT_MS, async () => {
+    const slotPath = join(runningJobsDir, `${jobId}.json`);
+    const lease = await readLease(slotPath);
+    if (!lease) throw new Error(`no lease found for job ${jobId}`);
+    await writeLeaseAtomic(slotPath, { ...lease, pid });
+  });
+}
+
+export async function releaseJobSlot(dataDir: string, jobId: string): Promise<void> {
+  const { runningJobsDir } = getConcurrencyRuntimePaths(dataDir);
+  await withRuntimeLock(dataDir, DEFAULT_STALE_LEASE_TIMEOUT_MS, async () => {
+    try {
+      await unlink(join(runningJobsDir, `${jobId}.json`));
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+    }
+  });
+}
+
+export async function getJobConcurrencyStatus(
+  dataDir: string,
+  maxConcurrentJobs: number,
+  lockTimeoutMs: number,
+): Promise<JobConcurrencyStatus> {
+  const { runningJobsDir } = getConcurrencyRuntimePaths(dataDir);
+  const staleSlots = await pruneStaleJobSlots(dataDir, lockTimeoutMs);
+  const activeJobs = await readActiveLeases(runningJobsDir);
+  const queuedJobs = await listQueuedSeeds(dataDir);
+  return {
+    limit: maxConcurrentJobs,
+    runningCount: activeJobs.length,
+    availableSlots: Math.max(0, maxConcurrentJobs - activeJobs.length),
+    queuedCount: queuedJobs.length,
+    activeJobs,
+    queuedJobs,
+    staleSlots,
+  };
 }
 
 export async function listQueuedSeeds(dataDir: string): Promise<QueuedJobSummary[]> {
