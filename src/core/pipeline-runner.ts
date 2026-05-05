@@ -98,6 +98,7 @@ export interface TaskStatus {
   attempts?: number;
   executionTimeMs?: number;
   refinementAttempts?: number;
+  restartCount?: number;
   error?: NormalizedError;
   failedStage?: string;
   stageLogPath?: string;
