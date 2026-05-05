@@ -450,9 +450,21 @@ export async function handleTaskStart(
       }
     }
 
-    await mkdir(path.join(dataDir, "pipeline-data"), { recursive: true });
-    await spawnDetached(["bun", "-e", "process.exit(0)"]);
-    return sendJson(202, { ok: true, jobId, taskId, action: "start", lifecycle });
+    const env: Record<string, string | undefined> = {
+      ...(process.env as Record<string, string>),
+      PO_ROOT: dataDir,
+      PO_START_FROM_TASK: taskId,
+    };
+    await spawnDetached(["bun", "run", RUNNER_PATH, jobId], env);
+
+    return sendJson(202, {
+      ok: true,
+      jobId,
+      taskId,
+      action: "start",
+      lifecycle: "current",
+      spawned: true,
+    });
   } finally {
     endStart(jobId);
   }

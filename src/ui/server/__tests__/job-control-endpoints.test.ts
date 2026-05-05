@@ -491,6 +491,43 @@ describe("handleTaskStart", () => {
     expect(body["code"]).toBe("task_not_pending");
   });
 
+  it("returns 202 and spawns runner when target task is pending and dependencies are done", async () => {
+    const root = await makeTempRoot();
+    initPATHS(root);
+
+    const jobDir = await setupJob(root, "task-start-ok", {
+      id: "task-start-ok",
+      state: "pending",
+      current: null,
+      currentStage: null,
+      tasks: {
+        research: { state: "done", currentStage: null },
+        analysis: { state: "pending", currentStage: null },
+      },
+      files: { artifacts: [], logs: [], tmp: [] },
+    });
+
+    const statusPath = path.join(jobDir, "tasks-status.json");
+    const snapshotBefore = await Bun.file(statusPath).text();
+
+    const req = new Request("http://localhost/api/jobs/task-start-ok/tasks/analysis/start", { method: "POST" });
+    const res = await handleTaskStart(req, "task-start-ok", "analysis", root);
+    const body = await res.json() as Record<string, unknown>;
+
+    expect(res.status).toBe(202);
+    expect(body).toEqual({
+      ok: true,
+      jobId: "task-start-ok",
+      taskId: "analysis",
+      action: "start",
+      lifecycle: "current",
+      spawned: true,
+    });
+
+    const snapshotAfter = await Bun.file(statusPath).text();
+    expect(snapshotAfter).toBe(snapshotBefore);
+  });
+
   it("returns 412 dependencies_not_satisfied when an earlier task is \"pending\"", async () => {
     const root = await makeTempRoot();
     initPATHS(root);
