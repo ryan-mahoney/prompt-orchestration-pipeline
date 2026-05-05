@@ -6,7 +6,7 @@ import type { Subprocess } from "bun";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { initPATHS, resetPATHS } from "../config-bridge-node";
-import { handleJobRestart, handleJobStop } from "../endpoints/job-control-endpoints";
+import { handleJobRestart, handleJobStop, handleTaskStart } from "../endpoints/job-control-endpoints";
 import { readJobStatus } from "../../../core/status-writer";
 
 const tempRoots: string[] = [];
@@ -347,6 +347,172 @@ describe("handleJobRestart", () => {
     expect(res.status).toBe(202);
     expect(body["ok"]).toBe(true);
     expect(body["mode"]).toBe("clean-slate");
+  });
+});
+
+describe("handleTaskStart", () => {
+  it("returns 404 JOB_NOT_FOUND when job exists in neither current/ nor complete/", async () => {
+    const root = await makeTempRoot();
+    initPATHS(root);
+
+    const req = new Request("http://localhost/api/jobs/missing/tasks/research/start", { method: "POST" });
+    const res = await handleTaskStart(req, "missing", "research", root);
+    const body = await res.json() as Record<string, unknown>;
+
+    expect(res.status).toBe(404);
+    expect(body["code"]).toBe("JOB_NOT_FOUND");
+  });
+
+  it("returns 409 unsupported_lifecycle when job exists only in complete/, leaving job directory in place", async () => {
+    const root = await makeTempRoot();
+    initPATHS(root);
+
+    const completeDir = path.join(root, "pipeline-data", "complete", "task-start-complete");
+    await mkdir(completeDir, { recursive: true });
+    await writeFile(path.join(completeDir, "tasks-status.json"), JSON.stringify({
+      id: "task-start-complete",
+      state: "complete",
+      current: null,
+      currentStage: null,
+      tasks: {
+        research: { state: "done", currentStage: null },
+      },
+      files: { artifacts: [], logs: [], tmp: [] },
+    }));
+
+    const req = new Request("http://localhost/api/jobs/task-start-complete/tasks/research/start", { method: "POST" });
+    const res = await handleTaskStart(req, "task-start-complete", "research", root);
+    const body = await res.json() as Record<string, unknown>;
+
+    expect(res.status).toBe(409);
+    expect(body["code"]).toBe("unsupported_lifecycle");
+
+    const stillThere = await Bun.file(path.join(completeDir, "tasks-status.json")).exists();
+    expect(stillThere).toBe(true);
+
+    const movedToCurrent = await Bun.file(path.join(root, "pipeline-data", "current", "task-start-complete", "tasks-status.json")).exists();
+    expect(movedToCurrent).toBe(false);
+  });
+
+  it("returns 409 job_running when runner.pid points to a live process", async () => {
+    const root = await makeTempRoot();
+    initPATHS(root);
+
+    const proc = spawnSleeper();
+
+    await setupJob(root, "task-start-live", {
+      id: "task-start-live",
+      state: "running",
+      current: "research",
+      currentStage: "prompt",
+      tasks: {
+        research: { state: "running", currentStage: "prompt" },
+      },
+      files: { artifacts: [], logs: [], tmp: [] },
+    }, proc.pid);
+
+    const req = new Request("http://localhost/api/jobs/task-start-live/tasks/research/start", { method: "POST" });
+    const res = await handleTaskStart(req, "task-start-live", "research", root);
+    const body = await res.json() as Record<string, unknown>;
+
+    expect(res.status).toBe(409);
+    expect(body["code"]).toBe("job_running");
+  });
+
+  it("returns 409 job_running when snapshot has a task in \"running\" state and PID is dead", async () => {
+    const root = await makeTempRoot();
+    initPATHS(root);
+
+    await setupJob(root, "task-start-stale", {
+      id: "task-start-stale",
+      state: "running",
+      current: "research",
+      currentStage: "prompt",
+      tasks: {
+        research: { state: "running", currentStage: "prompt" },
+        analysis: { state: "pending", currentStage: null },
+      },
+      files: { artifacts: [], logs: [], tmp: [] },
+    }, 999999);
+
+    const req = new Request("http://localhost/api/jobs/task-start-stale/tasks/analysis/start", { method: "POST" });
+    const res = await handleTaskStart(req, "task-start-stale", "analysis", root);
+    const body = await res.json() as Record<string, unknown>;
+
+    expect(res.status).toBe(409);
+    expect(body["code"]).toBe("job_running");
+  });
+
+  it("returns 404 task_not_found for an unknown taskId", async () => {
+    const root = await makeTempRoot();
+    initPATHS(root);
+
+    await setupJob(root, "task-start-unknown", {
+      id: "task-start-unknown",
+      state: "pending",
+      current: null,
+      currentStage: null,
+      tasks: {
+        research: { state: "done", currentStage: null },
+        analysis: { state: "pending", currentStage: null },
+      },
+      files: { artifacts: [], logs: [], tmp: [] },
+    });
+
+    const req = new Request("http://localhost/api/jobs/task-start-unknown/tasks/synthesis/start", { method: "POST" });
+    const res = await handleTaskStart(req, "task-start-unknown", "synthesis", root);
+    const body = await res.json() as Record<string, unknown>;
+
+    expect(res.status).toBe(404);
+    expect(body["code"]).toBe("task_not_found");
+  });
+
+  it("returns 422 task_not_pending when target task is \"done\"", async () => {
+    const root = await makeTempRoot();
+    initPATHS(root);
+
+    await setupJob(root, "task-start-done", {
+      id: "task-start-done",
+      state: "pending",
+      current: null,
+      currentStage: null,
+      tasks: {
+        research: { state: "done", currentStage: null },
+        analysis: { state: "pending", currentStage: null },
+      },
+      files: { artifacts: [], logs: [], tmp: [] },
+    });
+
+    const req = new Request("http://localhost/api/jobs/task-start-done/tasks/research/start", { method: "POST" });
+    const res = await handleTaskStart(req, "task-start-done", "research", root);
+    const body = await res.json() as Record<string, unknown>;
+
+    expect(res.status).toBe(422);
+    expect(body["code"]).toBe("task_not_pending");
+  });
+
+  it("returns 412 dependencies_not_satisfied when an earlier task is \"pending\"", async () => {
+    const root = await makeTempRoot();
+    initPATHS(root);
+
+    await setupJob(root, "task-start-deps", {
+      id: "task-start-deps",
+      state: "pending",
+      current: null,
+      currentStage: null,
+      tasks: {
+        research: { state: "pending", currentStage: null },
+        analysis: { state: "pending", currentStage: null },
+      },
+      files: { artifacts: [], logs: [], tmp: [] },
+    });
+
+    const req = new Request("http://localhost/api/jobs/task-start-deps/tasks/analysis/start", { method: "POST" });
+    const res = await handleTaskStart(req, "task-start-deps", "analysis", root);
+    const body = await res.json() as Record<string, unknown>;
+
+    expect(res.status).toBe(412);
+    expect(body["code"]).toBe("dependencies_not_satisfied");
   });
 });
 

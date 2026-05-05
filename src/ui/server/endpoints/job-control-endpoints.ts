@@ -414,6 +414,42 @@ export async function handleTaskStart(
       return sendJson(404, createErrorResponse(Constants.ERROR_CODES.JOB_NOT_FOUND, `job "${jobId}" was not found`));
     }
 
+    if (lifecycle !== "current") {
+      return sendJson(409, createErrorResponse("unsupported_lifecycle", `job "${jobId}" is not in the current lifecycle`));
+    }
+
+    const jobDir = getJobDirectoryPath(dataDir, jobId, "current");
+
+    const pid = await readRunnerPid(jobDir);
+    if (pid !== null && isProcessAlive(pid)) {
+      return sendJson(409, createErrorResponse("job_running", "Job is currently running (process alive)"));
+    }
+
+    const snapshot = await readJobStatus(jobDir);
+    if (snapshot) {
+      const taskEntries = Object.values(snapshot.tasks).filter((t): t is typeof t & { state: unknown } => "state" in t);
+      const derivedStatus = deriveJobStatusFromTasks(taskEntries);
+      if (derivedStatus === "running") {
+        return sendJson(409, createErrorResponse("job_running", "Job is currently running (task-level running)"));
+      }
+    }
+
+    const targetTask = snapshot?.tasks[taskId];
+    if (!targetTask) {
+      return sendJson(404, createErrorResponse("task_not_found", `task "${taskId}" was not found`));
+    }
+
+    if (targetTask.state !== "pending") {
+      return sendJson(422, createErrorResponse("task_not_pending", `task "${taskId}" is not pending`));
+    }
+
+    for (const priorTaskId of Object.keys(snapshot!.tasks)) {
+      if (priorTaskId === taskId) break;
+      if (snapshot!.tasks[priorTaskId]!.state !== "done") {
+        return sendJson(412, createErrorResponse("dependencies_not_satisfied", `task "${priorTaskId}" must be done before "${taskId}"`));
+      }
+    }
+
     await mkdir(path.join(dataDir, "pipeline-data"), { recursive: true });
     await spawnDetached(["bun", "-e", "process.exit(0)"]);
     return sendJson(202, { ok: true, jobId, taskId, action: "start", lifecycle });
