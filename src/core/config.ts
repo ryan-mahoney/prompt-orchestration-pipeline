@@ -10,6 +10,7 @@ export interface OrchestratorConfig {
   watchDebounce: number;
   watchStabilityThreshold: number;
   watchPollInterval: number;
+  maxConcurrentJobs: number;
 }
 
 export interface TaskRunnerConfig {
@@ -91,6 +92,7 @@ export const defaultConfig = {
     watchDebounce: 500,
     watchStabilityThreshold: 1000,
     watchPollInterval: 100,
+    maxConcurrentJobs: 3,
   },
   taskRunner: {
     maxRefinementAttempts: 3,
@@ -200,7 +202,24 @@ function loadFromEnvironment(config: AppConfig): AppConfig {
 
   const shutdownTimeoutRaw = process.env["PO_SHUTDOWN_TIMEOUT"];
   if (shutdownTimeoutRaw) {
-    overrides["orchestrator"] = { shutdownTimeout: parseInt(shutdownTimeoutRaw, 10) };
+    overrides["orchestrator"] = {
+      ...((overrides["orchestrator"] as PlainObject | undefined) ?? {}),
+      shutdownTimeout: parseInt(shutdownTimeoutRaw, 10),
+    };
+  }
+
+  const maxRunningJobsRaw = process.env["PO_MAX_RUNNING_JOBS"];
+  if (maxRunningJobsRaw !== undefined) {
+    const maxConcurrentJobs = Number(maxRunningJobsRaw);
+    if (!Number.isInteger(maxConcurrentJobs) || maxConcurrentJobs < 1) {
+      throw new Error(
+        `orchestrator.maxConcurrentJobs must be a positive integer (PO_MAX_RUNNING_JOBS), got ${maxRunningJobsRaw}`
+      );
+    }
+    overrides["orchestrator"] = {
+      ...((overrides["orchestrator"] as PlainObject | undefined) ?? {}),
+      maxConcurrentJobs,
+    };
   }
 
   const logLevel = process.env["PO_LOG_LEVEL"];
@@ -243,6 +262,9 @@ function validateConfig(config: AppConfig): void {
   }
   if (!Number.isInteger(config.taskRunner.maxAttempts) || config.taskRunner.maxAttempts < 1) {
     errors.push(`taskRunner.maxAttempts must be an integer >= 1, got ${config.taskRunner.maxAttempts}`);
+  }
+  if (!Number.isInteger(config.orchestrator.maxConcurrentJobs) || config.orchestrator.maxConcurrentJobs < 1) {
+    errors.push(`orchestrator.maxConcurrentJobs must be a positive integer, got ${config.orchestrator.maxConcurrentJobs}`);
   }
   if (!(VALID_LOG_LEVELS as readonly string[]).includes(config.logging.level)) {
     errors.push(`logging.level must be one of ${VALID_LOG_LEVELS.join(", ")}, got ${config.logging.level}`);
