@@ -6,6 +6,7 @@ import { Constants } from "../config-bridge-node";
 import { sendJson } from "../utils/http-utils";
 import { getJobDirectoryPath } from "../../../config/paths";
 import { deriveJobStatusFromTasks } from "../../../config/statuses";
+import { getPipelineConfig } from "../../../core/config";
 import {
   readJobStatus,
   resetJobToCleanSlate,
@@ -31,15 +32,43 @@ function end(set: Set<string>, jobId: string): void {
   set.delete(jobId);
 }
 
-async function spawnDetached(args: string[], env?: Record<string, string | undefined>): Promise<void> {
+function buildRunnerEnv(
+  dataDir: string,
+  opts: { startFromTask?: string; runSingleTask?: boolean } = {},
+): Record<string, string | undefined> {
+  const env: Record<string, string | undefined> = {
+    ...(process.env as Record<string, string>),
+    PO_ROOT: dataDir,
+  };
+
+  delete env["PO_START_FROM_TASK"];
+  delete env["PO_RUN_SINGLE_TASK"];
+
+  if (opts.startFromTask) {
+    env["PO_START_FROM_TASK"] = opts.startFromTask;
+  }
+  if (opts.runSingleTask) {
+    env["PO_RUN_SINGLE_TASK"] = "true";
+  }
+
+  return env;
+}
+
+async function spawnRunner(
+  dataDir: string,
+  jobId: string,
+  jobDir: string,
+  opts: { startFromTask?: string; runSingleTask?: boolean } = {},
+): Promise<void> {
   const proc = Bun.spawn({
-    cmd: args,
+    cmd: ["bun", "run", RUNNER_PATH, jobId],
     stdout: "ignore",
     stderr: "ignore",
     stdin: "ignore",
-    env: env ?? process.env as Record<string, string>,
+    env: buildRunnerEnv(dataDir, opts),
     detached: true,
   });
+  await Bun.write(path.join(jobDir, "runner.pid"), `${proc.pid}\n`);
   proc.unref();
 }
 
@@ -73,6 +102,10 @@ function isNonTerminalTaskState(state: unknown): boolean {
   return state === "pending" || state === "running";
 }
 
+function isDependencySatisfied(state: unknown): boolean {
+  return state === "done";
+}
+
 function isTaskLikelyInProgress(task: Record<string, unknown>): boolean {
   const state = task["state"];
   const nonTerminal = isNonTerminalTaskState(state);
@@ -88,6 +121,40 @@ function getProgressPercent(snapshot: StatusSnapshot): number {
   if (tasks.length === 0) return 0;
   const doneCount = tasks.filter((task) => task.state === "done").length;
   return Math.floor((doneCount / tasks.length) * 100);
+}
+
+function getTaskName(task: unknown): string | null {
+  if (typeof task === "string" && task.length > 0) return task;
+  if (typeof task !== "object" || task === null || Array.isArray(task)) return null;
+  const name = (task as Record<string, unknown>)["name"];
+  return typeof name === "string" && name.length > 0 ? name : null;
+}
+
+async function readSeedPipelineSlug(jobDir: string): Promise<string | null> {
+  try {
+    const seed = JSON.parse(await Bun.file(path.join(jobDir, "seed.json")).text()) as Record<string, unknown>;
+    return typeof seed["pipeline"] === "string" && seed["pipeline"].length > 0 ? seed["pipeline"] : null;
+  } catch {
+    return null;
+  }
+}
+
+async function loadPipelineTaskOrder(dataDir: string, jobDir: string, snapshot: StatusSnapshot): Promise<string[] | null> {
+  const snapshotPipeline = snapshot["pipeline"];
+  const pipelineSlug = typeof snapshotPipeline === "string" && snapshotPipeline.length > 0
+    ? snapshotPipeline
+    : await readSeedPipelineSlug(jobDir);
+
+  if (!pipelineSlug) return null;
+
+  try {
+    const { pipelineJsonPath } = getPipelineConfig(pipelineSlug, dataDir);
+    const pipeline = JSON.parse(await Bun.file(pipelineJsonPath).text()) as Record<string, unknown>;
+    if (!Array.isArray(pipeline["tasks"])) return null;
+    return pipeline["tasks"].map(getTaskName).filter((name): name is string => name !== null);
+  } catch {
+    return null;
+  }
 }
 
 function findRecoveryTask(snapshot: StatusSnapshot): string | null {
@@ -252,8 +319,9 @@ export async function handleJobRestart(
 
     const status = await readJobStatus(jobDir);
     if (status) {
-      const taskEntries = Object.values(status.tasks).filter((t): t is typeof t & { state: unknown } => "state" in t);
-      const derivedStatus = deriveJobStatusFromTasks(taskEntries);
+      const derivedStatus = deriveJobStatusFromTasks(
+        Object.values(status.tasks).map((task) => ({ state: task.state })),
+      );
       if (derivedStatus === "running") {
         return sendJson(409, createErrorResponse("job_running", "Job is currently running (task-level running)"));
       }
@@ -277,20 +345,10 @@ export async function handleJobRestart(
       mode = "clean-slate";
     }
 
-    // Build environment for the pipeline runner
-    const env: Record<string, string | undefined> = {
-      ...process.env as Record<string, string>,
-      PO_ROOT: dataDir,
-    };
-    if (fromTask) {
-      env["PO_START_FROM_TASK"] = fromTask;
-    }
-    if (singleTask && !continueAfter) {
-      env["PO_RUN_SINGLE_TASK"] = "true";
-    }
-
-    // Spawn the pipeline runner as a detached process
-    await spawnDetached(["bun", "run", RUNNER_PATH, jobId], env);
+    await spawnRunner(dataDir, jobId, jobDir, {
+      startFromTask: fromTask,
+      runSingleTask: Boolean(singleTask && !continueAfter),
+    });
 
     return sendJson(202, { ok: true, jobId, mode, spawned: true });
   } finally {
@@ -414,9 +472,64 @@ export async function handleTaskStart(
       return sendJson(404, createErrorResponse(Constants.ERROR_CODES.JOB_NOT_FOUND, `job "${jobId}" was not found`));
     }
 
-    await mkdir(path.join(dataDir, "pipeline-data"), { recursive: true });
-    await spawnDetached(["bun", "-e", "process.exit(0)"]);
-    return sendJson(202, { ok: true, jobId, taskId, action: "start", lifecycle });
+    if (lifecycle !== "current") {
+      return sendJson(409, createErrorResponse("unsupported_lifecycle", `job "${jobId}" is not in the current lifecycle`));
+    }
+
+    const jobDir = getJobDirectoryPath(dataDir, jobId, "current");
+
+    const pid = await readRunnerPid(jobDir);
+    if (pid !== null && isProcessAlive(pid)) {
+      return sendJson(409, createErrorResponse("job_running", "Job is currently running (process alive)"));
+    }
+
+    const snapshot = await readJobStatus(jobDir);
+    if (!snapshot) {
+      return sendJson(500, createErrorResponse("status_unavailable", `job "${jobId}" status could not be read`));
+    }
+
+    const derivedStatus = deriveJobStatusFromTasks(
+      Object.values(snapshot.tasks).map((task) => ({ state: task.state })),
+    );
+    if (derivedStatus === "running") {
+      return sendJson(409, createErrorResponse("job_running", "Job is currently running (task-level running)"));
+    }
+
+    const targetTask = snapshot.tasks[taskId];
+    if (!targetTask) {
+      return sendJson(404, createErrorResponse("task_not_found", `task "${taskId}" was not found`));
+    }
+
+    if (targetTask.state !== "pending") {
+      return sendJson(422, createErrorResponse("task_not_pending", `task "${taskId}" is not pending`));
+    }
+
+    const pipelineTaskOrder = await loadPipelineTaskOrder(dataDir, jobDir, snapshot);
+    if (!pipelineTaskOrder) {
+      return sendJson(500, createErrorResponse("status_unavailable", `pipeline task order for job "${jobId}" could not be read`));
+    }
+
+    const taskIndex = pipelineTaskOrder.indexOf(taskId);
+    if (taskIndex === -1) {
+      return sendJson(404, createErrorResponse("task_not_found", `task "${taskId}" was not found in the pipeline definition`));
+    }
+
+    for (const priorTaskId of pipelineTaskOrder.slice(0, taskIndex)) {
+      if (!isDependencySatisfied(snapshot.tasks[priorTaskId]?.state)) {
+        return sendJson(412, createErrorResponse("dependencies_not_satisfied", `task "${priorTaskId}" must be done before "${taskId}"`));
+      }
+    }
+
+    await spawnRunner(dataDir, jobId, jobDir, { startFromTask: taskId });
+
+    return sendJson(202, {
+      ok: true,
+      jobId,
+      taskId,
+      action: "start",
+      lifecycle: "current",
+      spawned: true,
+    });
   } finally {
     endStart(jobId);
   }
