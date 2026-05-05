@@ -433,6 +433,15 @@ export async function drainPendingQueue(
 
   for (let i = 0; i < queued.length; i++) {
     const { jobId, seedPath } = queued[i]!;
+
+    try {
+      JSON.parse(await Bun.file(seedPath).text());
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      logger.warn(`invalid JSON in ${jobId}-seed.json: ${message}`);
+      continue;
+    }
+
     const acquired = await tryAcquireJobSlot({
       dataDir,
       jobId,
@@ -491,16 +500,20 @@ export function startOrchestrator(opts: OrchestratorOptions): Promise<Orchestrat
 
       let isDraining = false;
       let pendingDrain = false;
+      let stopped = false;
+      let activeDrain: Promise<void> | null = null;
       const triggerDrain = (): void => {
+        if (stopped) return;
         if (isDraining) {
           pendingDrain = true;
           return;
         }
         isDraining = true;
-        void (async () => {
+        activeDrain = (async () => {
           try {
             do {
               pendingDrain = false;
+              if (stopped) return;
               await drainPendingQueue({
                 dataDir: dirs.dataDir,
                 maxConcurrentJobs,
@@ -512,12 +525,15 @@ export function startOrchestrator(opts: OrchestratorOptions): Promise<Orchestrat
             logger.error("drainPendingQueue failed", err);
           } finally {
             isDraining = false;
+            activeDrain = null;
           }
         })();
       };
 
-      const onChildExit = (jobId: string): Promise<void> =>
-        handleChildExit({ dataDir: dirs.dataDir, jobId, triggerDrain });
+      const onChildExit = (jobId: string): Promise<void> => {
+        if (stopped) return Promise.resolve();
+        return handleChildExit({ dataDir: dirs.dataDir, jobId, triggerDrain });
+      };
 
       const spawnRunnerForJob = async (jobId: string): Promise<{ pid: number }> => {
         const seedPath = join(dirs.current, jobId, "seed.json");
@@ -537,7 +553,9 @@ export function startOrchestrator(opts: OrchestratorOptions): Promise<Orchestrat
       });
 
       const stop = async (): Promise<void> => {
+        stopped = true;
         await watcher.close();
+        if (activeDrain) await activeDrain;
         await stopChildren(running, logger);
       };
 
