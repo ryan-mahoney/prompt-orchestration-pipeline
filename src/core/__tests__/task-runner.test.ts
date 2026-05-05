@@ -60,7 +60,7 @@ describe("runPipeline log tracking", () => {
 });
 
 describe("task-runner does not write job-level status fields", () => {
-  it("does not set snapshot.state, snapshot.current, snapshot.currentStage, or snapshot.progress on success", async () => {
+  it("does not set snapshot.state, snapshot.current, or snapshot.currentStage on success", async () => {
     const root = await makeTempRoot();
     const workDir = path.join(root, "job-1");
     await mkdir(workDir, { recursive: true });
@@ -91,11 +91,10 @@ describe("task-runner does not write job-level status fields", () => {
 
     const status = JSON.parse(await readFile(path.join(workDir, "tasks-status.json"), "utf8")) as StatusSnapshot;
 
-    // Job-level fields must remain untouched by task-runner
+    // Lifecycle fields are owned by pipeline-runner; task-runner persists progress only.
     expect(status.state).toBe("pending");
     expect(status.current).toBeNull();
     expect(status.currentStage).toBeNull();
-    expect(status.progress).toBeUndefined();
   });
 
   it("does not set snapshot.state on task failure", async () => {

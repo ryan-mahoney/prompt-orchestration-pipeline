@@ -165,8 +165,8 @@ describe("isRetryableError", () => {
 });
 
 describe("DEFAULT_REQUEST_TIMEOUT_MS", () => {
-  it("is 120 000 ms", () => {
-    expect(DEFAULT_REQUEST_TIMEOUT_MS).toBe(120_000);
+  it("is 1 hour (3 600 000 ms)", () => {
+    expect(DEFAULT_REQUEST_TIMEOUT_MS).toBe(3_600_000);
   });
 });
 
