@@ -85,6 +85,21 @@ describe("status-transformer", () => {
     expect(job?.status).toBe("running");
   });
 
+  it("maps numeric restartCount on tasks", () => {
+    const tasks = transformTasks({ alpha: { state: "running", restartCount: 4 } });
+    expect(tasks.alpha?.restartCount).toBe(4);
+  });
+
+  it("treats non-numeric restartCount as undefined", () => {
+    const tasks = transformTasks({ alpha: { state: "running", restartCount: "x" } });
+    expect(tasks.alpha?.restartCount).toBeUndefined();
+  });
+
+  it("returns undefined restartCount when key is absent", () => {
+    const tasks = transformTasks({ alpha: { state: "running" } });
+    expect(tasks.alpha?.restartCount).toBeUndefined();
+  });
+
   it("filters failed reads and computes transformation stats", () => {
     const transformed = transformMultipleJobs([
       { ok: true, data: { tasks: { a: { state: "done" } } }, jobId: "job-1", location: "current" },

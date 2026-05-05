@@ -33,6 +33,7 @@ function toTask(name: string, value: unknown): CanonicalTask {
     startedAt: typeof task["startedAt"] === "string" ? task["startedAt"] : null,
     endedAt: typeof task["endedAt"] === "string" ? task["endedAt"] : null,
     attempts: typeof task["attempts"] === "number" ? task["attempts"] : undefined,
+    restartCount: typeof task["restartCount"] === "number" ? task["restartCount"] : undefined,
     executionTimeMs:
       typeof task["executionTimeMs"] === "number" ? task["executionTimeMs"] : undefined,
     refinementAttempts:
