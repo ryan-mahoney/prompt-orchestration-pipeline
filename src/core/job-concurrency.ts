@@ -1,4 +1,5 @@
-import { readdir, readFile, stat } from "node:fs/promises";
+import { readdir, readFile, stat, unlink } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 
 const SEED_FILENAME_PATTERN = /^([A-Za-z0-9-_]+)-seed\.json$/;
@@ -97,6 +98,86 @@ async function readSeedMetadata(seedPath: string): Promise<{ name: string | null
   } catch {
     return { name: null, pipeline: null };
   }
+}
+
+function isProcessAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err) {
+    // EPERM means the process exists but is owned by another user — still alive.
+    return (err as NodeJS.ErrnoException).code === "EPERM";
+  }
+}
+
+async function removeLeaseFile(slotPath: string): Promise<void> {
+  try {
+    await unlink(slotPath);
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+  }
+}
+
+async function classifyLease(
+  dataDir: string,
+  slotPath: string,
+  fileName: string,
+  lockTimeoutMs: number,
+): Promise<StaleJobSlot | null> {
+  const fallbackJobId = fileName.replace(/\.json$/, "");
+  let raw: string;
+  try {
+    raw = await readFile(slotPath, "utf-8");
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw err;
+  }
+  let parsed: JobSlotLease;
+  try {
+    parsed = JSON.parse(raw) as JobSlotLease;
+  } catch {
+    return { jobId: fallbackJobId, slotPath, reason: "invalid_json" };
+  }
+  const jobId = typeof parsed.jobId === "string" ? parsed.jobId : fallbackJobId;
+  if (!existsSync(join(dataDir, "current", jobId))) {
+    return { jobId, slotPath, reason: "missing_current_job" };
+  }
+  if (parsed.pid === null || parsed.pid === undefined) {
+    const acquiredMs = Date.parse(parsed.acquiredAt);
+    if (Number.isFinite(acquiredMs) && Date.now() - acquiredMs >= lockTimeoutMs) {
+      return { jobId, slotPath, reason: "missing_pid" };
+    }
+    return null;
+  }
+  if (!isProcessAlive(parsed.pid)) {
+    return { jobId, slotPath, reason: "dead_pid" };
+  }
+  return null;
+}
+
+export async function pruneStaleJobSlots(
+  dataDir: string,
+  lockTimeoutMs: number,
+): Promise<StaleJobSlot[]> {
+  const { runningJobsDir } = getConcurrencyRuntimePaths(dataDir);
+  let names: string[];
+  try {
+    names = await readdir(runningJobsDir);
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return [];
+    throw err;
+  }
+  names.sort();
+  const stale: StaleJobSlot[] = [];
+  for (const name of names) {
+    const slotPath = join(runningJobsDir, name);
+    const result = await classifyLease(dataDir, slotPath, name, lockTimeoutMs);
+    if (result) {
+      await removeLeaseFile(slotPath);
+      stale.push(result);
+    }
+  }
+  return stale;
 }
 
 export async function listQueuedSeeds(dataDir: string): Promise<QueuedJobSummary[]> {

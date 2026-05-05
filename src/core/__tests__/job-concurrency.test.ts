@@ -1,8 +1,15 @@
 import { describe, test, expect } from "bun:test";
-import { mkdtemp, mkdir, writeFile, utimes, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, writeFile, utimes, rm, readdir } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { getConcurrencyRuntimePaths, listQueuedSeeds } from "../job-concurrency";
+import { spawnSync } from "node:child_process";
+import {
+  getConcurrencyRuntimePaths,
+  listQueuedSeeds,
+  pruneStaleJobSlots,
+  type JobSlotLease,
+} from "../job-concurrency";
 
 describe("getConcurrencyRuntimePaths", () => {
   test("resolves runtime paths under <dataDir>/runtime", () => {
@@ -122,6 +129,176 @@ describe("listQueuedSeeds", () => {
     try {
       const result = await listQueuedSeeds(dir);
       expect(result.map((s) => s.jobId)).toEqual(["job-only"]);
+    } finally {
+      await rm(dir, { recursive: true });
+    }
+  });
+});
+
+async function writeLease(
+  runningJobsDir: string,
+  jobId: string,
+  body: Partial<JobSlotLease> | string,
+): Promise<string> {
+  const slotPath = join(runningJobsDir, `${jobId}.json`);
+  await writeFile(slotPath, typeof body === "string" ? body : JSON.stringify(body));
+  return slotPath;
+}
+
+function getDeadPid(): number {
+  // Spawn a synchronous child that exits immediately. spawnSync only returns
+  // after the child has exited, so the captured PID is guaranteed dead by then.
+  const result = spawnSync(process.execPath, ["-e", ""]);
+  if (result.pid === undefined || result.status === null) {
+    throw new Error("failed to spawn child for dead-pid test");
+  }
+  return result.pid;
+}
+
+describe("pruneStaleJobSlots", () => {
+  test("returns [] when runningJobsDir does not exist", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "prune-stale-"));
+    try {
+      expect(await pruneStaleJobSlots(dir, 1000)).toEqual([]);
+    } finally {
+      await rm(dir, { recursive: true });
+    }
+  });
+
+  test("returns [] when runningJobsDir is empty", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "prune-stale-"));
+    const { runningJobsDir } = getConcurrencyRuntimePaths(dir);
+    await mkdir(runningJobsDir, { recursive: true });
+    try {
+      expect(await pruneStaleJobSlots(dir, 1000)).toEqual([]);
+    } finally {
+      await rm(dir, { recursive: true });
+    }
+  });
+
+  test("removes and reports lease with malformed JSON", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "prune-stale-"));
+    const { runningJobsDir } = getConcurrencyRuntimePaths(dir);
+    await mkdir(runningJobsDir, { recursive: true });
+    const slotPath = await writeLease(runningJobsDir, "job-bad", "not json {");
+    try {
+      const result = await pruneStaleJobSlots(dir, 1000);
+      expect(result).toEqual([
+        { jobId: "job-bad", slotPath, reason: "invalid_json" },
+      ]);
+      expect(existsSync(slotPath)).toBe(false);
+    } finally {
+      await rm(dir, { recursive: true });
+    }
+  });
+
+  test("removes and reports lease whose current/<jobId> directory is missing", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "prune-stale-"));
+    const { runningJobsDir } = getConcurrencyRuntimePaths(dir);
+    await mkdir(runningJobsDir, { recursive: true });
+    const slotPath = await writeLease(runningJobsDir, "job-missing", {
+      jobId: "job-missing",
+      pid: process.pid,
+      acquiredAt: new Date().toISOString(),
+      source: "orchestrator",
+      slotPath: join(runningJobsDir, "job-missing.json"),
+    });
+    try {
+      const result = await pruneStaleJobSlots(dir, 1000);
+      expect(result).toEqual([
+        { jobId: "job-missing", slotPath, reason: "missing_current_job" },
+      ]);
+      expect(existsSync(slotPath)).toBe(false);
+    } finally {
+      await rm(dir, { recursive: true });
+    }
+  });
+
+  test("removes and reports lease with a dead PID", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "prune-stale-"));
+    const { runningJobsDir } = getConcurrencyRuntimePaths(dir);
+    await mkdir(runningJobsDir, { recursive: true });
+    await mkdir(join(dir, "current", "job-dead"), { recursive: true });
+    const deadPid = getDeadPid();
+    const slotPath = await writeLease(runningJobsDir, "job-dead", {
+      jobId: "job-dead",
+      pid: deadPid,
+      acquiredAt: new Date().toISOString(),
+      source: "orchestrator",
+      slotPath: join(runningJobsDir, "job-dead.json"),
+    });
+    try {
+      const result = await pruneStaleJobSlots(dir, 1000);
+      expect(result).toEqual([
+        { jobId: "job-dead", slotPath, reason: "dead_pid" },
+      ]);
+      expect(existsSync(slotPath)).toBe(false);
+    } finally {
+      await rm(dir, { recursive: true });
+    }
+  });
+
+  test("removes and reports lease with null pid older than lockTimeoutMs", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "prune-stale-"));
+    const { runningJobsDir } = getConcurrencyRuntimePaths(dir);
+    await mkdir(runningJobsDir, { recursive: true });
+    await mkdir(join(dir, "current", "job-stale-pidless"), { recursive: true });
+    const slotPath = await writeLease(runningJobsDir, "job-stale-pidless", {
+      jobId: "job-stale-pidless",
+      pid: null,
+      acquiredAt: new Date(Date.now() - 60_000).toISOString(),
+      source: "orchestrator",
+      slotPath: join(runningJobsDir, "job-stale-pidless.json"),
+    });
+    try {
+      const result = await pruneStaleJobSlots(dir, 1000);
+      expect(result).toEqual([
+        { jobId: "job-stale-pidless", slotPath, reason: "missing_pid" },
+      ]);
+      expect(existsSync(slotPath)).toBe(false);
+    } finally {
+      await rm(dir, { recursive: true });
+    }
+  });
+
+  test("does not prune a fresh lease with null pid younger than lockTimeoutMs", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "prune-stale-"));
+    const { runningJobsDir } = getConcurrencyRuntimePaths(dir);
+    await mkdir(runningJobsDir, { recursive: true });
+    await mkdir(join(dir, "current", "job-fresh"), { recursive: true });
+    const slotPath = await writeLease(runningJobsDir, "job-fresh", {
+      jobId: "job-fresh",
+      pid: null,
+      acquiredAt: new Date().toISOString(),
+      source: "orchestrator",
+      slotPath: join(runningJobsDir, "job-fresh.json"),
+    });
+    try {
+      const result = await pruneStaleJobSlots(dir, 60_000);
+      expect(result).toEqual([]);
+      expect(existsSync(slotPath)).toBe(true);
+      expect(await readdir(runningJobsDir)).toEqual(["job-fresh.json"]);
+    } finally {
+      await rm(dir, { recursive: true });
+    }
+  });
+
+  test("keeps lease with live pid and present current dir", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "prune-stale-"));
+    const { runningJobsDir } = getConcurrencyRuntimePaths(dir);
+    await mkdir(runningJobsDir, { recursive: true });
+    await mkdir(join(dir, "current", "job-live"), { recursive: true });
+    const slotPath = await writeLease(runningJobsDir, "job-live", {
+      jobId: "job-live",
+      pid: process.pid,
+      acquiredAt: new Date().toISOString(),
+      source: "orchestrator",
+      slotPath: join(runningJobsDir, "job-live.json"),
+    });
+    try {
+      const result = await pruneStaleJobSlots(dir, 1000);
+      expect(result).toEqual([]);
+      expect(existsSync(slotPath)).toBe(true);
     } finally {
       await rm(dir, { recursive: true });
     }
