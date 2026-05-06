@@ -161,12 +161,16 @@ async function classifyLease(
     return { jobId: fallbackJobId, slotPath, reason: "invalid_json" };
   }
   const jobId = typeof parsed.jobId === "string" ? parsed.jobId : fallbackJobId;
+  const acquiredMs = Date.parse(parsed.acquiredAt);
+  const leaseAgedOut = !Number.isFinite(acquiredMs) || Date.now() - acquiredMs >= lockTimeoutMs;
   if (!(await directoryExists(join(dataDir, "current", jobId)))) {
+    // Grace window: drainPendingQueue acquires the slot before creating
+    // current/<jobId>, so a fresh lease without a current dir is in-flight, not stale.
+    if (!leaseAgedOut) return null;
     return { jobId, slotPath, reason: "missing_current_job" };
   }
-  const acquiredMs = Date.parse(parsed.acquiredAt);
   if (parsed.pid === null || parsed.pid === undefined) {
-    if (!Number.isFinite(acquiredMs) || Date.now() - acquiredMs >= lockTimeoutMs) {
+    if (leaseAgedOut) {
       return { jobId, slotPath, reason: "missing_pid" };
     }
     return null;
