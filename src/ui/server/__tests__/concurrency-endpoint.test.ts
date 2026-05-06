@@ -164,7 +164,7 @@ describe("handleConcurrencyStatus", () => {
 
     const { runningJobsDir } = getConcurrencyRuntimePaths(path.join(root, "pipeline-data"));
     const stalePath = path.join(runningJobsDir, "stale-job.json");
-    expect(await Bun.file(stalePath).exists()).toBe(true);
+    expect(await Bun.file(stalePath).exists()).toBe(false);
   });
 
   it("never exposes slotPath in activeJobs or staleSlots", async () => {

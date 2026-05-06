@@ -275,8 +275,14 @@ async function withRuntimeLock<T>(
       }
       try {
         const raw = await readFile(ownerPath, "utf-8");
-        const owner = JSON.parse(raw) as { pid?: unknown };
+        const owner = JSON.parse(raw) as { acquiredAt?: unknown; pid?: unknown };
+        const ownerAcquiredMs = typeof owner.acquiredAt === "string" ? Date.parse(owner.acquiredAt) : NaN;
+        const ownerTimedOut = Number.isFinite(ownerAcquiredMs) && Date.now() - ownerAcquiredMs >= lockTimeoutMs;
         if (typeof owner.pid === "number" && !isProcessAlive(owner.pid)) {
+          await rm(lockDir, { recursive: true, force: true });
+          continue;
+        }
+        if (typeof owner.pid !== "number" && ownerTimedOut) {
           await rm(lockDir, { recursive: true, force: true });
           continue;
         }
@@ -430,7 +436,7 @@ export async function getJobConcurrencyStatus(
   lockTimeoutMs: number,
 ): Promise<JobConcurrencyStatus> {
   return withRuntimeLock(dataDir, lockTimeoutMs, () =>
-    buildStatus(dataDir, maxConcurrentJobs, lockTimeoutMs, false),
+    buildStatus(dataDir, maxConcurrentJobs, lockTimeoutMs, true),
   );
 }
 

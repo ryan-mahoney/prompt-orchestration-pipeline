@@ -19,6 +19,7 @@ interface ResolvedDirs {
   pending: string;
   current: string;
   complete: string;
+  rejected: string;
 }
 
 /** Parsed seed file content (fields consumed by orchestrator). */
@@ -91,16 +92,21 @@ interface ChildHandle {
   kill(signal?: number): void;
 }
 
+interface SpawnedRunner {
+  pid: number;
+  kill?: () => void;
+}
+
 /** Seed filename regex. Captures jobId from {jobId}-seed.json. */
 export const SEED_PATTERN = /^([A-Za-z0-9-_]+)-seed\.json$/;
 
 import { join, basename, dirname, resolve } from "node:path";
-import { mkdir, rename, rm, stat } from "node:fs/promises";
+import { mkdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import { watch } from "chokidar";
 import { createLogger } from "./logger";
 import { createTaskFileIO, generateLogName } from "./file-io";
 import { LogEvent, LogFileExtension } from "../config/log-events";
-import { getConfig, getPipelineConfig } from "./config";
+import { getConfig, getOrchestratorConfig, getPipelineConfig } from "./config";
 import { buildReexecArgs } from "../cli/self-reexec";
 import { writeJobStatus } from "./status-writer";
 import { initializeStatusFromArtifacts } from "./status-initializer";
@@ -131,6 +137,7 @@ export function resolveDirs(dataDir: string): ResolvedDirs {
     pending: join(root, "pending"),
     current: join(root, "current"),
     complete: join(root, "complete"),
+    rejected: join(root, "rejected"),
   };
 }
 
@@ -406,11 +413,14 @@ export async function stopChildren(
   running.clear();
 }
 
+const MAX_PENDING_SEED_FAILURES = 3;
+const pendingSeedFailures = new Map<string, { count: number; signature: string }>();
+
 export interface DrainPendingQueueOptions {
   dataDir: string;
   maxConcurrentJobs: number;
   lockTimeoutMs: number;
-  spawnRunner: (jobId: string, seed: SeedData) => Promise<{ pid: number }>;
+  spawnRunner: (jobId: string, seed: SeedData) => Promise<SpawnedRunner>;
 }
 
 export interface DrainPendingQueueResult {
@@ -444,6 +454,43 @@ async function restoreSeedFile(currentJobDir: string, pendingSeedPath: string): 
     if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
   }
   await rm(currentJobDir, { recursive: true, force: true });
+}
+
+async function rejectSeedFile(
+  dataDir: string,
+  jobId: string,
+  seedPath: string,
+  reason: string,
+  message: string,
+): Promise<void> {
+  const rejectedJobDir = join(dataDir, "rejected", jobId);
+  await mkdir(rejectedJobDir, { recursive: true });
+  try {
+    await rename(seedPath, join(rejectedJobDir, "seed.json"));
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+  }
+  await writeFile(
+    join(rejectedJobDir, "rejection.json"),
+    JSON.stringify({
+      jobId,
+      reason,
+      message,
+      rejectedAt: new Date().toISOString(),
+    }),
+  );
+  pendingSeedFailures.delete(jobId);
+}
+
+function recordPendingSeedFailure(jobId: string, signature: string): number {
+  const current = pendingSeedFailures.get(jobId);
+  const count = current && current.signature === signature ? current.count + 1 : 1;
+  pendingSeedFailures.set(jobId, { count, signature });
+  return count;
+}
+
+function clearPendingSeedFailure(jobId: string): void {
+  pendingSeedFailures.delete(jobId);
 }
 
 async function readPendingSeed(seedPath: string): Promise<
@@ -483,6 +530,15 @@ export async function drainPendingQueue(
     const parsedSeed = await readPendingSeed(seedPath);
     if (!parsedSeed.ok) {
       logger.warn(`failed to read queued seed ${jobId}-seed.json (${parsedSeed.reason}): ${parsedSeed.message}`);
+      const failures = recordPendingSeedFailure(jobId, `${parsedSeed.reason}:${queued[i]!.queuedAt}:${parsedSeed.message}`);
+      if (failures >= MAX_PENDING_SEED_FAILURES) {
+        try {
+          await rejectSeedFile(dataDir, jobId, seedPath, parsedSeed.reason, parsedSeed.message);
+          logger.warn(`rejected queued seed ${jobId}-seed.json after ${failures} failed reads`);
+        } catch (rejectErr) {
+          logger.error(`failed to reject queued seed ${jobId}-seed.json`, rejectErr);
+        }
+      }
       continue;
     }
 
@@ -516,9 +572,9 @@ export async function drainPendingQueue(
       continue;
     }
 
-    let pid: number;
+    let spawned: SpawnedRunner;
     try {
-      ({ pid } = await spawnRunner(jobId, parsedSeed.seed));
+      spawned = await spawnRunner(jobId, parsedSeed.seed);
     } catch (err) {
       await releaseJobSlot(dataDir, jobId, lockTimeoutMs);
       try {
@@ -526,15 +582,47 @@ export async function drainPendingQueue(
       } catch (restoreErr) {
         logger.error(`failed to restore queued seed after spawn failure for job ${jobId}`, restoreErr);
       }
+      const message = err instanceof Error ? err.message : String(err);
+      const failures = recordPendingSeedFailure(jobId, `spawn:${message}`);
+      if (failures >= MAX_PENDING_SEED_FAILURES) {
+        try {
+          await rejectSeedFile(dataDir, jobId, seedPath, "spawn_failed", message);
+          logger.error(`rejected queued seed ${jobId} after ${failures} spawn failures`, err);
+        } catch (rejectErr) {
+          logger.error(`failed to reject queued seed after spawn failures for job ${jobId}`, rejectErr);
+        }
+      }
       logger.error(`failed to spawn queued job ${jobId}`, err);
       continue;
     }
 
     try {
-      await updateJobSlotPid(dataDir, jobId, pid, lockTimeoutMs);
+      await updateJobSlotPid(dataDir, jobId, spawned.pid, lockTimeoutMs);
     } catch (err) {
       logger.error(`failed to record runner pid for job ${jobId}`, err);
+      spawned.kill?.();
+      try {
+        await releaseJobSlot(dataDir, jobId, lockTimeoutMs);
+      } catch (releaseErr) {
+        logger.error(`failed to release slot after pid update failure for job ${jobId}`, releaseErr);
+      }
+      try {
+        await restoreSeedFile(currentJobDir, seedPath);
+      } catch (restoreErr) {
+        logger.error(`failed to restore queued seed after pid update failure for job ${jobId}`, restoreErr);
+      }
+      const message = err instanceof Error ? err.message : String(err);
+      const failures = recordPendingSeedFailure(jobId, `pid:${message}`);
+      if (failures >= MAX_PENDING_SEED_FAILURES) {
+        try {
+          await rejectSeedFile(dataDir, jobId, seedPath, "pid_update_failed", message);
+        } catch (rejectErr) {
+          logger.error(`failed to reject queued seed after pid update failures for job ${jobId}`, rejectErr);
+        }
+      }
+      continue;
     }
+    clearPendingSeedFailure(jobId);
     promoted.push(jobId);
   }
 
@@ -547,13 +635,14 @@ export function startOrchestrator(opts: OrchestratorOptions): Promise<Orchestrat
   const dirs = resolveDirs(opts.dataDir);
   const factory = opts.watcherFactory ?? ((path, options) => watch(path, options) as unknown as Watcher);
   const logger = createLogger("orchestrator");
-  const cfg = getConfig();
-  const maxConcurrentJobs = cfg.orchestrator.maxConcurrentJobs;
-  const lockTimeoutMs = cfg.orchestrator.lockFileTimeout;
+  const orchestratorConfig = getOrchestratorConfig();
+  const maxConcurrentJobs = orchestratorConfig.maxConcurrentJobs;
+  const lockTimeoutMs = orchestratorConfig.lockFileTimeout;
 
   return mkdir(dirs.pending, { recursive: true })
     .then(() => mkdir(dirs.current, { recursive: true }))
     .then(() => mkdir(dirs.complete, { recursive: true }))
+    .then(() => mkdir(dirs.rejected, { recursive: true }))
     .then(() => new Promise<OrchestratorHandle>((resolve, reject) => {
       const running = new Map<string, ChildHandle>();
       const spawnFn = opts.spawn ?? createDefaultSpawn();
@@ -595,12 +684,12 @@ export function startOrchestrator(opts: OrchestratorOptions): Promise<Orchestrat
         return handleChildExit({ dataDir: dirs.dataDir, jobId, triggerDrain, lockTimeoutMs });
       };
 
-      const spawnRunnerForJob = async (jobId: string, seed: SeedData): Promise<{ pid: number }> => {
+      const spawnRunnerForJob = async (jobId: string, seed: SeedData): Promise<SpawnedRunner> => {
         await scaffoldJobDir(jobId, seed, dirs, logger);
         await spawnRunner(jobId, seed, dirs, running, logger, spawnFn, onChildExit);
         const child = running.get(jobId);
         if (!child) throw new Error(`spawnRunner did not register child for ${jobId}`);
-        return { pid: child.pid };
+        return { pid: child.pid, kill: () => child.kill(15) };
       };
 
       const watcher = factory(join(dirs.pending, "*.json"), {

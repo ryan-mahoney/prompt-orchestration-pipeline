@@ -26,7 +26,7 @@ interface WatcherInternals {
   __resetConfig?: () => Promise<void> | void;
 }
 
-const IGNORED_PATHS = /(^|[\\/])(\.git|node_modules|dist|_task_root|pipeline-data[\\/]runtime[\\/]lock)([\\/]|$)/;
+const IGNORED_PATHS = /(^|[\\/])(\.git|node_modules|dist|_task_root)([\\/]|$)|(^|[\\/])runtime[\\/]lock([\\/]|$)/;
 
 function toChangeType(event: string): ChangeType | null {
   if (event === "add") return "created";

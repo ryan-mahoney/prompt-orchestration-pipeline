@@ -6,7 +6,7 @@ import { Constants } from "../config-bridge-node";
 import { sendJson } from "../utils/http-utils";
 import { getJobDirectoryPath, getPipelineDataDir } from "../../../config/paths";
 import { deriveJobStatusFromTasks } from "../../../config/statuses";
-import { getConfig, getPipelineConfig } from "../../../core/config";
+import { getOrchestratorConfig, getPipelineConfig } from "../../../core/config";
 import {
   releaseJobSlot,
   tryAcquireJobSlot,
@@ -29,10 +29,10 @@ const stoppingJobs = new Set<string>();
 const startingJobs = new Set<string>();
 
 function getOrchestratorRuntimeConfig(): { maxConcurrentJobs: number; lockFileTimeout: number } {
-  const orchestrator = getConfig().orchestrator;
+  const orchestrator = getOrchestratorConfig();
   return {
-    maxConcurrentJobs: orchestrator?.maxConcurrentJobs ?? 3,
-    lockFileTimeout: orchestrator?.lockFileTimeout ?? 30_000,
+    maxConcurrentJobs: orchestrator.maxConcurrentJobs,
+    lockFileTimeout: orchestrator.lockFileTimeout,
   };
 }
 
@@ -73,7 +73,7 @@ async function spawnRunner(
   jobId: string,
   jobDir: string,
   opts: { startFromTask?: string; runSingleTask?: boolean } = {},
-): Promise<{ pid: number }> {
+): Promise<{ kill: () => void; pid: number }> {
   const proc = Bun.spawn({
     cmd: ["bun", "run", RUNNER_PATH, jobId],
     stdout: "ignore",
@@ -84,7 +84,7 @@ async function spawnRunner(
   });
   await Bun.write(path.join(jobDir, "runner.pid"), `${proc.pid}\n`);
   proc.unref();
-  return { pid: proc.pid };
+  return { kill: () => proc.kill(), pid: proc.pid };
 }
 
 async function acquireConcurrencySlot(
@@ -127,17 +127,31 @@ async function spawnWithSlot(
 ): Promise<void> {
   const concurrencyDataDir = getPipelineDataDir(dataDir);
   const { lockFileTimeout } = getOrchestratorRuntimeConfig();
-  let pid: number;
+  let spawned: { kill: () => void; pid: number };
   try {
-    ({ pid } = await spawnRunner(dataDir, jobId, jobDir, opts));
+    spawned = await spawnRunner(dataDir, jobId, jobDir, opts);
   } catch (err) {
     await releaseJobSlot(concurrencyDataDir, jobId, lockFileTimeout);
     throw err;
   }
   try {
-    await updateJobSlotPid(concurrencyDataDir, jobId, pid, lockFileTimeout);
+    await updateJobSlotPid(concurrencyDataDir, jobId, spawned.pid, lockFileTimeout);
   } catch (err) {
-    console.error(`[spawnWithSlot] Failed to record PID ${pid} for job ${jobId}:`, err);
+    spawned.kill();
+    try {
+      await releaseJobSlot(concurrencyDataDir, jobId, lockFileTimeout);
+    } catch (releaseErr) {
+      console.error(`[spawnWithSlot] Failed to release slot for job ${jobId}:`, releaseErr);
+    }
+    try {
+      await unlink(path.join(jobDir, "runner.pid"));
+    } catch (unlinkErr) {
+      if ((unlinkErr as NodeJS.ErrnoException).code !== "ENOENT") {
+        console.error(`[spawnWithSlot] Failed to remove runner.pid for job ${jobId}:`, unlinkErr);
+      }
+    }
+    console.error(`[spawnWithSlot] Failed to record PID ${spawned.pid} for job ${jobId}:`, err);
+    throw err;
   }
 }
 

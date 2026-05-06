@@ -1,5 +1,5 @@
 import { describe, test, expect } from "bun:test";
-import { mkdtemp, mkdir, writeFile, utimes, rm, readdir } from "node:fs/promises";
+import { mkdtemp, mkdir, writeFile, utimes, rm, readdir, readFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -148,6 +148,85 @@ describe("drainPendingQueue", () => {
       const { runningJobsDir } = getConcurrencyRuntimePaths(dir);
       expect(existsSync(join(runningJobsDir, "job-bad.json"))).toBe(false);
       expect(existsSync(join(dir, "pending", "job-bad-seed.json"))).toBe(true);
+      const status = await getJobConcurrencyStatus(dir, 2, 1000);
+      expect(status.activeJobs).toEqual([]);
+    } finally {
+      await rm(dir, { recursive: true });
+    }
+  });
+
+  test("repeated spawn failures move the seed to rejected", async () => {
+    const dir = await setupDir("drain-spawn-reject-");
+    try {
+      await writeSeed(dir, "job-bad", { pipeline: "p" }, 1700000000);
+      const failingSpawn = async (): Promise<{ pid: number }> => {
+        throw new Error("boom");
+      };
+
+      for (let i = 0; i < 3; i++) {
+        await drainPendingQueue({
+          dataDir: dir,
+          maxConcurrentJobs: 2,
+          lockTimeoutMs: 1000,
+          spawnRunner: failingSpawn,
+        });
+      }
+
+      expect(existsSync(join(dir, "pending", "job-bad-seed.json"))).toBe(false);
+      expect(existsSync(join(dir, "rejected", "job-bad", "seed.json"))).toBe(true);
+      const rejection = JSON.parse(await readFile(join(dir, "rejected", "job-bad", "rejection.json"), "utf-8")) as Record<string, unknown>;
+      expect(rejection["reason"]).toBe("spawn_failed");
+    } finally {
+      await rm(dir, { recursive: true });
+    }
+  });
+
+  test("repeated invalid seed reads move the seed to rejected", async () => {
+    const dir = await setupDir("drain-invalid-reject-");
+    try {
+      const seedPath = join(dir, "pending", "job-invalid-seed.json");
+      await writeFile(seedPath, "not json {");
+      await utimes(seedPath, 1700000000, 1700000000);
+
+      for (let i = 0; i < 3; i++) {
+        await drainPendingQueue({
+          dataDir: dir,
+          maxConcurrentJobs: 2,
+          lockTimeoutMs: 1000,
+          spawnRunner: fakeSpawnRunner(new Map()),
+        });
+      }
+
+      expect(existsSync(seedPath)).toBe(false);
+      expect(existsSync(join(dir, "rejected", "job-invalid", "seed.json"))).toBe(true);
+      const rejection = JSON.parse(await readFile(join(dir, "rejected", "job-invalid", "rejection.json"), "utf-8")) as Record<string, unknown>;
+      expect(rejection["reason"]).toBe("invalid");
+    } finally {
+      await rm(dir, { recursive: true });
+    }
+  });
+
+  test("pid update failure kills the spawned runner and does not promote the job", async () => {
+    const dir = await setupDir("drain-pid-update-");
+    try {
+      await writeSeed(dir, "job-pid-fail", { pipeline: "p" }, 1700000000);
+      const { lockDir } = getConcurrencyRuntimePaths(dir);
+      let killed = 0;
+      const result = await drainPendingQueue({
+        dataDir: dir,
+        maxConcurrentJobs: 2,
+        lockTimeoutMs: 10,
+        spawnRunner: async () => {
+          await mkdir(lockDir, { recursive: true });
+          await writeFile(join(lockDir, "owner.json"), JSON.stringify({ pid: process.pid, acquiredAt: new Date().toISOString() }));
+          return { pid: process.pid, kill: () => { killed++; } };
+        },
+      });
+
+      expect(result.promoted).toEqual([]);
+      expect(killed).toBe(1);
+      expect(existsSync(join(dir, "pending", "job-pid-fail-seed.json"))).toBe(true);
+      await rm(lockDir, { recursive: true, force: true });
       const status = await getJobConcurrencyStatus(dir, 2, 1000);
       expect(status.activeJobs).toEqual([]);
     } finally {

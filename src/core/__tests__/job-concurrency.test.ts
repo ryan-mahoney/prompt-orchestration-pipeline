@@ -523,6 +523,7 @@ describe("getJobConcurrencyStatus", () => {
           reason: "invalid_json",
         },
       ]);
+      expect(existsSync(join(runningJobsDir, "broken.json"))).toBe(false);
     } finally {
       await rm(dir, { recursive: true });
     }

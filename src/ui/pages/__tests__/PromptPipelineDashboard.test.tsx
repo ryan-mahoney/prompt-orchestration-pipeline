@@ -1,6 +1,6 @@
 import "../../components/__tests__/test-dom";
 
-import { fireEvent, render, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, expect, mock, test } from "bun:test";
 
@@ -62,11 +62,32 @@ function emptyStatus(): JobConcurrencyApiStatus {
 }
 
 class MockEventSource {
-  public onerror: ((event: Event) => void) | null = null;
+  static instances: MockEventSource[] = [];
 
-  addEventListener(): void {}
+  public onerror: ((event: Event) => void) | null = null;
+  private readonly listeners = new Map<string, Array<(event: MessageEvent<string>) => void>>();
+
+  constructor() {
+    MockEventSource.instances.push(this);
+  }
+
+  addEventListener(type: string, listener: (event: MessageEvent<string>) => void): void {
+    const listeners = this.listeners.get(type) ?? [];
+    listeners.push(listener);
+    this.listeners.set(type, listeners);
+  }
 
   close(): void {}
+
+  emit(type: string, data: unknown): void {
+    for (const listener of this.listeners.get(type) ?? []) {
+      listener(new MessageEvent(type, { data: JSON.stringify(data) }));
+    }
+  }
+
+  static reset(): void {
+    MockEventSource.instances = [];
+  }
 }
 
 function installConcurrencyFetch(): void {
@@ -87,6 +108,7 @@ beforeEach(() => {
     key: (i: number) => Object.keys(store)[i] ?? null,
   } as Storage;
   setConcurrency(emptyStatus());
+  MockEventSource.reset();
   installConcurrencyFetch();
 });
 
@@ -95,6 +117,7 @@ afterEach(() => {
   globalThis.localStorage = originalLocalStorage;
   globalThis.fetch = originalFetch;
   globalThis.EventSource = originalEventSource;
+  MockEventSource.reset();
 });
 
 test("PromptPipelineDashboard renders tabs", async () => {
@@ -242,4 +265,78 @@ test("Concurrency tab renders stale slot warnings when present", async () => {
   expect(view.getByText("Process no longer running")).toBeTruthy();
   expect(view.getByText("stale-2")).toBeTruthy();
   expect(view.getByText("Lease file is not valid JSON")).toBeTruthy();
+});
+
+test("Concurrency tab updates after an SSE refresh without changing tabs", async () => {
+  setConcurrency(emptyStatus());
+  const { default: PromptPipelineDashboard } = await import("../PromptPipelineDashboard");
+  const view = render(
+    <MemoryRouter>
+      <PromptPipelineDashboard />
+    </MemoryRouter>,
+  );
+
+  fireEvent.click(view.getByText("Concurrency"));
+  await waitFor(() => expect(view.getByText("No queued jobs.")).toBeTruthy());
+
+  setConcurrency({
+    limit: 3,
+    runningCount: 0,
+    availableSlots: 3,
+    queuedCount: 1,
+    activeJobs: [],
+    queuedJobs: [
+      {
+        jobId: "queued-after-sse",
+        queuedAt: "2026-05-05T11:30:00.000Z",
+        name: "Queued After SSE",
+        pipeline: "demo-pipeline",
+      },
+    ],
+    staleSlots: [],
+  });
+
+  act(() => {
+    MockEventSource.instances[0]?.emit("state:summary", { ok: true });
+  });
+
+  await waitFor(() => expect(view.getByText("queued-after-sse")).toBeTruthy());
+  expect(view.getByText(/Queued jobs \(1\)/)).toBeTruthy();
+  expect(view.getByText("Concurrency")).toBeTruthy();
+  expect(view.queryByText("Job One")).toBeNull();
+});
+
+test("Concurrency tab shows stale data when live updates disconnect", async () => {
+  setConcurrency({
+    limit: 3,
+    runningCount: 1,
+    availableSlots: 2,
+    queuedCount: 0,
+    activeJobs: [
+      {
+        jobId: "active-before-error",
+        pid: 2468,
+        acquiredAt: "2026-05-05T12:00:00.000Z",
+        source: "orchestrator",
+      },
+    ],
+    queuedJobs: [],
+    staleSlots: [],
+  });
+  const { default: PromptPipelineDashboard } = await import("../PromptPipelineDashboard");
+  const view = render(
+    <MemoryRouter>
+      <PromptPipelineDashboard />
+    </MemoryRouter>,
+  );
+
+  fireEvent.click(view.getByText("Concurrency"));
+  await waitFor(() => expect(view.getByText("active-before-error")).toBeTruthy());
+
+  act(() => {
+    MockEventSource.instances[0]?.onerror?.(new Event("error"));
+  });
+
+  await waitFor(() => expect(view.getByText(/Showing last known concurrency status/)).toBeTruthy());
+  expect(view.getByText("active-before-error")).toBeTruthy();
 });

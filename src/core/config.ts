@@ -414,6 +414,14 @@ export function getConfig(): AppConfig {
   return cachedConfig;
 }
 
+export function getOrchestratorConfig(): OrchestratorConfig {
+  const config = getConfig();
+  return {
+    ...defaultConfig.orchestrator,
+    ...(config.orchestrator ?? {}),
+  };
+}
+
 export function getConfigValue(dotPath: string, defaultValue?: unknown): unknown {
   const config = getConfig();
   const parts = dotPath.split(".");

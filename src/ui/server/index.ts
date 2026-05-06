@@ -1,7 +1,7 @@
 import path from "node:path";
 
 import { getPipelineDataDir } from "../../config/paths";
-import { getConfig } from "../../core/config";
+import { getOrchestratorConfig } from "../../core/config";
 import { loadEnvironment } from "../../core/environment";
 import { getConcurrencyRuntimePaths } from "../../core/job-concurrency";
 import { createLogger } from "../../core/logger";
@@ -40,12 +40,12 @@ export async function initializeWatcher(dataDir: string): Promise<void> {
   }
   const paths = resolvePipelinePaths(dataDir);
   const runtime = getConcurrencyRuntimePaths(getPipelineDataDir(dataDir));
-  const orchestrator = getConfig().orchestrator;
+  const orchestrator = getOrchestratorConfig();
   const watcherOptions: WatcherOptions & WatcherInternals = {
     baseDir: dataDir,
-    debounceMs: orchestrator?.watchDebounce ?? 500,
-    stabilityThresholdMs: orchestrator?.watchStabilityThreshold ?? 1000,
-    pollIntervalMs: orchestrator?.watchPollInterval ?? 100,
+    debounceMs: orchestrator.watchDebounce,
+    stabilityThresholdMs: orchestrator.watchStabilityThreshold,
+    pollIntervalMs: orchestrator.watchPollInterval,
     __routeJobChange(change: JobChange) {
       if (change.filePath.endsWith("tasks-status.json")) {
         sseEnhancer.handleJobChange(change);

@@ -1,5 +1,5 @@
 import { getPipelineDataDir } from "../../../config/paths";
-import { getConfig } from "../../../core/config";
+import { getOrchestratorConfig } from "../../../core/config";
 import {
   getJobConcurrencyStatus,
   type JobConcurrencyStatus,
@@ -56,13 +56,11 @@ function toPublicStatus(status: JobConcurrencyStatus): PublicConcurrencyStatus {
 
 export async function handleConcurrencyStatus(dataDir: string): Promise<Response> {
   try {
-    const orchestrator = getConfig().orchestrator;
-    const maxConcurrentJobs = orchestrator?.maxConcurrentJobs ?? 3;
-    const lockFileTimeout = orchestrator?.lockFileTimeout ?? 30_000;
+    const orchestrator = getOrchestratorConfig();
     const status = await getJobConcurrencyStatus(
       getPipelineDataDir(dataDir),
-      maxConcurrentJobs,
-      lockFileTimeout,
+      orchestrator.maxConcurrentJobs,
+      orchestrator.lockFileTimeout,
     );
     const response = sendJson(200, { ok: true, data: toPublicStatus(status) });
     response.headers.set("Cache-Control", "no-store");
