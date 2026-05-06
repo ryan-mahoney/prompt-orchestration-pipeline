@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import type { Subprocess } from "bun";
@@ -7,6 +7,13 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { initPATHS, resetPATHS } from "../config-bridge-node";
 import { handleJobRestart, handleJobStop, handleTaskStart } from "../endpoints/job-control-endpoints";
+import { resetConfig } from "../../../core/config";
+import {
+  getConcurrencyRuntimePaths,
+  releaseJobSlot,
+  tryAcquireJobSlot,
+  type JobSlotLease,
+} from "../../../core/job-concurrency";
 import { readJobStatus } from "../../../core/status-writer";
 
 const tempRoots: string[] = [];
@@ -66,6 +73,8 @@ function spawnSleeper(): Subprocess {
 afterEach(async () => {
   vi.restoreAllMocks();
   resetPATHS();
+  delete process.env["PO_MAX_RUNNING_JOBS"];
+  resetConfig();
   for (const proc of childProcs.splice(0)) {
     try { proc.kill(); } catch {}
   }
@@ -982,5 +991,181 @@ describe("stop → restart integration", () => {
     expect(afterRestart!.tasks["research"]!.state).toBe("pending");
     expect(afterRestart!.tasks["analysis"]!.state).toBe("pending");
     expect(afterRestart!.tasks["synthesis"]!.state).toBe("pending");
+  });
+});
+
+describe("concurrency enforcement", () => {
+  function setMaxConcurrentJobs(value: number): void {
+    process.env["PO_MAX_RUNNING_JOBS"] = String(value);
+    resetConfig();
+  }
+
+  async function readLeaseFile(root: string, jobId: string): Promise<JobSlotLease> {
+    const { runningJobsDir } = getConcurrencyRuntimePaths(path.join(root, "pipeline-data"));
+    const raw = await readFile(path.join(runningJobsDir, `${jobId}.json`), "utf-8");
+    return JSON.parse(raw) as JobSlotLease;
+  }
+
+  it("returns 409 concurrency_limit_reached on restart when capacity is full", async () => {
+    const root = await makeTempRoot();
+    initPATHS(root);
+    setMaxConcurrentJobs(1);
+
+    await setupJob(root, "blocking-job", {
+      id: "blocking-job",
+      state: "pending",
+      current: null,
+      currentStage: null,
+      tasks: {},
+      files: { artifacts: [], logs: [], tmp: [] },
+    });
+    const blocking = await tryAcquireJobSlot({
+      dataDir: path.join(root, "pipeline-data"),
+      jobId: "blocking-job",
+      maxConcurrentJobs: 1,
+      source: "orchestrator",
+      pid: process.pid,
+    });
+    expect(blocking.ok).toBe(true);
+
+    await setupJob(root, "restart-full", {
+      id: "restart-full",
+      state: "pending",
+      current: null,
+      currentStage: null,
+      tasks: {
+        research: { state: "done", currentStage: null },
+        analysis: { state: "pending", currentStage: null },
+      },
+      files: { artifacts: [], logs: [], tmp: [] },
+    });
+
+    const spawnSpy = vi.spyOn(Bun, "spawn");
+    const req = new Request("http://localhost/api/jobs/restart-full/restart", { method: "POST" });
+    const res = await handleJobRestart(req, "restart-full", root);
+    const body = await res.json() as Record<string, unknown>;
+
+    expect(res.status).toBe(409);
+    expect(body["code"]).toBe("concurrency_limit_reached");
+    expect(body["ok"]).toBe(false);
+    expect(spawnSpy).not.toHaveBeenCalled();
+  });
+
+  it("returns 409 concurrency_limit_reached on task-start when capacity is full", async () => {
+    const root = await makeTempRoot();
+    initPATHS(root);
+    await setupPipelineConfig(root, "ts-full-pipeline", ["research", "analysis"]);
+    setMaxConcurrentJobs(1);
+
+    await setupJob(root, "blocking-job", {
+      id: "blocking-job",
+      state: "pending",
+      current: null,
+      currentStage: null,
+      tasks: {},
+      files: { artifacts: [], logs: [], tmp: [] },
+    });
+    const blocking = await tryAcquireJobSlot({
+      dataDir: path.join(root, "pipeline-data"),
+      jobId: "blocking-job",
+      maxConcurrentJobs: 1,
+      source: "orchestrator",
+      pid: process.pid,
+    });
+    expect(blocking.ok).toBe(true);
+
+    await setupJob(root, "task-start-full", {
+      id: "task-start-full",
+      pipeline: "ts-full-pipeline",
+      state: "pending",
+      current: null,
+      currentStage: null,
+      tasks: {
+        research: { state: "done", currentStage: null },
+        analysis: { state: "pending", currentStage: null },
+      },
+      files: { artifacts: [], logs: [], tmp: [] },
+    });
+
+    const spawnSpy = vi.spyOn(Bun, "spawn");
+    const req = new Request("http://localhost/api/jobs/task-start-full/tasks/analysis/start", { method: "POST" });
+    const res = await handleTaskStart(req, "task-start-full", "analysis", root);
+    const body = await res.json() as Record<string, unknown>;
+
+    expect(res.status).toBe(409);
+    expect(body["code"]).toBe("concurrency_limit_reached");
+    expect(body["ok"]).toBe(false);
+    expect(spawnSpy).not.toHaveBeenCalled();
+  });
+
+  it("releases the slot when the runner spawn throws after acquisition", async () => {
+    const root = await makeTempRoot();
+    initPATHS(root);
+    await setupPipelineConfig(root, "spawn-throw-pipeline", ["research", "analysis"]);
+    setMaxConcurrentJobs(2);
+
+    await setupJob(root, "spawn-throw", {
+      id: "spawn-throw",
+      pipeline: "spawn-throw-pipeline",
+      state: "pending",
+      current: null,
+      currentStage: null,
+      tasks: {
+        research: { state: "done", currentStage: null },
+        analysis: { state: "pending", currentStage: null },
+      },
+      files: { artifacts: [], logs: [], tmp: [] },
+    });
+
+    vi.spyOn(Bun, "spawn").mockImplementation(() => {
+      throw new Error("simulated spawn failure");
+    });
+
+    const req = new Request("http://localhost/api/jobs/spawn-throw/tasks/analysis/start", { method: "POST" });
+    await expect(handleTaskStart(req, "spawn-throw", "analysis", root)).rejects.toThrow(/spawn failure/);
+
+    const { runningJobsDir } = getConcurrencyRuntimePaths(path.join(root, "pipeline-data"));
+    const leasePath = path.join(runningJobsDir, "spawn-throw.json");
+    await expect(readFile(leasePath, "utf-8")).rejects.toMatchObject({ code: "ENOENT" });
+
+    // Slot is freed: a fresh acquisition for the same job succeeds.
+    const reacquired = await tryAcquireJobSlot({
+      dataDir: path.join(root, "pipeline-data"),
+      jobId: "spawn-throw",
+      maxConcurrentJobs: 2,
+      source: "orchestrator",
+    });
+    expect(reacquired.ok).toBe(true);
+    await releaseJobSlot(path.join(root, "pipeline-data"), "spawn-throw");
+  });
+
+  it("records the spawned PID in the lease via updateJobSlotPid on successful task-start", async () => {
+    const root = await makeTempRoot();
+    initPATHS(root);
+    await setupPipelineConfig(root, "lease-pid-pipeline", ["research", "analysis"]);
+    setMaxConcurrentJobs(2);
+    mockRunnerSpawn(54321);
+
+    await setupJob(root, "lease-pid", {
+      id: "lease-pid",
+      pipeline: "lease-pid-pipeline",
+      state: "pending",
+      current: null,
+      currentStage: null,
+      tasks: {
+        research: { state: "done", currentStage: null },
+        analysis: { state: "pending", currentStage: null },
+      },
+      files: { artifacts: [], logs: [], tmp: [] },
+    });
+
+    const req = new Request("http://localhost/api/jobs/lease-pid/tasks/analysis/start", { method: "POST" });
+    const res = await handleTaskStart(req, "lease-pid", "analysis", root);
+    expect(res.status).toBe(202);
+
+    const lease = await readLeaseFile(root, "lease-pid");
+    expect(lease.pid).toBe(54321);
+    expect(lease.source).toBe("task-start");
+    expect(lease.jobId).toBe("lease-pid");
   });
 });

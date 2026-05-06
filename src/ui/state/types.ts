@@ -62,6 +62,8 @@ export interface SnapshotDeps {
 export interface WatcherOptions {
   baseDir: string;
   debounceMs?: number;
+  stabilityThresholdMs?: number;
+  pollIntervalMs?: number;
 }
 
 export type WatcherOnChange = (changes: ChangeEntry[]) => void | Promise<void>;

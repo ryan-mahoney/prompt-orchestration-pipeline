@@ -26,7 +26,7 @@ interface WatcherInternals {
   __resetConfig?: () => Promise<void> | void;
 }
 
-const IGNORED_PATHS = /(^|[\\/])(\.git|node_modules|dist|_task_root)([\\/]|$)/;
+const IGNORED_PATHS = /(^|[\\/])(\.git|node_modules|dist|_task_root)([\\/]|$)|(^|[\\/])runtime[\\/]lock([\\/]|$)/;
 
 function toChangeType(event: string): ChangeType | null {
   if (event === "add") return "created";
@@ -147,10 +147,18 @@ export function startWatcher(
 
   setWatchedPaths(paths);
 
+  const stabilityThresholdMs = options.stabilityThresholdMs;
+  const pollIntervalMs = options.pollIntervalMs;
+  const awaitWriteFinish =
+    stabilityThresholdMs !== undefined && pollIntervalMs !== undefined
+      ? { stabilityThreshold: stabilityThresholdMs, pollInterval: pollIntervalMs }
+      : false;
+
   const watcher = watchFactory(paths, {
     ignored: IGNORED_PATHS,
     ignoreInitial: true,
     persistent: true,
+    awaitWriteFinish,
   });
 
   const ready = new Promise<void>((resolve) => {

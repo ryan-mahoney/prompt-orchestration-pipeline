@@ -5,10 +5,12 @@ export type ApiErrorCode =
   | "spawn_failed"
   | "unknown_error"
   | "network_error"
+  | "malformed_response"
   | "dependencies_not_satisfied"
   | "unsupported_lifecycle"
   | "task_not_found"
-  | "task_not_pending";
+  | "task_not_pending"
+  | "concurrency_limit_reached";
 
 export interface ApiError {
   code: ApiErrorCode;
@@ -183,6 +185,36 @@ export interface UseAnalysisProgressResult extends AnalysisProgressState {
 export interface AllowedActions {
   start: boolean;
   restart: boolean;
+}
+
+export interface JobConcurrencyApiStatus {
+  limit: number;
+  runningCount: number;
+  availableSlots: number;
+  queuedCount: number;
+  activeJobs: Array<{
+    jobId: string;
+    pid: number | null;
+    acquiredAt: string;
+    source: "orchestrator" | "restart" | "task-start";
+  }>;
+  queuedJobs: Array<{
+    jobId: string;
+    queuedAt: string | null;
+    name: string | null;
+    pipeline: string | null;
+  }>;
+  staleSlots: Array<{
+    jobId: string;
+    reason: "missing_current_job" | "missing_pid" | "dead_pid" | "invalid_json";
+  }>;
+}
+
+export interface UseConcurrencyStatusResult {
+  loading: boolean;
+  data: JobConcurrencyApiStatus | null;
+  error: ApiError | null;
+  refetch: () => void;
 }
 
 export interface SseJobEvent {

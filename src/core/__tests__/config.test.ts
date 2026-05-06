@@ -76,6 +76,10 @@ describe("defaultConfig", () => {
   test("taskRunner.maxAttempts defaults to 3", () => {
     expect(defaultConfig.taskRunner.maxAttempts).toBe(3);
   });
+
+  test("orchestrator.maxConcurrentJobs defaults to 3", () => {
+    expect(defaultConfig.orchestrator.maxConcurrentJobs).toBe(3);
+  });
 });
 
 describe("validateConfig (via loadConfig)", () => {
@@ -149,6 +153,44 @@ describe("PO_TASK_MAX_ATTEMPTS env override", () => {
     process.env.PO_TASK_MAX_ATTEMPTS = "2.5";
     resetConfig();
     expect(() => getConfig()).toThrow("PO_TASK_MAX_ATTEMPTS must be an integer >= 1");
+  });
+});
+
+describe("PO_MAX_RUNNING_JOBS env override", () => {
+  afterEach(() => {
+    delete process.env.PO_MAX_RUNNING_JOBS;
+    resetConfig();
+  });
+
+  test("getConfig reads PO_MAX_RUNNING_JOBS into orchestrator.maxConcurrentJobs", () => {
+    process.env.PO_MAX_RUNNING_JOBS = "7";
+    resetConfig();
+    const config: AppConfig = getConfig();
+    expect(config.orchestrator.maxConcurrentJobs).toBe(7);
+  });
+
+  test("getConfig rejects PO_MAX_RUNNING_JOBS=0", () => {
+    process.env.PO_MAX_RUNNING_JOBS = "0";
+    resetConfig();
+    expect(() => getConfig()).toThrow("orchestrator.maxConcurrentJobs");
+  });
+
+  test("getConfig rejects negative PO_MAX_RUNNING_JOBS", () => {
+    process.env.PO_MAX_RUNNING_JOBS = "-1";
+    resetConfig();
+    expect(() => getConfig()).toThrow("orchestrator.maxConcurrentJobs");
+  });
+
+  test("getConfig rejects non-integer PO_MAX_RUNNING_JOBS", () => {
+    process.env.PO_MAX_RUNNING_JOBS = "1.5";
+    resetConfig();
+    expect(() => getConfig()).toThrow("orchestrator.maxConcurrentJobs");
+  });
+
+  test("getConfig rejects non-numeric PO_MAX_RUNNING_JOBS", () => {
+    process.env.PO_MAX_RUNNING_JOBS = "abc";
+    resetConfig();
+    expect(() => getConfig()).toThrow("orchestrator.maxConcurrentJobs");
   });
 });
 

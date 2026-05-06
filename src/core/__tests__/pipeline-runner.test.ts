@@ -1,7 +1,12 @@
 import { describe, test, expect, mock, spyOn, beforeEach, afterEach } from "bun:test";
-import { mkdtemp, writeFile, mkdir, readFile, rm } from "node:fs/promises";
+import { mkdtemp, writeFile, mkdir, readFile, rm, access } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import {
+  getConcurrencyRuntimePaths,
+  releaseJobSlot,
+  tryAcquireJobSlot,
+} from "../job-concurrency";
 
 // ─── Mocks: NON-target externals only ─────────────────────────────────────────
 // We leave status-writer and lifecycle-policy REAL so the stale-snapshot bug
@@ -624,5 +629,161 @@ describe("runPipelineJob — bounded retry loop", () => {
     expect(mockRunPipeline.mock.calls.length).toBe(1);
     expect(sleepDelays).toEqual([]);
     expect(exitCalls).toContain(1);
+  });
+});
+
+describe("runPipelineJob — releases job slot", () => {
+  const savedEnv: Record<string, string | undefined> = {};
+  const cleanupDirs: string[] = [];
+
+  beforeEach(() => {
+    for (const key of Object.keys(savedEnv)) delete savedEnv[key];
+    for (const key of PO_ENV_KEYS) {
+      savedEnv[key] = process.env[key];
+      delete process.env[key];
+    }
+
+    mockRunPipeline.mockClear();
+    mockRunPipeline.mockImplementation(async (_modulePath: string, _ctx: unknown) => ({
+      ok: true as const,
+      logs: [{ stage: "generate", ok: true as const, ms: 10 }],
+      context: {} as Record<string, unknown>,
+      llmMetrics: [],
+    }));
+    mockEnsureTaskSymlinkBridge.mockClear();
+    mockValidateTaskSymlinks.mockClear();
+    mockRepairTaskSymlinks.mockClear();
+    mockCleanupTaskSymlinks.mockClear();
+    mockLoadFreshModule.mockClear();
+  });
+
+  afterEach(async () => {
+    for (const key of PO_ENV_KEYS) {
+      if (savedEnv[key] === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = savedEnv[key];
+      }
+    }
+    process.exitCode = 0;
+
+    await Promise.all(cleanupDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
+  });
+
+  async function fileExists(path: string): Promise<boolean> {
+    try {
+      await access(path);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  test("successful completion releases the lease", async () => {
+    const fixture = await setupMultiTaskFixture(["task-a"]);
+    cleanupDirs.push(fixture.tmpDir);
+
+    const acquire = await tryAcquireJobSlot({
+      dataDir: fixture.tmpDir,
+      jobId: fixture.jobId,
+      maxConcurrentJobs: 1,
+      source: "orchestrator",
+      pid: process.pid,
+    });
+    expect(acquire.ok).toBe(true);
+
+    const { runningJobsDir } = getConcurrencyRuntimePaths(fixture.tmpDir);
+    const slotPath = join(runningJobsDir, `${fixture.jobId}.json`);
+    expect(await fileExists(slotPath)).toBe(true);
+
+    const exitSpy = spyOn(process, "exit").mockImplementation(((code?: number) => {
+      throw new Error(`process.exit called with ${String(code)}`);
+    }) as typeof process.exit);
+
+    try {
+      await runPipelineJob(fixture.jobId);
+    } finally {
+      exitSpy.mockRestore();
+    }
+
+    expect(await fileExists(slotPath)).toBe(false);
+  });
+
+  test("catch-path failure releases the lease and surfaces the original error", async () => {
+    const fixture = await setupMultiTaskFixture(["task-a"]);
+    cleanupDirs.push(fixture.tmpDir);
+
+    const injectedMessage = "release-on-catch-injected";
+    mockLoadFreshModule.mockImplementation(async () => {
+      throw new Error(injectedMessage);
+    });
+
+    const acquire = await tryAcquireJobSlot({
+      dataDir: fixture.tmpDir,
+      jobId: fixture.jobId,
+      maxConcurrentJobs: 1,
+      source: "orchestrator",
+      pid: process.pid,
+    });
+    expect(acquire.ok).toBe(true);
+
+    const { runningJobsDir } = getConcurrencyRuntimePaths(fixture.tmpDir);
+    const slotPath = join(runningJobsDir, `${fixture.jobId}.json`);
+    expect(await fileExists(slotPath)).toBe(true);
+
+    const exitSpy = spyOn(process, "exit").mockImplementation(((code?: number) => {
+      throw new Error(`__test_exit__:${String(code)}`);
+    }) as typeof process.exit);
+    const fakeTimer = { unref: () => fakeTimer, ref: () => fakeTimer };
+    const setTimeoutSpy = spyOn(globalThis, "setTimeout").mockImplementation(
+      ((() => fakeTimer as unknown as ReturnType<typeof setTimeout>) as unknown) as typeof setTimeout,
+    );
+    const consoleErrorMessages: unknown[][] = [];
+    const consoleErrorSpy = spyOn(console, "error").mockImplementation((...args: unknown[]) => {
+      consoleErrorMessages.push(args);
+    });
+
+    try {
+      await runPipelineJob(fixture.jobId);
+    } catch (e) {
+      if (!(e instanceof Error) || !/^__test_exit__:/.test(e.message)) throw e;
+    } finally {
+      exitSpy.mockRestore();
+      setTimeoutSpy.mockRestore();
+      consoleErrorSpy.mockRestore();
+    }
+
+    expect(await fileExists(slotPath)).toBe(false);
+
+    const stderrContainsMessage = consoleErrorMessages.some((args) =>
+      args.some((a) => typeof a === "string" && a.includes(injectedMessage)),
+    );
+    expect(stderrContainsMessage).toBe(true);
+  });
+
+  test("a second release after runPipelineJob is a no-op", async () => {
+    const fixture = await setupMultiTaskFixture(["task-a"]);
+    cleanupDirs.push(fixture.tmpDir);
+
+    const acquire = await tryAcquireJobSlot({
+      dataDir: fixture.tmpDir,
+      jobId: fixture.jobId,
+      maxConcurrentJobs: 1,
+      source: "orchestrator",
+      pid: process.pid,
+    });
+    expect(acquire.ok).toBe(true);
+
+    const exitSpy = spyOn(process, "exit").mockImplementation(((code?: number) => {
+      throw new Error(`process.exit called with ${String(code)}`);
+    }) as typeof process.exit);
+
+    try {
+      await runPipelineJob(fixture.jobId);
+    } finally {
+      exitSpy.mockRestore();
+    }
+
+    await releaseJobSlot(fixture.tmpDir, fixture.jobId);
   });
 });
