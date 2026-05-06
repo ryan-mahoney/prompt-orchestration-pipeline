@@ -197,14 +197,14 @@ describe("pruneStaleJobSlots", () => {
     }
   });
 
-  test("removes and reports lease whose current/<jobId> directory is missing", async () => {
+  test("removes and reports lease whose current/<jobId> directory is missing once aged past lockTimeoutMs", async () => {
     const dir = await mkdtemp(join(tmpdir(), "prune-stale-"));
     const { runningJobsDir } = getConcurrencyRuntimePaths(dir);
     await mkdir(runningJobsDir, { recursive: true });
     const slotPath = await writeLease(runningJobsDir, "job-missing", {
       jobId: "job-missing",
       pid: process.pid,
-      acquiredAt: new Date().toISOString(),
+      acquiredAt: new Date(Date.now() - 60_000).toISOString(),
       source: "orchestrator",
       slotPath: join(runningJobsDir, "job-missing.json"),
     });
@@ -214,6 +214,29 @@ describe("pruneStaleJobSlots", () => {
         { jobId: "job-missing", slotPath, reason: "missing_current_job" },
       ]);
       expect(existsSync(slotPath)).toBe(false);
+    } finally {
+      await rm(dir, { recursive: true });
+    }
+  });
+
+  test("does not prune a fresh lease whose current/<jobId> dir has not yet been created", async () => {
+    // drainPendingQueue acquires the slot before creating current/<jobId>.
+    // A pruner running in that window must not delete the in-flight lease,
+    // or the global concurrency cap can be bypassed.
+    const dir = await mkdtemp(join(tmpdir(), "prune-stale-"));
+    const { runningJobsDir } = getConcurrencyRuntimePaths(dir);
+    await mkdir(runningJobsDir, { recursive: true });
+    const slotPath = await writeLease(runningJobsDir, "job-inflight", {
+      jobId: "job-inflight",
+      pid: process.pid,
+      acquiredAt: new Date().toISOString(),
+      source: "orchestrator",
+      slotPath: join(runningJobsDir, "job-inflight.json"),
+    });
+    try {
+      const result = await pruneStaleJobSlots(dir, 60_000);
+      expect(result).toEqual([]);
+      expect(existsSync(slotPath)).toBe(true);
     } finally {
       await rm(dir, { recursive: true });
     }

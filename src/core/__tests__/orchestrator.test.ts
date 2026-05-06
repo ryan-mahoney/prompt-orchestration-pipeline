@@ -227,7 +227,10 @@ describe("drainPendingQueue", () => {
       expect(killed).toBe(1);
       expect(existsSync(join(dir, "pending", "job-pid-fail-seed.json"))).toBe(true);
       await rm(lockDir, { recursive: true, force: true });
-      const status = await getJobConcurrencyStatus(dir, 2, 1000);
+      // The lease's missing_current_job grace window (lockTimeoutMs) must elapse
+      // before status-driven pruning will reclaim the slot.
+      await new Promise((r) => setTimeout(r, 30));
+      const status = await getJobConcurrencyStatus(dir, 2, 10);
       expect(status.activeJobs).toEqual([]);
     } finally {
       await rm(dir, { recursive: true });
