@@ -24,6 +24,8 @@ export interface TaskEntry {
   tokenUsage?: unknown[];
   startedAt?: string;
   endedAt?: string;
+  stageLogPath?: string;
+  errorContext?: Record<string, unknown>;
   files?: FilesManifest;
   [key: string]: unknown;
 }
@@ -56,6 +58,18 @@ export interface UploadArtifact {
 }
 
 export const STATUS_FILENAME = "tasks-status.json";
+
+function clearResetTaskMetadata(task: TaskEntry): void {
+  delete task.startedAt;
+  delete task.endedAt;
+  delete task.failedStage;
+  delete task.error;
+  delete task.stageLogPath;
+  delete task.errorContext;
+  delete task.retrying;
+  delete task.nextRetryAt;
+  delete task.lastRetryError;
+}
 
 import { rename, unlink, mkdir } from "node:fs/promises";
 import { basename, join } from "node:path";
@@ -230,8 +244,7 @@ export function resetJobFromTask(jobDir: string, fromTask: string, options?: Res
       const task = snapshot.tasks[key]!;
       task.state = "pending";
       task.currentStage = null;
-      delete task.failedStage;
-      delete task.error;
+      clearResetTaskMetadata(task);
       task.attempts = 0;
       task.restartCount = 0;
       task.refinementAttempts = 0;
@@ -257,8 +270,7 @@ export function resetJobToCleanSlate(jobDir: string, options?: ResetOptions): Pr
       const task = snapshot.tasks[key]!;
       task.state = "pending";
       task.currentStage = null;
-      delete task.failedStage;
-      delete task.error;
+      clearResetTaskMetadata(task);
       task.attempts = 0;
       task.restartCount = 0;
       task.refinementAttempts = 0;
@@ -285,8 +297,7 @@ export function resetSingleTask(jobDir: string, taskId: string, options?: ResetO
     const task = snapshot.tasks[taskId]!;
     task.state = "pending";
     task.currentStage = null;
-    delete task.failedStage;
-    delete task.error;
+    clearResetTaskMetadata(task);
     task.attempts = 0;
     task.restartCount = 0;
     task.refinementAttempts = 0;

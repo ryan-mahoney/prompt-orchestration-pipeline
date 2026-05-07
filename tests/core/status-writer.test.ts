@@ -37,6 +37,18 @@ mock.module("../../src/core/logger", () => ({
 
 import { STATUS_FILENAME, validateFilePath, createDefaultStatus, validateStatusSnapshot, atomicWrite, writeJobStatus, readJobStatus, updateTaskStatus, resetJobFromTask, resetJobToCleanSlate, resetSingleTask, initializeJobArtifacts } from "../../src/core/status-writer";
 
+function expectResetMetadataCleared(task: TaskEntry): void {
+  expect(task.startedAt).toBeUndefined();
+  expect(task.endedAt).toBeUndefined();
+  expect(task.failedStage).toBeUndefined();
+  expect(task.error).toBeUndefined();
+  expect(task.stageLogPath).toBeUndefined();
+  expect(task.errorContext).toBeUndefined();
+  expect(task.retrying).toBeUndefined();
+  expect(task.nextRetryAt).toBeUndefined();
+  expect(task.lastRetryError).toBeUndefined();
+}
+
 describe("public API exports", () => {
   test("all exported functions are defined and are functions", () => {
     expect(typeof writeJobStatus).toBe("function");
@@ -671,6 +683,13 @@ describe("resetJobFromTask", () => {
         state: "done",
         attempts: 2,
         refinementAttempts: 1,
+        startedAt: "2026-04-01T10:00:00.000Z",
+        endedAt: "2026-04-01T10:01:00.000Z",
+        stageLogPath: "/tmp/a.log",
+        errorContext: { stage: "kept" },
+        retrying: true,
+        nextRetryAt: "2026-04-01T10:02:00.000Z",
+        lastRetryError: { message: "kept retry" },
         tokenUsage: [{ tokens: 100 }],
         files: { artifacts: ["a.txt"], logs: [], tmp: [] },
       };
@@ -685,8 +704,15 @@ describe("resetJobFromTask", () => {
         state: "failed",
         attempts: 3,
         refinementAttempts: 2,
+        startedAt: "2026-04-01T10:03:00.000Z",
+        endedAt: "2026-04-01T10:04:00.000Z",
         failedStage: "stage-x",
         error: "something went wrong",
+        stageLogPath: "/tmp/c.log",
+        errorContext: { stage: "stage-x" },
+        retrying: true,
+        nextRetryAt: "2026-04-01T10:05:00.000Z",
+        lastRetryError: { message: "retry failed" },
         tokenUsage: [{ tokens: 200 }],
         files: { artifacts: ["c.txt"], logs: [], tmp: [] },
       };
@@ -721,6 +747,13 @@ describe("resetJobFromTask", () => {
     expect(snapshot.tasks["A"]!.state).toBe("done");
     expect(snapshot.tasks["A"]!.attempts).toBe(2);
     expect(snapshot.tasks["A"]!.refinementAttempts).toBe(1);
+    expect(snapshot.tasks["A"]!.startedAt).toBe("2026-04-01T10:00:00.000Z");
+    expect(snapshot.tasks["A"]!.endedAt).toBe("2026-04-01T10:01:00.000Z");
+    expect(snapshot.tasks["A"]!.stageLogPath).toBe("/tmp/a.log");
+    expect(snapshot.tasks["A"]!.errorContext).toEqual({ stage: "kept" });
+    expect(snapshot.tasks["A"]!.retrying).toBe(true);
+    expect(snapshot.tasks["A"]!.nextRetryAt).toBe("2026-04-01T10:02:00.000Z");
+    expect(snapshot.tasks["A"]!.lastRetryError).toEqual({ message: "kept retry" });
 
     expect(snapshot.tasks["B"]!.state).toBe("done");
     expect(snapshot.tasks["B"]!.attempts).toBe(1);
@@ -730,11 +763,13 @@ describe("resetJobFromTask", () => {
     expect(snapshot.tasks["C"]!.currentStage).toBeNull();
     expect(snapshot.tasks["C"]!.failedStage).toBeUndefined();
     expect(snapshot.tasks["C"]!.error).toBeUndefined();
+    expectResetMetadataCleared(snapshot.tasks["C"]!);
     expect(snapshot.tasks["C"]!.attempts).toBe(0);
     expect(snapshot.tasks["C"]!.refinementAttempts).toBe(0);
 
     // D is reset
     expect(snapshot.tasks["D"]!.state).toBe("pending");
+    expectResetMetadataCleared(snapshot.tasks["D"]!);
     expect(snapshot.tasks["D"]!.attempts).toBe(0);
     expect(snapshot.tasks["D"]!.refinementAttempts).toBe(0);
   });
@@ -841,8 +876,15 @@ describe("resetJobToCleanSlate", () => {
         state: "failed",
         attempts: 3,
         refinementAttempts: 2,
+        startedAt: "2026-04-01T10:00:00.000Z",
+        endedAt: "2026-04-01T10:01:00.000Z",
         failedStage: "stage-x",
         error: "something went wrong",
+        stageLogPath: "/tmp/b.log",
+        errorContext: { stage: "stage-x" },
+        retrying: true,
+        nextRetryAt: "2026-04-01T10:02:00.000Z",
+        lastRetryError: { message: "retry failed" },
         tokenUsage: [{ tokens: 200 }],
         files: { artifacts: ["b.txt"], logs: ["b.log"], tmp: [] },
       };
@@ -879,6 +921,7 @@ describe("resetJobToCleanSlate", () => {
       expect(task.currentStage).toBeNull();
       expect(task.failedStage).toBeUndefined();
       expect(task.error).toBeUndefined();
+      expectResetMetadataCleared(task);
       expect(task.attempts).toBe(0);
       expect(task.refinementAttempts).toBe(0);
       expect(task.tokenUsage).toEqual([]);
@@ -957,8 +1000,15 @@ describe("resetSingleTask", () => {
         state: "failed",
         attempts: 3,
         refinementAttempts: 2,
+        startedAt: "2026-04-01T10:00:00.000Z",
+        endedAt: "2026-04-01T10:01:00.000Z",
         failedStage: "stage-x",
         error: "bad",
+        stageLogPath: "/tmp/task-b.log",
+        errorContext: { stage: "stage-x" },
+        retrying: true,
+        nextRetryAt: "2026-04-01T10:02:00.000Z",
+        lastRetryError: { message: "retry failed" },
         tokenUsage: [{ tokens: 99 }],
       };
       s.tasks["task-c"] = { state: "pending", attempts: 0 };
@@ -982,6 +1032,7 @@ describe("resetSingleTask", () => {
     expect(snapshot.tasks["task-b"]!.currentStage).toBeNull();
     expect(snapshot.tasks["task-b"]!.failedStage).toBeUndefined();
     expect(snapshot.tasks["task-b"]!.error).toBeUndefined();
+    expectResetMetadataCleared(snapshot.tasks["task-b"]!);
     expect(snapshot.tasks["task-b"]!.attempts).toBe(0);
     expect(snapshot.tasks["task-b"]!.refinementAttempts).toBe(0);
     expect(snapshot.tasks["task-b"]!.tokenUsage).toEqual([]);
