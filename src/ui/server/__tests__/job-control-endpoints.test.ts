@@ -6,7 +6,12 @@ import type { Subprocess } from "bun";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { initPATHS, resetPATHS } from "../config-bridge-node";
-import { handleJobRestart, handleJobStop, handleTaskStart } from "../endpoints/job-control-endpoints";
+import {
+  classifyStaleRunningStatus,
+  handleJobRestart,
+  handleJobStop,
+  handleTaskStart,
+} from "../endpoints/job-control-endpoints";
 import { resetConfig } from "../../../core/config";
 import {
   getConcurrencyRuntimePaths,
@@ -15,6 +20,7 @@ import {
   type JobSlotLease,
 } from "../../../core/job-concurrency";
 import { readJobStatus } from "../../../core/status-writer";
+import type { StatusSnapshot } from "../../../core/status-writer";
 
 const tempRoots: string[] = [];
 const childProcs: Subprocess[] = [];
@@ -79,6 +85,87 @@ afterEach(async () => {
     try { proc.kill(); } catch {}
   }
   await Promise.all(tempRoots.splice(0).map((root) => Bun.$`rm -rf ${root}`));
+});
+
+function makeStatusSnapshot(overrides: Partial<StatusSnapshot> = {}): StatusSnapshot {
+  return {
+    id: "job-classifier",
+    state: "running",
+    current: "research",
+    currentStage: null,
+    lastUpdated: "2026-04-01T10:00:00.000Z",
+    tasks: {
+      research: { state: "running" },
+    },
+    files: { artifacts: [], logs: [], tmp: [] },
+    ...overrides,
+  };
+}
+
+describe("classifyStaleRunningStatus", () => {
+  it("returns not_running when task-derived status is not running", () => {
+    const decision = classifyStaleRunningStatus({
+      status: makeStatusSnapshot({
+        state: "pending",
+        current: null,
+        tasks: { research: { state: "done" }, analysis: { state: "pending" } },
+      }),
+      pid: null,
+      pidAlive: false,
+      nowMs: Date.parse("2026-04-01T10:01:00.000Z"),
+      staleAfterMs: 30_000,
+    });
+
+    expect(decision).toEqual({ stale: false, reason: "not_running" });
+  });
+
+  it("returns live_pid when task-derived status is running and the PID is alive", () => {
+    const decision = classifyStaleRunningStatus({
+      status: makeStatusSnapshot(),
+      pid: 123,
+      pidAlive: true,
+      nowMs: Date.parse("2026-04-01T10:01:00.000Z"),
+      staleAfterMs: 30_000,
+    });
+
+    expect(decision).toEqual({ stale: false, reason: "live_pid" });
+  });
+
+  it("returns fresh_status when running status is newer than the grace window", () => {
+    const decision = classifyStaleRunningStatus({
+      status: makeStatusSnapshot(),
+      pid: null,
+      pidAlive: false,
+      nowMs: Date.parse("2026-04-01T10:00:10.000Z"),
+      staleAfterMs: 30_000,
+    });
+
+    expect(decision).toEqual({ stale: false, reason: "fresh_status" });
+  });
+
+  it("returns missing_last_updated when lastUpdated is absent or invalid", () => {
+    const decision = classifyStaleRunningStatus({
+      status: makeStatusSnapshot({ lastUpdated: "" }),
+      pid: null,
+      pidAlive: false,
+      nowMs: Date.parse("2026-04-01T10:01:00.000Z"),
+      staleAfterMs: 30_000,
+    });
+
+    expect(decision).toEqual({ stale: false, reason: "missing_last_updated" });
+  });
+
+  it("returns stale when running status is old and no live runner exists", () => {
+    const decision = classifyStaleRunningStatus({
+      status: makeStatusSnapshot(),
+      pid: null,
+      pidAlive: false,
+      nowMs: Date.parse("2026-04-01T10:01:00.000Z"),
+      staleAfterMs: 30_000,
+    });
+
+    expect(decision).toEqual({ stale: true, runningTaskId: "research", ageMs: 60_000 });
+  });
 });
 
 describe("handleJobStop", () => {

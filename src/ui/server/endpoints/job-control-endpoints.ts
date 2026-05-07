@@ -23,6 +23,19 @@ import {
 import { readFileWithRetry } from "../file-reader";
 
 const RUNNER_PATH = path.resolve(import.meta.dir, "../../../core/pipeline-runner.ts");
+const STALE_RUNNING_GRACE_MS = 30_000;
+
+interface StaleRunningInput {
+  status: StatusSnapshot;
+  pid: number | null;
+  pidAlive: boolean;
+  nowMs: number;
+  staleAfterMs: number;
+}
+
+type StaleRunningDecision =
+  | { stale: false; reason: "not_running" | "live_pid" | "fresh_status" | "missing_last_updated" }
+  | { stale: true; runningTaskId: string | null; ageMs: number };
 
 const restartingJobs = new Set<string>();
 const stoppingJobs = new Set<string>();
@@ -187,6 +200,37 @@ function isNonTerminalTaskState(state: unknown): boolean {
 
 function isDependencySatisfied(state: unknown): boolean {
   return state === "done";
+}
+
+function getTaskDerivedStatus(snapshot: StatusSnapshot): string {
+  return deriveJobStatusFromTasks(
+    Object.values(snapshot.tasks).map((task) => ({ state: task.state })),
+  );
+}
+
+function findRunningTaskId(snapshot: StatusSnapshot): string | null {
+  if (snapshot.current && snapshot.tasks[snapshot.current]?.state === "running") {
+    return snapshot.current;
+  }
+  return Object.keys(snapshot.tasks).find((taskId) => snapshot.tasks[taskId]?.state === "running") ?? null;
+}
+
+export function classifyStaleRunningStatus(input: StaleRunningInput): StaleRunningDecision {
+  if (getTaskDerivedStatus(input.status) !== "running") {
+    return { stale: false, reason: "not_running" };
+  }
+  if (input.pid !== null && input.pidAlive) {
+    return { stale: false, reason: "live_pid" };
+  }
+  const updatedMs = Date.parse(input.status.lastUpdated);
+  if (!Number.isFinite(updatedMs)) {
+    return { stale: false, reason: "missing_last_updated" };
+  }
+  const ageMs = input.nowMs - updatedMs;
+  if (ageMs < input.staleAfterMs) {
+    return { stale: false, reason: "fresh_status" };
+  }
+  return { stale: true, runningTaskId: findRunningTaskId(input.status), ageMs };
 }
 
 function isTaskLikelyInProgress(task: Record<string, unknown>): boolean {
