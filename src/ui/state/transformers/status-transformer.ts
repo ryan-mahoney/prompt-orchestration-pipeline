@@ -36,7 +36,7 @@ function toTask(name: string, value: unknown): CanonicalTask {
     restartCount: typeof task["restartCount"] === "number" ? task["restartCount"] : undefined,
     retrying: typeof task["retrying"] === "boolean" ? task["retrying"] : undefined,
     nextRetryAt: typeof task["nextRetryAt"] === "string" ? task["nextRetryAt"] : undefined,
-    lastRetryError: Object.hasOwn(task, "lastRetryError") ? task["lastRetryError"] : undefined,
+    lastRetryError: Object.hasOwn(task, "lastRetryError") ? task["lastRetryError"] as import("../types").RetryError | null : undefined,
     executionTimeMs:
       typeof task["executionTimeMs"] === "number" ? task["executionTimeMs"] : undefined,
     refinementAttempts:

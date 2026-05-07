@@ -1,8 +1,11 @@
+import { rename, unlink, mkdir } from "node:fs/promises";
+import { basename, join } from "node:path";
+import { createJobLogger } from "./logger";
+import type { NormalizedError } from "./pipeline-runner";
+
 export type JobState = "pending" | "running" | "done" | "failed";
 
 type TaskState = "pending" | "running" | "done" | "failed";
-
-import type { NormalizedError } from "./pipeline-runner";
 
 export interface FilesManifest {
   artifacts: string[];
@@ -20,7 +23,7 @@ export interface TaskEntry {
   refinementAttempts?: number;
   retrying?: boolean;
   nextRetryAt?: string;
-  lastRetryError?: NormalizedError | string;
+  lastRetryError?: NormalizedError;
   tokenUsage?: unknown[];
   startedAt?: string;
   endedAt?: string;
@@ -70,10 +73,6 @@ function clearResetTaskMetadata(task: TaskEntry): void {
   delete task.nextRetryAt;
   delete task.lastRetryError;
 }
-
-import { rename, unlink, mkdir } from "node:fs/promises";
-import { basename, join } from "node:path";
-import { createJobLogger } from "./logger";
 
 export function validateFilePath(filename: string): boolean {
   if (!filename || typeof filename !== "string") {

@@ -61,6 +61,14 @@ describe("job adapter", () => {
     expect(tasks["plain"]?.lastRetryError).toBeUndefined();
   });
 
+  it("maps lastRetryError: null and preserves null on the normalized task", () => {
+    const tasks = normalizeTasks({
+      t1: { state: "running", lastRetryError: null },
+    });
+
+    expect(tasks["t1"]?.lastRetryError).toBeNull();
+  });
+
   it("adapts summary jobs with defaults", () => {
     const job = adaptJobSummary({
       jobId: "job-1",

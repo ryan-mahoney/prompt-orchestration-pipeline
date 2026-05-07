@@ -143,7 +143,8 @@ describe("classifyStaleRunningStatus", () => {
     expect(decision).toEqual({ stale: false, reason: "fresh_status" });
   });
 
-  it("returns missing_last_updated when lastUpdated is absent or invalid", () => {
+  it("treats missing or unparseable lastUpdated with no live PID as stale", () => {
+    // A crashed runner with no PID and no valid timestamp has no evidence of liveness.
     const decision = classifyStaleRunningStatus({
       status: makeStatusSnapshot({ lastUpdated: "" }),
       pid: null,
@@ -152,7 +153,7 @@ describe("classifyStaleRunningStatus", () => {
       staleAfterMs: 30_000,
     });
 
-    expect(decision).toEqual({ stale: false, reason: "missing_last_updated" });
+    expect(decision).toMatchObject({ stale: true, ageMs: 0 });
   });
 
   it("returns stale when running status is old and no live runner exists", () => {
@@ -165,6 +166,21 @@ describe("classifyStaleRunningStatus", () => {
     });
 
     expect(decision).toEqual({ stale: true, runningTaskId: "research", ageMs: 60_000 });
+  });
+
+  it("returns stale when age equals exactly STALE_RUNNING_GRACE_MS (boundary)", () => {
+    // At exactly the grace threshold the status is considered stale (age >= staleAfterMs).
+    const lastUpdated = "2026-04-01T10:00:00.000Z";
+    const nowMs = Date.parse(lastUpdated) + 30_000;
+    const decision = classifyStaleRunningStatus({
+      status: makeStatusSnapshot({ lastUpdated }),
+      pid: null,
+      pidAlive: false,
+      nowMs,
+      staleAfterMs: 30_000,
+    });
+
+    expect(decision).toMatchObject({ stale: true, ageMs: 30_000 });
   });
 });
 
@@ -567,6 +583,38 @@ describe("handleJobRestart", () => {
 });
 
 describe("handleTaskStart", () => {
+  it("allows restart/start when snapshot has no valid lastUpdated and no live PID (crashed runner scenario)", async () => {
+    // A runner that crashed before writing a valid lastUpdated should not permanently block
+    // task-starts. With no PID file and an unparseable lastUpdated, the job is treated as stale.
+    const root = await makeTempRoot();
+    initPATHS(root);
+    await setupPipelineConfig(root, "missing-ts-pipeline", ["research", "analysis"]);
+    const spawnSpy = mockRunnerSpawn(77777);
+
+    // No pid argument → no runner.pid file written; lastUpdated is empty (unparseable).
+    await setupJob(root, "task-start-missing-ts", {
+      id: "task-start-missing-ts",
+      pipeline: "missing-ts-pipeline",
+      state: "running",
+      current: "research",
+      currentStage: null,
+      lastUpdated: "",
+      tasks: {
+        research: { state: "done", currentStage: null },
+        analysis: { state: "pending", currentStage: null },
+      },
+      files: { artifacts: [], logs: [], tmp: [] },
+    });
+
+    const req = new Request("http://localhost/api/jobs/task-start-missing-ts/tasks/analysis/start", { method: "POST" });
+    const res = await handleTaskStart(req, "task-start-missing-ts", "analysis", root);
+    const body = await res.json() as Record<string, unknown>;
+
+    expect(res.status).toBe(202);
+    expect(body["ok"]).toBe(true);
+    expect(spawnSpy).toHaveBeenCalledTimes(1);
+  });
+
   it("returns 404 JOB_NOT_FOUND when job exists in neither current/ nor complete/", async () => {
     const root = await makeTempRoot();
     initPATHS(root);

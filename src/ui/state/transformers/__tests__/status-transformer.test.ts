@@ -119,6 +119,14 @@ describe("status-transformer", () => {
     expect(tasks.beta?.lastRetryError).toBeUndefined();
   });
 
+  it("maps lastRetryError: null and preserves null on the transformed task", () => {
+    const tasks = transformTasks({
+      alpha: { state: "running", lastRetryError: null },
+    });
+
+    expect(tasks.alpha?.lastRetryError).toBeNull();
+  });
+
   it("filters failed reads and computes transformation stats", () => {
     const transformed = transformMultipleJobs([
       { ok: true, data: { tasks: { a: { state: "done" } } }, jobId: "job-1", location: "current" },

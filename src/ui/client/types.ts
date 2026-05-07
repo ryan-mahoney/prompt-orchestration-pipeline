@@ -79,6 +79,8 @@ export interface CostsSummary {
   totalOutputCost: number;
 }
 
+export type RetryError = { message: string; name?: string; stack?: string } | string;
+
 export interface TaskFiles {
   artifacts: string[];
   logs: string[];
@@ -94,7 +96,7 @@ export interface NormalizedTask {
   restartCount?: number;
   retrying?: boolean;
   nextRetryAt?: string;
-  lastRetryError?: unknown;
+  lastRetryError?: RetryError | null;
   executionTimeMs?: number;
   currentStage?: string;
   failedStage?: string;

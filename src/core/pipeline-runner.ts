@@ -465,7 +465,7 @@ export async function runPipelineJob(jobId: string): Promise<void> {
     let result: PipelineResult | undefined;
     for (let attempt = 1; attempt <= cap; attempt++) {
       result = await runPipeline(relocatedEntryPath, taskExecutionContext);
-      const failedResult = result;
+      const failedResult = result; // const binding lets TypeScript narrow the union after the ok check below
       if (failedResult.ok) break;
       if (attempt >= cap) break;
 
@@ -601,12 +601,18 @@ export async function runPipelineJob(jobId: string): Promise<void> {
             snapshot.state = "failed";
             snapshot.current = failedTaskName;
             snapshot.currentStage = null;
-            const taskEntry = (snapshot.tasks[failedTaskName] ?? {}) as Record<string, unknown>;
-            taskEntry["state"] = TaskState.FAILED;
-            taskEntry["endedAt"] = failedAt;
-            taskEntry["failedStage"] = "orchestrator";
-            taskEntry["error"] = normalized;
-            taskEntry["currentStage"] = null;
+            const existing = snapshot.tasks[failedTaskName] ?? {};
+            const taskEntry: Partial<TaskStatus> & Record<string, unknown> = {
+              ...existing,
+              state: TaskState.FAILED,
+              endedAt: failedAt,
+              failedStage: "orchestrator",
+              error: normalized,
+              currentStage: null,
+            };
+            delete taskEntry.retrying;
+            delete taskEntry.nextRetryAt;
+            delete taskEntry.lastRetryError;
             snapshot.tasks[failedTaskName] = taskEntry as typeof snapshot.tasks[string];
           });
         } catch {

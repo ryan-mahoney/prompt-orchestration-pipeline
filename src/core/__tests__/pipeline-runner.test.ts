@@ -695,6 +695,58 @@ describe("runPipelineJob — bounded retry loop", () => {
     expect(Date.parse(interimSnapshot?.nextRetryAt as string)).toBeGreaterThan(Date.parse(interimLastUpdated ?? ""));
   });
 
+  test("exception escaping retry loop after first retry metadata write clears retrying/nextRetryAt/lastRetryError", async () => {
+    mockGetConfig.mockImplementation(() => ({ taskRunner: { maxAttempts: 3 } }));
+    const fixture = await setupMultiTaskFixture(["task-a"]);
+    cleanupDirs.push(fixture.tmpDir);
+
+    let call = 0;
+    mockRunPipeline.mockImplementation(async () => {
+      call += 1;
+      if (call === 1) return makeFailureResult() as never;
+      // On the second attempt, throw an exception instead of returning a result.
+      // This simulates an unexpected error escaping the retry loop after retry
+      // metadata (retrying=true, nextRetryAt, lastRetryError) has been written.
+      throw new Error("exception mid-retry");
+    });
+
+    const exitCalls: Array<number | undefined> = [];
+    const exitSpy = spyOn(process, "exit").mockImplementation(((code?: number) => {
+      exitCalls.push(code);
+      throw new Error(`__test_exit__:${String(code)}`);
+    }) as typeof process.exit);
+    const fakeTimer = { unref: () => fakeTimer, ref: () => fakeTimer };
+    // Stub setTimeout to prevent the delayed process.exit(1) from leaking into subsequent tests.
+    const setTimeoutSpy = spyOn(globalThis, "setTimeout").mockImplementation(
+      ((() => fakeTimer as unknown as ReturnType<typeof setTimeout>) as unknown) as typeof setTimeout,
+    );
+
+    try {
+      await runPipelineJob(fixture.jobId);
+    } catch (e) {
+      if (!(e instanceof Error) || !/^__test_exit__:/.test(e.message)) throw e;
+    } finally {
+      exitSpy.mockRestore();
+      setTimeoutSpy.mockRestore();
+    }
+
+    expect(exitCalls).toContain(1);
+
+    const statusText = await readFile(join(fixture.jobDir, "tasks-status.json"), "utf-8");
+    const status = JSON.parse(statusText) as {
+      tasks: Record<string, {
+        state?: string;
+        retrying?: unknown;
+        nextRetryAt?: unknown;
+        lastRetryError?: unknown;
+      }>;
+    };
+    expect(status.tasks["task-a"]?.state).toBe("failed");
+    expect(status.tasks["task-a"]?.retrying).toBeUndefined();
+    expect(status.tasks["task-a"]?.nextRetryAt).toBeUndefined();
+    expect(status.tasks["task-a"]?.lastRetryError).toBeUndefined();
+  });
+
   test("missing taskRunner config falls back to the default retry cap", async () => {
     mockGetConfig.mockImplementation(() => ({} as never));
     const fixture = await setupMultiTaskFixture(["task-a"]);
@@ -727,6 +779,8 @@ describe("runPipelineJob — bounded retry loop", () => {
       throw new Error(`__test_exit__:${String(code)}`);
     }) as typeof process.exit);
     const fakeTimer = { unref: () => fakeTimer, ref: () => fakeTimer };
+    // The catch block schedules process.exit(1) via setTimeout(...).unref(); without this
+    // stub the timer leaks into subsequent tests.
     const setTimeoutSpy = spyOn(globalThis, "setTimeout").mockImplementation(
       ((() => fakeTimer as unknown as ReturnType<typeof setTimeout>) as unknown) as typeof setTimeout,
     );

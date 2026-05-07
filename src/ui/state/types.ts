@@ -116,6 +116,8 @@ export interface ComputedStatus {
   progress: number;
 }
 
+export type RetryError = { message: string; name?: string; stack?: string } | string;
+
 export interface CanonicalTask {
   state: string;
   name: string;
@@ -126,7 +128,7 @@ export interface CanonicalTask {
   restartCount?: number;
   retrying?: boolean;
   nextRetryAt?: string;
-  lastRetryError?: unknown;
+  lastRetryError?: RetryError | null;
   executionTimeMs?: number;
   refinementAttempts?: number;
   stageLogPath?: string;

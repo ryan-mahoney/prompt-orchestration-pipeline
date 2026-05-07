@@ -224,7 +224,9 @@ export function classifyStaleRunningStatus(input: StaleRunningInput): StaleRunni
   }
   const updatedMs = Date.parse(input.status.lastUpdated);
   if (!Number.isFinite(updatedMs)) {
-    return { stale: false, reason: "missing_last_updated" };
+    // No live PID and no parseable timestamp: the runner crashed before writing a
+    // valid lastUpdated. There is no evidence of liveness, so treat as stale.
+    return { stale: true, runningTaskId: findRunningTaskId(input.status), ageMs: 0 };
   }
   const ageMs = input.nowMs - updatedMs;
   if (ageMs < input.staleAfterMs) {
@@ -454,6 +456,9 @@ export async function handleJobRestart(
         nowMs: Date.now(),
         staleAfterMs: STALE_RUNNING_GRACE_MS,
       });
+      // Note: "live_pid" can never be returned here because pidAlive is guaranteed false
+      // by the early-return guard above; only "not_running", "fresh_status", or stale=true
+      // are reachable at this call site.
       if (!staleDecision.stale && staleDecision.reason !== "not_running") {
         return sendJson(409, createErrorResponse("job_running", "Job is currently running (task-level running)"));
       }
