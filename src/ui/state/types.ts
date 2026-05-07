@@ -124,6 +124,9 @@ export interface CanonicalTask {
   endedAt?: string | null;
   attempts?: number;
   restartCount?: number;
+  retrying?: boolean;
+  nextRetryAt?: string;
+  lastRetryError?: unknown;
   executionTimeMs?: number;
   refinementAttempts?: number;
   stageLogPath?: string;

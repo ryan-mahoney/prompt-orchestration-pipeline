@@ -100,6 +100,25 @@ describe("status-transformer", () => {
     expect(tasks.alpha?.restartCount).toBeUndefined();
   });
 
+  it("maps retry metadata when present and leaves it undefined when absent", () => {
+    const tasks = transformTasks({
+      alpha: {
+        state: "running",
+        retrying: true,
+        nextRetryAt: "2026-04-01T10:01:00.000Z",
+        lastRetryError: { message: "try again" },
+      },
+      beta: { state: "pending" },
+    });
+
+    expect(tasks.alpha?.retrying).toBe(true);
+    expect(tasks.alpha?.nextRetryAt).toBe("2026-04-01T10:01:00.000Z");
+    expect(tasks.alpha?.lastRetryError).toEqual({ message: "try again" });
+    expect(tasks.beta?.retrying).toBeUndefined();
+    expect(tasks.beta?.nextRetryAt).toBeUndefined();
+    expect(tasks.beta?.lastRetryError).toBeUndefined();
+  });
+
   it("filters failed reads and computes transformation stats", () => {
     const transformed = transformMultipleJobs([
       { ok: true, data: { tasks: { a: { state: "done" } } }, jobId: "job-1", location: "current" },

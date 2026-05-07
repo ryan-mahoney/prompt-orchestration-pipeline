@@ -92,6 +92,9 @@ export interface NormalizedTask {
   endedAt: string | null;
   attempts?: number;
   restartCount?: number;
+  retrying?: boolean;
+  nextRetryAt?: string;
+  lastRetryError?: unknown;
   executionTimeMs?: number;
   currentStage?: string;
   failedStage?: string;

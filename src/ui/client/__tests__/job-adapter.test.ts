@@ -42,6 +42,25 @@ describe("job adapter", () => {
     expect(normalizeTasks({ t1: { state: "done" } })["t1"]?.restartCount).toBeUndefined();
   });
 
+  it("maps retry metadata when present and leaves it undefined when absent", () => {
+    const tasks = normalizeTasks({
+      retrying: {
+        state: "running",
+        retrying: true,
+        nextRetryAt: "2026-04-01T10:01:00.000Z",
+        lastRetryError: { message: "try again" },
+      },
+      plain: { state: "pending" },
+    });
+
+    expect(tasks["retrying"]?.retrying).toBe(true);
+    expect(tasks["retrying"]?.nextRetryAt).toBe("2026-04-01T10:01:00.000Z");
+    expect(tasks["retrying"]?.lastRetryError).toEqual({ message: "try again" });
+    expect(tasks["plain"]?.retrying).toBeUndefined();
+    expect(tasks["plain"]?.nextRetryAt).toBeUndefined();
+    expect(tasks["plain"]?.lastRetryError).toBeUndefined();
+  });
+
   it("adapts summary jobs with defaults", () => {
     const job = adaptJobSummary({
       jobId: "job-1",
