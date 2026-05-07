@@ -561,11 +561,21 @@ describe("runPipelineJob — bounded retry loop", () => {
 
     const statusText = await readFile(fixture.statusPath, "utf-8");
     const status = JSON.parse(statusText) as {
-      tasks: Record<string, { state?: string; attempts?: number; restartCount?: number }>;
+      tasks: Record<string, {
+        state?: string;
+        attempts?: number;
+        restartCount?: number;
+        retrying?: unknown;
+        nextRetryAt?: unknown;
+        lastRetryError?: unknown;
+      }>;
     };
     expect(status.tasks["task-a"]?.state).toBe("done");
     expect(status.tasks["task-a"]?.attempts).toBe(3);
     expect(status.tasks["task-a"]?.restartCount).toBe(2);
+    expect(status.tasks["task-a"]?.retrying).toBeUndefined();
+    expect(status.tasks["task-a"]?.nextRetryAt).toBeUndefined();
+    expect(status.tasks["task-a"]?.lastRetryError).toBeUndefined();
   });
 
   test("maxAttempts: 3 — always fails: three calls, restartCount=2, exits non-zero", async () => {
@@ -595,11 +605,25 @@ describe("runPipelineJob — bounded retry loop", () => {
 
     const statusText = await readFile(join(fixture.jobDir, "tasks-status.json"), "utf-8");
     const status = JSON.parse(statusText) as {
-      tasks: Record<string, { state?: string; attempts?: number; restartCount?: number }>;
+      tasks: Record<string, {
+        state?: string;
+        attempts?: number;
+        restartCount?: number;
+        retrying?: unknown;
+        nextRetryAt?: unknown;
+        lastRetryError?: unknown;
+        failedStage?: unknown;
+        error?: unknown;
+      }>;
     };
     expect(status.tasks["task-a"]?.state).toBe("failed");
     expect(status.tasks["task-a"]?.attempts).toBe(3);
     expect(status.tasks["task-a"]?.restartCount).toBe(2);
+    expect(status.tasks["task-a"]?.retrying).toBeUndefined();
+    expect(status.tasks["task-a"]?.nextRetryAt).toBeUndefined();
+    expect(status.tasks["task-a"]?.lastRetryError).toBeUndefined();
+    expect(status.tasks["task-a"]?.failedStage).toBe("generate");
+    expect(status.tasks["task-a"]?.error).toBeDefined();
   });
 
   test("interim status between attempts: state=running, no failedStage/error, restartCount incremented", async () => {
@@ -608,7 +632,17 @@ describe("runPipelineJob — bounded retry loop", () => {
     cleanupDirs.push(fixture.tmpDir);
 
     let call = 0;
-    let interimSnapshot: { state?: string; attempts?: number; failedStage?: unknown; error?: unknown; restartCount?: number } | undefined;
+    let interimLastUpdated: string | undefined;
+    let interimSnapshot: {
+      state?: string;
+      attempts?: number;
+      failedStage?: unknown;
+      error?: unknown;
+      restartCount?: number;
+      retrying?: unknown;
+      nextRetryAt?: unknown;
+      lastRetryError?: { message?: unknown };
+    } | undefined;
 
     // Capture the snapshot from disk *during* the second call (after the first failure
     // and the interim writeJobStatus). At call #2 we read tasks-status.json, then
@@ -618,8 +652,19 @@ describe("runPipelineJob — bounded retry loop", () => {
       if (call === 2) {
         const text = await readFile(join(fixture.jobDir, "tasks-status.json"), "utf-8");
         const parsed = JSON.parse(text) as {
-          tasks: Record<string, { state?: string; attempts?: number; failedStage?: unknown; error?: unknown; restartCount?: number }>;
+          lastUpdated?: string;
+          tasks: Record<string, {
+            state?: string;
+            attempts?: number;
+            failedStage?: unknown;
+            error?: unknown;
+            restartCount?: number;
+            retrying?: unknown;
+            nextRetryAt?: unknown;
+            lastRetryError?: { message?: unknown };
+          }>;
         };
+        interimLastUpdated = parsed.lastUpdated;
         interimSnapshot = parsed.tasks["task-a"];
         return makeSuccessResult() as never;
       }
@@ -644,6 +689,10 @@ describe("runPipelineJob — bounded retry loop", () => {
     expect(interimSnapshot?.error).toBeUndefined();
     expect(interimSnapshot?.attempts).toBe(2);
     expect(interimSnapshot?.restartCount).toBe(1);
+    expect(interimSnapshot?.retrying).toBe(true);
+    expect(typeof interimSnapshot?.nextRetryAt).toBe("string");
+    expect(interimSnapshot?.lastRetryError?.message).toBe("stub failure");
+    expect(Date.parse(interimSnapshot?.nextRetryAt as string)).toBeGreaterThan(Date.parse(interimLastUpdated ?? ""));
   });
 
   test("missing taskRunner config falls back to the default retry cap", async () => {

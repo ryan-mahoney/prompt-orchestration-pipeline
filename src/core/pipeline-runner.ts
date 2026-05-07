@@ -465,13 +465,15 @@ export async function runPipelineJob(jobId: string): Promise<void> {
     let result: PipelineResult | undefined;
     for (let attempt = 1; attempt <= cap; attempt++) {
       result = await runPipeline(relocatedEntryPath, taskExecutionContext);
-      if (result.ok) break;
+      const failedResult = result;
+      if (failedResult.ok) break;
       if (attempt >= cap) break;
 
       const delay = Math.min(
         INITIAL_RETRY_DELAY_MS * RETRY_BACKOFF_MULTIPLIER ** (attempt - 1),
         MAX_RETRY_DELAY_MS,
       );
+      const nextRetryAt = new Date(Date.now() + delay).toISOString();
 
       await writeJobStatus(config.workDir, (snapshot) => {
         const entry = snapshot.tasks[taskName] ?? {};
@@ -479,6 +481,9 @@ export async function runPipelineJob(jobId: string): Promise<void> {
         entry.state = "running";
         entry.attempts = currentAttempts + 1;
         entry.restartCount = (entry.restartCount ?? 0) + 1;
+        entry.retrying = true;
+        entry.nextRetryAt = nextRetryAt;
+        entry.lastRetryError = failedResult.error;
         delete entry.failedStage;
         delete entry.error;
         snapshot.tasks[taskName] = entry;
@@ -506,6 +511,9 @@ export async function runPipelineJob(jobId: string): Promise<void> {
         taskEntry.endedAt = new Date().toISOString();
         taskEntry.executionTimeMs = executionTimeMs;
         taskEntry.refinementAttempts = ((result.context as unknown) as Record<string, unknown>)["refinementAttempts"] as number | undefined ?? 0;
+        delete taskEntry.retrying;
+        delete taskEntry.nextRetryAt;
+        delete taskEntry.lastRetryError;
         snapshot.tasks[taskName] = taskEntry;
       });
       activeTaskName = null;
@@ -536,6 +544,9 @@ export async function runPipelineJob(jobId: string): Promise<void> {
         raw["failedStage"] = result.failedStage;
         raw["stageLogPath"] = result.error.debug?.logPath;
         raw["errorContext"] = result.error.debug as unknown as Record<string, unknown>;
+        delete raw["retrying"];
+        delete raw["nextRetryAt"];
+        delete raw["lastRetryError"];
         snapshot.tasks[taskName] = raw as typeof snapshot.tasks[string];
       });
       activeTaskName = null;
