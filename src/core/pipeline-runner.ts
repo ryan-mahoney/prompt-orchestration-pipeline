@@ -387,6 +387,14 @@ export async function runPipelineJob(jobId: string): Promise<void> {
       taskEntry.state = "running";
       taskEntry.startedAt = new Date().toISOString();
       taskEntry.attempts = (taskEntry.attempts ?? 0) + 1;
+      delete taskEntry.endedAt;
+      delete taskEntry.failedStage;
+      delete taskEntry.error;
+      delete taskEntry.stageLogPath;
+      delete taskEntry.errorContext;
+      delete taskEntry.retrying;
+      delete taskEntry.nextRetryAt;
+      delete taskEntry.lastRetryError;
       snapshot.tasks[taskName] = taskEntry;
     });
 

@@ -278,6 +278,54 @@ describe("runPipelineJob — multi-task success regression", () => {
     expect(anyLifecycleBlock).toBe(false);
     expect(exitCalls).toEqual([]);
   });
+
+  test("starting a task clears stale terminal fields from earlier attempts", async () => {
+    const fixture = await setupMultiTaskFixture(["task-a"]);
+    cleanupDirs.push(fixture.tmpDir);
+
+    const initialStatusText = await readFile(join(fixture.jobDir, "tasks-status.json"), "utf-8");
+    const initialStatus = JSON.parse(initialStatusText) as {
+      tasks: Record<string, Record<string, unknown>>;
+    };
+    initialStatus.tasks["task-a"] = {
+      ...initialStatus.tasks["task-a"],
+      state: "pending",
+      endedAt: "2026-04-01T10:00:00.000Z",
+      failedStage: "generate",
+      error: { message: "old failure" },
+      stageLogPath: "/tmp/old.log",
+      errorContext: { stage: "generate" },
+      retrying: true,
+      nextRetryAt: "2026-04-01T10:01:00.000Z",
+      lastRetryError: { message: "old retry" },
+    };
+    await writeFile(join(fixture.jobDir, "tasks-status.json"), JSON.stringify(initialStatus));
+
+    const exitSpy = spyOn(process, "exit").mockImplementation(((code?: number) => {
+      throw new Error(`process.exit called with ${String(code)}`);
+    }) as typeof process.exit);
+
+    try {
+      await runPipelineJob(fixture.jobId);
+    } finally {
+      exitSpy.mockRestore();
+    }
+
+    const finalStatusText = await readFile(fixture.statusPath, "utf-8");
+    const finalStatus = JSON.parse(finalStatusText) as {
+      tasks: Record<string, Record<string, unknown>>;
+    };
+    const task = finalStatus.tasks["task-a"];
+    expect(task?.["state"]).toBe("done");
+    expect(typeof task?.["endedAt"]).toBe("string");
+    expect(task?.["failedStage"]).toBeUndefined();
+    expect(task?.["error"]).toBeUndefined();
+    expect(task?.["stageLogPath"]).toBeUndefined();
+    expect(task?.["errorContext"]).toBeUndefined();
+    expect(task?.["retrying"]).toBeUndefined();
+    expect(task?.["nextRetryAt"]).toBeUndefined();
+    expect(task?.["lastRetryError"]).toBeUndefined();
+  });
 });
 
 describe("runPipelineJob — outer-catch failure surfacing", () => {
