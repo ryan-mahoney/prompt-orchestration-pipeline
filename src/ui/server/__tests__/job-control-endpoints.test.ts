@@ -644,6 +644,7 @@ describe("handleTaskStart", () => {
       state: "running",
       current: "research",
       currentStage: "prompt",
+      lastUpdated: new Date().toISOString(),
       tasks: {
         research: { state: "running", currentStage: "prompt" },
         analysis: { state: "pending", currentStage: null },
@@ -657,6 +658,70 @@ describe("handleTaskStart", () => {
 
     expect(res.status).toBe(409);
     expect(body["code"]).toBe("job_running");
+  });
+
+  it("returns 202 when stale-running status is the only blocker for an eligible pending task", async () => {
+    const root = await makeTempRoot();
+    initPATHS(root);
+    await setupPipelineConfig(root, "task-start-stale-ok-pipeline", ["research", "analysis", "synthesis"]);
+    const spawnSpy = mockRunnerSpawn(23456);
+
+    await setupJob(root, "task-start-stale-ok", {
+      id: "task-start-stale-ok",
+      pipeline: "task-start-stale-ok-pipeline",
+      state: "running",
+      current: "synthesis",
+      currentStage: "prompt",
+      lastUpdated: "2026-04-01T10:00:00.000Z",
+      tasks: {
+        research: { state: "done", currentStage: null },
+        analysis: { state: "pending", currentStage: null },
+        synthesis: { state: "running", currentStage: "prompt" },
+      },
+      files: { artifacts: [], logs: [], tmp: [] },
+    }, 999999);
+
+    vi.spyOn(Date, "now").mockReturnValue(Date.parse("2026-04-01T10:01:00.000Z"));
+
+    const req = new Request("http://localhost/api/jobs/task-start-stale-ok/tasks/analysis/start", { method: "POST" });
+    const res = await handleTaskStart(req, "task-start-stale-ok", "analysis", root);
+    const body = await res.json() as Record<string, unknown>;
+
+    expect(res.status).toBe(202);
+    expect(body["ok"]).toBe(true);
+    expect(body["taskId"]).toBe("analysis");
+    expect(spawnSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns 412 when stale-running recovery is possible but dependencies are not done", async () => {
+    const root = await makeTempRoot();
+    initPATHS(root);
+    await setupPipelineConfig(root, "task-start-stale-deps-pipeline", ["research", "analysis"]);
+    const spawnSpy = vi.spyOn(Bun, "spawn");
+
+    await setupJob(root, "task-start-stale-deps", {
+      id: "task-start-stale-deps",
+      pipeline: "task-start-stale-deps-pipeline",
+      state: "running",
+      current: "research",
+      currentStage: "prompt",
+      lastUpdated: "2026-04-01T10:00:00.000Z",
+      tasks: {
+        research: { state: "running", currentStage: "prompt" },
+        analysis: { state: "pending", currentStage: null },
+      },
+      files: { artifacts: [], logs: [], tmp: [] },
+    }, 999999);
+
+    vi.spyOn(Date, "now").mockReturnValue(Date.parse("2026-04-01T10:01:00.000Z"));
+
+    const req = new Request("http://localhost/api/jobs/task-start-stale-deps/tasks/analysis/start", { method: "POST" });
+    const res = await handleTaskStart(req, "task-start-stale-deps", "analysis", root);
+    const body = await res.json() as Record<string, unknown>;
+
+    expect(res.status).toBe(412);
+    expect(body["code"]).toBe("dependencies_not_satisfied");
+    expect(spawnSpy).not.toHaveBeenCalled();
   });
 
   it("returns 404 task_not_found for an unknown taskId", async () => {

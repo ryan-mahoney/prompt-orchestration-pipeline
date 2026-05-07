@@ -623,7 +623,8 @@ export async function handleTaskStart(
     const jobDir = getJobDirectoryPath(dataDir, jobId, "current");
 
     const pid = await readRunnerPid(jobDir);
-    if (pid !== null && isProcessAlive(pid)) {
+    const pidAlive = pid !== null && isProcessAlive(pid);
+    if (pidAlive) {
       return sendJson(409, createErrorResponse("job_running", "Job is currently running (process alive)"));
     }
 
@@ -632,10 +633,14 @@ export async function handleTaskStart(
       return sendJson(500, createErrorResponse("status_unavailable", `job "${jobId}" status could not be read`));
     }
 
-    const derivedStatus = deriveJobStatusFromTasks(
-      Object.values(snapshot.tasks).map((task) => ({ state: task.state })),
-    );
-    if (derivedStatus === "running") {
+    const staleDecision = classifyStaleRunningStatus({
+      status: snapshot,
+      pid,
+      pidAlive,
+      nowMs: Date.now(),
+      staleAfterMs: STALE_RUNNING_GRACE_MS,
+    });
+    if (!staleDecision.stale && staleDecision.reason !== "not_running") {
       return sendJson(409, createErrorResponse("job_running", "Job is currently running (task-level running)"));
     }
 
