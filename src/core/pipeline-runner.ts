@@ -288,6 +288,7 @@ const RETRY_BACKOFF_MULTIPLIER = 2;
 /** Runs a pipeline job end-to-end for the given job ID. */
 export async function runPipelineJob(jobId: string): Promise<void> {
   let workDir: string | undefined;
+  let activeTaskName: string | null = null;
   const poRoot = resolve(process.env["PO_ROOT"] ?? process.cwd());
   let dataDir: string | undefined = resolve(poRoot, process.env["PO_DATA_DIR"] ?? "pipeline-data");
   try {
@@ -377,6 +378,7 @@ export async function runPipelineJob(jobId: string): Promise<void> {
     }
 
     // Update status to RUNNING
+    activeTaskName = taskName;
     await writeJobStatus(config.workDir, (snapshot) => {
       snapshot.state = "running";
       snapshot.current = taskName;
@@ -498,6 +500,7 @@ export async function runPipelineJob(jobId: string): Promise<void> {
         taskEntry.refinementAttempts = ((result.context as unknown) as Record<string, unknown>)["refinementAttempts"] as number | undefined ?? 0;
         snapshot.tasks[taskName] = taskEntry;
       });
+      activeTaskName = null;
 
       // Add task output to pipelineArtifacts
       const outputPath = join(config.workDir, "tasks", taskName, "output.json");
@@ -527,6 +530,7 @@ export async function runPipelineJob(jobId: string): Promise<void> {
         raw["errorContext"] = result.error.debug as unknown as Record<string, unknown>;
         snapshot.tasks[taskName] = raw as typeof snapshot.tasks[string];
       });
+      activeTaskName = null;
 
       await releaseJobSlotBestEffort(dataDir, jobId);
       process.exit(1);
@@ -569,6 +573,26 @@ export async function runPipelineJob(jobId: string): Promise<void> {
         await failureIO.writeLog(failureLogName, JSON.stringify(normalized, null, 2));
       } catch {
         // Do not mask the original failure if log-write fails
+      }
+      if (activeTaskName !== null) {
+        try {
+          const failedTaskName = activeTaskName;
+          const failedAt = new Date().toISOString();
+          await writeJobStatus(workDir, (snapshot) => {
+            snapshot.state = "failed";
+            snapshot.current = failedTaskName;
+            snapshot.currentStage = null;
+            const taskEntry = (snapshot.tasks[failedTaskName] ?? {}) as Record<string, unknown>;
+            taskEntry["state"] = TaskState.FAILED;
+            taskEntry["endedAt"] = failedAt;
+            taskEntry["failedStage"] = "orchestrator";
+            taskEntry["error"] = normalized;
+            taskEntry["currentStage"] = null;
+            snapshot.tasks[failedTaskName] = taskEntry as typeof snapshot.tasks[string];
+          });
+        } catch {
+          // Do not mask the original failure if status finalization fails
+        }
       }
       try {
         await cleanupPidFile(workDir);

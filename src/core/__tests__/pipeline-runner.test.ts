@@ -361,6 +361,18 @@ describe("runPipelineJob — outer-catch failure surfacing", () => {
     expect(typeof failure.message).toBe("string");
     expect(failure.message).toContain(injectedMessage);
 
+    const statusText = await readFile(join(fixture.jobDir, "tasks-status.json"), "utf-8");
+    const status = JSON.parse(statusText) as {
+      state?: string;
+      current?: string | null;
+      tasks: Record<string, { state?: string; failedStage?: unknown; error?: unknown }>;
+    };
+    expect(status.state).toBe("pending");
+    expect(status.current).toBeNull();
+    expect(status.tasks["task-a"]?.state).toBe("pending");
+    expect(status.tasks["task-a"]?.failedStage).toBeUndefined();
+    expect(status.tasks["task-a"]?.error).toBeUndefined();
+
     const stderrContainsMessage = consoleErrorMessages.some((args) =>
       args.some((a) => typeof a === "string" && a.includes(injectedMessage)),
     );
@@ -617,6 +629,10 @@ describe("runPipelineJob — bounded retry loop", () => {
       exitCalls.push(code);
       throw new Error(`__test_exit__:${String(code)}`);
     }) as typeof process.exit);
+    const fakeTimer = { unref: () => fakeTimer, ref: () => fakeTimer };
+    const setTimeoutSpy = spyOn(globalThis, "setTimeout").mockImplementation(
+      ((() => fakeTimer as unknown as ReturnType<typeof setTimeout>) as unknown) as typeof setTimeout,
+    );
 
     try {
       await runPipelineJob(fixture.jobId);
@@ -624,11 +640,33 @@ describe("runPipelineJob — bounded retry loop", () => {
       if (!(e instanceof Error) || !/^__test_exit__:/.test(e.message)) throw e;
     } finally {
       exitSpy.mockRestore();
+      setTimeoutSpy.mockRestore();
     }
 
     expect(mockRunPipeline.mock.calls.length).toBe(1);
     expect(sleepDelays).toEqual([]);
     expect(exitCalls).toContain(1);
+
+    const statusText = await readFile(join(fixture.jobDir, "tasks-status.json"), "utf-8");
+    const status = JSON.parse(statusText) as {
+      state?: string;
+      current?: string | null;
+      currentStage?: string | null;
+      tasks: Record<string, {
+        state?: string;
+        endedAt?: string;
+        failedStage?: string;
+        error?: { message?: string };
+      }>;
+    };
+    const failedTask = status.tasks["task-a"];
+    expect(status.state).toBe("failed");
+    expect(status.current).toBe("task-a");
+    expect(status.currentStage).toBeNull();
+    expect(failedTask?.state).toBe("failed");
+    expect(typeof failedTask?.endedAt).toBe("string");
+    expect(failedTask?.failedStage).toBe("orchestrator");
+    expect(failedTask?.error?.message).toContain("task module exploded");
   });
 });
 
