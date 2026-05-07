@@ -2,6 +2,8 @@ export type JobState = "pending" | "running" | "done" | "failed";
 
 type TaskState = "pending" | "running" | "done" | "failed";
 
+import type { NormalizedError } from "./pipeline-runner";
+
 export interface FilesManifest {
   artifacts: string[];
   logs: string[];
@@ -16,6 +18,9 @@ export interface TaskEntry {
   attempts?: number;
   restartCount?: number;
   refinementAttempts?: number;
+  retrying?: boolean;
+  nextRetryAt?: string;
+  lastRetryError?: NormalizedError | string;
   tokenUsage?: unknown[];
   startedAt?: string;
   endedAt?: string;

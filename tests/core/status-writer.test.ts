@@ -97,8 +97,15 @@ describe("type exports", () => {
   });
 
   test("TaskEntry allows optional fields", () => {
-    const entry: TaskEntry = { state: "running", attempts: 1 };
+    const entry: TaskEntry = {
+      state: "running",
+      attempts: 1,
+      retrying: true,
+      nextRetryAt: new Date().toISOString(),
+      lastRetryError: { message: "try again" },
+    };
     expect(entry.state).toBe("running");
+    expect(entry.retrying).toBe(true);
   });
 
   test("StatusSnapshot has required fields", () => {
