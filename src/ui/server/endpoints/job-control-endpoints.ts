@@ -440,16 +440,21 @@ export async function handleJobRestart(
 
     // Check if the job is actually running via PID liveness, then task-derived status
     const pid = await readRunnerPid(jobDir);
-    if (pid !== null && isProcessAlive(pid)) {
+    const pidAlive = pid !== null && isProcessAlive(pid);
+    if (pidAlive) {
       return sendJson(409, createErrorResponse("job_running", "Job is currently running (process alive)"));
     }
 
     const status = await readJobStatus(jobDir);
     if (status) {
-      const derivedStatus = deriveJobStatusFromTasks(
-        Object.values(status.tasks).map((task) => ({ state: task.state })),
-      );
-      if (derivedStatus === "running") {
+      const staleDecision = classifyStaleRunningStatus({
+        status,
+        pid,
+        pidAlive,
+        nowMs: Date.now(),
+        staleAfterMs: STALE_RUNNING_GRACE_MS,
+      });
+      if (!staleDecision.stale && staleDecision.reason !== "not_running") {
         return sendJson(409, createErrorResponse("job_running", "Job is currently running (task-level running)"));
       }
     }

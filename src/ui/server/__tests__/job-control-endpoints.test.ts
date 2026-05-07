@@ -468,6 +468,7 @@ describe("handleJobRestart", () => {
       state: "running",
       current: "research",
       currentStage: "prompt",
+      lastUpdated: "2026-04-01T10:00:00.000Z",
       tasks: {
         research: { state: "running", currentStage: "prompt" },
       },
@@ -482,7 +483,7 @@ describe("handleJobRestart", () => {
     expect(body["code"]).toBe("job_running");
   });
 
-  it("returns 409 when PID is stale but tasks are still running", async () => {
+  it("returns 409 when PID is stale but task-derived running status is fresh", async () => {
     const root = await makeTempRoot();
     initPATHS(root);
 
@@ -492,6 +493,7 @@ describe("handleJobRestart", () => {
       state: "running",
       current: "research",
       currentStage: "prompt",
+      lastUpdated: new Date().toISOString(),
       tasks: {
         research: { state: "running", currentStage: "prompt" },
       },
@@ -504,6 +506,35 @@ describe("handleJobRestart", () => {
 
     expect(res.status).toBe(409);
     expect(body["code"]).toBe("job_running");
+  });
+
+  it("proceeds when task-derived running status is stale and the runner is gone", async () => {
+    const root = await makeTempRoot();
+    initPATHS(root);
+
+    await setupJob(root, "restart-stale-running", {
+      id: "restart-stale-running",
+      state: "running",
+      current: "research",
+      currentStage: "prompt",
+      lastUpdated: "2026-04-01T10:00:00.000Z",
+      tasks: {
+        research: { state: "running", currentStage: "prompt" },
+        analysis: { state: "pending", currentStage: null },
+      },
+      files: { artifacts: [], logs: [], tmp: [] },
+    }, 999999);
+
+    mockRunnerSpawn();
+    vi.spyOn(Date, "now").mockReturnValue(Date.parse("2026-04-01T10:01:00.000Z"));
+
+    const req = new Request("http://localhost/api/jobs/restart-stale-running/restart", { method: "POST" });
+    const res = await handleJobRestart(req, "restart-stale-running", root);
+    const body = await res.json() as Record<string, unknown>;
+
+    expect(res.status).toBe(202);
+    expect(body["ok"]).toBe(true);
+    expect(body["mode"]).toBe("clean-slate");
   });
 
   it("proceeds when PID is missing and no tasks are running", async () => {
