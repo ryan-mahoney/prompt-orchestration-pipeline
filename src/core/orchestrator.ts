@@ -20,6 +20,7 @@ interface ResolvedDirs {
   current: string;
   complete: string;
   rejected: string;
+  staging: string;
 }
 
 /** Parsed seed file content (fields consumed by orchestrator). */
@@ -138,6 +139,7 @@ export function resolveDirs(dataDir: string): ResolvedDirs {
     current: join(root, "current"),
     complete: join(root, "complete"),
     rejected: join(root, "rejected"),
+    staging: join(root, "staging"),
   };
 }
 
@@ -438,18 +440,30 @@ async function dirExists(path: string): Promise<boolean> {
   }
 }
 
-async function promoteSeedFile(
+export async function promoteSeedFile(
   pendingSeedPath: string,
   currentJobDir: string,
+  stagingJobDir: string,
 ): Promise<void> {
   await mkdir(currentJobDir, { recursive: true });
+  if (await dirExists(stagingJobDir)) {
+    await mkdir(join(currentJobDir, "files"), { recursive: true });
+    await rename(stagingJobDir, join(currentJobDir, "files", "artifacts"));
+  }
   await rename(pendingSeedPath, join(currentJobDir, "seed.json"));
 }
 
-async function restoreSeedFile(currentJobDir: string, pendingSeedPath: string): Promise<void> {
-  const currentSeedPath = join(currentJobDir, "seed.json");
+export async function restoreSeedFile(
+  currentJobDir: string,
+  pendingSeedPath: string,
+  stagingJobDir: string,
+): Promise<void> {
+  const artifactsDir = join(currentJobDir, "files", "artifacts");
+  if (await dirExists(artifactsDir)) {
+    await rename(artifactsDir, stagingJobDir);
+  }
   try {
-    await rename(currentSeedPath, pendingSeedPath);
+    await rename(join(currentJobDir, "seed.json"), pendingSeedPath);
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
   }
@@ -465,6 +479,11 @@ async function rejectSeedFile(
 ): Promise<void> {
   const rejectedJobDir = join(dataDir, "rejected", jobId);
   await mkdir(rejectedJobDir, { recursive: true });
+  const stagingJobDir = join(dataDir, "staging", jobId);
+  if (await dirExists(stagingJobDir)) {
+    await mkdir(join(rejectedJobDir, "files"), { recursive: true });
+    await rename(stagingJobDir, join(rejectedJobDir, "files", "artifacts"));
+  }
   try {
     await rename(seedPath, join(rejectedJobDir, "seed.json"));
   } catch (err) {
@@ -558,14 +577,15 @@ export async function drainPendingQueue(
     }
 
     const currentJobDir = join(dataDir, "current", jobId);
-    if (await dirExists(currentJobDir)) {
+    const stagingJobDir = join(dataDir, "staging", jobId);
+    if (await Bun.file(join(currentJobDir, "seed.json")).exists()) {
       await releaseJobSlot(dataDir, jobId, lockTimeoutMs);
-      logger.warn(`current job directory already exists for ${jobId}; skipping promotion`);
+      logger.warn(`seed already promoted for ${jobId}; skipping`);
       continue;
     }
 
     try {
-      await promoteSeedFile(seedPath, currentJobDir);
+      await promoteSeedFile(seedPath, currentJobDir, stagingJobDir);
     } catch (err) {
       await releaseJobSlot(dataDir, jobId, lockTimeoutMs);
       logger.error(`failed to promote seed file for job ${jobId}`, err);
@@ -578,7 +598,7 @@ export async function drainPendingQueue(
     } catch (err) {
       await releaseJobSlot(dataDir, jobId, lockTimeoutMs);
       try {
-        await restoreSeedFile(currentJobDir, seedPath);
+        await restoreSeedFile(currentJobDir, seedPath, stagingJobDir);
       } catch (restoreErr) {
         logger.error(`failed to restore queued seed after spawn failure for job ${jobId}`, restoreErr);
       }
@@ -607,7 +627,7 @@ export async function drainPendingQueue(
         logger.error(`failed to release slot after pid update failure for job ${jobId}`, releaseErr);
       }
       try {
-        await restoreSeedFile(currentJobDir, seedPath);
+        await restoreSeedFile(currentJobDir, seedPath, stagingJobDir);
       } catch (restoreErr) {
         logger.error(`failed to restore queued seed after pid update failure for job ${jobId}`, restoreErr);
       }
@@ -643,6 +663,7 @@ export function startOrchestrator(opts: OrchestratorOptions): Promise<Orchestrat
     .then(() => mkdir(dirs.current, { recursive: true }))
     .then(() => mkdir(dirs.complete, { recursive: true }))
     .then(() => mkdir(dirs.rejected, { recursive: true }))
+    .then(() => mkdir(dirs.staging, { recursive: true }))
     .then(() => new Promise<OrchestratorHandle>((resolve, reject) => {
       const running = new Map<string, ChildHandle>();
       const spawnFn = opts.spawn ?? createDefaultSpawn();
