@@ -3,7 +3,13 @@ import { mkdtemp, mkdir, writeFile, utimes, rm, readdir, readFile } from "node:f
 import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { drainPendingQueue, handleChildExit, resolveDirs } from "../orchestrator";
+import {
+  drainPendingQueue,
+  handleChildExit,
+  resolveDirs,
+  promoteSeedFile,
+  restoreSeedFile,
+} from "../orchestrator";
 import {
   getConcurrencyRuntimePaths,
   getJobConcurrencyStatus,
@@ -41,6 +47,75 @@ function fakeSpawnRunner(jobIdToPid: Map<string, number>): (jobId: string) => Pr
 describe("resolveDirs", () => {
   test("returns a staging dir under the pipeline-data root", () => {
     expect(resolveDirs("/x/pipeline-data").staging).toBe("/x/pipeline-data/staging");
+  });
+});
+
+describe("promoteSeedFile", () => {
+  test("moves staged artifacts into current/files/artifacts (byte-identical) then the seed, removing staging", async () => {
+    const dir = await setupDir("promote-staged-");
+    try {
+      const jobId = "job-promote";
+      const stagingJobDir = join(dir, "staging", jobId);
+      const currentJobDir = join(dir, "current", jobId);
+      const bytes = new Uint8Array(256);
+      for (let i = 0; i < 256; i++) bytes[i] = i;
+      await mkdir(join(stagingJobDir, "a"), { recursive: true });
+      await writeFile(join(stagingJobDir, "top.txt"), "top");
+      await writeFile(join(stagingJobDir, "a", "b.bin"), bytes);
+      const seedPath = await writeSeed(dir, jobId, { pipeline: "p" }, 1700000000);
+
+      await promoteSeedFile(seedPath, currentJobDir, stagingJobDir);
+
+      expect(existsSync(join(currentJobDir, "seed.json"))).toBe(true);
+      expect(await readFile(join(currentJobDir, "files", "artifacts", "top.txt"), "utf-8")).toBe("top");
+      const readBytes = new Uint8Array(await readFile(join(currentJobDir, "files", "artifacts", "a", "b.bin")));
+      expect(Array.from(readBytes)).toEqual(Array.from(bytes));
+      expect(existsSync(stagingJobDir)).toBe(false);
+      expect(existsSync(seedPath)).toBe(false);
+    } finally {
+      await rm(dir, { recursive: true });
+    }
+  });
+
+  test("with no staging dir, produces only current/seed.json (no files/artifacts)", async () => {
+    const dir = await setupDir("promote-nostage-");
+    try {
+      const jobId = "job-nostage";
+      const currentJobDir = join(dir, "current", jobId);
+      const stagingJobDir = join(dir, "staging", jobId);
+      const seedPath = await writeSeed(dir, jobId, { pipeline: "p" }, 1700000000);
+
+      await promoteSeedFile(seedPath, currentJobDir, stagingJobDir);
+
+      expect(existsSync(join(currentJobDir, "seed.json"))).toBe(true);
+      expect(existsSync(join(currentJobDir, "files"))).toBe(false);
+    } finally {
+      await rm(dir, { recursive: true });
+    }
+  });
+});
+
+describe("restoreSeedFile", () => {
+  test("returns artifacts to staging, seed to pending, and removes current/", async () => {
+    const dir = await setupDir("restore-");
+    try {
+      const jobId = "job-restore";
+      const currentJobDir = join(dir, "current", jobId);
+      const stagingJobDir = join(dir, "staging", jobId);
+      const pendingSeedPath = join(dir, "pending", `${jobId}-seed.json`);
+      await mkdir(join(dir, "staging"), { recursive: true });
+      await mkdir(join(currentJobDir, "files", "artifacts"), { recursive: true });
+      await writeFile(join(currentJobDir, "files", "artifacts", "x.bin"), "data");
+      await writeFile(join(currentJobDir, "seed.json"), JSON.stringify({ pipeline: "p" }));
+
+      await restoreSeedFile(currentJobDir, pendingSeedPath, stagingJobDir);
+
+      expect(existsSync(pendingSeedPath)).toBe(true);
+      expect(await readFile(join(stagingJobDir, "x.bin"), "utf-8")).toBe("data");
+      expect(existsSync(currentJobDir)).toBe(false);
+    } finally {
+      await rm(dir, { recursive: true });
+    }
   });
 });
 
@@ -94,12 +169,13 @@ describe("drainPendingQueue", () => {
     }
   });
 
-  test("seed whose current/<jobId>/ already exists is not promoted, slot is released, seed remains in pending", async () => {
-    const dir = await setupDir("drain-existing-");
+  test("AC5: seed whose current/<jobId>/seed.json already exists is skipped, slot released, seed remains in pending", async () => {
+    const dir = await setupDir("drain-existing-seed-");
     try {
       await writeSeed(dir, "job-existing", { pipeline: "p" }, 1700000000);
       await writeSeed(dir, "job-fresh", { pipeline: "p" }, 1700000100);
       await mkdir(join(dir, "current", "job-existing"), { recursive: true });
+      await writeFile(join(dir, "current", "job-existing", "seed.json"), JSON.stringify({ pipeline: "p" }));
       const pids = new Map<string, number>();
       const result = await drainPendingQueue({
         dataDir: dir,
@@ -108,11 +184,61 @@ describe("drainPendingQueue", () => {
         spawnRunner: fakeSpawnRunner(pids),
       });
       expect(result.promoted).toEqual(["job-fresh"]);
+      expect(pids.has("job-existing")).toBe(false);
       const status = await getJobConcurrencyStatus(dir, 5, 1000);
       expect(status.activeJobs.map((l) => l.jobId).sort()).toEqual(["job-fresh"]);
       expect(existsSync(join(dir, "pending", "job-existing-seed.json"))).toBe(true);
       const { runningJobsDir } = getConcurrencyRuntimePaths(dir);
       expect(existsSync(join(runningJobsDir, "job-existing.json"))).toBe(false);
+    } finally {
+      await rm(dir, { recursive: true });
+    }
+  });
+
+  test("AC3: seed with staged artifacts (current/ absent) promotes, moves artifacts, spawns once", async () => {
+    const dir = await setupDir("drain-staged-");
+    try {
+      await writeSeed(dir, "job-staged", { pipeline: "p" }, 1700000000);
+      await mkdir(join(dir, "staging", "job-staged"), { recursive: true });
+      await writeFile(join(dir, "staging", "job-staged", "notes.md"), "hello");
+      const pids = new Map<string, number>();
+      const result = await drainPendingQueue({
+        dataDir: dir,
+        maxConcurrentJobs: 5,
+        lockTimeoutMs: 1000,
+        spawnRunner: fakeSpawnRunner(pids),
+      });
+      expect(result.promoted).toEqual(["job-staged"]);
+      expect(pids.has("job-staged")).toBe(true);
+      expect(existsSync(join(dir, "pending", "job-staged-seed.json"))).toBe(false);
+      expect(existsSync(join(dir, "current", "job-staged", "seed.json"))).toBe(true);
+      expect(
+        await readFile(join(dir, "current", "job-staged", "files", "artifacts", "notes.md"), "utf-8"),
+      ).toBe("hello");
+      expect(existsSync(join(dir, "staging", "job-staged"))).toBe(false);
+    } finally {
+      await rm(dir, { recursive: true });
+    }
+  });
+
+  test("AC6: crash-mid-promote self-heal — artifacts present, seed absent, no staging → promotes", async () => {
+    const dir = await setupDir("drain-selfheal-");
+    try {
+      await writeSeed(dir, "job-heal", { pipeline: "p" }, 1700000000);
+      await mkdir(join(dir, "current", "job-heal", "files", "artifacts"), { recursive: true });
+      await writeFile(join(dir, "current", "job-heal", "files", "artifacts", "x.bin"), "x");
+      const pids = new Map<string, number>();
+      const result = await drainPendingQueue({
+        dataDir: dir,
+        maxConcurrentJobs: 5,
+        lockTimeoutMs: 1000,
+        spawnRunner: fakeSpawnRunner(pids),
+      });
+      expect(result.promoted).toEqual(["job-heal"]);
+      expect(pids.has("job-heal")).toBe(true);
+      expect(existsSync(join(dir, "pending", "job-heal-seed.json"))).toBe(false);
+      expect(existsSync(join(dir, "current", "job-heal", "seed.json"))).toBe(true);
+      expect(existsSync(join(dir, "current", "job-heal", "files", "artifacts", "x.bin"))).toBe(true);
     } finally {
       await rm(dir, { recursive: true });
     }

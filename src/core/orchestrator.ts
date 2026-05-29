@@ -440,18 +440,30 @@ async function dirExists(path: string): Promise<boolean> {
   }
 }
 
-async function promoteSeedFile(
+export async function promoteSeedFile(
   pendingSeedPath: string,
   currentJobDir: string,
+  stagingJobDir: string,
 ): Promise<void> {
   await mkdir(currentJobDir, { recursive: true });
+  if (await dirExists(stagingJobDir)) {
+    await mkdir(join(currentJobDir, "files"), { recursive: true });
+    await rename(stagingJobDir, join(currentJobDir, "files", "artifacts"));
+  }
   await rename(pendingSeedPath, join(currentJobDir, "seed.json"));
 }
 
-async function restoreSeedFile(currentJobDir: string, pendingSeedPath: string): Promise<void> {
-  const currentSeedPath = join(currentJobDir, "seed.json");
+export async function restoreSeedFile(
+  currentJobDir: string,
+  pendingSeedPath: string,
+  stagingJobDir: string,
+): Promise<void> {
+  const artifactsDir = join(currentJobDir, "files", "artifacts");
+  if (await dirExists(artifactsDir)) {
+    await rename(artifactsDir, stagingJobDir);
+  }
   try {
-    await rename(currentSeedPath, pendingSeedPath);
+    await rename(join(currentJobDir, "seed.json"), pendingSeedPath);
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
   }
@@ -560,14 +572,15 @@ export async function drainPendingQueue(
     }
 
     const currentJobDir = join(dataDir, "current", jobId);
-    if (await dirExists(currentJobDir)) {
+    const stagingJobDir = join(dataDir, "staging", jobId);
+    if (await Bun.file(join(currentJobDir, "seed.json")).exists()) {
       await releaseJobSlot(dataDir, jobId, lockTimeoutMs);
-      logger.warn(`current job directory already exists for ${jobId}; skipping promotion`);
+      logger.warn(`seed already promoted for ${jobId}; skipping`);
       continue;
     }
 
     try {
-      await promoteSeedFile(seedPath, currentJobDir);
+      await promoteSeedFile(seedPath, currentJobDir, stagingJobDir);
     } catch (err) {
       await releaseJobSlot(dataDir, jobId, lockTimeoutMs);
       logger.error(`failed to promote seed file for job ${jobId}`, err);
@@ -580,7 +593,7 @@ export async function drainPendingQueue(
     } catch (err) {
       await releaseJobSlot(dataDir, jobId, lockTimeoutMs);
       try {
-        await restoreSeedFile(currentJobDir, seedPath);
+        await restoreSeedFile(currentJobDir, seedPath, stagingJobDir);
       } catch (restoreErr) {
         logger.error(`failed to restore queued seed after spawn failure for job ${jobId}`, restoreErr);
       }
@@ -609,7 +622,7 @@ export async function drainPendingQueue(
         logger.error(`failed to release slot after pid update failure for job ${jobId}`, releaseErr);
       }
       try {
-        await restoreSeedFile(currentJobDir, seedPath);
+        await restoreSeedFile(currentJobDir, seedPath, stagingJobDir);
       } catch (restoreErr) {
         logger.error(`failed to restore queued seed after pid update failure for job ${jobId}`, restoreErr);
       }
