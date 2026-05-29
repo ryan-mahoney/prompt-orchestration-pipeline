@@ -479,6 +479,11 @@ async function rejectSeedFile(
 ): Promise<void> {
   const rejectedJobDir = join(dataDir, "rejected", jobId);
   await mkdir(rejectedJobDir, { recursive: true });
+  const stagingJobDir = join(dataDir, "staging", jobId);
+  if (await dirExists(stagingJobDir)) {
+    await mkdir(join(rejectedJobDir, "files"), { recursive: true });
+    await rename(stagingJobDir, join(rejectedJobDir, "files", "artifacts"));
+  }
   try {
     await rename(seedPath, join(rejectedJobDir, "seed.json"));
   } catch (err) {

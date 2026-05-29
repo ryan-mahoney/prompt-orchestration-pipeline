@@ -313,6 +313,35 @@ describe("drainPendingQueue", () => {
     }
   });
 
+  test("AC8: rejection relocates staged artifacts under rejected/<jobId>/files/artifacts and removes staging", async () => {
+    const dir = await setupDir("drain-reject-staging-");
+    try {
+      await writeSeed(dir, "job-bad", { pipeline: "p" }, 1700000000);
+      await mkdir(join(dir, "staging", "job-bad"), { recursive: true });
+      await writeFile(join(dir, "staging", "job-bad", "notes.md"), "hello");
+      const failingSpawn = async (): Promise<{ pid: number }> => {
+        throw new Error("boom");
+      };
+
+      for (let i = 0; i < 3; i++) {
+        await drainPendingQueue({
+          dataDir: dir,
+          maxConcurrentJobs: 2,
+          lockTimeoutMs: 1000,
+          spawnRunner: failingSpawn,
+        });
+      }
+
+      expect(existsSync(join(dir, "rejected", "job-bad", "seed.json"))).toBe(true);
+      expect(
+        await readFile(join(dir, "rejected", "job-bad", "files", "artifacts", "notes.md"), "utf-8"),
+      ).toBe("hello");
+      expect(existsSync(join(dir, "staging", "job-bad"))).toBe(false);
+    } finally {
+      await rm(dir, { recursive: true });
+    }
+  });
+
   test("repeated invalid seed reads move the seed to rejected", async () => {
     const dir = await setupDir("drain-invalid-reject-");
     try {
