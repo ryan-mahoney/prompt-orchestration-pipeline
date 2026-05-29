@@ -20,6 +20,7 @@ interface ResolvedDirs {
   current: string;
   complete: string;
   rejected: string;
+  staging: string;
 }
 
 /** Parsed seed file content (fields consumed by orchestrator). */
@@ -138,6 +139,7 @@ export function resolveDirs(dataDir: string): ResolvedDirs {
     current: join(root, "current"),
     complete: join(root, "complete"),
     rejected: join(root, "rejected"),
+    staging: join(root, "staging"),
   };
 }
 
@@ -643,6 +645,7 @@ export function startOrchestrator(opts: OrchestratorOptions): Promise<Orchestrat
     .then(() => mkdir(dirs.current, { recursive: true }))
     .then(() => mkdir(dirs.complete, { recursive: true }))
     .then(() => mkdir(dirs.rejected, { recursive: true }))
+    .then(() => mkdir(dirs.staging, { recursive: true }))
     .then(() => new Promise<OrchestratorHandle>((resolve, reject) => {
       const running = new Map<string, ChildHandle>();
       const spawnFn = opts.spawn ?? createDefaultSpawn();

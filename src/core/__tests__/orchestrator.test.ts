@@ -3,7 +3,7 @@ import { mkdtemp, mkdir, writeFile, utimes, rm, readdir, readFile } from "node:f
 import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { drainPendingQueue, handleChildExit } from "../orchestrator";
+import { drainPendingQueue, handleChildExit, resolveDirs } from "../orchestrator";
 import {
   getConcurrencyRuntimePaths,
   getJobConcurrencyStatus,
@@ -37,6 +37,12 @@ function fakeSpawnRunner(jobIdToPid: Map<string, number>): (jobId: string) => Pr
     return { pid };
   };
 }
+
+describe("resolveDirs", () => {
+  test("returns a staging dir under the pipeline-data root", () => {
+    expect(resolveDirs("/x/pipeline-data").staging).toBe("/x/pipeline-data/staging");
+  });
+});
 
 describe("drainPendingQueue", () => {
   test("with limit 2 and three seeds, promotes exactly two and one remains in pending", async () => {
