@@ -39,6 +39,9 @@ export async function parseMultipartFormData(
   ) {
     throw badRequest("expected multipart/form-data content-type");
   }
+  if (!/boundary=/i.test(contentType)) {
+    throw badRequest("multipart boundary is required");
+  }
 
   const raw = await readRawBody(req, maxBytes); // enforces the size cap on actual bytes
   const form = await new Response(raw, {

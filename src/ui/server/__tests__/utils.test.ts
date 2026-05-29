@@ -141,6 +141,16 @@ describe("server utils", () => {
     await expect(parseMultipartFormData(request)).rejects.toThrow(/multipart/);
   });
 
+  it("rejects multipart content types without a boundary", async () => {
+    const request = new Request("http://localhost", {
+      method: "POST",
+      headers: { "content-type": "multipart/form-data" },
+      body: "irrelevant",
+    });
+
+    await expect(parseMultipartFormData(request)).rejects.toThrow(/boundary/);
+  });
+
   it("enforces the multipart byte cap", async () => {
     const boundary = "capboundary";
     const encoder = new TextEncoder();
