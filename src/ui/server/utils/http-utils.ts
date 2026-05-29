@@ -20,7 +20,7 @@ export function sendJson(statusCode: number, data: unknown): Response {
 export async function readRawBody(
   req: Request,
   maxBytes: number = DEFAULT_MAX_BYTES,
-): Promise<Uint8Array> {
+): Promise<Uint8Array<ArrayBuffer>> {
   const buffer = new Uint8Array(await req.arrayBuffer());
   if (buffer.byteLength > maxBytes) {
     throw badRequest(`request body exceeds ${maxBytes} bytes`);
@@ -28,63 +28,40 @@ export async function readRawBody(
   return buffer;
 }
 
-function parseHeaders(block: string): Record<string, string> {
-  return Object.fromEntries(
-    block
-      .split("\r\n")
-      .filter(Boolean)
-      .flatMap((line) => {
-        const [name, ...rest] = line.split(":");
-        if (name === undefined) return [];
-        return [[name.trim().toLowerCase(), rest.join(":").trim()] as const];
-      }),
-  );
-}
-
-function getBoundary(contentType: string | null): string {
-  const match = /boundary=(?:"([^"]+)"|([^;]+))/i.exec(contentType ?? "");
-  if (!match) throw badRequest("multipart boundary is required");
-  return match[1] ?? match[2]!;
-}
-
 export async function parseMultipartFormData(
   req: Request,
+  maxBytes: number = DEFAULT_MAX_BYTES,
 ): Promise<{ fields: Record<string, string>; files: MultipartFile[] }> {
-  const boundary = getBoundary(req.headers.get("content-type"));
-  const body = new TextDecoder().decode(await readRawBody(req));
-  const parts = body.split(`--${boundary}`).slice(1, -1);
-  const fields: Record<string, string> = {};
-  const files: MultipartFile[] = [];
-
-  for (const rawPart of parts) {
-    const part = rawPart.trimStart().replace(/\r\n$/, "");
-    const separator = part.indexOf("\r\n\r\n");
-    if (separator < 0) continue;
-
-    const headerBlock = part.slice(0, separator);
-    const contentBlock = part.slice(separator + 4);
-    const headers = parseHeaders(headerBlock);
-    const disposition = headers["content-disposition"];
-    if (!disposition) continue;
-
-    const nameMatch = /name="([^"]+)"/.exec(disposition);
-    const fieldName = nameMatch?.[1];
-    if (!fieldName) continue;
-    const filenameMatch = /filename="([^"]*)"/.exec(disposition);
-
-    if (!filenameMatch) {
-      fields[fieldName] = contentBlock;
-      continue;
-    }
-
-    const filename = filenameMatch[1];
-    if (filename === undefined) continue;
-    files.push({
-      filename,
-      contentType: headers["content-type"] ?? "application/octet-stream",
-      content: new TextEncoder().encode(contentBlock),
-    });
+  const contentType = req.headers.get("content-type");
+  if (
+    !contentType ||
+    !contentType.toLowerCase().includes("multipart/form-data")
+  ) {
+    throw badRequest("expected multipart/form-data content-type");
+  }
+  if (!/boundary=/i.test(contentType)) {
+    throw badRequest("multipart boundary is required");
   }
 
+  const raw = await readRawBody(req, maxBytes); // enforces the size cap on actual bytes
+  const form = await new Response(raw, {
+    headers: { "content-type": contentType },
+  }).formData();
+
+  const fields: Record<string, string> = {};
+  const files: MultipartFile[] = [];
+  for (const name of new Set(form.keys())) {
+    for (const value of form.getAll(name)) {
+      if (typeof value === "string") {
+        fields[name] = value;
+      } else {
+        files.push({
+          filename: value.name,
+          contentType: value.type || "application/octet-stream",
+          content: new Uint8Array(await value.arrayBuffer()),
+        });
+      }
+    }
+  }
   return { fields, files };
 }
