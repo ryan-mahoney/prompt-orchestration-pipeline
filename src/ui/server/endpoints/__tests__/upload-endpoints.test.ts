@@ -1,7 +1,20 @@
+import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+
 import { zipSync } from "fflate";
 import { describe, expect, it } from "vitest";
 
-import { normalizeSeedUpload } from "../upload-endpoints";
+import { handleSeedUploadDirect, normalizeSeedUpload } from "../upload-endpoints";
+
+async function pathExists(target: string): Promise<boolean> {
+  try {
+    await stat(target);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 function concatBytes(parts: Uint8Array[]): Uint8Array<ArrayBuffer> {
   const total = parts.reduce((sum, part) => sum + part.length, 0);
@@ -53,5 +66,37 @@ describe("normalizeSeedUpload", () => {
     expect(blob.filename).toBe("artifacts/blob.bin");
     expect(blob.content.length).toBe(artifact.length);
     expect(Array.from(blob.content)).toEqual(Array.from(artifact));
+  });
+});
+
+describe("handleSeedUploadDirect", () => {
+  it("stages artifacts under staging/{jobId}/ without creating current/{jobId}/", async () => {
+    const dataDir = await mkdtemp(path.join(tmpdir(), "upload-direct-"));
+    try {
+      const content = new TextEncoder().encode("# notes\nhello\n");
+      const seedObject = { name: "demo", pipeline: "x" };
+
+      const response = await handleSeedUploadDirect(seedObject, dataDir, [
+        { filename: "notes.md", content },
+      ]);
+      expect(response.status).toBe(201);
+      const body = (await response.json()) as { data: { jobId: string } };
+      const jobId = body.data.jobId;
+
+      const pipelineData = path.join(dataDir, "pipeline-data");
+
+      // Artifact staged byte-identical under staging/{jobId}/.
+      const staged = path.join(pipelineData, "staging", jobId, "notes.md");
+      const stagedBytes = await readFile(staged);
+      expect(Array.from(stagedBytes)).toEqual(Array.from(content));
+
+      // Pending seed trigger written.
+      expect(await pathExists(path.join(pipelineData, "pending", `${jobId}-seed.json`))).toBe(true);
+
+      // The endpoint must not create current/{jobId}/.
+      expect(await pathExists(path.join(pipelineData, "current", jobId))).toBe(false);
+    } finally {
+      await rm(dataDir, { recursive: true, force: true });
+    }
   });
 });

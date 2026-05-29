@@ -35,12 +35,13 @@ export async function handleSeedUploadDirect(
   const pipelineData = path.join(dataDir, "pipeline-data");
   const pendingDir = path.join(pipelineData, "pending");
 
-  // Write artifacts to current/{jobId}/ first (before the trigger file)
-  // so they are in place when the orchestrator processes the seed.
+  // Stage artifacts under staging/{jobId}/ (before the trigger file).
+  // The orchestrator owns current/{jobId}/ and moves staged artifacts into
+  // current/{jobId}/files/artifacts/ during promotion.
   if (artifacts.length > 0) {
-    const jobDir = path.join(pipelineData, "current", jobId);
+    const stagingJobDir = path.join(pipelineData, "staging", jobId);
     for (const artifact of artifacts) {
-      const artifactPath = path.join(jobDir, "files", "artifacts", artifact.filename);
+      const artifactPath = path.join(stagingJobDir, artifact.filename);
       await mkdir(path.dirname(artifactPath), { recursive: true });
       await Bun.write(artifactPath, artifact.content);
     }
