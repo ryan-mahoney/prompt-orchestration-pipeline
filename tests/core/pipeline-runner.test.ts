@@ -1451,6 +1451,212 @@ describe("runPipelineJob", () => {
     expect(events[0]?.message).toContain("missing-task-key");
   });
 
+  test("valid patch inserts entries after insertAfter and creates pending status records in pipeline order", async () => {
+    const currentDir = join(tmpDir, "current");
+    const completeDir = join(tmpDir, "complete");
+    const jobId = "job-control-patch";
+    const tasks = ["planner", "anchor", "tail"];
+    await setupJob(currentDir, jobId, tasks);
+
+    process.env["PO_CURRENT_DIR"] = currentDir;
+    process.env["PO_COMPLETE_DIR"] = completeDir;
+    process.env["PO_PIPELINE_SLUG"] = "test-pipeline";
+
+    mockLoadFreshModule.mockImplementation(async (_path: string) => ({
+      default: {
+        planner: "./planner.js",
+        anchor: "./anchor.js",
+        "inserted-a-key": "./inserted-a.js",
+        "inserted-b-key": "./inserted-b.js",
+        tail: "./tail.js",
+      },
+    }));
+
+    const runOrder: string[] = [];
+    mockRunPipeline.mockImplementation(async (_modulePath: string, ctx: unknown) => {
+      const taskCtx = ctx as { taskName: string; taskDir: string };
+      runOrder.push(taskCtx.taskName);
+      if (taskCtx.taskName === "planner") {
+        await writeFile(join(taskCtx.taskDir, "control.json"), JSON.stringify({
+          patch: {
+            insertAfter: "anchor",
+            add: [
+              { name: "inserted-a", task: "inserted-a-key", config: { n: 1 } },
+              { name: "inserted-b", task: "inserted-b-key" },
+            ],
+          },
+        }));
+      }
+      return {
+        ok: true as const,
+        logs: [] as Array<{ stage: string; ok: true; ms: number }>,
+        context: {} as Record<string, unknown>,
+        llmMetrics: [],
+      };
+    });
+
+    let plannerDoneSnapshot: Record<string, unknown> | null = null;
+    mockWriteJobStatus.mockImplementation(async (dir: string, updateFn: (snap: Record<string, unknown>) => void) => {
+      const snap = await applyMockStatusUpdate(dir, updateFn);
+      const taskRecords = snap["tasks"] as Record<string, { state?: string; controlApplied?: boolean }>;
+      if (
+        plannerDoneSnapshot === null &&
+        taskRecords["planner"]?.state === "done" &&
+        taskRecords["planner"]?.controlApplied === true
+      ) {
+        plannerDoneSnapshot = JSON.parse(JSON.stringify(snap)) as Record<string, unknown>;
+      }
+      return snap;
+    });
+
+    await runPipelineJob(jobId);
+
+    const completedPipeline = JSON.parse(await readFile(join(completeDir, jobId, "pipeline.json"), "utf-8")) as {
+      tasks: Array<string | PipelineTaskEntry>;
+    };
+    expect(completedPipeline.tasks.map(getTaskName)).toEqual(["planner", "anchor", "inserted-a", "inserted-b", "tail"]);
+    expect(runOrder).toEqual(["planner", "anchor", "inserted-a", "inserted-b", "tail"]);
+
+    expect(plannerDoneSnapshot).not.toBeNull();
+    const plannerDoneTasks = plannerDoneSnapshot!["tasks"] as Record<string, { state?: string; controlApplied?: boolean }>;
+    expect(Object.keys(plannerDoneTasks)).toEqual(["planner", "anchor", "inserted-a", "inserted-b", "tail"]);
+    expect(plannerDoneTasks["planner"]?.controlApplied).toBe(true);
+    expect(plannerDoneTasks["inserted-a"]?.state).toBe("pending");
+    expect(plannerDoneTasks["inserted-b"]?.state).toBe("pending");
+
+    const events = (await readFile(join(completeDir, jobId, "events.jsonl"), "utf-8"))
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line) as { type?: string; task?: string; added?: string[]; insertAfter?: string; at?: string });
+    expect(events).toContainEqual({
+      type: "patch_applied",
+      task: "planner",
+      added: ["inserted-a", "inserted-b"],
+      insertAfter: "anchor",
+      at: expect.any(String),
+    });
+  });
+
+  test("second patch application is idempotent and leaves pipeline.json byte-identical", async () => {
+    const currentDir = join(tmpDir, "current");
+    const jobId = "job-control-patch-idempotent";
+    const tasks = ["planner", "tail"];
+    await setupJob(currentDir, jobId, tasks);
+    const workDir = join(currentDir, jobId);
+
+    process.env["PO_CURRENT_DIR"] = currentDir;
+    process.env["PO_COMPLETE_DIR"] = join(tmpDir, "complete");
+    process.env["PO_PIPELINE_SLUG"] = "test-pipeline";
+    process.env["PO_START_FROM_TASK"] = "planner";
+    process.env["PO_RUN_SINGLE_TASK"] = "true";
+
+    mockLoadFreshModule.mockImplementation(async (_path: string) => ({
+      default: {
+        planner: "./planner.js",
+        inserted: "./inserted.js",
+        tail: "./tail.js",
+      },
+    }));
+    mockRunPipeline.mockImplementation(async (_modulePath: string, ctx: unknown) => {
+      const taskCtx = ctx as { taskName: string; taskDir: string };
+      if (taskCtx.taskName === "planner") {
+        await writeFile(join(taskCtx.taskDir, "control.json"), JSON.stringify({
+          patch: {
+            add: [{ name: "inserted" }],
+          },
+        }));
+      }
+      return {
+        ok: true as const,
+        logs: [] as Array<{ stage: string; ok: true; ms: number }>,
+        context: {} as Record<string, unknown>,
+        llmMetrics: [],
+      };
+    });
+
+    await runPipelineJob(jobId);
+    const afterFirst = await readFile(join(workDir, "pipeline.json"), "utf-8");
+    expect((JSON.parse(afterFirst) as { tasks: Array<string | PipelineTaskEntry> }).tasks.map(getTaskName)).toEqual([
+      "planner",
+      "inserted",
+      "tail",
+    ]);
+
+    const status = JSON.parse(await readFile(join(workDir, "tasks-status.json"), "utf-8")) as {
+      tasks: Record<string, { state?: string }>;
+    };
+    status.tasks["planner"] = { ...status.tasks["planner"], state: "pending" };
+    await writeFile(join(workDir, "tasks-status.json"), JSON.stringify(status));
+
+    await runPipelineJob(jobId);
+    const afterSecond = await readFile(join(workDir, "pipeline.json"), "utf-8");
+
+    expect(afterSecond).toBe(afterFirst);
+    expect((JSON.parse(afterSecond) as { tasks: Array<string | PipelineTaskEntry> }).tasks.map(getTaskName)).toEqual([
+      "planner",
+      "inserted",
+      "tail",
+    ]);
+  });
+
+  test("valid skip marks pending target skipped and downstream still executes", async () => {
+    const currentDir = join(tmpDir, "current");
+    const completeDir = join(tmpDir, "complete");
+    const jobId = "job-control-skip";
+    const tasks = ["planner", "optional", "downstream"];
+    await setupJob(currentDir, jobId, tasks);
+
+    process.env["PO_CURRENT_DIR"] = currentDir;
+    process.env["PO_COMPLETE_DIR"] = completeDir;
+    process.env["PO_PIPELINE_SLUG"] = "test-pipeline";
+
+    const runOrder: string[] = [];
+    mockRunPipeline.mockImplementation(async (_modulePath: string, ctx: unknown) => {
+      const taskCtx = ctx as { taskName: string; taskDir: string };
+      runOrder.push(taskCtx.taskName);
+      if (taskCtx.taskName === "planner") {
+        await writeFile(join(taskCtx.taskDir, "control.json"), JSON.stringify({
+          skip: [{ task: "optional", reason: "Planner selected the direct path" }],
+        }));
+      }
+      return {
+        ok: true as const,
+        logs: [] as Array<{ stage: string; ok: true; ms: number }>,
+        context: {} as Record<string, unknown>,
+        llmMetrics: [],
+      };
+    });
+
+    await runPipelineJob(jobId);
+
+    expect(runOrder).toEqual(["planner", "downstream"]);
+
+    const completedStatus = JSON.parse(await readFile(join(completeDir, jobId, "tasks-status.json"), "utf-8")) as {
+      tasks: Record<string, { state?: string; skipReason?: string; skippedBy?: string; controlApplied?: boolean }>;
+    };
+    expect(completedStatus.tasks["planner"]?.controlApplied).toBe(true);
+    expect(completedStatus.tasks["optional"]?.state).toBe("skipped");
+    expect(completedStatus.tasks["optional"]?.skipReason).toBe("Planner selected the direct path");
+    expect(completedStatus.tasks["optional"]?.skippedBy).toBe("planner");
+    expect(completedStatus.tasks["downstream"]?.state).toBe("done");
+
+    const events = (await readFile(join(completeDir, jobId, "events.jsonl"), "utf-8"))
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line) as {
+        type?: string;
+        task?: string;
+        skipped?: Array<{ task: string; reason: string }>;
+        at?: string;
+      });
+    expect(events).toContainEqual({
+      type: "skip_applied",
+      task: "planner",
+      skipped: [{ task: "optional", reason: "Planner selected the direct path" }],
+      at: expect.any(String),
+    });
+  });
+
   // ─── Step 9: top-level error handling ────────────────────────────────────
 
   test("unexpected error: console.error is called and process.exit(1) is invoked", async () => {
