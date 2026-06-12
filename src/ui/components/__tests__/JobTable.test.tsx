@@ -43,3 +43,13 @@ test("JobTable renders invalid job rows as non interactive", () => {
   expect(rows[1]?.getAttribute("tabindex")).toBe("-1");
   expect(rows[1]?.className).toContain("cursor-not-allowed");
 });
+
+test("JobTable renders waiting status badge", () => {
+  const view = render(
+    <MemoryRouter>
+      <JobTable jobs={[makeJob({ status: "waiting" })]} onOpenJob={() => undefined} />
+    </MemoryRouter>,
+  );
+
+  expect(view.getByText("waiting")).toBeTruthy();
+});

@@ -1,17 +1,22 @@
 import "./test-dom";
 
-import { render } from "@testing-library/react";
+import { fireEvent, render, waitFor } from "@testing-library/react";
 import { afterEach, expect, mock, test } from "bun:test";
 
 import type { DagItem, JobDetail as JobDetailType, PipelineType } from "../types";
 
 const capturedItems: DagItem[][] = [];
+const decideGateMock = mock((_jobId: string, _action: string, _note?: string) => Promise.resolve({ ok: true }));
 
 mock.module("../DAGGrid", () => ({
-  default: ({ items }: { items: DagItem[] }) => {
+  default: ({ items, waitingTaskId }: { items: DagItem[]; waitingTaskId?: string | null }) => {
     capturedItems.push(items);
-    return null;
+    return <div data-testid="dag-grid" data-waiting-task-id={waitingTaskId ?? ""} />;
   },
+}));
+
+mock.module("../../client/api", () => ({
+  decideGate: decideGateMock,
 }));
 
 const JobDetail = (await import("../JobDetail")).default;
@@ -19,6 +24,7 @@ const JobDetail = (await import("../JobDetail")).default;
 afterEach(() => {
   document.body.innerHTML = "";
   capturedItems.length = 0;
+  decideGateMock.mockClear();
 });
 
 function makeJob(restartCount: number): JobDetailType {
@@ -59,4 +65,52 @@ test("JobDetail re-emits dag item when only restartCount changes", () => {
   const secondBuild = lastItems.find((item) => item.id === "build");
   expect(secondBuild?.restartCount).toBe(2);
   expect(secondBuild).not.toBe(firstBuild);
+});
+
+test("JobDetail renders gate controls and approves a gate", async () => {
+  const job: JobDetailType = {
+    ...makeJob(0),
+    status: "waiting",
+    gate: {
+      afterTask: "build",
+      message: "Review build output",
+      artifacts: ["build-output.md"],
+      requestedAt: "2026-06-12T12:00:00.000Z",
+    },
+  };
+
+  const view = render(<JobDetail job={job} pipeline={pipeline} />);
+
+  expect(view.getByText("Review build output")).toBeTruthy();
+  expect(view.getByText("After task: build")).toBeTruthy();
+  expect(view.getByRole("link", { name: "build-output.md" }).getAttribute("href")).toContain("/api/jobs/job-1/tasks/build/file?");
+  expect(view.getByTestId("dag-grid").getAttribute("data-waiting-task-id")).toBe("build");
+
+  fireEvent.click(view.getByRole("button", { name: "Approve gate" }));
+
+  expect(view.getByRole("button", { name: "Approve gate" }).getAttribute("disabled")).not.toBeNull();
+  await waitFor(() => expect(decideGateMock).toHaveBeenCalledWith("job-1", "approve", undefined));
+});
+
+test("JobDetail rejects a gate with an optional note", async () => {
+  const originalPrompt = window.prompt;
+  window.prompt = mock(() => "not ready") as unknown as typeof window.prompt;
+
+  try {
+    const view = render(<JobDetail job={{
+      ...makeJob(0),
+      status: "waiting",
+      gate: {
+        afterTask: "build",
+        message: "Review build output",
+        requestedAt: "2026-06-12T12:00:00.000Z",
+      },
+    }} pipeline={pipeline} />);
+
+    fireEvent.click(view.getByRole("button", { name: "Reject gate" }));
+
+    await waitFor(() => expect(decideGateMock).toHaveBeenCalledWith("job-1", "reject", "not ready"));
+  } finally {
+    window.prompt = originalPrompt;
+  }
 });

@@ -12,6 +12,7 @@ import { Progress } from "./ui/Progress";
 
 function getIntent(status: string): "gray" | "blue" | "green" | "red" | "amber" {
   if (status === "running") return "blue";
+  if (status === "waiting") return "amber";
   if (status === "complete") return "green";
   if (status === "failed") return "red";
   return "amber";

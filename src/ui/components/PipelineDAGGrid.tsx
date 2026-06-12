@@ -2,7 +2,20 @@ import { useMemo, useState } from "react";
 
 import { computeEffectiveCols, computeVisualOrder, defaultGeometryAdapter, formatStepName } from "./dag-shared";
 import PipelineTypeTaskSidebar from "./PipelineTypeTaskSidebar";
-import type { DagItem, PipelineTask } from "./types";
+import type { DagItem, PipelineTask, TaskState } from "./types";
+
+function getStatusLabel(status: TaskState): string {
+  if (status === "skipped") return "Skipped";
+  return status;
+}
+
+function getStatusClasses(status: TaskState): string {
+  if (status === "skipped") return "text-gray-500";
+  if (status === "done") return "text-green-700";
+  if (status === "running") return "text-amber-700";
+  if (status === "failed") return "text-red-700";
+  return "text-gray-500";
+}
 
 export default function PipelineDAGGrid({
   items,
@@ -32,7 +45,9 @@ export default function PipelineDAGGrid({
             >
               <div className="text-xs text-gray-500">Task</div>
               <div className="mt-1 text-base font-semibold">{items[index]?.title ?? formatStepName(items[index]?.id ?? "")}</div>
-              <div className="mt-2 text-sm text-gray-500">{items[index]?.status}</div>
+              <div className={`mt-2 text-sm ${getStatusClasses(items[index]?.status ?? "pending")}`}>
+                {getStatusLabel(items[index]?.status ?? "pending")}
+              </div>
             </button>
           ),
         )}

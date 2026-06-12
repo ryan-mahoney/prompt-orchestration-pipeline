@@ -5,7 +5,7 @@ import type { DagItem, JobSummary, TaskProposal, Toast } from "../types";
 test("DagItem type accepts valid shape", () => {
   const item: DagItem = {
     id: "extract",
-    status: "running",
+    status: "skipped",
     stage: "processing",
     title: "Extract",
     subtitle: "gpt-4 · 1.2k tokens",
@@ -14,7 +14,7 @@ test("DagItem type accepts valid shape", () => {
     endedAt: null,
   };
 
-  expect(item.id).toBe("extract");
+  expect(item.status).toBe("skipped");
 });
 
 test("JobSummary type accepts valid shape", () => {
@@ -30,9 +30,14 @@ test("JobSummary type accepts valid shape", () => {
     tasks: {},
     current: "task-1",
     displayCategory: "current",
+    gate: {
+      afterTask: "task-1",
+      message: "Review output",
+      requestedAt: "2026-06-12T12:00:00.000Z",
+    },
   };
 
-  expect(job.displayCategory).toBe("current");
+  expect(job.gate?.afterTask).toBe("task-1");
 });
 
 test("TaskProposal and Toast types accept valid shapes", () => {

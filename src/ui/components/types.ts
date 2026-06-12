@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-export type TaskState = "pending" | "running" | "done" | "failed";
+export type TaskState = "pending" | "running" | "done" | "failed" | "skipped";
 export type DisplayCategory = "current" | "errors" | "complete";
 
 export interface Breadcrumb {
@@ -45,6 +45,9 @@ export interface TaskStateObject {
   attempts?: number;
   restartCount?: number;
   executionTimeMs?: number;
+  skipReason?: string;
+  skippedBy?: string;
+  controlApplied?: boolean;
 }
 
 export type TaskCollection = Record<string, TaskStateObject> | TaskStateObject[];
@@ -69,6 +72,14 @@ export interface JobSummary {
   totalCost?: number;
   totalTokens?: number;
   displayCategory: DisplayCategory;
+  gate?: GateInfo | null;
+}
+
+export interface GateInfo {
+  afterTask: string;
+  message: string;
+  artifacts?: string[];
+  requestedAt: string;
 }
 
 export function normalizeTaskCollection(
@@ -95,6 +106,7 @@ export interface JobDetail {
   totalTokens?: number;
   current: string | { taskName: string; stage?: string } | null;
   pipelineLabel?: string;
+  gate?: GateInfo | null;
 }
 
 export interface DagItem {
