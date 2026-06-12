@@ -33,6 +33,7 @@ function makeJob(overrides: Partial<CanonicalJob> = {}): CanonicalJob {
 describe("list-transformer", () => {
   it("returns status priorities and sorts valid jobs only", () => {
     expect(getStatusPriority("running")).toBe(4);
+    expect(getStatusPriority("waiting")).toBe(4);
     expect(getStatusPriority("unknown")).toBe(0);
 
     const jobs = sortJobs([
@@ -61,6 +62,7 @@ describe("list-transformer", () => {
     expect(groupJobsByStatus(jobs)).toMatchObject({
       running: [jobs[0]],
       complete: [jobs[1]],
+      waiting: [],
     });
     expect(getJobListStats(jobs).averageProgress).toBe(75);
     expect(filterJobs(jobs, "alp")).toEqual([jobs[0]]);
@@ -86,6 +88,19 @@ describe("list-transformer", () => {
       efficiency: 0.5,
       statusDistribution: { pending: 1 },
       locationDistribution: { current: 1 },
+    });
+  });
+
+  it("passes gate metadata through API list output", () => {
+    const gate = {
+      afterTask: "review",
+      message: "Approve output",
+      requestedAt: "2026-06-12T12:00:00.000Z",
+    };
+
+    expect(transformJobListForAPI([makeJob({ status: "waiting", gate })])[0]).toMatchObject({
+      status: "waiting",
+      gate,
     });
   });
 });

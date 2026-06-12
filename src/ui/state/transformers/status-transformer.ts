@@ -1,11 +1,14 @@
 import {
   deriveJobStatusFromTasks,
+  normalizeJobStatus,
   normalizeTaskState,
 } from "../../../config/statuses";
 import type {
   CanonicalJob,
+  CanonicalJobStatus,
   CanonicalTask,
   ComputedStatus,
+  GateInfo,
   JobReadResult,
   TransformationStats,
 } from "../types";
@@ -21,6 +24,23 @@ function asTaskFiles(value: unknown): CanonicalTask["files"] {
     artifacts: Array.isArray(record?.["artifacts"]) ? (record["artifacts"] as string[]) : [],
     logs: Array.isArray(record?.["logs"]) ? (record["logs"] as string[]) : [],
     tmp: Array.isArray(record?.["tmp"]) ? (record["tmp"] as string[]) : [],
+  };
+}
+
+function toGateInfo(value: unknown): GateInfo | null | undefined {
+  if (value === null) return null;
+  const record = asRecord(value);
+  if (!record) return undefined;
+
+  const artifacts = Array.isArray(record["artifacts"])
+    ? record["artifacts"].filter((artifact): artifact is string => typeof artifact === "string")
+    : undefined;
+
+  return {
+    afterTask: typeof record["afterTask"] === "string" ? record["afterTask"] : "",
+    message: typeof record["message"] === "string" ? record["message"] : "",
+    requestedAt: typeof record["requestedAt"] === "string" ? record["requestedAt"] : "",
+    ...(artifacts && artifacts.length > 0 ? { artifacts } : {}),
   };
 }
 
@@ -49,18 +69,21 @@ function toTask(name: string, value: unknown): CanonicalTask {
     failedStage: typeof task["failedStage"] === "string" ? task["failedStage"] : undefined,
     artifacts: task["artifacts"],
     error: asRecord(task["error"]) as CanonicalTask["error"],
+    skipReason: typeof task["skipReason"] === "string" ? task["skipReason"] : undefined,
+    skippedBy: typeof task["skippedBy"] === "string" ? task["skippedBy"] : undefined,
+    controlApplied: typeof task["controlApplied"] === "boolean" ? task["controlApplied"] : undefined,
   };
 }
 
-function getStatusValue(status: string): string {
+function getStatusValue(status: ReturnType<typeof deriveJobStatusFromTasks>): CanonicalJobStatus {
   return status === "failed" ? "error" : status;
 }
 
 function getProgress(tasks: CanonicalTask[]): number {
   if (tasks.length === 0) return 0;
 
-  const done = tasks.filter((task) => task.state === "done").length;
-  return Math.floor((done / tasks.length) * 100);
+  const completed = tasks.filter((task) => task.state === "done" || task.state === "skipped").length;
+  return Math.floor((completed / tasks.length) * 100);
 }
 
 function getTitle(raw: Record<string, unknown>, jobId: string): string {
@@ -143,6 +166,8 @@ export function transformJobStatus(raw: unknown, jobId: string, location: string
 
   const tasks = transformTasks(record["tasks"]);
   const computed = computeJobStatus(tasks);
+  const snapshotStatus = normalizeJobStatus(record["status"] ?? record["state"]);
+  const gate = toGateInfo(record["gate"]);
   const title = getTitle(record, jobId);
 
   return {
@@ -150,7 +175,7 @@ export function transformJobStatus(raw: unknown, jobId: string, location: string
     jobId,
     name: title,
     title,
-    status: computed.status,
+    status: snapshotStatus === "waiting" ? "waiting" : computed.status,
     progress: computed.progress,
     createdAt: typeof record["createdAt"] === "string" ? record["createdAt"] : null,
     updatedAt: typeof record["updatedAt"] === "string" ? record["updatedAt"] : null,
@@ -164,6 +189,7 @@ export function transformJobStatus(raw: unknown, jobId: string, location: string
     pipelineConfig: asRecord(record["pipelineConfig"]) ?? undefined,
     current: record["current"],
     currentStage: record["currentStage"],
+    gate,
     warnings: Array.isArray(record["warnings"]) ? (record["warnings"] as string[]) : undefined,
   };
 }

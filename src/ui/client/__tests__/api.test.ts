@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { fetchConcurrencyStatus, restartJob, startTask, stopJob } from "../api";
+import { decideGate, fetchConcurrencyStatus, restartJob, startTask, stopJob } from "../api";
 import type { JobConcurrencyApiStatus } from "../types";
 
 const fetchMock = vi.fn<typeof fetch>();
@@ -89,6 +89,24 @@ describe("ui client api", () => {
     globalThis.fetch = fetchMock as unknown as typeof fetch;
 
     await expect(stopJob("job-1")).resolves.toEqual({ ok: true });
+  });
+
+  it("posts gate decisions with action and note", async () => {
+    fetchMock.mockResolvedValue(
+      new Response(JSON.stringify({ ok: true, jobId: "job-1", action: "approve", spawned: true }), { status: 202 }),
+    );
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    await expect(decideGate("job-1", "approve", "looks good")).resolves.toEqual({ ok: true });
+    expect(fetchMock).toHaveBeenCalledWith("/api/jobs/job-1/gate", expect.objectContaining({
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+    }));
+    const init = fetchMock.mock.calls[0]?.[1];
+    expect(JSON.parse(String(init?.body))).toEqual({
+      action: "approve",
+      note: "looks good",
+    });
   });
 
   it("maps network failures to network_error", async () => {

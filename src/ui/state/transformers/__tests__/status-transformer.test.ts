@@ -63,6 +63,16 @@ describe("status-transformer", () => {
     expect(result).toEqual({ status: "running", progress: 50 });
   });
 
+  it("counts skipped tasks as completed progress units", () => {
+    const result = computeJobStatus({
+      a: { state: "done" },
+      b: { state: "skipped" },
+      c: { state: "pending" },
+    });
+
+    expect(result).toEqual({ status: "pending", progress: 66 });
+  });
+
   it("returns pending with zero progress for empty task list", () => {
     expect(computeJobStatus([])).toEqual({ status: "pending", progress: 0 });
   });
@@ -83,6 +93,34 @@ describe("status-transformer", () => {
 
     expect(job?.progress).toBe(50);
     expect(job?.status).toBe("running");
+  });
+
+  it("surfaces waiting snapshots and gate metadata", () => {
+    const job = transformJobStatus(
+      {
+        state: "waiting",
+        gate: {
+          afterTask: "review",
+          message: "Approve output",
+          artifacts: ["tasks/review/output.md", 42],
+          requestedAt: "2026-06-12T12:00:00.000Z",
+        },
+        tasks: {
+          review: { state: "done" },
+          deploy: { state: "pending" },
+        },
+      },
+      "job-1",
+      "current",
+    );
+
+    expect(job?.status).toBe("waiting");
+    expect(job?.gate).toEqual({
+      afterTask: "review",
+      message: "Approve output",
+      artifacts: ["tasks/review/output.md"],
+      requestedAt: "2026-06-12T12:00:00.000Z",
+    });
   });
 
   it("maps numeric restartCount on tasks", () => {

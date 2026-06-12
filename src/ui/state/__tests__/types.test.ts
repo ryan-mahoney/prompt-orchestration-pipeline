@@ -55,6 +55,7 @@ describe("ui/state types", () => {
     };
     const grouped: GroupedJobs = {
       running: [],
+      waiting: [],
       error: [],
       pending: [job],
       complete: [],

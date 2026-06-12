@@ -1,3 +1,5 @@
+import type { JobStatusValue, TaskStateValue } from "../../config/statuses";
+
 export type ApiErrorCode =
   | "job_running"
   | "job_not_found"
@@ -21,6 +23,14 @@ export interface ApiError {
 export interface ApiOkResponse {
   ok: true;
   message?: string;
+}
+
+export type GateDecisionAction = "approve" | "reject";
+
+export interface GateDecisionResponse extends ApiOkResponse {
+  jobId?: string;
+  action?: GateDecisionAction;
+  spawned?: boolean;
 }
 
 export interface RestartJobOptions {
@@ -81,6 +91,13 @@ export interface CostsSummary {
 
 export type RetryError = { message: string; name?: string; stack?: string } | string;
 
+export interface GateInfo {
+  afterTask: string;
+  message: string;
+  artifacts?: string[];
+  requestedAt: string;
+}
+
 export interface TaskFiles {
   artifacts: string[];
   logs: string[];
@@ -89,7 +106,7 @@ export interface TaskFiles {
 
 export interface NormalizedTask {
   name: string;
-  state: string;
+  state: TaskStateValue;
   startedAt: string | null;
   endedAt: string | null;
   attempts?: number;
@@ -104,6 +121,9 @@ export interface NormalizedTask {
   artifacts?: string[];
   tokenUsage?: Record<string, unknown>;
   error?: Record<string, unknown>;
+  skipReason?: string;
+  skippedBy?: string;
+  controlApplied?: boolean;
 }
 
 export interface CurrentTaskInfo {
@@ -115,10 +135,11 @@ export interface NormalizedJobSummary {
   id: string;
   jobId: string;
   name: string;
-  status: string;
+  status: JobStatusValue;
   progress: number;
   taskCount: number;
   doneCount: number;
+  completedCount?: number;
   location: string;
   tasks: Record<string, NormalizedTask>;
   current?: CurrentTaskInfo | null;
@@ -128,6 +149,7 @@ export interface NormalizedJobSummary {
   pipeline?: string;
   pipelineLabel?: string;
   pipelineConfig?: Record<string, unknown>;
+  gate?: GateInfo | null;
   costsSummary?: CostsSummary;
   totalCost?: number;
   totalTokens?: number;
@@ -201,7 +223,7 @@ export interface JobConcurrencyApiStatus {
     jobId: string;
     pid: number | null;
     acquiredAt: string;
-    source: "orchestrator" | "restart" | "task-start";
+    source: "orchestrator" | "restart" | "task-start" | "gate";
   }>;
   queuedJobs: Array<{
     jobId: string;
