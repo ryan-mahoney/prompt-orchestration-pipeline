@@ -643,6 +643,27 @@ describe("runPipelineJob", () => {
     return snap;
   }
 
+  async function runExpectingProcessExit(jobId: string): Promise<number | undefined> {
+    let exitCode: number | undefined;
+    const consoleErrorSpy = spyOn(console, "error").mockImplementation(() => {});
+    const exitSpy = spyOn(process, "exit").mockImplementation((code?: number) => {
+      exitCode = code;
+      throw new Error("process.exit called");
+    });
+
+    try {
+      await runPipelineJob(jobId);
+      throw new Error("Expected process.exit to be called");
+    } catch (e) {
+      expect((e as Error).message).toBe("process.exit called");
+    } finally {
+      exitSpy.mockRestore();
+      consoleErrorSpy.mockRestore();
+    }
+
+    return exitCode;
+  }
+
   beforeEach(async () => {
     for (const key of PO_ENV_KEYS) {
       savedEnv[key] = process.env[key];
@@ -1316,6 +1337,118 @@ describe("runPipelineJob", () => {
       expectedModulePath,
       tmpDir,
     );
+  });
+
+  test("invalid control JSON fails the emitting task without retrying or patch side effects", async () => {
+    const currentDir = join(tmpDir, "current");
+    const jobId = "job-control-invalid-json";
+    const tasks = ["task-a", "task-b"];
+    await setupJob(currentDir, jobId, tasks);
+    const workDir = join(currentDir, jobId);
+    const pipelineBefore = await readFile(join(workDir, "pipeline.json"), "utf-8");
+
+    process.env["PO_CURRENT_DIR"] = currentDir;
+    process.env["PO_COMPLETE_DIR"] = join(tmpDir, "complete");
+    process.env["PO_PIPELINE_SLUG"] = "test-pipeline";
+
+    mockGetConfig.mockImplementation(() => ({ taskRunner: { maxAttempts: 3 } }));
+    mockRunPipeline.mockImplementation(async (_modulePath: string, ctx: unknown) => {
+      await writeFile(join((ctx as { taskDir: string }).taskDir, "control.json"), "{ not json");
+      return {
+        ok: true as const,
+        logs: [] as Array<{ stage: string; ok: true; ms: number }>,
+        context: {} as Record<string, unknown>,
+        llmMetrics: [],
+      };
+    });
+
+    const exitCode = await runExpectingProcessExit(jobId);
+
+    expect(exitCode).toBe(1);
+    expect(mockRunPipeline).toHaveBeenCalledTimes(1);
+    expect(await readFile(join(workDir, "pipeline.json"), "utf-8")).toBe(pipelineBefore);
+
+    const status = JSON.parse(await readFile(join(workDir, "tasks-status.json"), "utf-8")) as {
+      state?: string;
+      current?: string | null;
+      tasks: Record<string, { state?: string; attempts?: number; error?: { name?: string; message?: string } }>;
+    };
+    expect(status.state).toBe("failed");
+    expect(status.current).toBe("task-a");
+    expect(status.tasks["task-a"]?.state).toBe("failed");
+    expect(status.tasks["task-a"]?.attempts).toBe(1);
+    expect(status.tasks["task-a"]?.error?.name).toBe("ControlValidationError");
+    expect(status.tasks["task-a"]?.error?.message).toContain("invalid JSON");
+    expect(status.tasks["task-b"]?.state).toBeUndefined();
+
+    const events = (await readFile(join(workDir, "events.jsonl"), "utf-8"))
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line) as { type?: string; task?: string; message?: string });
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      type: "control_invalid",
+      task: "task-a",
+    });
+    expect(events[0]?.message).toContain("invalid JSON");
+  });
+
+  test("invalid control directive fails the emitting task without retrying or patch side effects", async () => {
+    const currentDir = join(tmpDir, "current");
+    const jobId = "job-control-invalid-directive";
+    const tasks = ["task-a", "task-b"];
+    await setupJob(currentDir, jobId, tasks);
+    const workDir = join(currentDir, jobId);
+    const pipelineBefore = await readFile(join(workDir, "pipeline.json"), "utf-8");
+
+    process.env["PO_CURRENT_DIR"] = currentDir;
+    process.env["PO_COMPLETE_DIR"] = join(tmpDir, "complete");
+    process.env["PO_PIPELINE_SLUG"] = "test-pipeline";
+
+    mockGetConfig.mockImplementation(() => ({ taskRunner: { maxAttempts: 3 } }));
+    mockRunPipeline.mockImplementation(async (_modulePath: string, ctx: unknown) => {
+      await writeFile(join((ctx as { taskDir: string }).taskDir, "control.json"), JSON.stringify({
+        patch: {
+          add: [{ name: "task-inserted", task: "missing-task-key" }],
+        },
+      }));
+      return {
+        ok: true as const,
+        logs: [] as Array<{ stage: string; ok: true; ms: number }>,
+        context: {} as Record<string, unknown>,
+        llmMetrics: [],
+      };
+    });
+
+    const exitCode = await runExpectingProcessExit(jobId);
+
+    expect(exitCode).toBe(1);
+    expect(mockRunPipeline).toHaveBeenCalledTimes(1);
+    expect(await readFile(join(workDir, "pipeline.json"), "utf-8")).toBe(pipelineBefore);
+
+    const status = JSON.parse(await readFile(join(workDir, "tasks-status.json"), "utf-8")) as {
+      state?: string;
+      current?: string | null;
+      tasks: Record<string, { state?: string; attempts?: number; error?: { name?: string; message?: string } }>;
+    };
+    expect(status.state).toBe("failed");
+    expect(status.current).toBe("task-a");
+    expect(status.tasks["task-a"]?.state).toBe("failed");
+    expect(status.tasks["task-a"]?.attempts).toBe(1);
+    expect(status.tasks["task-a"]?.error?.name).toBe("ControlValidationError");
+    expect(status.tasks["task-a"]?.error?.message).toContain("missing-task-key");
+    expect(status.tasks["task-inserted"]).toBeUndefined();
+
+    const events = (await readFile(join(workDir, "events.jsonl"), "utf-8"))
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line) as { type?: string; task?: string; message?: string });
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      type: "control_invalid",
+      task: "task-a",
+    });
+    expect(events[0]?.message).toContain("missing-task-key");
   });
 
   // ─── Step 9: top-level error handling ────────────────────────────────────

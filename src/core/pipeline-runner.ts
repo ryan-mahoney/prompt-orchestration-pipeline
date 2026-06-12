@@ -16,6 +16,8 @@ import { createTaskFileIO, generateLogName } from "./file-io";
 import { LogEvent, LogFileExtension } from "../config/log-events";
 import { TaskState, normalizeTaskState } from "../config/statuses";
 import { releaseJobSlot } from "./job-concurrency";
+import { ControlValidationError, parseControlFile, validateControlDirectives, type ControlDirectives } from "./control";
+import { appendRunEvent } from "./run-events";
 
 // ─── Type definitions ─────────────────────────────────────────────────────────
 
@@ -171,6 +173,26 @@ async function loadDoneArtifact(
     const outputText = await Bun.file(outputPath).text();
     pipelineArtifacts[taskName] = JSON.parse(outputText) as unknown;
   }
+}
+
+async function readControlDirectives(taskDir: string): Promise<ControlDirectives | null> {
+  const controlFile = Bun.file(join(taskDir, "control.json"));
+  if (!(await controlFile.exists())) return null;
+  return parseControlFile(await controlFile.text());
+}
+
+function getTaskStateMap(
+  statusTasks: Record<string, { state?: string }>,
+  pipelineTasks: PipelineTaskEntry[],
+): Record<string, string> {
+  const taskStates: Record<string, string> = {};
+  for (const task of pipelineTasks) {
+    taskStates[task.name] = normalizeTaskState(statusTasks[task.name]?.state ?? TaskState.PENDING);
+  }
+  for (const [name, status] of Object.entries(statusTasks)) {
+    taskStates[name] = normalizeTaskState(status.state ?? TaskState.PENDING);
+  }
+  return taskStates;
 }
 
 /** Normalizes any thrown value into a serializable NormalizedError. */
@@ -552,6 +574,53 @@ export async function runPipelineJob(jobId: string): Promise<void> {
       // Write execution logs
       const logsLogName = generateLogName(taskName, "pipeline", LogEvent.EXECUTION_LOGS, LogFileExtension.JSON);
       await fileIO.writeLog(logsLogName, JSON.stringify(result.logs, null, 2));
+
+      try {
+        const directives = await readControlDirectives(taskDir);
+        if (directives !== null) {
+          const controlPipeline = await loadPipeline(config.pipelineJsonPath);
+          const controlPipelineTasks = normalizePipelineTasks(controlPipeline);
+          const controlStatusText = await Bun.file(config.statusPath).text();
+          const controlStatus = JSON.parse(controlStatusText) as { tasks: Record<string, { state?: string }> };
+          validateControlDirectives(directives, {
+            pipelineTasks: controlPipelineTasks,
+            taskStates: getTaskStateMap(controlStatus.tasks, controlPipelineTasks),
+            registryKeys: Object.keys(taskRegistry),
+            emittingTask: taskName,
+          });
+        }
+      } catch (error) {
+        if (!(error instanceof ControlValidationError)) throw error;
+
+        const normalized = normalizeError(error);
+        await appendRunEvent(config.workDir, {
+          type: "control_invalid",
+          task: taskName,
+          message: normalized.message,
+          at: new Date().toISOString(),
+        });
+
+        await writeJobStatus(config.workDir, (snapshot) => {
+          snapshot.state = "failed";
+          snapshot.current = taskName;
+          snapshot.currentStage = null;
+          const raw = (snapshot.tasks[taskName] ?? {}) as Record<string, unknown>;
+          raw["state"] = TaskState.FAILED;
+          raw["endedAt"] = new Date().toISOString();
+          raw["error"] = { name: normalized.name, message: normalized.message, stack: normalized.stack };
+          raw["failedStage"] = "control";
+          delete raw["stageLogPath"];
+          delete raw["errorContext"];
+          delete raw["retrying"];
+          delete raw["nextRetryAt"];
+          delete raw["lastRetryError"];
+          snapshot.tasks[taskName] = raw as typeof snapshot.tasks[string];
+        });
+        activeTaskName = null;
+
+        await releaseJobSlotBestEffort(dataDir, jobId);
+        process.exit(1);
+      }
 
       // Update status to DONE
       await writeJobStatus(config.workDir, (snapshot) => {
