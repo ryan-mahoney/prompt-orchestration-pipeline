@@ -1,4 +1,4 @@
-import { describe, it, expect } from "bun:test";
+import { describe, it, expect, spyOn } from "bun:test";
 import {
   TaskState,
   JobStatus,
@@ -17,6 +17,7 @@ describe("TaskState", () => {
     expect(TaskState.RUNNING).toBe("running");
     expect(TaskState.DONE).toBe("done");
     expect(TaskState.FAILED).toBe("failed");
+    expect(TaskState.SKIPPED).toBe("skipped");
   });
 
   it("is frozen", () => {
@@ -30,6 +31,7 @@ describe("JobStatus", () => {
     expect(JobStatus.RUNNING).toBe("running");
     expect(JobStatus.FAILED).toBe("failed");
     expect(JobStatus.COMPLETE).toBe("complete");
+    expect(JobStatus.WAITING).toBe("waiting");
   });
 
   it("is frozen", () => {
@@ -56,6 +58,7 @@ describe("VALID_TASK_STATES", () => {
     expect(VALID_TASK_STATES.has("running")).toBe(true);
     expect(VALID_TASK_STATES.has("done")).toBe(true);
     expect(VALID_TASK_STATES.has("failed")).toBe(true);
+    expect(VALID_TASK_STATES.has("skipped")).toBe(true);
   });
 
   it("rejects invalid values", () => {
@@ -70,6 +73,7 @@ describe("VALID_JOB_STATUSES", () => {
     expect(VALID_JOB_STATUSES.has("running")).toBe(true);
     expect(VALID_JOB_STATUSES.has("failed")).toBe(true);
     expect(VALID_JOB_STATUSES.has("complete")).toBe(true);
+    expect(VALID_JOB_STATUSES.has("waiting")).toBe(true);
   });
 
   it("rejects invalid values", () => {
@@ -114,7 +118,26 @@ describe("normalizeTaskState", () => {
   });
 
   it("returns pending for unrecognized strings", () => {
-    expect(normalizeTaskState("bogus")).toBe("pending");
+    const warn = spyOn(console, "warn").mockImplementation(() => {});
+
+    expect(normalizeTaskState("bogus-task-state")).toBe("pending");
+
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0]?.[0]).toContain("bogus-task-state");
+    warn.mockRestore();
+  });
+
+  it("warns once per unknown string", () => {
+    const warn = spyOn(console, "warn").mockImplementation(() => {});
+
+    expect(normalizeTaskState("mystery-task-state")).toBe("pending");
+    expect(normalizeTaskState("mystery-task-state")).toBe("pending");
+    expect(normalizeTaskState("another-mystery-task-state")).toBe("pending");
+
+    expect(warn).toHaveBeenCalledTimes(2);
+    expect(warn.mock.calls[0]?.[0]).toContain("mystery-task-state");
+    expect(warn.mock.calls[1]?.[0]).toContain("another-mystery-task-state");
+    warn.mockRestore();
   });
 
   it("passes through valid values", () => {
@@ -122,6 +145,7 @@ describe("normalizeTaskState", () => {
     expect(normalizeTaskState("failed")).toBe("failed");
     expect(normalizeTaskState("running")).toBe("running");
     expect(normalizeTaskState("pending")).toBe("pending");
+    expect(normalizeTaskState("skipped")).toBe("skipped");
   });
 
   it("is idempotent", () => {
@@ -150,6 +174,18 @@ describe("normalizeJobStatus", () => {
     expect(normalizeJobStatus("running")).toBe("running");
     expect(normalizeJobStatus("failed")).toBe("failed");
     expect(normalizeJobStatus("complete")).toBe("complete");
+    expect(normalizeJobStatus("waiting")).toBe("waiting");
+  });
+
+  it("returns pending for unrecognized strings and warns once", () => {
+    const warn = spyOn(console, "warn").mockImplementation(() => {});
+
+    expect(normalizeJobStatus("mystery-job-status")).toBe("pending");
+    expect(normalizeJobStatus("mystery-job-status")).toBe("pending");
+
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0]?.[0]).toContain("mystery-job-status");
+    warn.mockRestore();
   });
 
   it("is idempotent", () => {
@@ -170,8 +206,14 @@ describe("deriveJobStatusFromTasks", () => {
     expect(deriveJobStatusFromTasks([{ state: "done" }, { state: "done" }])).toBe("complete");
   });
 
+  it("returns complete when all tasks are done or skipped", () => {
+    expect(deriveJobStatusFromTasks([{ state: "done" }, { state: "skipped" }])).toBe("complete");
+    expect(deriveJobStatusFromTasks([{ state: "skipped" }, { state: "skipped" }])).toBe("complete");
+  });
+
   it("returns pending when mixed with pending tasks", () => {
     expect(deriveJobStatusFromTasks([{ state: "pending" }, { state: "done" }])).toBe("pending");
+    expect(deriveJobStatusFromTasks([{ state: "skipped" }, { state: "pending" }])).toBe("pending");
   });
 
   it("returns pending for empty array", () => {
@@ -187,5 +229,10 @@ describe("deriveJobStatusFromTasks", () => {
     expect(
       deriveJobStatusFromTasks([{ state: "failed" }, { state: "running" }, { state: "done" }]),
     ).toBe("failed");
+  });
+
+  it("treats skipped as done-equivalent in status priority", () => {
+    expect(deriveJobStatusFromTasks([{ state: "skipped" }, { state: "failed" }])).toBe("failed");
+    expect(deriveJobStatusFromTasks([{ state: "skipped" }, { state: "running" }])).toBe("running");
   });
 });

@@ -1,5 +1,5 @@
-export type TaskStateValue = "pending" | "running" | "done" | "failed";
-export type JobStatusValue = "pending" | "running" | "failed" | "complete";
+export type TaskStateValue = "pending" | "running" | "done" | "failed" | "skipped";
+export type JobStatusValue = "pending" | "running" | "failed" | "complete" | "waiting";
 export type JobLocationValue = "pending" | "current" | "complete" | "rejected";
 
 export const TaskState = Object.freeze({
@@ -7,6 +7,7 @@ export const TaskState = Object.freeze({
   RUNNING: "running",
   DONE: "done",
   FAILED: "failed",
+  SKIPPED: "skipped",
 } as const satisfies Record<string, TaskStateValue>);
 
 export const JobStatus = Object.freeze({
@@ -14,6 +15,7 @@ export const JobStatus = Object.freeze({
   RUNNING: "running",
   FAILED: "failed",
   COMPLETE: "complete",
+  WAITING: "waiting",
 } as const satisfies Record<string, JobStatusValue>);
 
 export const JobLocation = Object.freeze({
@@ -28,6 +30,7 @@ export const VALID_TASK_STATES: ReadonlySet<string> = new Set<TaskStateValue>([
   TaskState.RUNNING,
   TaskState.DONE,
   TaskState.FAILED,
+  TaskState.SKIPPED,
 ]);
 
 export const VALID_JOB_STATUSES: ReadonlySet<string> = new Set<JobStatusValue>([
@@ -35,6 +38,7 @@ export const VALID_JOB_STATUSES: ReadonlySet<string> = new Set<JobStatusValue>([
   JobStatus.RUNNING,
   JobStatus.FAILED,
   JobStatus.COMPLETE,
+  JobStatus.WAITING,
 ]);
 
 export const VALID_JOB_LOCATIONS: ReadonlySet<string> = new Set<JobLocationValue>([
@@ -54,12 +58,28 @@ const JOB_STATUS_SYNONYMS: Readonly<Record<string, JobStatusValue>> = Object.fre
   error: "failed",
 });
 
+const warnedUnknownTaskStates = new Set<string>();
+const warnedUnknownJobStatuses = new Set<string>();
+
+function warnUnknownTaskState(state: string): void {
+  if (warnedUnknownTaskStates.has(state)) return;
+  warnedUnknownTaskStates.add(state);
+  console.warn(`Unknown task state "${state}"; coercing to "pending".`);
+}
+
+function warnUnknownJobStatus(status: string): void {
+  if (warnedUnknownJobStatuses.has(status)) return;
+  warnedUnknownJobStatuses.add(status);
+  console.warn(`Unknown job status "${status}"; coercing to "pending".`);
+}
+
 export function normalizeTaskState(state: unknown): TaskStateValue {
   if (typeof state !== "string") return "pending";
   const normalized = state.toLowerCase().trim();
   const synonym = TASK_STATE_SYNONYMS[normalized];
   if (synonym !== undefined) return synonym;
   if (VALID_TASK_STATES.has(normalized)) return normalized as TaskStateValue;
+  warnUnknownTaskState(normalized);
   return "pending";
 }
 
@@ -69,6 +89,7 @@ export function normalizeJobStatus(status: unknown): JobStatusValue {
   const synonym = JOB_STATUS_SYNONYMS[normalized];
   if (synonym !== undefined) return synonym;
   if (VALID_JOB_STATUSES.has(normalized)) return normalized as JobStatusValue;
+  warnUnknownJobStatus(normalized);
   return "pending";
 }
 
