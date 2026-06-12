@@ -1,6 +1,7 @@
 import Ajv from "ajv";
 import addFormats from "ajv-formats";
 import { getConfig } from "./config";
+import { isNonEmptyString, isPlainObject } from "./object-utils";
 
 export interface ValidationError {
   message: string;
@@ -137,16 +138,6 @@ export function validatePipeline(pipeline: unknown): ValidationResult {
   if (errors.length === 0) return { valid: true };
 
   return { valid: false, errors };
-}
-
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
-  const proto = Object.getPrototypeOf(value);
-  return proto === Object.prototype || proto === null;
-}
-
-function isNonEmptyString(value: unknown): value is string {
-  return typeof value === "string" && value.trim().length > 0;
 }
 
 function getPipelineTaskEntryName(task: unknown): string | null {

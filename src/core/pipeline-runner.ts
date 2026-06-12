@@ -361,7 +361,7 @@ async function applyControlFileIfPresent(args: {
     gate,
   });
 
-  if (directives.patch) {
+  if (directives.patch && patchResult.added.length > 0) {
     await appendRunEvent(args.config.workDir, {
       type: "patch_applied",
       task: args.taskName,
@@ -426,6 +426,14 @@ async function failControlValidation(args: {
 
   await releaseJobSlotBestEffort(args.dataDir, args.jobId);
   process.exit(1);
+}
+
+async function markControlRecoveryChecked(workDir: string, taskName: string): Promise<void> {
+  await writeJobStatus(workDir, (snapshot) => {
+    const taskEntry = snapshot.tasks[taskName];
+    if (!taskEntry || taskEntry.state !== TaskState.DONE || taskEntry.controlApplied === true) return;
+    taskEntry.controlApplied = true;
+  });
 }
 
 function buildGateInfo(
@@ -707,6 +715,7 @@ export async function runPipelineJob(jobId: string): Promise<void> {
               replayedControl = true;
               break;
             }
+            await markControlRecoveryChecked(config.workDir, taskName);
           } catch (error) {
             if (!(error instanceof ControlValidationError)) throw error;
             activeTaskName = null;
@@ -734,6 +743,10 @@ export async function runPipelineJob(jobId: string): Promise<void> {
 
     if (replayedControl) {
       continue;
+    }
+
+    if (startFromTask && !reachedStartFrom) {
+      throw new Error(`Start-from task no longer exists in pipeline: ${startFromTask}`);
     }
 
     if (selectedEntry === null) {

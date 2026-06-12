@@ -9,6 +9,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { initPATHS, resetPATHS } from "../config-bridge-node";
 import { handleGateDecision } from "../endpoints/gate-endpoints";
 import { resetConfig } from "../../../core/config";
+import { tryAcquireJobSlot } from "../../../core/job-concurrency";
 import { readJobStatus, type StatusSnapshot } from "../../../core/status-writer";
 
 const tempRoots: string[] = [];
@@ -111,7 +112,7 @@ describe("handleGateDecision", () => {
 
     const events = (await readFile(path.join(jobDir, "events.jsonl"), "utf8")).trim().split("\n").map((line) => JSON.parse(line) as Record<string, unknown>);
     expect(events).toHaveLength(1);
-    expect(events[0]).toMatchObject({ type: "gate_decided", action: "approve" });
+    expect(events[0]).toMatchObject({ type: "gate_decided", action: "approve", afterTask: "plan" });
   });
 
   it("rejects a gate by failing the job, appending an event, and not spawning", async () => {
@@ -138,7 +139,26 @@ describe("handleGateDecision", () => {
 
     const events = (await readFile(path.join(jobDir, "events.jsonl"), "utf8")).trim().split("\n").map((line) => JSON.parse(line) as Record<string, unknown>);
     expect(events).toHaveLength(1);
-    expect(events[0]).toMatchObject({ type: "gate_decided", action: "reject", note: "needs another pass" });
+    expect(events[0]).toMatchObject({ type: "gate_decided", action: "reject", afterTask: "plan", note: "needs another pass" });
+  });
+
+  it("returns 409 when another gate decision already holds the job slot", async () => {
+    const root = await makeTempRoot();
+    initPATHS(root);
+    await setupJob(root, "slot-held-job", makeSnapshot());
+    const lease = await tryAcquireJobSlot({
+      dataDir: path.join(root, "pipeline-data"),
+      jobId: "slot-held-job",
+      maxConcurrentJobs: 1,
+      source: "gate",
+    });
+    expect(lease.ok).toBe(true);
+
+    const res = await handleGateDecision("slot-held-job", gateRequest("slot-held-job", { action: "reject" }), root);
+    const body = await res.json() as Record<string, unknown>;
+
+    expect(res.status).toBe(409);
+    expect(body["code"]).toBe("job_running");
   });
 
   it("returns 409 when the job has no gate", async () => {

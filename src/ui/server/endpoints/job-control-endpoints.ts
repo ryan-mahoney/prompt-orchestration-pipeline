@@ -312,23 +312,34 @@ async function resetJobToSourceCleanSlate(dataDir: string, jobDir: string): Prom
     return reset;
   }
 
-  const { pipelineJsonPath } = getPipelineConfig(pipelineSlug, dataDir);
-  const normalizedPipeline = await materializeNormalizedPipelineDefinition(
-    pipelineJsonPath,
-    path.join(jobDir, "pipeline.json"),
-  );
-  const taskNames = normalizedPipeline.tasks.map((task) => task.name);
-
-  return writeJobStatus(jobDir, (current) => {
-    current.state = "pending";
-    current.current = null;
-    current.currentStage = null;
-    current.progress = 0;
-    current.gate = null;
-    current.tasks = Object.fromEntries(
-      taskNames.map((name) => [name, { state: "pending" as const }]),
+  try {
+    const { pipelineJsonPath } = getPipelineConfig(pipelineSlug, dataDir);
+    const normalizedPipeline = await materializeNormalizedPipelineDefinition(
+      pipelineJsonPath,
+      path.join(jobDir, "pipeline.json"),
     );
-  });
+    const taskNames = normalizedPipeline.tasks.map((task) => task.name);
+
+    return writeJobStatus(jobDir, (current) => {
+      current.state = "pending";
+      current.current = null;
+      current.currentStage = null;
+      current.progress = 0;
+      current.gate = null;
+      current.tasks = Object.fromEntries(
+        taskNames.map((name) => [name, { state: "pending" as const }]),
+      );
+    });
+  } catch (error) {
+    console.warn(`clean-slate restart could not re-materialize source pipeline "${pipelineSlug}"; falling back to status reset`, error);
+    const reset = await resetJobToCleanSlate(jobDir);
+    if (reset.gate) {
+      return writeJobStatus(jobDir, (current) => {
+        current.gate = null;
+      });
+    }
+    return reset;
+  }
 }
 
 function findRecoveryTask(snapshot: StatusSnapshot): string | null {

@@ -65,18 +65,16 @@ export async function handleGateDecision(
   if (!snapshot.gate) {
     return sendJson(409, createErrorResponse("no_pending_gate", `job "${jobId}" has no pending gate`));
   }
+  const pendingGate = snapshot.gate;
 
   const pid = await readRunnerPid(jobDir);
   if (pid !== null && isProcessAlive(pid)) {
     return sendJson(409, createErrorResponse("job_running", "Job is currently running (process alive)"));
   }
 
-  let slotAcquired = false;
-  if (body.action === "approve") {
-    const slot = await acquireConcurrencySlot(dataDir, jobId, "gate");
-    if (!slot.ok) return slot.response;
-    slotAcquired = true;
-  }
+  const slot = await acquireConcurrencySlot(dataDir, jobId, "gate");
+  if (!slot.ok) return slot.response;
+  let slotAcquired = true;
 
   try {
     await writeJobStatus(jobDir, (current) => {
@@ -96,12 +94,17 @@ export async function handleGateDecision(
     await appendRunEvent(jobDir, {
       type: "gate_decided",
       action: body.action,
+      afterTask: pendingGate.afterTask,
       ...(body.note === undefined ? {} : { note: body.note }),
       at: new Date().toISOString(),
     });
 
     if (body.action === "approve") {
       await spawnWithSlot(dataDir, jobId, jobDir);
+      slotAcquired = false;
+    } else {
+      const orchestrator = getOrchestratorConfig();
+      await releaseJobSlot(getPipelineDataDir(dataDir), jobId, orchestrator.lockFileTimeout);
       slotAcquired = false;
     }
   } catch (error) {

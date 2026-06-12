@@ -644,6 +644,54 @@ describe("handleJobRestart", () => {
     expect(snapshot!.tasks["inserted"]).toBeUndefined();
   });
 
+  it("clean-slate restart falls back to status reset when source pipeline cannot be loaded", async () => {
+    const root = await makeTempRoot();
+    initPATHS(root);
+
+    const jobDir = await setupJob(root, "restart-missing-source", {
+      id: "restart-missing-source",
+      pipeline: "deleted-pipeline",
+      state: "waiting",
+      current: "inserted",
+      currentStage: null,
+      lastUpdated: "2026-04-01T10:00:00.000Z",
+      gate: {
+        afterTask: "inserted",
+        message: "approve before continuing",
+        requestedAt: "2026-04-01T10:00:00.000Z",
+      },
+      tasks: {
+        research: { state: "done", currentStage: null },
+        inserted: { state: "pending", currentStage: null },
+      },
+      files: { artifacts: [], logs: [], tmp: [] },
+    });
+    await writeFile(path.join(jobDir, "pipeline.json"), JSON.stringify({
+      name: "deleted-pipeline",
+      tasks: [{ name: "research" }, { name: "inserted", task: "shared-task" }],
+    }));
+
+    mockRunnerSpawn();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+
+    const req = new Request("http://localhost/api/jobs/restart-missing-source/restart", { method: "POST" });
+    const res = await handleJobRestart(req, "restart-missing-source", root);
+    const body = await res.json() as Record<string, unknown>;
+
+    expect(res.status).toBe(202);
+    expect(body["mode"]).toBe("clean-slate");
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining("clean-slate restart could not re-materialize source pipeline"),
+      expect.any(Error),
+    );
+
+    const snapshot = await readJobStatus(jobDir);
+    expect(snapshot!.gate).toBeNull();
+    expect(Object.keys(snapshot!.tasks)).toEqual(["research", "inserted"]);
+    expect(snapshot!.tasks["research"]!.state).toBe("pending");
+    expect(snapshot!.tasks["inserted"]!.state).toBe("pending");
+  });
+
   it("fromTask restart preserves a patched per-run definition", async () => {
     const root = await makeTempRoot();
     initPATHS(root);

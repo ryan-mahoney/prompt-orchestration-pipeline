@@ -1,4 +1,5 @@
 import type { PipelineTaskEntry } from "./pipeline-runner";
+import { isNonEmptyString, isPlainObject } from "./object-utils";
 
 export interface ControlPatch {
   add: PipelineTaskEntry[];
@@ -295,14 +296,4 @@ function validateArtifactsShape(value: unknown, path: string, violations: string
       violations.push(`${path}[${index}] must be a string`);
     }
   });
-}
-
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
-  const proto = Object.getPrototypeOf(value);
-  return proto === Object.prototype || proto === null;
-}
-
-function isNonEmptyString(value: unknown): value is string {
-  return typeof value === "string" && value.trim().length > 0;
 }

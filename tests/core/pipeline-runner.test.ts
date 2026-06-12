@@ -915,6 +915,53 @@ describe("runPipelineJob", () => {
     expect(mockWriteJobStatus).not.toHaveBeenCalled();
   });
 
+  test("startFromTask removed after initial validation exits with an error", async () => {
+    const currentDir = join(tmpDir, "current");
+    const jobId = "job-start-from-removed";
+    const tasks = ["task-a", "task-b"];
+    await setupJob(currentDir, jobId, tasks);
+    const workDir = join(currentDir, jobId);
+
+    process.env["PO_CURRENT_DIR"] = currentDir;
+    process.env["PO_COMPLETE_DIR"] = join(tmpDir, "complete");
+    process.env["PO_PIPELINE_SLUG"] = "test-pipeline";
+    process.env["PO_START_FROM_TASK"] = "task-b";
+    process.env["PO_RUN_SINGLE_TASK"] = "true";
+
+    mockLoadFreshModule.mockImplementation(async (_path: string) => {
+      await writeFile(join(workDir, "pipeline.json"), JSON.stringify({ tasks: ["task-a"] }));
+      return {
+        default: {
+          "task-a": "./task-a.js",
+          "task-b": "./task-b.js",
+        },
+      };
+    });
+
+    let exitCode: number | undefined;
+    let consoleErrorMessage = "";
+    const consoleErrorSpy = spyOn(console, "error").mockImplementation((...args: unknown[]) => {
+      consoleErrorMessage = args.map(String).join(" ");
+    });
+    const exitSpy = spyOn(process, "exit").mockImplementation((code?: number) => {
+      exitCode = code;
+      throw new Error("process.exit called");
+    });
+
+    try {
+      await runPipelineJob(jobId);
+    } catch (e) {
+      expect((e as Error).message).toBe("process.exit called");
+    } finally {
+      exitSpy.mockRestore();
+      consoleErrorSpy.mockRestore();
+    }
+
+    expect(exitCode).toBe(1);
+    expect(consoleErrorMessage).toContain("Start-from task no longer exists in pipeline: task-b");
+    expect(mockRunPipeline).not.toHaveBeenCalled();
+  });
+
   test("runSingleTask without startFromTask: process.exit(1) called and error logged", async () => {
     const currentDir = join(tmpDir, "current");
     const jobId = "job-single-no-start";
@@ -1451,6 +1498,53 @@ describe("runPipelineJob", () => {
     expect(events[0]?.message).toContain("missing-task-key");
   });
 
+  test("invalid current-run patch replay rejects duplicate names and changed existing entries", async () => {
+    const currentDir = join(tmpDir, "current");
+    const jobId = "job-control-invalid-current-run";
+    const tasks = ["task-a", "task-b"];
+    await setupJob(currentDir, jobId, tasks);
+    const workDir = join(currentDir, jobId);
+    const pipelineBefore = await readFile(join(workDir, "pipeline.json"), "utf-8");
+
+    process.env["PO_CURRENT_DIR"] = currentDir;
+    process.env["PO_COMPLETE_DIR"] = join(tmpDir, "complete");
+    process.env["PO_PIPELINE_SLUG"] = "test-pipeline";
+
+    mockGetConfig.mockImplementation(() => ({ taskRunner: { maxAttempts: 3 } }));
+    mockRunPipeline.mockImplementation(async (_modulePath: string, ctx: unknown) => {
+      await writeFile(join((ctx as { taskDir: string }).taskDir, "control.json"), JSON.stringify({
+        patch: {
+          add: [
+            { name: "task-b", config: { changed: true } },
+            { name: "task-new" },
+            { name: "task-new" },
+          ],
+        },
+      }));
+      return {
+        ok: true as const,
+        logs: [] as Array<{ stage: string; ok: true; ms: number }>,
+        context: {} as Record<string, unknown>,
+        llmMetrics: [],
+      };
+    });
+
+    const exitCode = await runExpectingProcessExit(jobId);
+
+    expect(exitCode).toBe(1);
+    expect(mockRunPipeline).toHaveBeenCalledTimes(1);
+    expect(await readFile(join(workDir, "pipeline.json"), "utf-8")).toBe(pipelineBefore);
+
+    const status = JSON.parse(await readFile(join(workDir, "tasks-status.json"), "utf-8")) as {
+      tasks: Record<string, { state?: string; error?: { name?: string; message?: string } }>;
+    };
+    expect(status.tasks["task-a"]?.state).toBe("failed");
+    expect(status.tasks["task-a"]?.error?.name).toBe("ControlValidationError");
+    expect(status.tasks["task-a"]?.error?.message).toContain("already exists with different config");
+    expect(status.tasks["task-a"]?.error?.message).toContain("duplicated within the batch");
+    expect(status.tasks["task-new"]).toBeUndefined();
+  });
+
   test("valid patch inserts entries after insertAfter and creates pending status records in pipeline order", async () => {
     const currentDir = join(tmpDir, "current");
     const completeDir = join(tmpDir, "complete");
@@ -1597,6 +1691,13 @@ describe("runPipelineJob", () => {
       "inserted",
       "tail",
     ]);
+
+    const events = (await readFile(join(workDir, "events.jsonl"), "utf-8"))
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line) as { type?: string; added?: string[] });
+    expect(events.filter((event) => event.type === "patch_applied")).toHaveLength(1);
+    expect(events.find((event) => event.type === "patch_applied")?.added).toEqual(["inserted"]);
   });
 
   test("pre-applied patch with running emitter re-runs and completes without duplicate entries", async () => {
@@ -1664,6 +1765,38 @@ describe("runPipelineJob", () => {
     const plannerDir = join(workDir, "tasks", "planner");
     await mkdir(plannerDir, { recursive: true });
     await writeFile(join(plannerDir, "control.json"), "{ this would fail if read");
+
+    process.env["PO_CURRENT_DIR"] = currentDir;
+    process.env["PO_COMPLETE_DIR"] = completeDir;
+    process.env["PO_PIPELINE_SLUG"] = "test-pipeline";
+
+    const runOrder: string[] = [];
+    mockRunPipeline.mockImplementation(async (_modulePath: string, ctx: unknown) => {
+      runOrder.push((ctx as { taskName: string }).taskName);
+      return {
+        ok: true as const,
+        logs: [] as Array<{ stage: string; ok: true; ms: number }>,
+        context: {} as Record<string, unknown>,
+        llmMetrics: [],
+      };
+    });
+
+    await runPipelineJob(jobId);
+
+    expect(runOrder).toEqual(["tail"]);
+    const completedStatus = JSON.parse(await readFile(join(completeDir, jobId, "tasks-status.json"), "utf-8")) as {
+      tasks: Record<string, { state?: string; controlApplied?: boolean }>;
+    };
+    expect(completedStatus.tasks["planner"]).toMatchObject({ state: "done", controlApplied: true });
+    expect(completedStatus.tasks["tail"]?.state).toBe("done");
+  });
+
+  test("done task without control file is marked checked during recovery", async () => {
+    const currentDir = join(tmpDir, "current");
+    const completeDir = join(tmpDir, "complete");
+    const jobId = "job-control-no-file-checked";
+    const tasks = ["planner", "tail"];
+    await setupJob(currentDir, jobId, tasks, { planner: "done" });
 
     process.env["PO_CURRENT_DIR"] = currentDir;
     process.env["PO_COMPLETE_DIR"] = completeDir;
