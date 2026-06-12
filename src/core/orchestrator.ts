@@ -111,7 +111,7 @@ import { getConfig, getOrchestratorConfig, getPipelineConfig } from "./config";
 import { buildReexecArgs } from "../cli/self-reexec";
 import { writeJobStatus } from "./status-writer";
 import { initializeStatusFromArtifacts } from "./status-initializer";
-import { normalizeTaskEntry, type PipelineDefinition, type PipelineTaskEntry } from "./pipeline-runner";
+import { materializeNormalizedPipelineDefinition } from "./pipeline-definition";
 import {
   listQueuedSeeds,
   releaseJobSlot,
@@ -271,13 +271,11 @@ async function scaffoldJobDir(
   let pipelineTasks: string[] = [];
   try {
     const pipelineCfg = getPipelineConfig(seed.pipeline);
-    const pipelineJson = JSON.parse(await Bun.file(pipelineCfg.pipelineJsonPath).text()) as PipelineDefinition;
-    if (Array.isArray(pipelineJson["tasks"])) {
-      const normalizedTasks = (pipelineJson["tasks"] as Array<string | PipelineTaskEntry>).map(normalizeTaskEntry);
-      const normalizedPipeline = { ...pipelineJson, tasks: normalizedTasks };
-      pipelineTasks = normalizedTasks.map((task) => task.name).filter(Boolean);
-      await Bun.write(join(jobDir, "pipeline.json"), JSON.stringify(normalizedPipeline, null, 2));
-    }
+    const normalizedPipeline = await materializeNormalizedPipelineDefinition(
+      pipelineCfg.pipelineJsonPath,
+      join(jobDir, "pipeline.json"),
+    );
+    pipelineTasks = normalizedPipeline.tasks.map((task) => task.name).filter(Boolean);
   } catch {
     logger.warn(`could not read pipeline config for ${seed.pipeline}; tasks will start empty`);
   }

@@ -18,22 +18,18 @@ import { TaskState, normalizeTaskState } from "../config/statuses";
 import { releaseJobSlot } from "./job-concurrency";
 import { ControlValidationError, parseControlFile, validateControlDirectives, type ControlDirectives } from "./control";
 import { appendRunEvent } from "./run-events";
+import {
+  getTaskName,
+  normalizePipelineTasks,
+  normalizeTaskEntry,
+  type PipelineDefinition,
+  type PipelineTaskEntry,
+} from "./pipeline-definition";
+
+export { getTaskName, normalizeTaskEntry };
+export type { PipelineDefinition, PipelineTaskEntry };
 
 // ─── Type definitions ─────────────────────────────────────────────────────────
-
-/** Pipeline definition read from pipeline.json. */
-export interface PipelineTaskEntry {
-  name: string;
-  task?: string;
-  config?: Record<string, unknown>;
-  gate?: boolean | { message?: string; artifacts?: string[] };
-}
-
-export interface PipelineDefinition {
-  tasks: Array<string | PipelineTaskEntry>;
-  llm?: Record<string, unknown> | null;
-  taskConfig?: Record<string, Record<string, unknown>>;
-}
 
 /** Task registry: maps task names to module file paths. */
 export type TaskRegistry = Record<string, string>;
@@ -147,20 +143,6 @@ export interface ResolvedJobConfig {
 }
 
 // ─── Helper functions ─────────────────────────────────────────────────────────
-
-/** Extracts the task name from either a plain string or a named task object. */
-export function normalizeTaskEntry(task: string | PipelineTaskEntry): PipelineTaskEntry {
-  return typeof task === "string" ? { name: task } : task;
-}
-
-/** Extracts the task name from either a plain string or a named task object. */
-export function getTaskName(task: string | PipelineTaskEntry): string {
-  return normalizeTaskEntry(task).name;
-}
-
-function normalizePipelineTasks(pipeline: PipelineDefinition): PipelineTaskEntry[] {
-  return pipeline.tasks.map(normalizeTaskEntry);
-}
 
 async function loadDoneArtifact(
   workDir: string,
