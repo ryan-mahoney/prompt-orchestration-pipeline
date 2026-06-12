@@ -28,6 +28,8 @@ Based on an analysis of the application's pages (`src/pages`), the following key
 *   **Job Execution Management**:
     *   **Stop Job**: Functionality to safely stop running jobs (`StopJobModal` in `PipelineDetail.jsx`).
     *   **Rescan Job**: Ability to trigger a rescan of a job's status/tasks to sync with the backend.
+    *   **Gate Decisions**: Waiting jobs expose Approve gate and Reject gate controls in the job detail view.
+    *   **Restart Modes**: Clean-slate restart re-materializes the source pipeline, while task-level restarts preserve per-run mutations.
 
 ## 4. Developer Experience & Documentation
 *   **API Reference**: A dedicated documentation page (`Code.jsx`) that provides comprehensive guides for developers building tasks, including:
@@ -49,8 +51,11 @@ Based on an analysis of the application's pages (`src/pages`), the following key
     *   **Standardized Task Lifecycle**: A rigid 11-stage lifecycle (Ingestion → ... → Integration) enforces consistency and enables advanced features like "Refine Loops" and "Critique".
     *   **Resumability**: Built-in support for restarting jobs from specific tasks (`resetJobFromTask`), preserving previously completed work.
     *   **Lifecycle Policies**: Pre-execution checks that allow for controlled pauses or stops based on job state.
+    *   **Pipeline Control Primitives**: Successful tasks can append new steps, skip pending downstream tasks, or pause the run behind a human approval gate.
 *   **Data & State Management**:
     *   **Atomic Status Updates**: State changes are written atomically to `tasks-status.json`, preventing race conditions.
+    *   **Per-Run Definitions**: Each job receives its own `pipeline.json` copy so dynamic run changes do not mutate shared pipeline config.
+    *   **Run Event Lineage**: `events.jsonl` records patch, skip, gate-created, gate-decided, and invalid-control events for audit/debugging.
     *   **Real-Time Observability**: State changes trigger Server-Sent Events (SSE), powering live UI updates without polling.
     *   **Artifact Management**: dedicated handling for job inputs (seeds), outputs (artifacts), and execution logs.
 

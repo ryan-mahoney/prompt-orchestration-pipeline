@@ -8,6 +8,7 @@ import {
   Database,
   FileText,
   Folder,
+  GitBranch,
   Key,
   Shield,
 } from "lucide-react";
@@ -62,6 +63,7 @@ const SECTIONS: readonly Section[] = [
   { id: "environment", label: "Environment", icon: Key },
   { id: "getting-started", label: "Getting Started", icon: FileText },
   { id: "pipeline-config", label: "Pipeline Config", icon: Folder },
+  { id: "run-control", label: "Run Control", icon: GitBranch },
   { id: "io-api", label: "IO API", icon: Database },
   { id: "llm-api", label: "LLM API", icon: Cpu },
   { id: "validation", label: "Validation", icon: Shield },
@@ -71,8 +73,13 @@ const SAMPLE_PIPELINE_JSON = {
   name: "content-generation",
   version: "1.0.0",
   description: "Demo pipeline showcasing multi-stage LLM workflows",
-  tasks: ["research", "analysis", "synthesis", "formatting"],
-  taskConfig: { research: { maxRetries: 3 } },
+  tasks: [
+    "research",
+    { name: "analysis", task: "analysis", config: { depth: "full" } },
+    { name: "review", gate: { message: "Approve synthesis inputs" } },
+    "synthesis",
+  ],
+  taskConfig: { analysis: { maxRetries: 3 } },
   llm: { provider: "anthropic", model: "claude-sonnet-4-20250514" },
 };
 
@@ -80,10 +87,29 @@ const PIPELINE_FIELDS: readonly PipelineField[] = [
   { name: "name", required: true, type: "string", description: "Unique identifier for the pipeline. Used to reference this pipeline from seed files." },
   { name: "version", required: false, type: "string", description: 'Semantic version of the pipeline (e.g., "1.0.0"). Useful for tracking changes.' },
   { name: "description", required: false, type: "string", description: "Human-readable description of what this pipeline does." },
-  { name: "tasks", required: true, type: "string[]", description: "Ordered array of task names to execute. Each task must be registered in the task index." },
+  { name: "tasks", required: true, type: "Array<string | task entry>", description: "Ordered task list. Object entries support a unique name, shared task key, per-entry config, and optional gate." },
   { name: "taskConfig", required: false, type: "object", description: "Per-task configuration overrides. Keys are task names, values are config objects passed to stages." },
   { name: "llm", required: false, type: "{ provider, model }", description: "Pipeline-level LLM override. When set, ALL task LLM calls are routed to this provider/model.", isNew: true },
 ];
+
+const CONTROL_DIRECTIVE_CODE = `export const integration = async ({ io, flags }) => {
+  await Bun.write(\`\${io.getTaskDir()}/control.json\`, JSON.stringify({
+    patch: {
+      add: [
+        { name: "implement-step-2", task: "implementation-step", config: { step: 2 } }
+      ]
+    },
+    skip: [
+      { task: "optional-review", reason: "No review required for this run" }
+    ],
+    pause: {
+      message: "Approve generated implementation plan",
+      artifacts: ["output.json"]
+    }
+  }, null, 2));
+
+  return { output: {}, flags };
+};`;
 
 const WRITE_FUNCTIONS: readonly IOFunction[] = [
   { name: "writeArtifact", description: "Persist output files for downstream tasks", params: 'name, content, { mode?: "replace"|"append" }', returns: "Promise<string>", path: "{workDir}/files/artifacts" },
@@ -545,6 +571,72 @@ export default function Code() {
                 <div className="text-sm text-gray-500">
                   <span>Location: </span>
                   <code className="font-mono text-sm">{"{pipelineDir}"}/pipeline.json</code>
+                </div>
+              </div>
+            </CollapsibleSection>
+          </div>
+
+          {/* ── Run Control ─────────────────────────────────────── */}
+          <div id="run-control" ref={sectionRef("run-control")} className="scroll-mt-24">
+            <CollapsibleSection
+              id="run-control"
+              title="Run Control"
+              icon={GitBranch}
+              isOpen={openSections["run-control"]}
+              onToggle={() => toggle("run-control")}
+            >
+              <p className="text-base text-gray-600 mb-4">
+                A task can write <code className="text-sm font-mono">control.json</code> in its
+                task directory after it succeeds. The runner validates the file, then applies the
+                requested run changes atomically.
+              </p>
+
+              <div className="space-y-6">
+                <div>
+                  <span className="text-sm font-medium mb-3 block">Directives</span>
+                  <div className="border border-gray-200 rounded-md overflow-hidden">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr>
+                          <th className="bg-gray-50 px-4 py-3 text-left font-medium">Directive</th>
+                          <th className="bg-gray-50 px-4 py-3 text-left font-medium">Effect</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr className="border-t border-gray-100">
+                          <td className="px-4 py-3"><code className="text-sm font-mono">patch.add</code></td>
+                          <td className="px-4 py-3 text-gray-600">Adds task entries to the current run&apos;s per-run pipeline definition.</td>
+                        </tr>
+                        <tr className="border-t border-gray-100">
+                          <td className="px-4 py-3"><code className="text-sm font-mono">patch.insertAfter</code></td>
+                          <td className="px-4 py-3 text-gray-600">Optional insertion point; defaults to the task that wrote the control file.</td>
+                        </tr>
+                        <tr className="border-t border-gray-100">
+                          <td className="px-4 py-3"><code className="text-sm font-mono">skip</code></td>
+                          <td className="px-4 py-3 text-gray-600">Marks later pending tasks as skipped; skipped tasks satisfy dependency checks.</td>
+                        </tr>
+                        <tr className="border-t border-gray-100">
+                          <td className="px-4 py-3"><code className="text-sm font-mono">pause</code></td>
+                          <td className="px-4 py-3 text-gray-600">Puts the job in waiting state and shows Approve gate / Reject gate controls.</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <div>
+                  <span className="text-sm font-medium mb-2 block">Example</span>
+                  <CopyableCodeBlock maxHeight="320px">{CONTROL_DIRECTIVE_CODE}</CopyableCodeBlock>
+                </div>
+
+                <div className="bg-gray-50 border border-gray-200 rounded-md p-4">
+                  <span className="text-sm font-medium text-gray-900">Validation rules</span>
+                  <ul className="mt-2 space-y-1 text-sm text-gray-700">
+                    <li>Added task names must be unique and registered by task key.</li>
+                    <li>Skipped tasks and insertion targets must be later pending tasks.</li>
+                    <li>Invalid control files fail the emitting task with <code className="font-mono text-xs">ControlValidationError</code> and do not burn task retries.</li>
+                    <li><code className="font-mono text-xs">events.jsonl</code> records lineage; <code className="font-mono text-xs">tasks-status.json</code> and per-run <code className="font-mono text-xs">pipeline.json</code> remain the source of truth.</li>
+                  </ul>
                 </div>
               </div>
             </CollapsibleSection>

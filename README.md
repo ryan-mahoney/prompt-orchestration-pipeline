@@ -24,11 +24,13 @@ This framework is designed for AI Engineers and Systems Integrators who need to 
 Running long-duration AI tasks locally can be fragile. A single script crash or API timeout can waste hours of execution and dollars in token costs.
 *   **Process Isolation**: Every pipeline runs in its own dedicated child process. If one agent crashes, your orchestrator stays alive.
 *   **Resumability**: Pause, stop, and resume jobs from any specific task. Fix a bug in step 5 and restart exactly where you left off.
+*   **Run Control**: Tasks can pause for human approval, skip downstream work, or add follow-up tasks to the current run.
 *   **Atomic State**: Every stage transition is saved to disk instantly. You never lose progress.
 
 ### 2. Gain Radical Observability
 "Black box" agents are impossible to debug. POP provides deep visibility into the "thought process" of your pipelines.
 *   **Real-Time Dashboard**: Watch jobs progress stage-by-stage via a built-in UI (Server-Sent Events).
+*   **Gate Decisions**: Approve or reject waiting jobs directly from the job detail view.
 *   **Granular Logging**: Every input, output, and internal thought is captured in dedicated log files.
 *   **Cost Tracking**: See exact token usage and cost breakdown for every task and model call.
 
@@ -79,6 +81,7 @@ The system comprises three main runtime containers:
 Inside the **Pipeline Runner**, the logic is structured into:
 
 *   **Task Runner**: The engine that drives a specific task (e.g., "Research") through the standardized lifecycle.
+*   **Run Control Contract**: A task can write `tasks/{taskName}/control.json` to append tasks, skip pending tasks, or create an approval gate after it succeeds.
 *   **LLM Layer**: A unified abstraction for all model providers, handling retries, cost calculation, and normalization.
 *   **Symlink Bridge**: A specialized component that ensures every task has deterministic access to `node_modules` and shared utilities, regardless of where it is defined on disk.
 *   **Status Writer**: An atomic file-writer that updates `tasks-status.json` safely, preventing data corruption.
