@@ -2019,6 +2019,73 @@ describe("runPipelineJob", () => {
     expect(mockRunPipeline).toHaveBeenCalledTimes(1);
   });
 
+  test("control run writes patch, skip, and gate events in order", async () => {
+    const currentDir = join(tmpDir, "current");
+    const jobId = "job-control-event-order";
+    const tasks = ["planner", "optional", "tail"];
+    await setupJob(currentDir, jobId, tasks);
+    const workDir = join(currentDir, jobId);
+
+    process.env["PO_CURRENT_DIR"] = currentDir;
+    process.env["PO_COMPLETE_DIR"] = join(tmpDir, "complete");
+    process.env["PO_PIPELINE_SLUG"] = "test-pipeline";
+
+    mockLoadFreshModule.mockImplementation(async (_path: string) => ({
+      default: {
+        planner: "./planner.js",
+        inserted: "./inserted.js",
+        optional: "./optional.js",
+        tail: "./tail.js",
+      },
+    }));
+
+    mockRunPipeline.mockImplementation(async (_modulePath: string, ctx: unknown) => {
+      const taskCtx = ctx as { taskName: string; taskDir: string };
+      if (taskCtx.taskName === "planner") {
+        await writeFile(join(taskCtx.taskDir, "control.json"), JSON.stringify({
+          patch: { add: [{ name: "inserted" }] },
+          skip: [{ task: "optional", reason: "Covered by inserted task" }],
+          pause: { message: "Review inserted task" },
+        }));
+      }
+      return {
+        ok: true as const,
+        logs: [] as Array<{ stage: string; ok: true; ms: number }>,
+        context: {} as Record<string, unknown>,
+        llmMetrics: [],
+      };
+    });
+
+    await runPipelineJob(jobId);
+
+    const events = (await readFile(join(workDir, "events.jsonl"), "utf-8"))
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line) as {
+        type?: string;
+        task?: string;
+        added?: string[];
+        skipped?: Array<{ task: string; reason: string }>;
+        afterTask?: string;
+        message?: string;
+      });
+
+    expect(events.map((event) => event.type)).toEqual([
+      "patch_applied",
+      "skip_applied",
+      "gate_created",
+    ]);
+    expect(events[0]).toMatchObject({ task: "planner", added: ["inserted"] });
+    expect(events[1]).toMatchObject({
+      task: "planner",
+      skipped: [{ task: "optional", reason: "Covered by inserted task" }],
+    });
+    expect(events[2]).toMatchObject({
+      afterTask: "planner",
+      message: "Review inserted task",
+    });
+  });
+
   // ─── Step 9: top-level error handling ────────────────────────────────────
 
   test("unexpected error: console.error is called and process.exit(1) is invoked", async () => {
