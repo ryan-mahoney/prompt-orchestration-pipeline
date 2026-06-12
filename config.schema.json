@@ -3,6 +3,83 @@
   "title": "Prompt Orchestration Pipeline Configuration",
   "description": "Configuration schema for the Prompt Orchestration Pipeline",
   "type": "object",
+  "definitions": {
+    "pipelineTaskEntry": {
+      "type": "object",
+      "required": ["name"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "task": {
+          "type": "string",
+          "minLength": 1
+        },
+        "config": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "gate": {
+          "oneOf": [
+            { "type": "boolean" },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "message": {
+                  "type": "string"
+                },
+                "artifacts": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "pipelineDefinition": {
+      "type": "object",
+      "required": ["name", "tasks"],
+      "additionalProperties": true,
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "tasks": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "oneOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "$ref": "#/definitions/pipelineTaskEntry"
+              }
+            ]
+          }
+        },
+        "llm": {
+          "type": ["object", "null"],
+          "additionalProperties": true
+        },
+        "taskConfig": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      }
+    }
+  },
   "properties": {
     "orchestrator": {
       "type": "object",

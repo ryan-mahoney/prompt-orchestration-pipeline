@@ -19,8 +19,15 @@ import { releaseJobSlot } from "./job-concurrency";
 // ─── Type definitions ─────────────────────────────────────────────────────────
 
 /** Pipeline definition read from pipeline.json. */
+export interface PipelineTaskEntry {
+  name: string;
+  task?: string;
+  config?: Record<string, unknown>;
+  gate?: boolean | { message?: string; artifacts?: string[] };
+}
+
 export interface PipelineDefinition {
-  tasks: Array<string | { name: string }>;
+  tasks: Array<string | PipelineTaskEntry>;
   llm?: Record<string, unknown> | null;
   taskConfig?: Record<string, Record<string, unknown>>;
 }
@@ -45,7 +52,7 @@ export interface TaskExecutionContext {
   jobId: string;
   llmOverride: Record<string, unknown> | null;
   meta: {
-    pipelineTasks: Array<string | { name: string }>;
+    pipelineTasks: Array<string | PipelineTaskEntry>;
   };
 }
 
@@ -139,8 +146,13 @@ export interface ResolvedJobConfig {
 // ─── Helper functions ─────────────────────────────────────────────────────────
 
 /** Extracts the task name from either a plain string or a named task object. */
-export function getTaskName(task: string | { name: string }): string {
-  return typeof task === "string" ? task : task.name;
+export function normalizeTaskEntry(task: string | PipelineTaskEntry): PipelineTaskEntry {
+  return typeof task === "string" ? { name: task } : task;
+}
+
+/** Extracts the task name from either a plain string or a named task object. */
+export function getTaskName(task: string | PipelineTaskEntry): string {
+  return normalizeTaskEntry(task).name;
 }
 
 /** Normalizes any thrown value into a serializable NormalizedError. */

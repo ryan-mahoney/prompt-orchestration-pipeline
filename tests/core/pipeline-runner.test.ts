@@ -109,10 +109,27 @@ mock.module("../../src/core/file-io", () => ({
   generateLogName: mockGenerateLogName,
 }));
 
-import { getTaskName, normalizeError, resolveJobConfig, writePidFile, cleanupPidFileSync, loadPipeline, loadTaskRegistry, runPipelineJob, completeJob, isDirectSourceExecution } from "../../src/core/pipeline-runner";
-import type { ResolvedJobConfig, JobStatus } from "../../src/core/pipeline-runner";
+import { getTaskName, normalizeTaskEntry, normalizeError, resolveJobConfig, writePidFile, cleanupPidFileSync, loadPipeline, loadTaskRegistry, runPipelineJob, completeJob, isDirectSourceExecution } from "../../src/core/pipeline-runner";
+import type { ResolvedJobConfig, JobStatus, PipelineTaskEntry } from "../../src/core/pipeline-runner";
 
-// ─── getTaskName ──────────────────────────────────────────────────────────────
+// ─── Task entry helpers ───────────────────────────────────────────────────────
+
+describe("normalizeTaskEntry", () => {
+  test("converts a string task to a named task entry", () => {
+    expect(normalizeTaskEntry("myTask")).toEqual({ name: "myTask" });
+  });
+
+  test("returns an object task entry with task, config, and gate intact", () => {
+    const entry: PipelineTaskEntry = {
+      name: "impl-step-2",
+      task: "spec-run-step",
+      config: { step: 2 },
+      gate: { message: "Review implementation", artifacts: ["tasks/impl-step-2/output.json"] },
+    };
+
+    expect(normalizeTaskEntry(entry)).toBe(entry);
+  });
+});
 
 describe("getTaskName", () => {
   test("returns the string as-is when passed a string", () => {
@@ -120,7 +137,7 @@ describe("getTaskName", () => {
   });
 
   test("returns the name property when passed an object with name", () => {
-    expect(getTaskName({ name: "myTask" })).toBe("myTask");
+    expect(getTaskName({ name: "myTask", task: "sharedTask", config: { role: "test" }, gate: true })).toBe("myTask");
   });
 });
 
@@ -563,7 +580,7 @@ describe("runPipelineJob", () => {
   async function setupJob(
     currentDir: string,
     jobId: string,
-    tasks: Array<string | { name: string }>,
+    tasks: Array<string | PipelineTaskEntry>,
     taskStates: Record<string, string> = {}
   ): Promise<void> {
     const workDir = join(currentDir, jobId);
