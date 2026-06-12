@@ -89,6 +89,7 @@ export default function DAGGrid({
   const [lines, setLines] = useState<ConnectorLine[]>([]);
   const [effectiveCols, setEffectiveCols] = useState(cols);
   const reducedMotion = checkReducedMotion();
+  const itemStatusKey = items.map((item) => `${item.id}:${item.status}`).join("|");
 
   const visualOrder = useMemo(() => computeVisualOrder(items.length, effectiveCols), [effectiveCols, items.length]);
   const openItem = openIndex === null ? null : items[openIndex];
@@ -119,7 +120,7 @@ export default function DAGGrid({
     };
 
     return deriveAllowedActions(adaptedJob, pipelineTasks);
-  }, [items, jobId, pipelineTasks]);
+  }, [items, itemStatusKey, jobId, pipelineTasks]);
 
   const pushAlert = (type: "success" | "error" | "warning", message: string) => {
     setAlert({ type, message });

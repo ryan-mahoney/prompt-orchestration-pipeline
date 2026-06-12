@@ -41,7 +41,7 @@ Users can identify waiting jobs, inspect pending gates, approve or reject gates 
 
 - AC-S12-1: `JobDetail` renders a gate banner when `job.gate` is present, including the message, `afterTask`, one link per artifact, "Approve gate", and "Reject gate".
 - AC-S12-2: Clicking "Approve gate" calls `decideGate(job.id, "approve")`; buttons are disabled while the request is in flight.
-- AC-S12-3: Clicking "Reject gate" prompts for an optional note and calls `decideGate(job.id, "reject", note)`; an empty/cancelled note is omitted.
+- AC-S12-3: Clicking "Reject gate" prompts for an optional note and calls `decideGate(job.id, "reject", note)`; an empty note is omitted, and a cancelled prompt aborts the rejection.
 - AC-S12-4: `DAGGrid` renders a skipped item with visible "Skipped" text and muted styling distinct from pending/done.
 - AC-S12-5: `DAGGrid` renders a waiting item with visible "Waiting" text and an amber gate/waiting style distinct from pending/done.
 - AC-S12-6: `JobTable` renders a waiting status badge, and waiting progress does not use the running progress variant.

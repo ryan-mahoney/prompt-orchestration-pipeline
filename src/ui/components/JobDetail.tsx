@@ -69,10 +69,12 @@ export default function JobDetail({
   const gate = job.gate ?? null;
 
   const submitGateDecision = (action: GateDecisionAction) => {
-    const note = action === "reject" ? window.prompt("Reject note (optional)") : undefined;
+    const rawNote = action === "reject" ? window.prompt("Reject note (optional)") : undefined;
+    if (action === "reject" && rawNote === null) return;
+    const note = rawNote?.trim() ? rawNote.trim() : undefined;
     setGateSubmitting(action);
     setGateAlert(null);
-    void decideGate(job.id, action, note?.trim() ? note.trim() : undefined)
+    void decideGate(job.id, action, note)
       .then(() => {
         setGateAlert({ type: "success", message: action === "approve" ? "Gate approved." : "Gate rejected." });
       })

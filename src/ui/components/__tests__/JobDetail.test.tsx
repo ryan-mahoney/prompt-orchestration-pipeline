@@ -114,3 +114,26 @@ test("JobDetail rejects a gate with an optional note", async () => {
     window.prompt = originalPrompt;
   }
 });
+
+test("JobDetail cancels gate rejection when the prompt is cancelled", () => {
+  const originalPrompt = window.prompt;
+  window.prompt = mock(() => null) as unknown as typeof window.prompt;
+
+  try {
+    const view = render(<JobDetail job={{
+      ...makeJob(0),
+      status: "waiting",
+      gate: {
+        afterTask: "build",
+        message: "Review build output",
+        requestedAt: "2026-06-12T12:00:00.000Z",
+      },
+    }} pipeline={pipeline} />);
+
+    fireEvent.click(view.getByRole("button", { name: "Reject gate" }));
+
+    expect(decideGateMock).not.toHaveBeenCalled();
+  } finally {
+    window.prompt = originalPrompt;
+  }
+});
