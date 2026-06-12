@@ -692,7 +692,7 @@ describe("handleJobRestart", () => {
     expect(snapshot!.tasks["inserted"]!.state).toBe("pending");
   });
 
-  it("fromTask restart preserves a patched per-run definition", async () => {
+  it("fromTask restart preserves a patched per-run definition and clears stale gates", async () => {
     const root = await makeTempRoot();
     initPATHS(root);
     await setupPipelineConfig(root, "mutable-pipeline", ["research", "analysis"]);
@@ -700,9 +700,14 @@ describe("handleJobRestart", () => {
     const jobDir = await setupJob(root, "restart-mutated-from-task", {
       id: "restart-mutated-from-task",
       pipeline: "mutable-pipeline",
-      state: "failed",
+      state: "waiting",
       current: "inserted",
       currentStage: null,
+      gate: {
+        afterTask: "research",
+        message: "Approve generated steps",
+        requestedAt: "2026-06-12T12:00:00.000Z",
+      },
       lastUpdated: "2026-04-01T10:00:00.000Z",
       tasks: {
         research: { state: "done", currentStage: null },
@@ -731,9 +736,54 @@ describe("handleJobRestart", () => {
 
     const snapshot = await readJobStatus(jobDir);
     expect(Object.keys(snapshot!.tasks)).toEqual(["research", "inserted", "analysis"]);
+    expect(snapshot!.state).toBe("pending");
+    expect(snapshot!.gate).toBeNull();
     expect(snapshot!.tasks["research"]!.state).toBe("done");
     expect(snapshot!.tasks["inserted"]!.state).toBe("pending");
     expect(snapshot!.tasks["analysis"]!.state).toBe("pending");
+  });
+
+  it("single-task restart clears a stale gate before spawning", async () => {
+    const root = await makeTempRoot();
+    initPATHS(root);
+    await setupPipelineConfig(root, "single-task-gate-pipeline", ["review", "deploy"]);
+
+    const jobDir = await setupJob(root, "restart-single-task-gate", {
+      id: "restart-single-task-gate",
+      pipeline: "single-task-gate-pipeline",
+      state: "waiting",
+      current: null,
+      currentStage: null,
+      gate: {
+        afterTask: "review",
+        message: "Approve review",
+        requestedAt: "2026-06-12T12:00:00.000Z",
+      },
+      lastUpdated: "2026-04-01T10:00:00.000Z",
+      tasks: {
+        review: { state: "done", currentStage: null },
+        deploy: { state: "pending", currentStage: null },
+      },
+      files: { artifacts: [], logs: [], tmp: [] },
+    });
+
+    mockRunnerSpawn();
+
+    const req = new Request("http://localhost/api/jobs/restart-single-task-gate/restart", {
+      method: "POST",
+      body: JSON.stringify({ fromTask: "deploy", singleTask: true }),
+    });
+    const res = await handleJobRestart(req, "restart-single-task-gate", root);
+    const body = await res.json() as Record<string, unknown>;
+
+    expect(res.status).toBe(202);
+    expect(body["mode"]).toBe("single-task");
+
+    const snapshot = await readJobStatus(jobDir);
+    expect(snapshot!.state).toBe("pending");
+    expect(snapshot!.gate).toBeNull();
+    expect(snapshot!.tasks["review"]!.state).toBe("done");
+    expect(snapshot!.tasks["deploy"]!.state).toBe("pending");
   });
 });
 

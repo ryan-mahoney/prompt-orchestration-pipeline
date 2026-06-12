@@ -342,6 +342,17 @@ async function resetJobToSourceCleanSlate(dataDir: string, jobDir: string): Prom
   }
 }
 
+async function clearGateForRestart(jobDir: string): Promise<void> {
+  await writeJobStatus(jobDir, (current) => {
+    current.gate = null;
+    if (current.state === "waiting") {
+      current.state = "pending";
+      current.current = null;
+      current.currentStage = null;
+    }
+  });
+}
+
 function findRecoveryTask(snapshot: StatusSnapshot): string | null {
   const taskIds = Object.keys(snapshot.tasks);
   if (taskIds.length === 0) return null;
@@ -542,6 +553,7 @@ export async function handleJobRestart(
           await resetJobFromTask(jobDir, fromTask);
           mode = continueAfter ? "from-task-continue" : "from-task";
         }
+        await clearGateForRestart(jobDir);
       } else {
         await resetJobToSourceCleanSlate(dataDir, jobDir);
         mode = "clean-slate";
