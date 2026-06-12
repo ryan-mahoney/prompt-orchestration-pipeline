@@ -3,9 +3,16 @@ import { basename, join } from "node:path";
 import { createJobLogger } from "./logger";
 import type { NormalizedError } from "./pipeline-runner";
 
-export type JobState = "pending" | "running" | "done" | "failed";
+export type JobState = "pending" | "running" | "waiting" | "done" | "failed";
 
 type TaskState = "pending" | "running" | "done" | "failed";
+
+export interface GateInfo {
+  afterTask: string;
+  message: string;
+  artifacts?: string[];
+  requestedAt: string;
+}
 
 export interface FilesManifest {
   artifacts: string[];
@@ -27,6 +34,9 @@ export interface TaskEntry {
   tokenUsage?: unknown[];
   startedAt?: string;
   endedAt?: string;
+  skipReason?: string;
+  skippedBy?: string;
+  controlApplied?: boolean;
   stageLogPath?: string;
   errorContext?: Record<string, unknown>;
   files?: FilesManifest;
@@ -42,6 +52,7 @@ export interface StatusSnapshot {
   progress?: number;
   tasks: Record<string, TaskEntry>;
   files: FilesManifest;
+  gate?: GateInfo | null;
   lifecycleBlockReason?: string;
   lifecycleBlockTaskId?: string;
   lifecycleBlockOp?: string;
@@ -119,6 +130,9 @@ export function validateStatusSnapshot(snapshot: unknown, jobDir: string): Statu
   if (typeof s["currentStage"] !== "string" && s["currentStage"] !== null) s["currentStage"] = null;
   if (typeof s["lastUpdated"] !== "string") s["lastUpdated"] = new Date().toISOString();
   if (typeof s["tasks"] !== "object" || s["tasks"] === null || Array.isArray(s["tasks"])) s["tasks"] = {};
+  if ("gate" in s && s["gate"] !== null && (typeof s["gate"] !== "object" || Array.isArray(s["gate"]))) {
+    delete s["gate"];
+  }
 
   if (typeof s["files"] !== "object" || s["files"] === null || Array.isArray(s["files"])) {
     s["files"] = { artifacts: [], logs: [], tmp: [] };

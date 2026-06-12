@@ -3,6 +3,7 @@ import { getOrchestratorConfig } from "../../../core/config";
 import {
   getJobConcurrencyStatus,
   type JobConcurrencyStatus,
+  type JobSlotLease,
 } from "../../../core/job-concurrency";
 import { sendJson } from "../utils/http-utils";
 
@@ -15,7 +16,7 @@ interface PublicConcurrencyStatus {
     jobId: string;
     pid: number | null;
     acquiredAt: string;
-    source: "orchestrator" | "restart" | "task-start";
+    source: JobSlotLease["source"];
   }>;
   queuedJobs: Array<{
     jobId: string;

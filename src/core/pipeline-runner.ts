@@ -5,25 +5,31 @@ import { unlinkSync } from "node:fs";
 import { getConfig, getPipelineConfig } from "./config";
 import { validatePipelineOrThrow } from "./validation";
 import { loadFreshModule } from "./module-loader";
-import { writeJobStatus } from "./status-writer";
+import { atomicWrite, writeJobStatus, type GateInfo } from "./status-writer";
 import { decideTransition } from "./lifecycle-policy";
 import { runPipeline } from "./task-runner";
 import type { AuditLogEntry, PipelineResult } from "./task-runner";
+import type { TaskStateValue } from "../config/statuses";
 import { ensureTaskSymlinkBridge } from "./symlink-bridge";
 import { validateTaskSymlinks, repairTaskSymlinks, cleanupTaskSymlinks } from "./symlink-utils";
 import { createTaskFileIO, generateLogName } from "./file-io";
 import { LogEvent, LogFileExtension } from "../config/log-events";
-import { TaskState } from "../config/statuses";
+import { TaskState, normalizeTaskState } from "../config/statuses";
 import { releaseJobSlot } from "./job-concurrency";
+import { ControlValidationError, parseControlFile, validateControlDirectives, type ControlDirectives } from "./control";
+import { appendRunEvent } from "./run-events";
+import {
+  getTaskName,
+  normalizePipelineTasks,
+  normalizeTaskEntry,
+  type PipelineDefinition,
+  type PipelineTaskEntry,
+} from "./pipeline-definition";
+
+export { getTaskName, normalizeTaskEntry };
+export type { PipelineDefinition, PipelineTaskEntry };
 
 // ─── Type definitions ─────────────────────────────────────────────────────────
-
-/** Pipeline definition read from pipeline.json. */
-export interface PipelineDefinition {
-  tasks: Array<string | { name: string }>;
-  llm?: Record<string, unknown> | null;
-  taskConfig?: Record<string, Record<string, unknown>>;
-}
 
 /** Task registry: maps task names to module file paths. */
 export type TaskRegistry = Record<string, string>;
@@ -45,7 +51,7 @@ export interface TaskExecutionContext {
   jobId: string;
   llmOverride: Record<string, unknown> | null;
   meta: {
-    pipelineTasks: Array<string | { name: string }>;
+    pipelineTasks: Array<string | PipelineTaskEntry>;
   };
 }
 
@@ -138,9 +144,345 @@ export interface ResolvedJobConfig {
 
 // ─── Helper functions ─────────────────────────────────────────────────────────
 
-/** Extracts the task name from either a plain string or a named task object. */
-export function getTaskName(task: string | { name: string }): string {
-  return typeof task === "string" ? task : task.name;
+async function loadDoneArtifact(
+  workDir: string,
+  taskName: string,
+  pipelineArtifacts: Record<string, unknown>,
+): Promise<void> {
+  if (Object.hasOwn(pipelineArtifacts, taskName)) return;
+  const outputPath = join(workDir, "tasks", taskName, "output.json");
+  if (await Bun.file(outputPath).exists()) {
+    const outputText = await Bun.file(outputPath).text();
+    pipelineArtifacts[taskName] = JSON.parse(outputText) as unknown;
+  }
+}
+
+async function readControlDirectives(taskDir: string): Promise<ControlDirectives | null> {
+  const controlFile = Bun.file(join(taskDir, "control.json"));
+  if (!(await controlFile.exists())) return null;
+  return parseControlFile(await controlFile.text());
+}
+
+function sameJsonValue(left: unknown, right: unknown): boolean {
+  return JSON.stringify(left ?? null) === JSON.stringify(right ?? null);
+}
+
+function validateControlDirectivesForCurrentRun(
+  directives: ControlDirectives,
+  ctx: {
+    pipelineTasks: PipelineTaskEntry[];
+    taskStates: Record<string, string>;
+    registryKeys: string[];
+    emittingTask: string;
+  },
+): void {
+  const existingByName = new Map(ctx.pipelineTasks.map((task) => [task.name, task]));
+  const patch = directives.patch;
+  if (!patch) {
+    validateControlDirectives(directives, ctx);
+    return;
+  }
+
+  const violations: string[] = [];
+  const registryKeySet = new Set(ctx.registryKeys);
+  const addForValidation: PipelineTaskEntry[] = [];
+  const seenAddNames = new Set<string>();
+
+  for (const entry of patch.add) {
+    if (seenAddNames.has(entry.name)) {
+      violations.push(`patch.add task name '${entry.name}' is duplicated within the batch`);
+      continue;
+    }
+    seenAddNames.add(entry.name);
+
+    const existing = existingByName.get(entry.name);
+    if (!existing) {
+      addForValidation.push(entry);
+      continue;
+    }
+
+    const existingTaskKey = existing.task ?? existing.name;
+    const entryTaskKey = entry.task ?? entry.name;
+    if (existingTaskKey !== entryTaskKey) {
+      violations.push(`patch.add task name '${entry.name}' already exists with a different task key`);
+    }
+    if (!sameJsonValue(existing.config, entry.config)) {
+      violations.push(`patch.add task name '${entry.name}' already exists with different config`);
+    }
+    if (!sameJsonValue(existing.gate, entry.gate)) {
+      violations.push(`patch.add task name '${entry.name}' already exists with different gate`);
+    }
+    if (!registryKeySet.has(entryTaskKey)) {
+      violations.push(`patch.add task '${entry.name}' references unregistered task key '${entryTaskKey}'`);
+    }
+  }
+
+  if (violations.length > 0) {
+    throw new ControlValidationError(violations);
+  }
+
+  validateControlDirectives(
+    {
+      ...directives,
+      patch: {
+        ...patch,
+        add: addForValidation,
+      },
+    },
+    ctx,
+  );
+}
+
+async function applyPipelinePatch(
+  pipelinePath: string,
+  directives: ControlDirectives,
+  emittingTask: string,
+): Promise<{ pipeline: PipelineDefinition; added: PipelineTaskEntry[]; insertAfter: string | null }> {
+  const pipeline = await loadPipeline(pipelinePath);
+  const patch = directives.patch;
+  if (!patch) return { pipeline, added: [], insertAfter: null };
+
+  const insertAfter = patch.insertAfter ?? emittingTask;
+  const existingNames = new Set(pipeline.tasks.map(getTaskName));
+  const added = patch.add.filter((entry) => !existingNames.has(entry.name));
+  if (added.length === 0) return { pipeline, added, insertAfter };
+
+  const insertAfterIndex = pipeline.tasks.findIndex((entry) => getTaskName(entry) === insertAfter);
+  const nextTasks = [...pipeline.tasks];
+  nextTasks.splice(insertAfterIndex + 1, 0, ...added);
+  const nextPipeline: PipelineDefinition = { ...pipeline, tasks: nextTasks };
+
+  await atomicWrite(pipelinePath, `${JSON.stringify(nextPipeline, null, 2)}\n`);
+  return { pipeline: nextPipeline, added, insertAfter };
+}
+
+function buildTaskRecordFromPipeline(
+  pipeline: PipelineDefinition,
+  existing: Record<string, TaskStatus>,
+): Record<string, TaskStatus> {
+  const rebuilt: Record<string, TaskStatus> = {};
+  const namesInPipeline = new Set<string>();
+
+  for (const task of normalizePipelineTasks(pipeline)) {
+    namesInPipeline.add(task.name);
+    rebuilt[task.name] = existing[task.name] ?? { state: TaskState.PENDING };
+  }
+
+  for (const [name, status] of Object.entries(existing)) {
+    if (!namesInPipeline.has(name)) {
+      rebuilt[name] = status;
+    }
+  }
+
+  return rebuilt;
+}
+
+async function applyControlStatus(args: {
+  workDir: string;
+  pipeline: PipelineDefinition;
+  taskName: string;
+  executionTimeMs: number;
+  refinementAttempts: number;
+  endedAt?: string;
+  directives: ControlDirectives | null;
+  gate: GateInfo | null;
+}): Promise<void> {
+  const endedAt = args.endedAt ?? new Date().toISOString();
+  await writeJobStatus(args.workDir, (snapshot) => {
+    const existingTasks = snapshot.tasks as Record<string, TaskStatus>;
+    snapshot.tasks = buildTaskRecordFromPipeline(args.pipeline, existingTasks) as typeof snapshot.tasks;
+
+    const taskEntry = snapshot.tasks[args.taskName] ?? {};
+    taskEntry.state = TaskState.DONE;
+    taskEntry.endedAt = endedAt;
+    taskEntry.executionTimeMs = args.executionTimeMs;
+    taskEntry.refinementAttempts = args.refinementAttempts;
+    if (args.directives !== null) {
+      taskEntry.controlApplied = true;
+    }
+    delete taskEntry.retrying;
+    delete taskEntry.nextRetryAt;
+    delete taskEntry.lastRetryError;
+    snapshot.tasks[args.taskName] = taskEntry;
+
+    for (const skip of args.directives?.skip ?? []) {
+      const skipEntry = (snapshot.tasks[skip.task] ?? { state: TaskState.PENDING }) as TaskStatus;
+      if (normalizeTaskState(skipEntry.state) === TaskState.PENDING) {
+        skipEntry.state = TaskState.SKIPPED;
+        skipEntry.skipReason = skip.reason;
+        skipEntry.skippedBy = args.taskName;
+        snapshot.tasks[skip.task] = skipEntry as typeof snapshot.tasks[string];
+      }
+    }
+
+    if (args.gate !== null) {
+      snapshot.state = "waiting";
+      snapshot.current = null;
+      snapshot.currentStage = null;
+      snapshot.gate = args.gate;
+    }
+  });
+}
+
+async function applyControlFileIfPresent(args: {
+  config: ResolvedJobConfig;
+  taskRegistry: TaskRegistry;
+  taskName: string;
+  selectedEntry: PipelineTaskEntry;
+  executionTimeMs: number;
+  refinementAttempts: number;
+  endedAt?: string;
+}): Promise<{ gate: GateInfo | null } | null> {
+  const taskDir = join(args.config.workDir, "tasks", args.taskName);
+  const directives = await readControlDirectives(taskDir);
+  if (directives === null) return null;
+
+  const controlPipeline = await loadPipeline(args.config.pipelineJsonPath);
+  const controlPipelineTasks = normalizePipelineTasks(controlPipeline);
+  const controlStatusText = await Bun.file(args.config.statusPath).text();
+  const controlStatus = JSON.parse(controlStatusText) as { tasks: Record<string, { state?: string }> };
+  validateControlDirectivesForCurrentRun(directives, {
+    pipelineTasks: controlPipelineTasks,
+    taskStates: getTaskStateMap(controlStatus.tasks, controlPipelineTasks),
+    registryKeys: Object.keys(args.taskRegistry),
+    emittingTask: args.taskName,
+  });
+
+  const patchResult = await applyPipelinePatch(args.config.pipelineJsonPath, directives, args.taskName);
+  const gate = buildGateInfo(args.taskName, directives, args.selectedEntry);
+  await applyControlStatus({
+    workDir: args.config.workDir,
+    pipeline: patchResult.pipeline,
+    taskName: args.taskName,
+    executionTimeMs: args.executionTimeMs,
+    refinementAttempts: args.refinementAttempts,
+    endedAt: args.endedAt,
+    directives,
+    gate,
+  });
+
+  if (directives.patch && patchResult.added.length > 0) {
+    await appendRunEvent(args.config.workDir, {
+      type: "patch_applied",
+      task: args.taskName,
+      added: patchResult.added.map((entry) => entry.name),
+      insertAfter: patchResult.insertAfter ?? args.taskName,
+      at: new Date().toISOString(),
+    });
+  }
+
+  if (directives.skip && directives.skip.length > 0) {
+    await appendRunEvent(args.config.workDir, {
+      type: "skip_applied",
+      task: args.taskName,
+      skipped: directives.skip.map((skip) => ({ task: skip.task, reason: skip.reason })),
+      at: new Date().toISOString(),
+    });
+  }
+
+  if (gate !== null) {
+    await appendRunEvent(args.config.workDir, {
+      type: "gate_created",
+      afterTask: gate.afterTask,
+      message: gate.message,
+      at: new Date().toISOString(),
+    });
+  }
+
+  return { gate };
+}
+
+async function failControlValidation(args: {
+  workDir: string;
+  dataDir: string;
+  jobId: string;
+  taskName: string;
+  error: ControlValidationError;
+}): Promise<never> {
+  const normalized = normalizeError(args.error);
+  await appendRunEvent(args.workDir, {
+    type: "control_invalid",
+    task: args.taskName,
+    message: normalized.message,
+    at: new Date().toISOString(),
+  });
+
+  await writeJobStatus(args.workDir, (snapshot) => {
+    snapshot.state = "failed";
+    snapshot.current = args.taskName;
+    snapshot.currentStage = null;
+    const raw = (snapshot.tasks[args.taskName] ?? {}) as Record<string, unknown>;
+    raw["state"] = TaskState.FAILED;
+    raw["endedAt"] = new Date().toISOString();
+    raw["error"] = { name: normalized.name, message: normalized.message, stack: normalized.stack };
+    raw["failedStage"] = "control";
+    delete raw["stageLogPath"];
+    delete raw["errorContext"];
+    delete raw["retrying"];
+    delete raw["nextRetryAt"];
+    delete raw["lastRetryError"];
+    snapshot.tasks[args.taskName] = raw as typeof snapshot.tasks[string];
+  });
+
+  await releaseJobSlotBestEffort(args.dataDir, args.jobId);
+  process.exit(1);
+}
+
+async function markControlRecoveryChecked(workDir: string, taskName: string): Promise<void> {
+  await writeJobStatus(workDir, (snapshot) => {
+    const taskEntry = snapshot.tasks[taskName];
+    if (!taskEntry || taskEntry.state !== TaskState.DONE || taskEntry.controlApplied === true) return;
+    taskEntry.controlApplied = true;
+  });
+}
+
+function buildGateInfo(
+  taskName: string,
+  directives: ControlDirectives | null,
+  selectedEntry: PipelineTaskEntry,
+): GateInfo | null {
+  const requestedAt = new Date().toISOString();
+  const directivePause = directives?.pause;
+  if (directivePause) {
+    return {
+      afterTask: taskName,
+      message: directivePause.message,
+      artifacts: directivePause.artifacts,
+      requestedAt,
+    };
+  }
+
+  if (selectedEntry.gate === undefined || selectedEntry.gate === false) return null;
+
+  const defaultMessage = `Review task '${taskName}' before continuing.`;
+  if (selectedEntry.gate === true) {
+    return {
+      afterTask: taskName,
+      message: defaultMessage,
+      requestedAt,
+    };
+  }
+
+  return {
+    afterTask: taskName,
+    message: selectedEntry.gate.message ?? defaultMessage,
+    artifacts: selectedEntry.gate.artifacts,
+    requestedAt,
+  };
+}
+
+function getTaskStateMap(
+  statusTasks: Record<string, { state?: string }>,
+  pipelineTasks: PipelineTaskEntry[],
+): Record<string, string> {
+  const taskStates: Record<string, string> = {};
+  for (const task of pipelineTasks) {
+    taskStates[task.name] = normalizeTaskState(statusTasks[task.name]?.state ?? TaskState.PENDING);
+  }
+  for (const [name, status] of Object.entries(statusTasks)) {
+    taskStates[name] = normalizeTaskState(status.state ?? TaskState.PENDING);
+  }
+  return taskStates;
 }
 
 /** Normalizes any thrown value into a serializable NormalizedError. */
@@ -181,6 +523,11 @@ export async function resolveJobConfig(jobId: string): Promise<ResolvedJobConfig
     const pipelineConfig = getPipelineConfig(pipelineSlug);
     pipelineJsonPath = pipelineConfig.pipelineJsonPath;
     tasksDir = pipelineConfig.tasksDir;
+  }
+
+  const runScopedPipelineJsonPath = join(workDir, "pipeline.json");
+  if (await Bun.file(runScopedPipelineJsonPath).exists()) {
+    pipelineJsonPath = runScopedPipelineJsonPath;
   }
 
   const taskRegistryPath = process.env["PO_TASK_REGISTRY"] ?? join(tasksDir, "index.js");
@@ -298,7 +645,7 @@ export async function runPipelineJob(jobId: string): Promise<void> {
   await writePidFile(config.workDir);
   installSignalHandlers(config.workDir, dataDir, jobId);
 
-  const pipeline = await loadPipeline(config.pipelineJsonPath);
+  const initialPipeline = await loadPipeline(config.pipelineJsonPath);
   const taskRegistry = await loadTaskRegistry(config.taskRegistryPath);
 
   const { startFromTask, runSingleTask } = config;
@@ -310,7 +657,7 @@ export async function runPipelineJob(jobId: string): Promise<void> {
   }
 
   if (startFromTask) {
-    const taskNames = pipeline.tasks.map(getTaskName);
+    const taskNames = initialPipeline.tasks.map(getTaskName);
     if (!taskNames.includes(startFromTask)) {
       throw new Error(`Start-from task not found in pipeline: ${startFromTask}`);
     }
@@ -319,56 +666,109 @@ export async function runPipelineJob(jobId: string): Promise<void> {
   // ─── Task execution loop ─────────────────────────────────────────────────
 
   const pipelineArtifacts: Record<string, unknown> = {};
-  let reachedStartFrom = !startFromTask;
 
-  for (const task of pipeline.tasks) {
-    const taskName = getTaskName(task);
-
+  while (true) {
+    const pipeline = await loadPipeline(config.pipelineJsonPath);
+    const pipelineTasks = normalizePipelineTasks(pipeline);
     const statusText = await Bun.file(config.statusPath).text();
     const status = JSON.parse(statusText) as { tasks: Record<string, { state?: string }> };
 
-    // Skip tasks before startFromTask
-    if (!reachedStartFrom) {
-      if (taskName === startFromTask) {
-        reachedStartFrom = true;
-      } else {
-        // Load output for already-DONE skipped tasks
-        const taskState = status.tasks[taskName]?.state;
-        if (taskState === "DONE" || taskState === "done") {
-          const outputPath = join(config.workDir, "tasks", taskName, "output.json");
-          if (await Bun.file(outputPath).exists()) {
-            const outputText = await Bun.file(outputPath).text();
-            pipelineArtifacts[taskName] = JSON.parse(outputText) as unknown;
+    let selectedEntry: PipelineTaskEntry | null = null;
+    let selectedTaskState: TaskStateValue = TaskState.PENDING;
+    let reachedStartFrom = !startFromTask;
+    let replayedControl = false;
+
+    for (const entry of pipelineTasks) {
+      const taskName = entry.name;
+      const taskStatus = status.tasks[taskName] as TaskStatus | undefined;
+      const taskState = normalizeTaskState(taskStatus?.state ?? TaskState.PENDING);
+
+      if (!reachedStartFrom) {
+        if (taskName === startFromTask) {
+          reachedStartFrom = true;
+        } else {
+          if (taskState === TaskState.DONE) {
+            await loadDoneArtifact(config.workDir, taskName, pipelineArtifacts);
+          }
+          continue;
+        }
+      }
+
+      if (taskState === TaskState.DONE) {
+        if (taskStatus?.controlApplied !== true) {
+          try {
+            const appliedControl = await applyControlFileIfPresent({
+              config,
+              taskRegistry,
+              taskName,
+              selectedEntry: entry,
+              executionTimeMs: typeof taskStatus?.executionTimeMs === "number" ? taskStatus.executionTimeMs : 0,
+              refinementAttempts: typeof taskStatus?.refinementAttempts === "number" ? taskStatus.refinementAttempts : 0,
+              endedAt: typeof taskStatus?.endedAt === "string" ? taskStatus.endedAt : undefined,
+            });
+            if (appliedControl !== null) {
+              if (appliedControl.gate !== null) {
+                activeTaskName = null;
+                await releaseJobSlotBestEffort(dataDir, jobId);
+                return;
+              }
+              replayedControl = true;
+              break;
+            }
+            await markControlRecoveryChecked(config.workDir, taskName);
+          } catch (error) {
+            if (!(error instanceof ControlValidationError)) throw error;
+            activeTaskName = null;
+            await failControlValidation({
+              workDir: config.workDir,
+              dataDir,
+              jobId,
+              taskName,
+              error,
+            });
           }
         }
+        await loadDoneArtifact(config.workDir, taskName, pipelineArtifacts);
         continue;
       }
+
+      if (taskState === TaskState.SKIPPED) {
+        continue;
+      }
+
+      selectedEntry = entry;
+      selectedTaskState = taskState;
+      break;
     }
 
-    const taskState = status.tasks[taskName]?.state ?? "pending";
-
-    // Handle already-DONE tasks (when resuming without startFromTask)
-    if ((taskState === "DONE" || taskState === "done") && !startFromTask) {
-      const outputPath = join(config.workDir, "tasks", taskName, "output.json");
-      if (await Bun.file(outputPath).exists()) {
-        const outputText = await Bun.file(outputPath).text();
-        pipelineArtifacts[taskName] = JSON.parse(outputText) as unknown;
-      }
+    if (replayedControl) {
       continue;
+    }
+
+    if (startFromTask && !reachedStartFrom) {
+      throw new Error(`Start-from task no longer exists in pipeline: ${startFromTask}`);
+    }
+
+    if (selectedEntry === null) {
+      break;
+    }
+
+    const taskName = selectedEntry.name;
+    const taskState = selectedTaskState;
+
+    let predecessorsReady = true;
+    for (const entry of pipelineTasks) {
+      if (entry.name === taskName) break;
+      const state = normalizeTaskState(status.tasks[entry.name]?.state ?? TaskState.PENDING);
+      if (state !== TaskState.DONE && state !== TaskState.SKIPPED) {
+        predecessorsReady = false;
+        break;
+      }
     }
 
     // Check lifecycle policy (bypassed when startFromTask is set)
     if (!startFromTask) {
-      const taskKeys = pipeline.tasks.map(getTaskName);
-      const taskIndex = taskKeys.indexOf(taskName);
-      const dependenciesReady = taskKeys
-        .slice(0, taskIndex)
-        .every((name) => {
-          const s = status.tasks[name]?.state;
-          return s === "DONE" || s === "done";
-        });
-
-      const decision = decideTransition({ op: "start", taskState, dependenciesReady });
+      const decision = decideTransition({ op: "start", taskState, dependenciesReady: predecessorsReady });
       if (!decision.ok) {
         throw Object.assign(
           new Error(`Lifecycle policy blocked task start: ${taskName} (reason: ${decision.reason})`),
@@ -400,12 +800,13 @@ export async function runPipelineJob(jobId: string): Promise<void> {
 
     // ─── Task execution ───────────────────────────────────────────────────
 
-    if (!taskRegistry[taskName]) {
-      throw new Error(`Task not registered: ${taskName}`);
+    const taskKey = selectedEntry.task ?? selectedEntry.name;
+    if (!taskRegistry[taskKey]) {
+      throw new Error(`Task not registered: ${taskKey}`);
     }
 
     // Resolve task module path
-    const relativeModulePath = taskRegistry[taskName];
+    const relativeModulePath = taskRegistry[taskKey];
     const absoluteModulePath = resolve(dirname(config.taskRegistryPath), relativeModulePath);
 
     // Create task directory
@@ -447,12 +848,15 @@ export async function runPipelineJob(jobId: string): Promise<void> {
       taskDir,
       seed,
       taskName,
-      taskConfig: (pipeline.taskConfig?.[taskName] ?? {}) as Record<string, unknown>,
+      taskConfig: {
+        ...(pipeline.taskConfig?.[taskName] ?? {}),
+        ...(selectedEntry.config ?? {}),
+      },
       statusPath: config.statusPath,
       jobId,
       llmOverride: (pipeline.llm ?? null) as Record<string, unknown> | null,
       meta: {
-        pipelineTasks: pipeline.tasks.map(getTaskName),
+        pipelineTasks: pipelineTasks.map((entry) => entry.name),
       },
     };
 
@@ -504,18 +908,59 @@ export async function runPipelineJob(jobId: string): Promise<void> {
       const logsLogName = generateLogName(taskName, "pipeline", LogEvent.EXECUTION_LOGS, LogFileExtension.JSON);
       await fileIO.writeLog(logsLogName, JSON.stringify(result.logs, null, 2));
 
-      // Update status to DONE
-      await writeJobStatus(config.workDir, (snapshot) => {
-        const taskEntry = snapshot.tasks[taskName] ?? {};
-        taskEntry.state = TaskState.DONE;
-        taskEntry.endedAt = new Date().toISOString();
-        taskEntry.executionTimeMs = executionTimeMs;
-        taskEntry.refinementAttempts = ((result.context as unknown) as Record<string, unknown>)["refinementAttempts"] as number | undefined ?? 0;
-        delete taskEntry.retrying;
-        delete taskEntry.nextRetryAt;
-        delete taskEntry.lastRetryError;
-        snapshot.tasks[taskName] = taskEntry;
-      });
+      const refinementAttempts =
+        (((result.context as unknown) as Record<string, unknown>)["refinementAttempts"] as number | undefined) ?? 0;
+      let appliedControl: { gate: GateInfo | null } | null = null;
+
+      try {
+        appliedControl = await applyControlFileIfPresent({
+          config,
+          taskRegistry,
+          taskName,
+          selectedEntry,
+          executionTimeMs,
+          refinementAttempts,
+        });
+      } catch (error) {
+        if (!(error instanceof ControlValidationError)) throw error;
+        activeTaskName = null;
+        await failControlValidation({
+          workDir: config.workDir,
+          dataDir,
+          jobId,
+          taskName,
+          error,
+        });
+      }
+
+      if (appliedControl === null) {
+        const gate = buildGateInfo(taskName, null, selectedEntry);
+        await applyControlStatus({
+          workDir: config.workDir,
+          pipeline,
+          taskName,
+          executionTimeMs,
+          refinementAttempts,
+          directives: null,
+          gate,
+        });
+
+        if (gate !== null) {
+          await appendRunEvent(config.workDir, {
+            type: "gate_created",
+            afterTask: gate.afterTask,
+            message: gate.message,
+            at: new Date().toISOString(),
+          });
+          activeTaskName = null;
+          await releaseJobSlotBestEffort(dataDir, jobId);
+          return;
+        }
+      } else if (appliedControl.gate !== null) {
+        activeTaskName = null;
+        await releaseJobSlotBestEffort(dataDir, jobId);
+        return;
+      }
       activeTaskName = null;
 
       // Add task output to pipelineArtifacts

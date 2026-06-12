@@ -1,13 +1,34 @@
+import { join } from "node:path";
+
 import { getPipelineConfig } from "../../../core/config";
 import { aggregateAndSortJobs, transformJobListForAPI } from "../../state/transformers/list-transformer";
 import { transformJobStatus, transformMultipleJobs } from "../../state/transformers/status-transformer";
 import { createErrorResponse } from "../config-bridge";
-import { Constants, validateJobId } from "../config-bridge-node";
+import { Constants, getJobPath, validateJobId } from "../config-bridge-node";
 import { readMultipleJobs, readJob } from "../job-reader";
 import { listAllJobs } from "../job-scanner";
 import { sendJson } from "../utils/http-utils";
 
-async function loadPipelineJson(slug: string): Promise<Record<string, unknown> | null> {
+function isJobLocation(location: string | null | undefined): location is "current" | "complete" {
+  return location === "current" || location === "complete";
+}
+
+async function loadPipelineJson(
+  slug: string,
+  location?: string | null,
+  jobId?: string,
+): Promise<Record<string, unknown> | null> {
+  if (jobId && isJobLocation(location)) {
+    const perRunPath = join(getJobPath(jobId, location), "pipeline.json");
+    if (await Bun.file(perRunPath).exists()) {
+      try {
+        return JSON.parse(await Bun.file(perRunPath).text()) as Record<string, unknown>;
+      } catch {
+        return null;
+      }
+    }
+  }
+
   try {
     const cfg = getPipelineConfig(slug);
     return JSON.parse(await Bun.file(cfg.pipelineJsonPath).text()) as Record<string, unknown>;
@@ -24,15 +45,10 @@ export async function handleJobList(): Promise<Response> {
   ]);
   const jobs = aggregateAndSortJobs(transformMultipleJobs(current), transformMultipleJobs(complete));
 
-  const slugs = [...new Set(jobs.filter((j) => j.pipeline && !j.pipelineConfig).map((j) => j.pipeline!))];
-  const configs = await Promise.all(slugs.map(loadPipelineJson));
-  const configMap = new Map(slugs.map((s, i) => [s, configs[i]]));
-
-  for (const job of jobs) {
-    if (!job.pipeline || job.pipelineConfig) continue;
-    const cached = configMap.get(job.pipeline);
-    if (cached) job.pipelineConfig = cached;
-  }
+  await Promise.all(jobs.map(async (job) => {
+    if (!job.pipeline || job.pipelineConfig) return;
+    job.pipelineConfig = await loadPipelineJson(job.pipeline, job.location, job.jobId) ?? undefined;
+  }));
 
   return sendJson(200, { ok: true, data: transformJobListForAPI(jobs, { includePipelineMetadata: true }) });
 }
@@ -54,7 +70,7 @@ export async function handleJobDetail(jobId: string): Promise<Response> {
   }
 
   if (job.pipeline) {
-    job.pipelineConfig = await loadPipelineJson(job.pipeline) ?? undefined;
+    job.pipelineConfig = await loadPipelineJson(job.pipeline, job.location, job.jobId) ?? undefined;
   }
 
   const [apiJob] = transformJobListForAPI([job], { includePipelineMetadata: true });

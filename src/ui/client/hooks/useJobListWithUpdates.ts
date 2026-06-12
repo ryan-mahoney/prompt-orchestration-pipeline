@@ -16,6 +16,7 @@ const REFETCH_DEBOUNCE_MS = 300;
 function sortNormalizedJobs(jobs: NormalizedJobSummary[]): NormalizedJobSummary[] {
   const priority: Record<string, number> = {
     running: 4,
+    waiting: 4,
     failed: 3,
     pending: 2,
     complete: 1,

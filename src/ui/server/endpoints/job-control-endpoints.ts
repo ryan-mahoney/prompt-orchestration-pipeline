@@ -15,11 +15,15 @@ import {
 } from "../../../core/job-concurrency";
 import {
   readJobStatus,
+  resetJobFromTask,
   resetJobToCleanSlate,
   resetSingleTask,
   writeJobStatus,
   type StatusSnapshot,
 } from "../../../core/status-writer";
+import {
+  materializeNormalizedPipelineDefinition,
+} from "../../../core/pipeline-definition";
 import { readFileWithRetry } from "../file-reader";
 
 const RUNNER_PATH = path.resolve(import.meta.dir, "../../../core/pipeline-runner.ts");
@@ -100,7 +104,7 @@ async function spawnRunner(
   return { kill: () => proc.kill(), pid: proc.pid };
 }
 
-async function acquireConcurrencySlot(
+export async function acquireConcurrencySlot(
   dataDir: string,
   jobId: string,
   source: JobSlotLease["source"],
@@ -132,7 +136,7 @@ async function acquireConcurrencySlot(
   };
 }
 
-async function spawnWithSlot(
+export async function spawnWithSlot(
   dataDir: string,
   jobId: string,
   jobDir: string,
@@ -168,7 +172,7 @@ async function spawnWithSlot(
   }
 }
 
-async function readRunnerPid(jobDir: string): Promise<number | null> {
+export async function readRunnerPid(jobDir: string): Promise<number | null> {
   try {
     const content = await Bun.file(path.join(jobDir, "runner.pid")).text();
     const pid = parseInt(content.trim(), 10);
@@ -178,7 +182,7 @@ async function readRunnerPid(jobDir: string): Promise<number | null> {
   }
 }
 
-function isProcessAlive(pid: number): boolean {
+export function isProcessAlive(pid: number): boolean {
   try {
     process.kill(pid, 0);
     return true;
@@ -259,6 +263,13 @@ function getTaskName(task: unknown): string | null {
   return typeof name === "string" && name.length > 0 ? name : null;
 }
 
+function getPipelineTaskOrderFromDefinition(pipeline: unknown): string[] | null {
+  if (typeof pipeline !== "object" || pipeline === null || Array.isArray(pipeline)) return null;
+  const tasks = (pipeline as Record<string, unknown>)["tasks"];
+  if (!Array.isArray(tasks)) return null;
+  return tasks.map(getTaskName).filter((name): name is string => name !== null);
+}
+
 async function readSeedPipelineSlug(jobDir: string): Promise<string | null> {
   try {
     const seed = JSON.parse(await Bun.file(path.join(jobDir, "seed.json")).text()) as Record<string, unknown>;
@@ -269,6 +280,15 @@ async function readSeedPipelineSlug(jobDir: string): Promise<string | null> {
 }
 
 async function loadPipelineTaskOrder(dataDir: string, jobDir: string, snapshot: StatusSnapshot): Promise<string[] | null> {
+  const perRunPipeline = Bun.file(path.join(jobDir, "pipeline.json"));
+  if (await perRunPipeline.exists()) {
+    try {
+      return getPipelineTaskOrderFromDefinition(JSON.parse(await perRunPipeline.text()));
+    } catch {
+      return null;
+    }
+  }
+
   const snapshotPipeline = snapshot["pipeline"];
   const pipelineSlug = typeof snapshotPipeline === "string" && snapshotPipeline.length > 0
     ? snapshotPipeline
@@ -278,12 +298,73 @@ async function loadPipelineTaskOrder(dataDir: string, jobDir: string, snapshot: 
 
   try {
     const { pipelineJsonPath } = getPipelineConfig(pipelineSlug, dataDir);
-    const pipeline = JSON.parse(await Bun.file(pipelineJsonPath).text()) as Record<string, unknown>;
-    if (!Array.isArray(pipeline["tasks"])) return null;
-    return pipeline["tasks"].map(getTaskName).filter((name): name is string => name !== null);
+    return getPipelineTaskOrderFromDefinition(JSON.parse(await Bun.file(pipelineJsonPath).text()));
   } catch {
     return null;
   }
+}
+
+async function readJobPipelineSlug(jobDir: string, snapshot: StatusSnapshot | null): Promise<string | null> {
+  const snapshotPipeline = snapshot?.["pipeline"];
+  if (typeof snapshotPipeline === "string" && snapshotPipeline.length > 0) {
+    return snapshotPipeline;
+  }
+  return readSeedPipelineSlug(jobDir);
+}
+
+async function resetJobToSourceCleanSlate(dataDir: string, jobDir: string): Promise<StatusSnapshot> {
+  const snapshot = await readJobStatus(jobDir);
+  const pipelineSlug = await readJobPipelineSlug(jobDir, snapshot);
+
+  if (!pipelineSlug) {
+    const reset = await resetJobToCleanSlate(jobDir);
+    if (reset.gate) {
+      return writeJobStatus(jobDir, (current) => {
+        current.gate = null;
+      });
+    }
+    return reset;
+  }
+
+  try {
+    const { pipelineJsonPath } = getPipelineConfig(pipelineSlug, dataDir);
+    const normalizedPipeline = await materializeNormalizedPipelineDefinition(
+      pipelineJsonPath,
+      path.join(jobDir, "pipeline.json"),
+    );
+    const taskNames = normalizedPipeline.tasks.map((task) => task.name);
+
+    return writeJobStatus(jobDir, (current) => {
+      current.state = "pending";
+      current.current = null;
+      current.currentStage = null;
+      current.progress = 0;
+      current.gate = null;
+      current.tasks = Object.fromEntries(
+        taskNames.map((name) => [name, { state: "pending" as const }]),
+      );
+    });
+  } catch (error) {
+    console.warn(`clean-slate restart could not re-materialize source pipeline "${pipelineSlug}"; falling back to status reset`, error);
+    const reset = await resetJobToCleanSlate(jobDir);
+    if (reset.gate) {
+      return writeJobStatus(jobDir, (current) => {
+        current.gate = null;
+      });
+    }
+    return reset;
+  }
+}
+
+async function clearGateForRestart(jobDir: string): Promise<void> {
+  await writeJobStatus(jobDir, (current) => {
+    current.gate = null;
+    if (current.state === "waiting") {
+      current.state = "pending";
+      current.current = null;
+      current.currentStage = null;
+    }
+  });
 }
 
 function findRecoveryTask(snapshot: StatusSnapshot): string | null {
@@ -478,11 +559,17 @@ export async function handleJobRestart(
         jobDir = currentJobDir;
       }
 
-      if (singleTask && fromTask) {
-        await resetSingleTask(jobDir, fromTask);
-        mode = continueAfter ? "single-task-continue" : "single-task";
+      if (fromTask) {
+        if (singleTask) {
+          await resetSingleTask(jobDir, fromTask);
+          mode = continueAfter ? "single-task-continue" : "single-task";
+        } else {
+          await resetJobFromTask(jobDir, fromTask);
+          mode = continueAfter ? "from-task-continue" : "from-task";
+        }
+        await clearGateForRestart(jobDir);
       } else {
-        await resetJobToCleanSlate(jobDir);
+        await resetJobToSourceCleanSlate(dataDir, jobDir);
         mode = "clean-slate";
       }
 

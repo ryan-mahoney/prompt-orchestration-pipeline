@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type {
   JobState,
+  GateInfo,
   FilesManifest,
   TaskEntry,
   StatusSnapshot,
@@ -97,8 +98,19 @@ describe("STATUS_FILENAME", () => {
 // If the types are wrong, this file will fail to typecheck.
 describe("type exports", () => {
   test("JobState is a valid union type", () => {
-    const state: JobState = "pending";
-    expect(["pending", "running", "done", "failed"]).toContain(state);
+    const state: JobState = "waiting";
+    expect(["pending", "running", "waiting", "done", "failed"]).toContain(state);
+  });
+
+  test("GateInfo has the correct shape", () => {
+    const gate: GateInfo = {
+      afterTask: "review",
+      message: "Approve the generated proposal",
+      artifacts: ["proposal.md"],
+      requestedAt: "2026-06-12T12:00:00.000Z",
+    };
+    expect(gate.afterTask).toBe("review");
+    expect(gate.artifacts).toEqual(["proposal.md"]);
   });
 
   test("FilesManifest has the correct shape", () => {
@@ -115,9 +127,13 @@ describe("type exports", () => {
       retrying: true,
       nextRetryAt: new Date().toISOString(),
       lastRetryError: { message: "try again" },
+      controlApplied: true,
+      skipReason: "not needed for this run",
+      skippedBy: "planner",
     };
     expect(entry.state).toBe("running");
     expect(entry.retrying).toBe(true);
+    expect(entry.controlApplied).toBe(true);
   });
 
   test("StatusSnapshot has required fields", () => {
@@ -252,6 +268,37 @@ describe("validateStatusSnapshot", () => {
     const snapshot = validateStatusSnapshot({ files: { artifacts: [], logs: null, tmp: 5 } }, "/jobs/xyz");
     expect(snapshot.files.logs).toEqual([]);
     expect(snapshot.files.tmp).toEqual([]);
+  });
+
+  test("round-trips waiting state with full gate block", () => {
+    const gate: GateInfo = {
+      afterTask: "architect",
+      message: "Review proposal before continuing",
+      artifacts: ["proposal.md", "risks.md"],
+      requestedAt: "2026-06-12T14:30:00.000Z",
+    };
+
+    const snapshot = validateStatusSnapshot(
+      {
+        id: "job-gated",
+        state: "waiting",
+        current: null,
+        currentStage: null,
+        lastUpdated: "2026-06-12T14:30:00.000Z",
+        tasks: {},
+        files: { artifacts: [], logs: [], tmp: [] },
+        gate,
+      },
+      "/jobs/job-gated",
+    );
+
+    expect(snapshot.state).toBe("waiting");
+    expect(snapshot.gate).toEqual(gate);
+  });
+
+  test("preserves an explicit null gate", () => {
+    const snapshot = validateStatusSnapshot({ gate: null }, "/jobs/xyz");
+    expect(snapshot.gate).toBeNull();
   });
 });
 
@@ -503,6 +550,28 @@ describe("writeJobStatus", () => {
     expect(data["reason"]).toBe("blocked by policy");
     expect(data["taskId"]).toBe("task-1");
     expect(data["op"]).toBe("write");
+  });
+
+  test("task entries retain control metadata after write", async () => {
+    const dir = await makeTempDir();
+
+    const snapshot = await writeJobStatus(dir, (s) => {
+      s.tasks["implementation"] = {
+        state: "done",
+        controlApplied: true,
+        skipReason: "Planner chose a shorter path",
+        skippedBy: "planner",
+      };
+    });
+
+    expect(snapshot.tasks["implementation"]!.controlApplied).toBe(true);
+    expect(snapshot.tasks["implementation"]!.skipReason).toBe("Planner chose a shorter path");
+    expect(snapshot.tasks["implementation"]!.skippedBy).toBe("planner");
+
+    const onDisk = JSON.parse(await Bun.file(join(dir, STATUS_FILENAME)).text()) as StatusSnapshot;
+    expect(onDisk.tasks["implementation"]!.controlApplied).toBe(true);
+    expect(onDisk.tasks["implementation"]!.skipReason).toBe("Planner chose a shorter path");
+    expect(onDisk.tasks["implementation"]!.skippedBy).toBe("planner");
   });
 
   test("SSE errors are swallowed and write still succeeds", async () => {

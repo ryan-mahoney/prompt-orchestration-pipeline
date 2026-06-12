@@ -3,6 +3,21 @@ import { Badge } from "./ui/Badge";
 import { Progress } from "./ui/Progress";
 import { formatCurrency4 } from "../../utils/formatters";
 
+function getBadgeIntent(status: string): "gray" | "blue" | "green" | "red" | "amber" {
+  if (status === "failed") return "red";
+  if (status === "complete") return "green";
+  if (status === "running") return "blue";
+  if (status === "waiting") return "amber";
+  return "amber";
+}
+
+function getProgressVariant(status: string): "running" | "error" | "completed" | "pending" {
+  if (status === "failed") return "error";
+  if (status === "complete") return "completed";
+  if (status === "running") return "running";
+  return "pending";
+}
+
 export default function JobCard({
   job,
   pipeline,
@@ -23,10 +38,10 @@ export default function JobCard({
           <div className="text-base font-semibold">{job.name}</div>
           <div className="text-sm text-gray-500">{job.pipelineLabel ?? pipeline?.name ?? job.pipeline ?? "—"}</div>
         </div>
-        <Badge intent={job.status === "failed" ? "red" : job.status === "complete" ? "green" : job.status === "running" ? "blue" : "amber"}>{job.status}</Badge>
+        <Badge intent={getBadgeIntent(job.status)}>{job.status}</Badge>
       </div>
       <div className="mt-4">
-        <Progress value={progressPct} variant={job.status === "failed" ? "error" : job.status === "complete" ? "completed" : "running"} />
+        <Progress value={progressPct} variant={getProgressVariant(job.status)} />
       </div>
       <div className="mt-3 text-sm text-gray-600">Cost: {formatCurrency4(job.totalCost ?? 0)} · Duration: {Math.max(0, Math.floor(overallElapsedMs / 1000))}s</div>
     </button>

@@ -19,7 +19,9 @@ function formatStageLabel(stage: string): string {
   return [first[0]?.toUpperCase() + first.slice(1).toLowerCase(), ...rest.map((part) => (part === part.toUpperCase() ? part : part.toLowerCase()))].join(" ");
 }
 
-function getHeaderClasses(status: TaskState): string {
+function getHeaderClasses(status: TaskState, waiting = false): string {
+  if (waiting) return "bg-yellow-50 border-yellow-300 text-yellow-800";
+
   switch (status) {
     case "done":
       return "bg-green-50 border-green-200 text-green-700";
@@ -27,9 +29,17 @@ function getHeaderClasses(status: TaskState): string {
       return "bg-amber-50 border-amber-200 text-amber-700";
     case "failed":
       return "bg-red-50 border-red-200 text-red-700";
+    case "skipped":
+      return "bg-gray-50 border-gray-300 text-gray-500";
     default:
       return "bg-gray-100 border-gray-200 text-gray-700";
   }
+}
+
+function getStatusLabel(status: TaskState, waiting = false): string {
+  if (waiting) return "Waiting";
+  if (status === "skipped") return "Skipped";
+  return status;
 }
 
 function parseTimestamp(value: string | number | null | undefined): number | null {
@@ -40,7 +50,7 @@ function parseTimestamp(value: string | number | null | undefined): number | nul
 }
 
 function getItemStatus(item: DagItem | undefined, index: number, activeIndex: number | undefined): TaskState {
-  if (item?.status === "failed" || item?.status === "done" || item?.status === "running") return item.status;
+  if (item?.status === "failed" || item?.status === "done" || item?.status === "running" || item?.status === "skipped") return item.status;
   if (typeof activeIndex === "number") {
     if (index < activeIndex) return "done";
     if (index === activeIndex) return "running";
@@ -56,6 +66,7 @@ export default function DAGGrid({
   filesByTypeForItem,
   taskById,
   pipelineTasks = [],
+  waitingTaskId = null,
   geometryAdapter = defaultGeometryAdapter,
 }: {
   items: DagItem[];
@@ -65,6 +76,7 @@ export default function DAGGrid({
   filesByTypeForItem: (index: number) => TaskFiles;
   taskById: Record<string, TaskStateObject>;
   pipelineTasks?: string[];
+  waitingTaskId?: string | null;
   geometryAdapter?: typeof defaultGeometryAdapter;
 }) {
   const overlayRef = useRef<SVGSVGElement | null>(null);
@@ -77,6 +89,7 @@ export default function DAGGrid({
   const [lines, setLines] = useState<ConnectorLine[]>([]);
   const [effectiveCols, setEffectiveCols] = useState(cols);
   const reducedMotion = checkReducedMotion();
+  const itemStatusKey = items.map((item) => `${item.id}:${item.status}`).join("|");
 
   const visualOrder = useMemo(() => computeVisualOrder(items.length, effectiveCols), [effectiveCols, items.length]);
   const openItem = openIndex === null ? null : items[openIndex];
@@ -99,6 +112,7 @@ export default function DAGGrid({
       progress: 0,
       taskCount: items.length,
       doneCount: items.filter((item) => item.status === "done").length,
+      completedCount: items.filter((item) => item.status === "done" || item.status === "skipped").length,
       location: "current",
       tasks: Object.fromEntries(taskEntries),
       current: null,
@@ -106,7 +120,7 @@ export default function DAGGrid({
     };
 
     return deriveAllowedActions(adaptedJob, pipelineTasks);
-  }, [items, jobId, pipelineTasks]);
+  }, [items, itemStatusKey, jobId, pipelineTasks]);
 
   const pushAlert = (type: "success" | "error" | "warning", message: string) => {
     setAlert({ type, message });
@@ -251,6 +265,10 @@ export default function DAGGrid({
       >
         {visualOrder.map((index, position) =>
           index === -1 ? <div key={`ghost-${position}`} className="invisible" aria-hidden="true" /> : (
+            (() => {
+              const itemStatus = getItemStatus(items[index], index, activeIndex);
+              const isWaitingItem = waitingTaskId !== null && waitingTaskId === items[index]?.id;
+              return (
             <div
               key={items[index]?.id}
               ref={(node) => {
@@ -270,11 +288,12 @@ export default function DAGGrid({
                   setOpenIndex(index);
                 }
               }}
-              className={`cursor-pointer overflow-hidden rounded-md border border-gray-300 outline outline-2 outline-transparent hover:border-gray-400 focus-visible:outline-[#6d28d9] ${reducedMotion ? "" : "transition-all duration-200 ease-in-out"} ${getItemStatus(items[index], index, activeIndex) === "pending" ? "bg-gray-50" : "bg-white"}`}
+              className={`cursor-pointer overflow-hidden rounded-md border border-gray-300 outline outline-2 outline-transparent hover:border-gray-400 focus-visible:outline-[#6d28d9] ${reducedMotion ? "" : "transition-all duration-200 ease-in-out"} ${itemStatus === "pending" || itemStatus === "skipped" ? "bg-gray-50" : "bg-white"}`}
+              data-status={isWaitingItem ? "waiting" : itemStatus}
             >
               <div
                 data-role="card-header"
-                className={`flex items-center justify-between gap-3 rounded-t-lg border-b px-4 py-2 ${reducedMotion ? "" : "transition-opacity duration-300 ease-in-out"} ${getHeaderClasses(getItemStatus(items[index], index, activeIndex))}`}
+                className={`flex items-center justify-between gap-3 rounded-t-lg border-b px-4 py-2 ${reducedMotion ? "" : "transition-opacity duration-300 ease-in-out"} ${getHeaderClasses(itemStatus, isWaitingItem)}`}
               >
                 {(items[index]?.restartCount ?? 0) > 0 ? (
                   <span
@@ -288,7 +307,7 @@ export default function DAGGrid({
                 ) : null}
                 <div className="min-w-0 flex-1 truncate text-left font-medium">{items[index]?.title ?? formatStepName(items[index]?.id ?? "")}</div>
                 <div className="flex items-center gap-2">
-                  {getItemStatus(items[index], index, activeIndex) === "running" ? (
+                  {itemStatus === "running" && !isWaitingItem ? (
                     <>
                       <div className="relative h-4 w-4" aria-label="Active">
                         <span className="sr-only">Active</span>
@@ -307,14 +326,14 @@ export default function DAGGrid({
                   ) : (
                     <>
                       <span className="text-xs font-medium opacity-80">
-                        {getItemStatus(items[index], index, activeIndex)}
-                        {getItemStatus(items[index], index, activeIndex) === "failed" && items[index]?.stage ? (
+                        {getStatusLabel(itemStatus, isWaitingItem)}
+                        {itemStatus === "failed" && items[index]?.stage ? (
                           <span className="ml-2 truncate text-xs font-medium opacity-80" title={items[index]?.stage ?? undefined}>
                             ({formatStageLabel(items[index]!.stage!)})
                           </span>
                         ) : null}
                       </span>
-                      {getItemStatus(items[index], index, activeIndex) === "done" && parseTimestamp(items[index]?.startedAt) ? (
+                      {itemStatus === "done" && !isWaitingItem && parseTimestamp(items[index]?.startedAt) ? (
                         <TimerText
                           startMs={parseTimestamp(items[index]?.startedAt)!}
                           endMs={parseTimestamp(items[index]?.endedAt)}
@@ -330,7 +349,7 @@ export default function DAGGrid({
                 {items[index]?.subtitle ? <div className="text-sm text-gray-600">{items[index]?.subtitle}</div> : null}
                 {items[index]?.body ? <div className="mt-2 text-sm text-gray-700">{items[index]?.body}</div> : null}
                 <div className="mt-3 flex gap-2 border-t border-gray-100 pt-3">
-                  {getItemStatus(items[index], index, activeIndex) === "pending" ? (
+                  {itemStatus === "pending" ? (
                     <Button
                       size="sm"
                       variant="outline"
@@ -361,7 +380,7 @@ export default function DAGGrid({
                       Start
                     </Button>
                   ) : null}
-                  {getItemStatus(items[index], index, activeIndex) === "done" || getItemStatus(items[index], index, activeIndex) === "failed" ? (
+                  {itemStatus === "done" || itemStatus === "failed" || itemStatus === "skipped" ? (
                     <Button
                       size="sm"
                       variant="outline"
@@ -379,6 +398,8 @@ export default function DAGGrid({
                 </div>
               </div>
             </div>
+              );
+            })()
           ),
         )}
       </div>

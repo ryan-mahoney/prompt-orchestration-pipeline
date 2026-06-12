@@ -1,4 +1,7 @@
+import type { JobStatusValue, TaskStateValue } from "../../config/statuses";
+
 export type ChangeType = "created" | "modified" | "deleted";
+export type CanonicalJobStatus = JobStatusValue | "error";
 
 export interface ChangeEntry {
   path: string;
@@ -112,14 +115,21 @@ export interface SSEStreamResult {
 }
 
 export interface ComputedStatus {
-  status: string;
+  status: CanonicalJobStatus;
   progress: number;
 }
 
 export type RetryError = { message: string; name?: string; stack?: string } | string;
 
+export interface GateInfo {
+  afterTask: string;
+  message: string;
+  artifacts?: string[];
+  requestedAt: string;
+}
+
 export interface CanonicalTask {
-  state: string;
+  state: TaskStateValue;
   name: string;
   files: { artifacts: string[]; logs: string[]; tmp: string[] };
   startedAt?: string | null;
@@ -137,6 +147,9 @@ export interface CanonicalTask {
   failedStage?: string;
   artifacts?: unknown;
   error?: { message: string; [key: string]: unknown } | null;
+  skipReason?: string;
+  skippedBy?: string;
+  controlApplied?: boolean;
 }
 
 export interface CanonicalJob {
@@ -144,7 +157,7 @@ export interface CanonicalJob {
   jobId: string;
   name: string;
   title: string;
-  status: string;
+  status: CanonicalJobStatus;
   progress: number;
   createdAt: string | null;
   updatedAt: string | null;
@@ -157,6 +170,7 @@ export interface CanonicalJob {
   pipelineConfig?: Record<string, unknown>;
   current?: unknown;
   currentStage?: unknown;
+  gate?: GateInfo | null;
   warnings?: string[];
 }
 
@@ -187,6 +201,7 @@ export interface JobListStats {
 
 export interface GroupedJobs {
   running: CanonicalJob[];
+  waiting: CanonicalJob[];
   error: CanonicalJob[];
   pending: CanonicalJob[];
   complete: CanonicalJob[];
@@ -204,7 +219,7 @@ export interface CostsSummary {
 export interface APIJob {
   jobId: string;
   title: string;
-  status: string;
+  status: CanonicalJobStatus;
   progress: number;
   createdAt: string | null;
   updatedAt: string | null;
@@ -213,6 +228,7 @@ export interface APIJob {
   files?: Record<string, unknown>;
   current?: unknown;
   currentStage?: unknown;
+  gate?: GateInfo | null;
   costsSummary: CostsSummary;
   pipelineSlug?: string;
   pipeline?: string;

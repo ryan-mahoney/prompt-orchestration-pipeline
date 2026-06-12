@@ -167,6 +167,48 @@ describe("job adapter", () => {
     expect(job.progress).toBe(50);
   });
 
+  it("counts skipped tasks as completed for aggregate progress", () => {
+    const job = adaptJobSummary({
+      jobId: "job-1",
+      tasks: {
+        build: { state: "done" },
+        test: { state: "skipped" },
+        deploy: { state: "pending" },
+      },
+    });
+
+    expect(job.doneCount).toBe(1);
+    expect(job.completedCount).toBe(2);
+    expect(job.progress).toBe(66);
+  });
+
+  it("surfaces waiting status and gate metadata", () => {
+    const gate = {
+      afterTask: "review",
+      message: "Approve output",
+      requestedAt: "2026-06-12T12:00:00.000Z",
+      artifacts: ["tasks/review/output.md", 42],
+    };
+
+    const job = adaptJobDetail({
+      jobId: "job-1",
+      status: "waiting",
+      gate,
+      tasks: {
+        review: { state: "done" },
+        deploy: { state: "pending" },
+      },
+    });
+
+    expect(job.status).toBe("waiting");
+    expect(job.gate).toEqual({
+      afterTask: "review",
+      message: "Approve output",
+      requestedAt: "2026-06-12T12:00:00.000Z",
+      artifacts: ["tasks/review/output.md"],
+    });
+  });
+
   it("falls back to taskList length when pipelineConfig is absent", () => {
     const job = adaptJobSummary({
       jobId: "job-1",
@@ -209,6 +251,19 @@ describe("job adapter", () => {
       jobId: "job-1",
       tasks: {
         build: { state: "done" },
+        test: { state: "pending" },
+      },
+    });
+
+    expect(deriveAllowedActions(job, ["build", "test"])).toEqual({ start: true, restart: true });
+  });
+
+  it("treats skipped dependencies as complete and waiting jobs as restartable", () => {
+    const job = adaptJobSummary({
+      jobId: "job-1",
+      status: "waiting",
+      tasks: {
+        build: { state: "skipped" },
         test: { state: "pending" },
       },
     });

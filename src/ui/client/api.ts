@@ -2,6 +2,8 @@ import type {
   ApiError,
   ApiErrorCode,
   ApiOkResponse,
+  GateDecisionAction,
+  GateDecisionResponse,
   JobConcurrencyApiStatus,
   RestartJobOptions,
 } from "./types";
@@ -185,6 +187,18 @@ export async function startTask(jobId: string, taskId: string): Promise<ApiOkRes
 
 export async function stopJob(jobId: string): Promise<ApiOkResponse> {
   return postJson(`/api/jobs/${jobId}/stop`, {}, getStopErrorMessage);
+}
+
+export async function decideGate(
+  jobId: string,
+  action: GateDecisionAction,
+  note?: string,
+): Promise<GateDecisionResponse> {
+  return postJson(
+    `/api/jobs/${jobId}/gate`,
+    { action, ...(note !== undefined ? { note } : {}) },
+    (_errorData, status) => getErrorMessageFromStatus(status),
+  ) as Promise<GateDecisionResponse>;
 }
 
 export async function fetchConcurrencyStatus(

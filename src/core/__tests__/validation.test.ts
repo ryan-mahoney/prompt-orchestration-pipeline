@@ -54,6 +54,32 @@ describe("validatePipeline", () => {
     expect(result.valid).toBe(true);
   });
 
+  test("returns valid for string task entries", () => {
+    const result = validatePipeline({ name: "test", tasks: ["t1", "t2"] });
+    expect(result.valid).toBe(true);
+  });
+
+  test("returns valid for full object task entries", () => {
+    const result = validatePipeline({
+      name: "test",
+      tasks: [
+        "research",
+        {
+          name: "impl-step-2",
+          task: "spec-run-step",
+          config: { step: 2 },
+          gate: { message: "Review implementation", artifacts: ["tasks/impl-step-2/output.json"] },
+        },
+        {
+          name: "approval",
+          gate: true,
+        },
+      ],
+    });
+
+    expect(result.valid).toBe(true);
+  });
+
   test("returns invalid for missing tasks", () => {
     const result = validatePipeline({ name: "test" });
     expect(result.valid).toBe(false);
@@ -67,6 +93,42 @@ describe("validatePipeline", () => {
   test("allows additional properties", () => {
     const result = validatePipeline({ name: "test", tasks: ["t1"], extra: true });
     expect(result.valid).toBe(true);
+  });
+
+  test("returns invalid for duplicate task names across string and object entries", () => {
+    const result = validatePipeline({
+      name: "test",
+      tasks: ["build", { name: "build", task: "shared-build" }],
+    });
+
+    expect(result.valid).toBe(false);
+    if (!result.valid) {
+      expect(formatPipelineValidationErrors(result.errors)).toContain("duplicate task name 'build'");
+    }
+  });
+
+  test("returns invalid for empty object task entry task key", () => {
+    const result = validatePipeline({
+      name: "test",
+      tasks: [{ name: "build", task: "" }],
+    });
+
+    expect(result.valid).toBe(false);
+    if (!result.valid) {
+      expect(formatPipelineValidationErrors(result.errors)).toContain("task must be a non-empty string");
+    }
+  });
+
+  test("returns invalid for non-object task entry config", () => {
+    const result = validatePipeline({
+      name: "test",
+      tasks: [{ name: "build", config: ["not", "plain"] }],
+    });
+
+    expect(result.valid).toBe(false);
+    if (!result.valid) {
+      expect(formatPipelineValidationErrors(result.errors)).toContain("config must be a plain object");
+    }
   });
 });
 

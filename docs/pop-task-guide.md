@@ -236,6 +236,82 @@ Pipeline jobs start from a seed file in `pending/`:
 
 ---
 
+## Pipeline Task Entries
+
+Pipeline definitions can use simple string entries or object entries. String entries are still the shortest form:
+
+```json
+{
+  "tasks": ["research", "analysis", "synthesis"]
+}
+```
+
+Use object entries when multiple run steps should share one task implementation, when a step needs per-entry config, or when a step should pause for review after it succeeds:
+
+```json
+{
+  "tasks": [
+    "plan",
+    { "name": "implement-step-1", "task": "implementation-step", "config": { "step": 1 } },
+    { "name": "review", "gate": { "message": "Approve review before merge" } }
+  ],
+  "taskConfig": {
+    "implement-step-1": { "maxAttempts": 2 }
+  }
+}
+```
+
+Object entry fields:
+
+| Field | Required | Purpose |
+|-------|----------|---------|
+| `name` | Yes | Unique task name for this run. |
+| `task` | No | Task registry key. Defaults to `name`. |
+| `config` | No | Per-entry config merged over `taskConfig[name]`; entry config wins on conflicts. |
+| `gate` | No | `true` or `{ "message": "...", "artifacts": ["..."] }` to pause after this task succeeds. |
+
+---
+
+## Run Control Files
+
+A task can control the rest of its run by writing `control.json` in its task directory before the stage lifecycle returns success. Use `io.getTaskDir()` to locate the directory:
+
+```js
+export const integration = async ({ io, flags }) => {
+  await Bun.write(`${io.getTaskDir()}/control.json`, JSON.stringify({
+    patch: {
+      add: [
+        { name: "implement-step-2", task: "implementation-step", config: { step: 2 } }
+      ]
+    },
+    skip: [
+      { task: "optional-review", reason: "No review required for this run" }
+    ],
+    pause: {
+      message: "Approve generated implementation plan",
+      artifacts: ["output.json"]
+    }
+  }, null, 2));
+
+  return { output: {}, flags };
+};
+```
+
+Supported directives:
+
+| Directive | Purpose |
+|-----------|---------|
+| `patch.add` | Adds new task entries to the current run's per-run `pipeline.json`. |
+| `patch.insertAfter` | Optional insertion point; defaults to the task that wrote the control file. |
+| `skip` | Marks later pending tasks as `skipped`; skipped tasks count as dependency-satisfied. |
+| `pause` | Puts the job in `waiting` and shows Approve gate / Reject gate controls in the UI. |
+
+Validation is strict. Invalid JSON, duplicate added names, unknown task registry keys, invalid skip targets, or invalid insertion points fail the emitting task with `ControlValidationError`. These failures happen after task execution succeeds and do not burn task retry attempts.
+
+Run mutations are durable but not event-sourced. The source of truth is `tasks-status.json` plus the per-run `pipeline.json`; `events.jsonl` is an append-only audit trail.
+
+---
+
 ## Context Object Reference
 
 Each stage receives:
@@ -316,4 +392,3 @@ Each stage receives:
   2. Return `{ output, flags }` from every stage
   3. Custom helper functions are valid JavaScript but will not be called by the pipeline—only use them if called from within a valid stage
   4. Most simple tasks need only: `ingestion` → `promptTemplating` → `inference`
-  

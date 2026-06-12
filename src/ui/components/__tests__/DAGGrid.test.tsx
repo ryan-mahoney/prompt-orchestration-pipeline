@@ -209,3 +209,40 @@ test("DAGGrid renders the restart badge as the first child of the card header", 
   expect(firstChild).not.toBeNull();
   expect(firstChild!.getAttribute("data-role")).toBe("restart-badge");
 });
+
+test("DAGGrid renders skipped nodes with a visible skipped label", () => {
+  installMatchMedia();
+
+  const view = render(
+    <DAGGrid
+      items={[makeItem({ id: "build", title: "Build", status: "skipped" })]}
+      jobId="job-1"
+      taskById={{ build: makeTaskState({ name: "build", state: "skipped" }) }}
+      pipelineTasks={["build"]}
+      filesByTypeForItem={() => emptyFiles}
+      geometryAdapter={geometryAdapter}
+    />,
+  );
+
+  expect(view.getByText("Skipped")).toBeTruthy();
+  expect(view.container.querySelector('[data-status="skipped"]')).not.toBeNull();
+});
+
+test("DAGGrid renders gate-adjacent waiting nodes with a visible waiting label", () => {
+  installMatchMedia();
+
+  const view = render(
+    <DAGGrid
+      items={[makeItem({ id: "review", title: "Review", status: "done" })]}
+      jobId="job-1"
+      taskById={{ review: makeTaskState({ name: "review", state: "done" }) }}
+      pipelineTasks={["review"]}
+      waitingTaskId="review"
+      filesByTypeForItem={() => emptyFiles}
+      geometryAdapter={geometryAdapter}
+    />,
+  );
+
+  expect(view.getByText("Waiting")).toBeTruthy();
+  expect(view.container.querySelector('[data-status="waiting"]')).not.toBeNull();
+});

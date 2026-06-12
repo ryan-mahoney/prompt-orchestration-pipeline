@@ -3,6 +3,7 @@ import type {
   AllowedActions,
   CostsSummary,
   CurrentTaskInfo,
+  GateInfo,
   NormalizedJobDetail,
   NormalizedJobSummary,
   NormalizedTask,
@@ -41,6 +42,26 @@ function normalizeFiles(files: unknown): TaskFiles {
   };
 }
 
+function normalizeGate(value: unknown): GateInfo | null | undefined {
+  if (value === null) return null;
+  if (!isRecord(value)) return undefined;
+
+  const artifacts = Array.isArray(value["artifacts"])
+    ? value["artifacts"].filter((artifact): artifact is string => typeof artifact === "string")
+    : undefined;
+
+  return {
+    afterTask: typeof value["afterTask"] === "string" ? value["afterTask"] : "",
+    message: typeof value["message"] === "string" ? value["message"] : "",
+    requestedAt: typeof value["requestedAt"] === "string" ? value["requestedAt"] : "",
+    ...(artifacts && artifacts.length > 0 ? { artifacts } : {}),
+  };
+}
+
+function isCompletedTaskState(state: NormalizedTask["state"]): boolean {
+  return state === "done" || state === "skipped";
+}
+
 function normalizeTask(name: string, rawTask: unknown): NormalizedTask {
   const task = isRecord(rawTask) ? rawTask : {};
   return {
@@ -60,6 +81,9 @@ function normalizeTask(name: string, rawTask: unknown): NormalizedTask {
     artifacts: Array.isArray(task["artifacts"]) ? task["artifacts"].filter((x): x is string => typeof x === "string") : undefined,
     tokenUsage: isRecord(task["tokenUsage"]) ? task["tokenUsage"] : undefined,
     error: isRecord(task["error"]) ? task["error"] : undefined,
+    skipReason: typeof task["skipReason"] === "string" ? task["skipReason"] : undefined,
+    skippedBy: typeof task["skippedBy"] === "string" ? task["skippedBy"] : undefined,
+    controlApplied: typeof task["controlApplied"] === "boolean" ? task["controlApplied"] : undefined,
   };
 }
 
@@ -136,6 +160,7 @@ function adaptBaseJob(apiJob: Record<string, unknown>): NormalizedJobSummary {
   const tasks = normalizeTasks(rawTasks);
   const taskList = Object.values(tasks);
   const doneCount = taskList.filter((task) => task.state === "done").length;
+  const completedCount = taskList.filter((task) => isCompletedTaskState(task.state)).length;
   const rawPipelineConfig = isRecord(apiJob["pipelineConfig"]) ? apiJob["pipelineConfig"] : null;
   const pipelineTaskArray = rawPipelineConfig && Array.isArray(rawPipelineConfig["tasks"])
     ? rawPipelineConfig["tasks"] as unknown[]
@@ -144,10 +169,10 @@ function adaptBaseJob(apiJob: Record<string, unknown>): NormalizedJobSummary {
   const inferredStatus = deriveJobStatusFromTasks(taskList);
   const status = normalizeJobStatus(apiJob["status"] ?? inferredStatus);
   const progress = pipelineTaskArray
-    ? (taskCount === 0 ? 0 : Math.min(100, Math.floor((doneCount / taskCount) * 100)))
+    ? (taskCount === 0 ? 0 : Math.min(100, Math.floor((completedCount / taskCount) * 100)))
     : typeof apiJob["progress"] === "number"
       ? apiJob["progress"]
-      : taskCount === 0 ? 0 : Math.min(100, Math.floor((doneCount / taskCount) * 100));
+      : taskCount === 0 ? 0 : Math.min(100, Math.floor((completedCount / taskCount) * 100));
 
   return {
     id: typeof apiJob["id"] === "string" ? apiJob["id"] : String(apiJob["jobId"] ?? ""),
@@ -159,6 +184,7 @@ function adaptBaseJob(apiJob: Record<string, unknown>): NormalizedJobSummary {
     progress,
     taskCount,
     doneCount,
+    completedCount,
     location: typeof apiJob["location"] === "string" ? apiJob["location"] : "current",
     tasks,
     current: normalizeCurrent(apiJob["current"]),
@@ -170,6 +196,7 @@ function adaptBaseJob(apiJob: Record<string, unknown>): NormalizedJobSummary {
     pipelineConfig: typeof apiJob["pipelineConfig"] === "object" && apiJob["pipelineConfig"] !== null
       ? apiJob["pipelineConfig"] as Record<string, unknown>
       : undefined,
+    gate: normalizeGate(apiJob["gate"]),
     costsSummary: normalizeCostsSummary(apiJob["costsSummary"]),
     totalCost: toNumber(apiJob["totalCost"], normalizeCostsSummary(apiJob["costsSummary"]).totalCost),
     totalTokens: toNumber(apiJob["totalTokens"], normalizeCostsSummary(apiJob["costsSummary"]).totalTokens),
@@ -200,7 +227,10 @@ export function deriveAllowedActions(
   const start = pipelineTasks.some((taskName, index) => {
     const task = adaptedJob.tasks[taskName];
     if (!task || task.state !== "pending") return false;
-    return pipelineTasks.slice(0, index).every((dependency) => adaptedJob.tasks[dependency]?.state === "done");
+    return pipelineTasks.slice(0, index).every((dependency) => {
+      const dependencyTask = adaptedJob.tasks[dependency];
+      return dependencyTask !== undefined && isCompletedTaskState(dependencyTask.state);
+    });
   });
 
   return {

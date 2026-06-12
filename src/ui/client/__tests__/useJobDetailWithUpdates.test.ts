@@ -5,6 +5,7 @@ import {
   extractJobDetail,
   matchesJobTasksStatusPath,
   REFRESH_DEBOUNCE_MS,
+  shouldRefetchDetailForTaskSet,
 } from "../hooks/useJobDetailWithUpdates";
 import type { NormalizedJobDetail } from "../types";
 
@@ -109,6 +110,45 @@ describe("useJobDetailWithUpdates helpers", () => {
     expect(next.progress).toBe(50);
     expect(next.progress).toBeGreaterThanOrEqual(0);
     expect(next.progress).toBeLessThanOrEqual(100);
+  });
+
+  it("refetches full detail when a job update has a different task set than pipelineConfig", () => {
+    const detail: NormalizedJobDetail = {
+      ...makeDetail("job-1"),
+      pipelineConfig: {
+        tasks: ["build", "test"],
+      },
+    };
+
+    expect(shouldRefetchDetailForTaskSet(detail, {
+      type: "job:updated",
+      data: {
+        jobId: "job-1",
+        tasks: {
+          build: { state: "done" },
+          inserted: { state: "pending" },
+          test: { state: "pending" },
+        },
+      },
+    })).toBe(true);
+  });
+
+  it("refetches full detail when a task update targets an unknown inserted task", () => {
+    const detail = makeDetail("job-1");
+
+    expect(shouldRefetchDetailForTaskSet(detail, {
+      type: "task:updated",
+      data: { jobId: "job-1", taskName: "inserted", task: { state: "pending" } },
+    })).toBe(true);
+  });
+
+  it("does not refetch full detail for known task updates", () => {
+    const detail = makeDetail("job-1");
+
+    expect(shouldRefetchDetailForTaskSet(detail, {
+      type: "task:updated",
+      data: { jobId: "job-1", taskName: "build", task: { state: "running" } },
+    })).toBe(false);
   });
 
   it("exports the detail debounce constant", () => {

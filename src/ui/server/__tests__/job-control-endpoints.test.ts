@@ -47,7 +47,11 @@ async function setupJob(
   return jobDir;
 }
 
-async function setupPipelineConfig(root: string, slug: string, tasks: string[]): Promise<void> {
+async function setupPipelineConfig(
+  root: string,
+  slug: string,
+  tasks: Array<string | Record<string, unknown>>,
+): Promise<void> {
   const configDir = path.join(root, "pipeline-config", slug);
   await mkdir(configDir, { recursive: true });
   await writeFile(path.join(configDir, "pipeline.json"), JSON.stringify({ name: slug, tasks }));
@@ -56,6 +60,18 @@ async function setupPipelineConfig(root: string, slug: string, tasks: string[]):
       [slug]: {},
     },
   }));
+}
+
+async function readPipelineTaskNames(pipelinePath: string): Promise<string[]> {
+  const pipeline = JSON.parse(await readFile(pipelinePath, "utf-8")) as { tasks?: unknown[] };
+  return (pipeline.tasks ?? []).map((task) => {
+    if (typeof task === "string") return task;
+    if (typeof task === "object" && task !== null && !Array.isArray(task)) {
+      const name = (task as Record<string, unknown>)["name"];
+      return typeof name === "string" ? name : "";
+    }
+    return "";
+  }).filter((name) => name.length > 0);
 }
 
 function mockRunnerSpawn(pid = 424242) {
@@ -580,6 +596,195 @@ describe("handleJobRestart", () => {
     expect(body["ok"]).toBe(true);
     expect(body["mode"]).toBe("clean-slate");
   });
+
+  it("clean-slate restart restores the source task list and clears a pending gate", async () => {
+    const root = await makeTempRoot();
+    initPATHS(root);
+    await setupPipelineConfig(root, "mutable-pipeline", ["research", "analysis"]);
+
+    const jobDir = await setupJob(root, "restart-mutated-clean", {
+      id: "restart-mutated-clean",
+      pipeline: "mutable-pipeline",
+      state: "waiting",
+      current: "research",
+      currentStage: null,
+      lastUpdated: "2026-04-01T10:00:00.000Z",
+      gate: {
+        afterTask: "research",
+        message: "approve before continuing",
+        requestedAt: "2026-04-01T10:00:00.000Z",
+      },
+      tasks: {
+        research: { state: "done", currentStage: null },
+        inserted: { state: "pending", currentStage: null },
+        analysis: { state: "pending", currentStage: null },
+      },
+      files: { artifacts: [], logs: [], tmp: [] },
+    });
+    await writeFile(path.join(jobDir, "pipeline.json"), JSON.stringify({
+      name: "mutable-pipeline",
+      tasks: [{ name: "research" }, { name: "inserted", task: "shared-task" }, { name: "analysis" }],
+    }));
+
+    mockRunnerSpawn();
+
+    const req = new Request("http://localhost/api/jobs/restart-mutated-clean/restart", { method: "POST" });
+    const res = await handleJobRestart(req, "restart-mutated-clean", root);
+    const body = await res.json() as Record<string, unknown>;
+
+    expect(res.status).toBe(202);
+    expect(body["mode"]).toBe("clean-slate");
+    expect(await readPipelineTaskNames(path.join(jobDir, "pipeline.json"))).toEqual(["research", "analysis"]);
+
+    const snapshot = await readJobStatus(jobDir);
+    expect(snapshot!.gate).toBeNull();
+    expect(Object.keys(snapshot!.tasks)).toEqual(["research", "analysis"]);
+    expect(snapshot!.tasks["research"]!.state).toBe("pending");
+    expect(snapshot!.tasks["analysis"]!.state).toBe("pending");
+    expect(snapshot!.tasks["inserted"]).toBeUndefined();
+  });
+
+  it("clean-slate restart falls back to status reset when source pipeline cannot be loaded", async () => {
+    const root = await makeTempRoot();
+    initPATHS(root);
+
+    const jobDir = await setupJob(root, "restart-missing-source", {
+      id: "restart-missing-source",
+      pipeline: "deleted-pipeline",
+      state: "waiting",
+      current: "inserted",
+      currentStage: null,
+      lastUpdated: "2026-04-01T10:00:00.000Z",
+      gate: {
+        afterTask: "inserted",
+        message: "approve before continuing",
+        requestedAt: "2026-04-01T10:00:00.000Z",
+      },
+      tasks: {
+        research: { state: "done", currentStage: null },
+        inserted: { state: "pending", currentStage: null },
+      },
+      files: { artifacts: [], logs: [], tmp: [] },
+    });
+    await writeFile(path.join(jobDir, "pipeline.json"), JSON.stringify({
+      name: "deleted-pipeline",
+      tasks: [{ name: "research" }, { name: "inserted", task: "shared-task" }],
+    }));
+
+    mockRunnerSpawn();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+
+    const req = new Request("http://localhost/api/jobs/restart-missing-source/restart", { method: "POST" });
+    const res = await handleJobRestart(req, "restart-missing-source", root);
+    const body = await res.json() as Record<string, unknown>;
+
+    expect(res.status).toBe(202);
+    expect(body["mode"]).toBe("clean-slate");
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining("clean-slate restart could not re-materialize source pipeline"),
+      expect.any(Error),
+    );
+
+    const snapshot = await readJobStatus(jobDir);
+    expect(snapshot!.gate).toBeNull();
+    expect(Object.keys(snapshot!.tasks)).toEqual(["research", "inserted"]);
+    expect(snapshot!.tasks["research"]!.state).toBe("pending");
+    expect(snapshot!.tasks["inserted"]!.state).toBe("pending");
+  });
+
+  it("fromTask restart preserves a patched per-run definition and clears stale gates", async () => {
+    const root = await makeTempRoot();
+    initPATHS(root);
+    await setupPipelineConfig(root, "mutable-pipeline", ["research", "analysis"]);
+
+    const jobDir = await setupJob(root, "restart-mutated-from-task", {
+      id: "restart-mutated-from-task",
+      pipeline: "mutable-pipeline",
+      state: "waiting",
+      current: "inserted",
+      currentStage: null,
+      gate: {
+        afterTask: "research",
+        message: "Approve generated steps",
+        requestedAt: "2026-06-12T12:00:00.000Z",
+      },
+      lastUpdated: "2026-04-01T10:00:00.000Z",
+      tasks: {
+        research: { state: "done", currentStage: null },
+        inserted: { state: "failed", currentStage: null },
+        analysis: { state: "pending", currentStage: null },
+      },
+      files: { artifacts: [], logs: [], tmp: [] },
+    });
+    await writeFile(path.join(jobDir, "pipeline.json"), JSON.stringify({
+      name: "mutable-pipeline",
+      tasks: [{ name: "research" }, { name: "inserted", task: "shared-task" }, { name: "analysis" }],
+    }));
+
+    mockRunnerSpawn();
+
+    const req = new Request("http://localhost/api/jobs/restart-mutated-from-task/restart", {
+      method: "POST",
+      body: JSON.stringify({ fromTask: "inserted", singleTask: false }),
+    });
+    const res = await handleJobRestart(req, "restart-mutated-from-task", root);
+    const body = await res.json() as Record<string, unknown>;
+
+    expect(res.status).toBe(202);
+    expect(body["mode"]).toBe("from-task");
+    expect(await readPipelineTaskNames(path.join(jobDir, "pipeline.json"))).toEqual(["research", "inserted", "analysis"]);
+
+    const snapshot = await readJobStatus(jobDir);
+    expect(Object.keys(snapshot!.tasks)).toEqual(["research", "inserted", "analysis"]);
+    expect(snapshot!.state).toBe("pending");
+    expect(snapshot!.gate).toBeNull();
+    expect(snapshot!.tasks["research"]!.state).toBe("done");
+    expect(snapshot!.tasks["inserted"]!.state).toBe("pending");
+    expect(snapshot!.tasks["analysis"]!.state).toBe("pending");
+  });
+
+  it("single-task restart clears a stale gate before spawning", async () => {
+    const root = await makeTempRoot();
+    initPATHS(root);
+    await setupPipelineConfig(root, "single-task-gate-pipeline", ["review", "deploy"]);
+
+    const jobDir = await setupJob(root, "restart-single-task-gate", {
+      id: "restart-single-task-gate",
+      pipeline: "single-task-gate-pipeline",
+      state: "waiting",
+      current: null,
+      currentStage: null,
+      gate: {
+        afterTask: "review",
+        message: "Approve review",
+        requestedAt: "2026-06-12T12:00:00.000Z",
+      },
+      lastUpdated: "2026-04-01T10:00:00.000Z",
+      tasks: {
+        review: { state: "done", currentStage: null },
+        deploy: { state: "pending", currentStage: null },
+      },
+      files: { artifacts: [], logs: [], tmp: [] },
+    });
+
+    mockRunnerSpawn();
+
+    const req = new Request("http://localhost/api/jobs/restart-single-task-gate/restart", {
+      method: "POST",
+      body: JSON.stringify({ fromTask: "deploy", singleTask: true }),
+    });
+    const res = await handleJobRestart(req, "restart-single-task-gate", root);
+    const body = await res.json() as Record<string, unknown>;
+
+    expect(res.status).toBe(202);
+    expect(body["mode"]).toBe("single-task");
+
+    const snapshot = await readJobStatus(jobDir);
+    expect(snapshot!.state).toBe("pending");
+    expect(snapshot!.gate).toBeNull();
+    expect(snapshot!.tasks["review"]!.state).toBe("done");
+    expect(snapshot!.tasks["deploy"]!.state).toBe("pending");
+  });
 });
 
 describe("handleTaskStart", () => {
@@ -739,6 +944,73 @@ describe("handleTaskStart", () => {
     expect(body["ok"]).toBe(true);
     expect(body["taskId"]).toBe("analysis");
     expect(spawnSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("starts a dynamically inserted task from the per-run pipeline definition", async () => {
+    const root = await makeTempRoot();
+    initPATHS(root);
+    await setupPipelineConfig(root, "task-start-mutated-pipeline", ["research", "analysis"]);
+    const spawnSpy = mockRunnerSpawn(77778);
+
+    const jobDir = await setupJob(root, "task-start-inserted", {
+      id: "task-start-inserted",
+      pipeline: "task-start-mutated-pipeline",
+      state: "pending",
+      current: null,
+      currentStage: null,
+      lastUpdated: "2026-04-01T10:00:00.000Z",
+      tasks: {
+        research: { state: "done", currentStage: null },
+        inserted: { state: "pending", currentStage: null },
+        analysis: { state: "pending", currentStage: null },
+      },
+      files: { artifacts: [], logs: [], tmp: [] },
+    });
+    await writeFile(path.join(jobDir, "pipeline.json"), JSON.stringify({
+      name: "task-start-mutated-pipeline",
+      tasks: [{ name: "research" }, { name: "inserted", task: "shared-task" }, { name: "analysis" }],
+    }));
+
+    const req = new Request("http://localhost/api/jobs/task-start-inserted/tasks/inserted/start", { method: "POST" });
+    const res = await handleTaskStart(req, "task-start-inserted", "inserted", root);
+    const body = await res.json() as Record<string, unknown>;
+
+    expect(res.status).toBe(202);
+    expect(body["ok"]).toBe(true);
+    expect(spawnSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("uses per-run inserted tasks for task-start dependency checks", async () => {
+    const root = await makeTempRoot();
+    initPATHS(root);
+    await setupPipelineConfig(root, "task-start-mutated-deps-pipeline", ["research", "analysis"]);
+
+    const jobDir = await setupJob(root, "task-start-mutated-deps", {
+      id: "task-start-mutated-deps",
+      pipeline: "task-start-mutated-deps-pipeline",
+      state: "pending",
+      current: null,
+      currentStage: null,
+      lastUpdated: "2026-04-01T10:00:00.000Z",
+      tasks: {
+        research: { state: "done", currentStage: null },
+        inserted: { state: "pending", currentStage: null },
+        analysis: { state: "pending", currentStage: null },
+      },
+      files: { artifacts: [], logs: [], tmp: [] },
+    });
+    await writeFile(path.join(jobDir, "pipeline.json"), JSON.stringify({
+      name: "task-start-mutated-deps-pipeline",
+      tasks: [{ name: "research" }, { name: "inserted", task: "shared-task" }, { name: "analysis" }],
+    }));
+
+    const req = new Request("http://localhost/api/jobs/task-start-mutated-deps/tasks/analysis/start", { method: "POST" });
+    const res = await handleTaskStart(req, "task-start-mutated-deps", "analysis", root);
+    const body = await res.json() as Record<string, unknown>;
+
+    expect(res.status).toBe(412);
+    expect(body["code"]).toBe("dependencies_not_satisfied");
+    expect(body["message"]).toContain("inserted");
   });
 
   it("returns 412 when stale-running recovery is possible but dependencies are not done", async () => {

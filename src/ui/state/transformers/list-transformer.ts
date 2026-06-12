@@ -11,6 +11,7 @@ import type {
 
 const STATUS_PRIORITY: Record<string, number> = {
   running: 4,
+  waiting: 4,
   error: 3,
   pending: 2,
   complete: 1,
@@ -80,6 +81,7 @@ export function aggregateAndSortJobs(
 export function groupJobsByStatus(jobs: CanonicalJob[]): GroupedJobs {
   const grouped: GroupedJobs = {
     running: [],
+    waiting: [],
     error: [],
     pending: [],
     complete: [],
@@ -145,6 +147,7 @@ export function transformJobListForAPI(
       files: job.files,
       current: job.current,
       currentStage: job.currentStage,
+      gate: job.gate,
       costsSummary: getCostsSummary(job.costs),
     };
 

@@ -28,15 +28,50 @@ function getPipelineTaskCount(detail: NormalizedJobDetail): number | null {
   return null;
 }
 
+function getPipelineTaskNames(detail: NormalizedJobDetail): string[] {
+  const config = detail.pipelineConfig;
+  if (!config || !Array.isArray(config["tasks"])) return Object.keys(detail.tasks);
+
+  const names = config["tasks"].flatMap((task) => {
+    if (typeof task === "string") return [task];
+    if (isRecord(task) && typeof task["name"] === "string") return [task["name"]];
+    return [];
+  });
+  return names.length > 0 ? names : Object.keys(detail.tasks);
+}
+
+function sameTaskSet(left: string[], right: string[]): boolean {
+  if (left.length !== right.length) return false;
+  const rightSet = new Set(right);
+  return left.every((taskName) => rightSet.has(taskName));
+}
+
+export function shouldRefetchDetailForTaskSet(detail: NormalizedJobDetail, event: SseJobEvent): boolean {
+  if (event.type === "task:updated") {
+    const taskName = typeof event.data["taskName"] === "string" ? event.data["taskName"] : null;
+    return taskName !== null && detail.tasks[taskName] === undefined;
+  }
+
+  if (event.type !== "job:updated") return false;
+  const rawTasks = event.data["tasks"];
+  if (!isRecord(rawTasks)) return false;
+
+  const incomingTaskNames = Object.keys(rawTasks);
+  if (incomingTaskNames.length === 0) return false;
+  return !sameTaskSet(getPipelineTaskNames(detail), incomingTaskNames);
+}
+
 function recomputeProgress(detail: NormalizedJobDetail): NormalizedJobDetail {
   const tasks = Object.values(detail.tasks);
   const doneCount = tasks.filter((task) => task.state === "done").length;
+  const completedCount = tasks.filter((task) => task.state === "done" || task.state === "skipped").length;
   const taskCount = getPipelineTaskCount(detail) ?? tasks.length;
   return {
     ...detail,
     doneCount,
+    completedCount,
     taskCount,
-    progress: taskCount === 0 ? 0 : Math.min(100, Math.floor((doneCount / taskCount) * 100)),
+    progress: taskCount === 0 ? 0 : Math.min(100, Math.floor((completedCount / taskCount) * 100)),
     updatedAt: new Date().toISOString(),
   };
 }
@@ -161,6 +196,11 @@ export function useJobDetailWithUpdates(jobId: string): UseJobDetailWithUpdatesR
     source.onopen = () => setConnectionStatus("connected");
     source.onerror = () => setConnectionStatus(source.readyState === 2 ? "disconnected" : "error");
 
+    const scheduleRefetch = () => {
+      if (refetchTimerRef.current !== null) clearTimeout(refetchTimerRef.current);
+      refetchTimerRef.current = setTimeout(load, REFRESH_DEBOUNCE_MS);
+    };
+
     const onMessage = (event: MessageEvent<string>) => {
       let payload: SseJobEvent;
       try {
@@ -176,14 +216,18 @@ export function useJobDetailWithUpdates(jobId: string): UseJobDetailWithUpdatesR
       if (payload.type === "state:change") {
         const path = typeof payload.data["path"] === "string" ? payload.data["path"] : "";
         if (matchesJobTasksStatusPath(path, jobId)) {
-          if (refetchTimerRef.current !== null) clearTimeout(refetchTimerRef.current);
-          refetchTimerRef.current = setTimeout(load, REFRESH_DEBOUNCE_MS);
+          scheduleRefetch();
         }
         return;
       }
 
       if (!hydratedRef.current || refetchingRef.current || dataRef.current === null) {
         queueRef.current.push(payload);
+        return;
+      }
+
+      if (shouldRefetchDetailForTaskSet(dataRef.current, payload)) {
+        scheduleRefetch();
         return;
       }
 
