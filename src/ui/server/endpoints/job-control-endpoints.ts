@@ -100,7 +100,7 @@ async function spawnRunner(
   return { kill: () => proc.kill(), pid: proc.pid };
 }
 
-async function acquireConcurrencySlot(
+export async function acquireConcurrencySlot(
   dataDir: string,
   jobId: string,
   source: JobSlotLease["source"],
@@ -132,7 +132,7 @@ async function acquireConcurrencySlot(
   };
 }
 
-async function spawnWithSlot(
+export async function spawnWithSlot(
   dataDir: string,
   jobId: string,
   jobDir: string,
@@ -168,7 +168,7 @@ async function spawnWithSlot(
   }
 }
 
-async function readRunnerPid(jobDir: string): Promise<number | null> {
+export async function readRunnerPid(jobDir: string): Promise<number | null> {
   try {
     const content = await Bun.file(path.join(jobDir, "runner.pid")).text();
     const pid = parseInt(content.trim(), 10);
@@ -178,7 +178,7 @@ async function readRunnerPid(jobDir: string): Promise<number | null> {
   }
 }
 
-function isProcessAlive(pid: number): boolean {
+export function isProcessAlive(pid: number): boolean {
   try {
     process.kill(pid, 0);
     return true;

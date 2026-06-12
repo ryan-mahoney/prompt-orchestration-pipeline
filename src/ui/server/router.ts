@@ -4,6 +4,7 @@ import { embeddedAssets } from "./embedded-assets";
 import { handleConcurrencyStatus } from "./endpoints/concurrency-endpoint";
 import { handleCreatePipeline } from "./endpoints/create-pipeline-endpoint";
 import { handleTaskFile, handleTaskFileList } from "./endpoints/file-endpoints";
+import { handleGateDecision } from "./endpoints/gate-endpoints";
 import {
   handleJobRescan,
   handleJobRestart,
@@ -76,6 +77,7 @@ export function createRouter(options: RouterOptions): {
 
   addRoute("GET", "/api/jobs", () => handleJobList());
   addRoute("GET", "/api/jobs/:jobId", (_req, params) => handleJobDetail(params["jobId"]!));
+  addRoute("POST", "/api/jobs/:jobId/gate", (req, params) => handleGateDecision(params["jobId"]!, req, options.dataDir));
   addRoute("POST", "/api/jobs/:jobId/restart", (req, params) => handleJobRestart(req, params["jobId"]!, options.dataDir));
   addRoute("POST", "/api/jobs/:jobId/stop", (req, params) => handleJobStop(req, params["jobId"]!, options.dataDir));
   addRoute("POST", "/api/jobs/:jobId/rescan", (req, params) => handleJobRescan(req, params["jobId"]!, options.dataDir));

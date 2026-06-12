@@ -38,4 +38,36 @@ describe("router", () => {
     const spaResponse = await router.handle(new Request("http://localhost/unknown"));
     await expect(spaResponse.text()).resolves.toContain("<html>ok</html>");
   });
+
+  it("dispatches gate decisions to the current job endpoint", async () => {
+    const root = await makeTempRoot();
+    process.env["PO_ROOT"] = root;
+    initPATHS(root);
+    await mkdir(path.join(root, "pipeline-data", "current", "gate-job"), { recursive: true });
+    await writeFile(path.join(root, "pipeline-data", "current", "gate-job", "tasks-status.json"), JSON.stringify({
+      id: "gate-job",
+      state: "waiting",
+      current: "plan",
+      currentStage: null,
+      lastUpdated: "2026-04-01T10:00:00.000Z",
+      tasks: { plan: { state: "done" }, implement: { state: "pending" } },
+      files: { artifacts: [], logs: [], tmp: [] },
+      gate: {
+        afterTask: "plan",
+        message: "Review the plan",
+        requestedAt: "2026-04-01T10:00:00.000Z",
+      },
+    }));
+    const router = createRouter({ dataDir: root, distDir: path.join(root, "dist") });
+
+    const response = await router.handle(new Request("http://localhost/api/jobs/gate-job/gate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "reject" }),
+    }));
+    const body = await response.json() as Record<string, unknown>;
+
+    expect(response.status).toBe(202);
+    expect(body).toMatchObject({ ok: true, jobId: "gate-job", action: "reject", spawned: false });
+  });
 });

@@ -11,7 +11,7 @@ export interface JobSlotLease {
   jobId: string;
   pid: number | null;
   acquiredAt: string;
-  source: "orchestrator" | "restart" | "task-start";
+  source: "orchestrator" | "restart" | "task-start" | "gate";
   slotPath: string;
 }
 
