@@ -946,6 +946,73 @@ describe("handleTaskStart", () => {
     expect(spawnSpy).toHaveBeenCalledTimes(1);
   });
 
+  it("starts a dynamically inserted task from the per-run pipeline definition", async () => {
+    const root = await makeTempRoot();
+    initPATHS(root);
+    await setupPipelineConfig(root, "task-start-mutated-pipeline", ["research", "analysis"]);
+    const spawnSpy = mockRunnerSpawn(77778);
+
+    const jobDir = await setupJob(root, "task-start-inserted", {
+      id: "task-start-inserted",
+      pipeline: "task-start-mutated-pipeline",
+      state: "pending",
+      current: null,
+      currentStage: null,
+      lastUpdated: "2026-04-01T10:00:00.000Z",
+      tasks: {
+        research: { state: "done", currentStage: null },
+        inserted: { state: "pending", currentStage: null },
+        analysis: { state: "pending", currentStage: null },
+      },
+      files: { artifacts: [], logs: [], tmp: [] },
+    });
+    await writeFile(path.join(jobDir, "pipeline.json"), JSON.stringify({
+      name: "task-start-mutated-pipeline",
+      tasks: [{ name: "research" }, { name: "inserted", task: "shared-task" }, { name: "analysis" }],
+    }));
+
+    const req = new Request("http://localhost/api/jobs/task-start-inserted/tasks/inserted/start", { method: "POST" });
+    const res = await handleTaskStart(req, "task-start-inserted", "inserted", root);
+    const body = await res.json() as Record<string, unknown>;
+
+    expect(res.status).toBe(202);
+    expect(body["ok"]).toBe(true);
+    expect(spawnSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("uses per-run inserted tasks for task-start dependency checks", async () => {
+    const root = await makeTempRoot();
+    initPATHS(root);
+    await setupPipelineConfig(root, "task-start-mutated-deps-pipeline", ["research", "analysis"]);
+
+    const jobDir = await setupJob(root, "task-start-mutated-deps", {
+      id: "task-start-mutated-deps",
+      pipeline: "task-start-mutated-deps-pipeline",
+      state: "pending",
+      current: null,
+      currentStage: null,
+      lastUpdated: "2026-04-01T10:00:00.000Z",
+      tasks: {
+        research: { state: "done", currentStage: null },
+        inserted: { state: "pending", currentStage: null },
+        analysis: { state: "pending", currentStage: null },
+      },
+      files: { artifacts: [], logs: [], tmp: [] },
+    });
+    await writeFile(path.join(jobDir, "pipeline.json"), JSON.stringify({
+      name: "task-start-mutated-deps-pipeline",
+      tasks: [{ name: "research" }, { name: "inserted", task: "shared-task" }, { name: "analysis" }],
+    }));
+
+    const req = new Request("http://localhost/api/jobs/task-start-mutated-deps/tasks/analysis/start", { method: "POST" });
+    const res = await handleTaskStart(req, "task-start-mutated-deps", "analysis", root);
+    const body = await res.json() as Record<string, unknown>;
+
+    expect(res.status).toBe(412);
+    expect(body["code"]).toBe("dependencies_not_satisfied");
+    expect(body["message"]).toContain("inserted");
+  });
+
   it("returns 412 when stale-running recovery is possible but dependencies are not done", async () => {
     const root = await makeTempRoot();
     initPATHS(root);

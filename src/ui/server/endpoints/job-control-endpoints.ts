@@ -263,6 +263,13 @@ function getTaskName(task: unknown): string | null {
   return typeof name === "string" && name.length > 0 ? name : null;
 }
 
+function getPipelineTaskOrderFromDefinition(pipeline: unknown): string[] | null {
+  if (typeof pipeline !== "object" || pipeline === null || Array.isArray(pipeline)) return null;
+  const tasks = (pipeline as Record<string, unknown>)["tasks"];
+  if (!Array.isArray(tasks)) return null;
+  return tasks.map(getTaskName).filter((name): name is string => name !== null);
+}
+
 async function readSeedPipelineSlug(jobDir: string): Promise<string | null> {
   try {
     const seed = JSON.parse(await Bun.file(path.join(jobDir, "seed.json")).text()) as Record<string, unknown>;
@@ -273,6 +280,15 @@ async function readSeedPipelineSlug(jobDir: string): Promise<string | null> {
 }
 
 async function loadPipelineTaskOrder(dataDir: string, jobDir: string, snapshot: StatusSnapshot): Promise<string[] | null> {
+  const perRunPipeline = Bun.file(path.join(jobDir, "pipeline.json"));
+  if (await perRunPipeline.exists()) {
+    try {
+      return getPipelineTaskOrderFromDefinition(JSON.parse(await perRunPipeline.text()));
+    } catch {
+      return null;
+    }
+  }
+
   const snapshotPipeline = snapshot["pipeline"];
   const pipelineSlug = typeof snapshotPipeline === "string" && snapshotPipeline.length > 0
     ? snapshotPipeline
@@ -282,9 +298,7 @@ async function loadPipelineTaskOrder(dataDir: string, jobDir: string, snapshot: 
 
   try {
     const { pipelineJsonPath } = getPipelineConfig(pipelineSlug, dataDir);
-    const pipeline = JSON.parse(await Bun.file(pipelineJsonPath).text()) as Record<string, unknown>;
-    if (!Array.isArray(pipeline["tasks"])) return null;
-    return pipeline["tasks"].map(getTaskName).filter((name): name is string => name !== null);
+    return getPipelineTaskOrderFromDefinition(JSON.parse(await Bun.file(pipelineJsonPath).text()));
   } catch {
     return null;
   }
