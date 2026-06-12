@@ -123,6 +123,24 @@ describe("status-transformer", () => {
     });
   });
 
+  it("preserves root failed status for rejected gates without failed tasks", () => {
+    const job = transformJobStatus(
+      {
+        state: "failed",
+        error: { name: "GateRejected", message: "gate rejected" },
+        gate: null,
+        tasks: {
+          review: { state: "done" },
+          deploy: { state: "pending" },
+        },
+      },
+      "job-1",
+      "current",
+    );
+
+    expect(job?.status).toBe("error");
+  });
+
   it("maps numeric restartCount on tasks", () => {
     const tasks = transformTasks({ alpha: { state: "running", restartCount: 4 } });
     expect(tasks.alpha?.restartCount).toBe(4);

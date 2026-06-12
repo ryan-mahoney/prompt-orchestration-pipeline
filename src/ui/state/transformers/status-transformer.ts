@@ -175,7 +175,9 @@ export function transformJobStatus(raw: unknown, jobId: string, location: string
     jobId,
     name: title,
     title,
-    status: snapshotStatus === "waiting" ? "waiting" : computed.status,
+    status: snapshotStatus === "waiting" || snapshotStatus === "failed"
+      ? getStatusValue(snapshotStatus)
+      : computed.status,
     progress: computed.progress,
     createdAt: typeof record["createdAt"] === "string" ? record["createdAt"] : null,
     updatedAt: typeof record["updatedAt"] === "string" ? record["updatedAt"] : null,
