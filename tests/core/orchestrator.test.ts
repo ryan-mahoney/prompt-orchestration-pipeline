@@ -1,4 +1,4 @@
-import { describe, test, expect, afterEach, mock } from "bun:test";
+import { describe, test, expect, beforeEach, afterEach, mock } from "bun:test";
 import { mkdtemp, rm, access, mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -7,7 +7,7 @@ import type { OrchestratorOptions, OrchestratorHandle } from "../../src/core/orc
 import type { Logger } from "../../src/core/logger";
 import { generateLogName } from "../../src/core/file-io";
 import { LogEvent, LogFileExtension } from "../../src/config/log-events";
-import { defaultConfig } from "../../src/core/config";
+import { defaultConfig, resetConfig } from "../../src/core/config";
 
 describe("SEED_PATTERN", () => {
   describe("valid filenames", () => {
@@ -332,8 +332,19 @@ describe("handleSeedAdd", () => {
 
 describe("handleSeedAdd — job scaffolding", () => {
   const tmpDirs: string[] = [];
+  let savedPoRoot: string | undefined;
+
+  beforeEach(() => {
+    savedPoRoot = process.env["PO_ROOT"];
+  });
 
   afterEach(async () => {
+    if (savedPoRoot === undefined) {
+      delete process.env["PO_ROOT"];
+    } else {
+      process.env["PO_ROOT"] = savedPoRoot;
+    }
+    resetConfig();
     for (const dir of tmpDirs.splice(0)) {
       await rm(dir, { recursive: true, force: true });
     }
@@ -430,6 +441,62 @@ describe("handleSeedAdd — job scaffolding", () => {
     const statusPath = join(dirs.current, "myjob", "tasks-status.json");
     const status = JSON.parse(await Bun.file(statusPath).text()) as Record<string, unknown>;
     expect(status["name"]).toBe("myjob");
+  });
+
+  test("materializes a normalized per-run pipeline.json before status initialization", async () => {
+    const { base, dirs } = await makeTmpDirWithDirs();
+    process.env["PO_ROOT"] = base;
+    resetConfig();
+
+    const slug = "my-pipeline";
+    const pipelineConfigDir = join(base, "pipeline-config", slug);
+    const tasksDir = join(pipelineConfigDir, "tasks");
+    await mkdir(tasksDir, { recursive: true });
+    await writeFile(
+      join(base, "pipeline-config", "registry.json"),
+      JSON.stringify({ pipelines: { [slug]: { configDir: pipelineConfigDir, tasksDir } } }),
+    );
+    await writeFile(
+      join(pipelineConfigDir, "pipeline.json"),
+      JSON.stringify({
+        tasks: [
+          "plan",
+          { name: "impl-step-2", task: "spec-run-step", config: { step: 2 }, gate: true },
+        ],
+        taskConfig: { plan: { mode: "fast" } },
+      }),
+    );
+
+    const { logger } = makeMockLogger();
+    const running = new Map();
+    const seedPath = join(dirs.pending, "myjob-seed.json");
+    await writeFile(seedPath, JSON.stringify({ pipeline: slug, name: "My Job" }));
+    const opts: OrchestratorOptions = {
+      dataDir: "/tmp/does-not-matter",
+      spawn: mock(() => ({
+        pid: process.pid,
+        exited: Promise.resolve({ code: 0, signal: null, completionType: "success" as const }),
+        kill: mock(() => {}),
+      })),
+    };
+
+    await handleSeedAdd(seedPath, dirs, running, logger, opts);
+
+    const jobDir = join(dirs.current, "myjob");
+    const perRun = JSON.parse(await Bun.file(join(jobDir, "pipeline.json")).text()) as Record<string, unknown>;
+    expect(perRun["tasks"]).toEqual([
+      { name: "plan" },
+      { name: "impl-step-2", task: "spec-run-step", config: { step: 2 }, gate: true },
+    ]);
+    expect(perRun["taskConfig"]).toEqual({ plan: { mode: "fast" } });
+
+    const status = JSON.parse(await Bun.file(join(jobDir, "tasks-status.json")).text()) as {
+      tasks: Record<string, { state: string }>;
+    };
+    expect(status.tasks).toMatchObject({
+      plan: { state: "pending" },
+      "impl-step-2": { state: "pending" },
+    });
   });
 });
 

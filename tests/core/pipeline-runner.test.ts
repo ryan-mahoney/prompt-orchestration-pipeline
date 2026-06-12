@@ -349,6 +349,26 @@ describe("resolveJobConfig", () => {
     expect(mockGetPipelineConfig).not.toHaveBeenCalled();
   });
 
+  test("job-dir pipeline.json wins over PO_PIPELINE_PATH while tasksDir still derives from PO_PIPELINE_PATH", async () => {
+    const currentDir = join(tmpDir, "current");
+    const jobId = "job-run-scoped-definition";
+    await writeJobSeed(currentDir, jobId, { pipeline: "test-pipeline" });
+    const jobPipelinePath = join(currentDir, jobId, "pipeline.json");
+    await writeFile(jobPipelinePath, JSON.stringify({ tasks: [{ name: "run-scoped" }] }));
+
+    process.env["PO_CURRENT_DIR"] = currentDir;
+    process.env["PO_COMPLETE_DIR"] = join(tmpDir, "complete");
+    process.env["PO_PIPELINE_SLUG"] = "test-pipeline";
+    process.env["PO_PIPELINE_PATH"] = "/custom/my-pipeline/pipeline.json";
+
+    const config = await resolveJobConfig(jobId);
+
+    expect(config.pipelineJsonPath).toBe(jobPipelinePath);
+    expect(config.tasksDir).toBe("/custom/my-pipeline/tasks");
+    expect(config.taskRegistryPath).toBe("/custom/my-pipeline/tasks/index.js");
+    expect(mockGetPipelineConfig).not.toHaveBeenCalled();
+  });
+
   test("taskRegistryPath defaults to join(tasksDir, 'index.js')", async () => {
     const currentDir = join(tmpDir, "current");
     const jobId = "job-008";

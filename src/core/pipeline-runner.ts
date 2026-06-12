@@ -195,6 +195,11 @@ export async function resolveJobConfig(jobId: string): Promise<ResolvedJobConfig
     tasksDir = pipelineConfig.tasksDir;
   }
 
+  const runScopedPipelineJsonPath = join(workDir, "pipeline.json");
+  if (await Bun.file(runScopedPipelineJsonPath).exists()) {
+    pipelineJsonPath = runScopedPipelineJsonPath;
+  }
+
   const taskRegistryPath = process.env["PO_TASK_REGISTRY"] ?? join(tasksDir, "index.js");
   const startFromTask = process.env["PO_START_FROM_TASK"] ?? null;
   const runSingleTask = process.env["PO_RUN_SINGLE_TASK"] === "true";
