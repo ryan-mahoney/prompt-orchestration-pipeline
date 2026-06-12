@@ -9,11 +9,12 @@ import { writeJobStatus } from "./status-writer";
 import { decideTransition } from "./lifecycle-policy";
 import { runPipeline } from "./task-runner";
 import type { AuditLogEntry, PipelineResult } from "./task-runner";
+import type { TaskStateValue } from "../config/statuses";
 import { ensureTaskSymlinkBridge } from "./symlink-bridge";
 import { validateTaskSymlinks, repairTaskSymlinks, cleanupTaskSymlinks } from "./symlink-utils";
 import { createTaskFileIO, generateLogName } from "./file-io";
 import { LogEvent, LogFileExtension } from "../config/log-events";
-import { TaskState } from "../config/statuses";
+import { TaskState, normalizeTaskState } from "../config/statuses";
 import { releaseJobSlot } from "./job-concurrency";
 
 // ─── Type definitions ─────────────────────────────────────────────────────────
@@ -153,6 +154,23 @@ export function normalizeTaskEntry(task: string | PipelineTaskEntry): PipelineTa
 /** Extracts the task name from either a plain string or a named task object. */
 export function getTaskName(task: string | PipelineTaskEntry): string {
   return normalizeTaskEntry(task).name;
+}
+
+function normalizePipelineTasks(pipeline: PipelineDefinition): PipelineTaskEntry[] {
+  return pipeline.tasks.map(normalizeTaskEntry);
+}
+
+async function loadDoneArtifact(
+  workDir: string,
+  taskName: string,
+  pipelineArtifacts: Record<string, unknown>,
+): Promise<void> {
+  if (Object.hasOwn(pipelineArtifacts, taskName)) return;
+  const outputPath = join(workDir, "tasks", taskName, "output.json");
+  if (await Bun.file(outputPath).exists()) {
+    const outputText = await Bun.file(outputPath).text();
+    pipelineArtifacts[taskName] = JSON.parse(outputText) as unknown;
+  }
 }
 
 /** Normalizes any thrown value into a serializable NormalizedError. */
@@ -315,7 +333,7 @@ export async function runPipelineJob(jobId: string): Promise<void> {
   await writePidFile(config.workDir);
   installSignalHandlers(config.workDir, dataDir, jobId);
 
-  const pipeline = await loadPipeline(config.pipelineJsonPath);
+  const initialPipeline = await loadPipeline(config.pipelineJsonPath);
   const taskRegistry = await loadTaskRegistry(config.taskRegistryPath);
 
   const { startFromTask, runSingleTask } = config;
@@ -327,7 +345,7 @@ export async function runPipelineJob(jobId: string): Promise<void> {
   }
 
   if (startFromTask) {
-    const taskNames = pipeline.tasks.map(getTaskName);
+    const taskNames = initialPipeline.tasks.map(getTaskName);
     if (!taskNames.includes(startFromTask)) {
       throw new Error(`Start-from task not found in pipeline: ${startFromTask}`);
     }
@@ -336,56 +354,66 @@ export async function runPipelineJob(jobId: string): Promise<void> {
   // ─── Task execution loop ─────────────────────────────────────────────────
 
   const pipelineArtifacts: Record<string, unknown> = {};
-  let reachedStartFrom = !startFromTask;
 
-  for (const task of pipeline.tasks) {
-    const taskName = getTaskName(task);
-
+  while (true) {
+    const pipeline = await loadPipeline(config.pipelineJsonPath);
+    const pipelineTasks = normalizePipelineTasks(pipeline);
     const statusText = await Bun.file(config.statusPath).text();
     const status = JSON.parse(statusText) as { tasks: Record<string, { state?: string }> };
 
-    // Skip tasks before startFromTask
-    if (!reachedStartFrom) {
-      if (taskName === startFromTask) {
-        reachedStartFrom = true;
-      } else {
-        // Load output for already-DONE skipped tasks
-        const taskState = status.tasks[taskName]?.state;
-        if (taskState === "DONE" || taskState === "done") {
-          const outputPath = join(config.workDir, "tasks", taskName, "output.json");
-          if (await Bun.file(outputPath).exists()) {
-            const outputText = await Bun.file(outputPath).text();
-            pipelineArtifacts[taskName] = JSON.parse(outputText) as unknown;
+    let selectedEntry: PipelineTaskEntry | null = null;
+    let selectedTaskState: TaskStateValue = TaskState.PENDING;
+    let reachedStartFrom = !startFromTask;
+
+    for (const entry of pipelineTasks) {
+      const taskName = entry.name;
+      const taskState = normalizeTaskState(status.tasks[taskName]?.state ?? TaskState.PENDING);
+
+      if (!reachedStartFrom) {
+        if (taskName === startFromTask) {
+          reachedStartFrom = true;
+        } else {
+          if (taskState === TaskState.DONE) {
+            await loadDoneArtifact(config.workDir, taskName, pipelineArtifacts);
           }
+          continue;
         }
+      }
+
+      if (taskState === TaskState.DONE) {
+        await loadDoneArtifact(config.workDir, taskName, pipelineArtifacts);
         continue;
       }
+
+      if (taskState === TaskState.SKIPPED) {
+        continue;
+      }
+
+      selectedEntry = entry;
+      selectedTaskState = taskState;
+      break;
     }
 
-    const taskState = status.tasks[taskName]?.state ?? "pending";
+    if (selectedEntry === null) {
+      break;
+    }
 
-    // Handle already-DONE tasks (when resuming without startFromTask)
-    if ((taskState === "DONE" || taskState === "done") && !startFromTask) {
-      const outputPath = join(config.workDir, "tasks", taskName, "output.json");
-      if (await Bun.file(outputPath).exists()) {
-        const outputText = await Bun.file(outputPath).text();
-        pipelineArtifacts[taskName] = JSON.parse(outputText) as unknown;
+    const taskName = selectedEntry.name;
+    const taskState = selectedTaskState;
+
+    let predecessorsReady = true;
+    for (const entry of pipelineTasks) {
+      if (entry.name === taskName) break;
+      const state = normalizeTaskState(status.tasks[entry.name]?.state ?? TaskState.PENDING);
+      if (state !== TaskState.DONE && state !== TaskState.SKIPPED) {
+        predecessorsReady = false;
+        break;
       }
-      continue;
     }
 
     // Check lifecycle policy (bypassed when startFromTask is set)
     if (!startFromTask) {
-      const taskKeys = pipeline.tasks.map(getTaskName);
-      const taskIndex = taskKeys.indexOf(taskName);
-      const dependenciesReady = taskKeys
-        .slice(0, taskIndex)
-        .every((name) => {
-          const s = status.tasks[name]?.state;
-          return s === "DONE" || s === "done";
-        });
-
-      const decision = decideTransition({ op: "start", taskState, dependenciesReady });
+      const decision = decideTransition({ op: "start", taskState, dependenciesReady: predecessorsReady });
       if (!decision.ok) {
         throw Object.assign(
           new Error(`Lifecycle policy blocked task start: ${taskName} (reason: ${decision.reason})`),
@@ -417,12 +445,13 @@ export async function runPipelineJob(jobId: string): Promise<void> {
 
     // ─── Task execution ───────────────────────────────────────────────────
 
-    if (!taskRegistry[taskName]) {
-      throw new Error(`Task not registered: ${taskName}`);
+    const taskKey = selectedEntry.task ?? selectedEntry.name;
+    if (!taskRegistry[taskKey]) {
+      throw new Error(`Task not registered: ${taskKey}`);
     }
 
     // Resolve task module path
-    const relativeModulePath = taskRegistry[taskName];
+    const relativeModulePath = taskRegistry[taskKey];
     const absoluteModulePath = resolve(dirname(config.taskRegistryPath), relativeModulePath);
 
     // Create task directory
@@ -464,12 +493,15 @@ export async function runPipelineJob(jobId: string): Promise<void> {
       taskDir,
       seed,
       taskName,
-      taskConfig: (pipeline.taskConfig?.[taskName] ?? {}) as Record<string, unknown>,
+      taskConfig: {
+        ...(pipeline.taskConfig?.[taskName] ?? {}),
+        ...(selectedEntry.config ?? {}),
+      },
       statusPath: config.statusPath,
       jobId,
       llmOverride: (pipeline.llm ?? null) as Record<string, unknown> | null,
       meta: {
-        pipelineTasks: pipeline.tasks.map(getTaskName),
+        pipelineTasks: pipelineTasks.map((entry) => entry.name),
       },
     };
 
