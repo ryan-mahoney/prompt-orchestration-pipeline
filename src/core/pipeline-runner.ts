@@ -5,7 +5,7 @@ import { unlinkSync } from "node:fs";
 import { getConfig, getPipelineConfig } from "./config";
 import { validatePipelineOrThrow } from "./validation";
 import { loadFreshModule } from "./module-loader";
-import { atomicWrite, writeJobStatus } from "./status-writer";
+import { atomicWrite, writeJobStatus, type GateInfo } from "./status-writer";
 import { decideTransition } from "./lifecycle-policy";
 import { runPipeline } from "./task-runner";
 import type { AuditLogEntry, PipelineResult } from "./task-runner";
@@ -302,6 +302,7 @@ async function applyControlStatus(args: {
   executionTimeMs: number;
   refinementAttempts: number;
   directives: ControlDirectives | null;
+  gate: GateInfo | null;
 }): Promise<void> {
   const endedAt = new Date().toISOString();
   await writeJobStatus(args.workDir, (snapshot) => {
@@ -330,7 +331,49 @@ async function applyControlStatus(args: {
         snapshot.tasks[skip.task] = skipEntry as typeof snapshot.tasks[string];
       }
     }
+
+    if (args.gate !== null) {
+      snapshot.state = "waiting";
+      snapshot.current = null;
+      snapshot.currentStage = null;
+      snapshot.gate = args.gate;
+    }
   });
+}
+
+function buildGateInfo(
+  taskName: string,
+  directives: ControlDirectives | null,
+  selectedEntry: PipelineTaskEntry,
+): GateInfo | null {
+  const requestedAt = new Date().toISOString();
+  const directivePause = directives?.pause;
+  if (directivePause) {
+    return {
+      afterTask: taskName,
+      message: directivePause.message,
+      artifacts: directivePause.artifacts,
+      requestedAt,
+    };
+  }
+
+  if (selectedEntry.gate === undefined || selectedEntry.gate === false) return null;
+
+  const defaultMessage = `Review task '${taskName}' before continuing.`;
+  if (selectedEntry.gate === true) {
+    return {
+      afterTask: taskName,
+      message: defaultMessage,
+      requestedAt,
+    };
+  }
+
+  return {
+    afterTask: taskName,
+    message: selectedEntry.gate.message ?? defaultMessage,
+    artifacts: selectedEntry.gate.artifacts,
+    requestedAt,
+  };
 }
 
 function getTaskStateMap(
@@ -786,6 +829,7 @@ export async function runPipelineJob(jobId: string): Promise<void> {
 
       const refinementAttempts =
         (((result.context as unknown) as Record<string, unknown>)["refinementAttempts"] as number | undefined) ?? 0;
+      const gate = buildGateInfo(taskName, directives, selectedEntry);
       await applyControlStatus({
         workDir: config.workDir,
         pipeline: patchedPipeline,
@@ -793,6 +837,7 @@ export async function runPipelineJob(jobId: string): Promise<void> {
         executionTimeMs,
         refinementAttempts,
         directives,
+        gate,
       });
 
       if (directives?.patch) {
@@ -812,6 +857,18 @@ export async function runPipelineJob(jobId: string): Promise<void> {
           skipped: directives.skip.map((skip) => ({ task: skip.task, reason: skip.reason })),
           at: new Date().toISOString(),
         });
+      }
+
+      if (gate !== null) {
+        await appendRunEvent(config.workDir, {
+          type: "gate_created",
+          afterTask: gate.afterTask,
+          message: gate.message,
+          at: new Date().toISOString(),
+        });
+        activeTaskName = null;
+        await releaseJobSlotBestEffort(dataDir, jobId);
+        return;
       }
       activeTaskName = null;
 

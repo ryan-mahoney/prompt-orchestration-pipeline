@@ -1657,6 +1657,225 @@ describe("runPipelineJob", () => {
     });
   });
 
+  test("pause directive writes done control status and gate while job remains current", async () => {
+    const currentDir = join(tmpDir, "current");
+    const completeDir = join(tmpDir, "complete");
+    const jobId = "job-control-pause";
+    const tasks = ["planner", "tail"];
+    await setupJob(currentDir, jobId, tasks);
+    const workDir = join(currentDir, jobId);
+
+    process.env["PO_CURRENT_DIR"] = currentDir;
+    process.env["PO_COMPLETE_DIR"] = completeDir;
+    process.env["PO_PIPELINE_SLUG"] = "test-pipeline";
+
+    mockRunPipeline.mockImplementation(async (_modulePath: string, ctx: unknown) => {
+      const taskCtx = ctx as { taskName: string; taskDir: string };
+      if (taskCtx.taskName === "planner") {
+        await writeFile(join(taskCtx.taskDir, "control.json"), JSON.stringify({
+          pause: {
+            message: "Review the plan before continuing",
+            artifacts: ["tasks/planner/output.json"],
+          },
+        }));
+      }
+      return {
+        ok: true as const,
+        logs: [] as Array<{ stage: string; ok: true; ms: number }>,
+        context: {} as Record<string, unknown>,
+        llmMetrics: [],
+      };
+    });
+
+    let waitingSnapshot: Record<string, unknown> | null = null;
+    mockWriteJobStatus.mockImplementation(async (dir: string, updateFn: (snap: Record<string, unknown>) => void) => {
+      const snap = await applyMockStatusUpdate(dir, updateFn);
+      if (snap["state"] === "waiting") {
+        waitingSnapshot = JSON.parse(JSON.stringify(snap)) as Record<string, unknown>;
+      }
+      return snap;
+    });
+
+    await runPipelineJob(jobId);
+
+    expect(waitingSnapshot).not.toBeNull();
+    const tasksByName = waitingSnapshot!["tasks"] as Record<string, { state?: string; controlApplied?: boolean }>;
+    expect(waitingSnapshot!["state"]).toBe("waiting");
+    expect(waitingSnapshot!["current"]).toBeNull();
+    expect(waitingSnapshot!["currentStage"]).toBeNull();
+    expect(tasksByName["planner"]?.state).toBe("done");
+    expect(tasksByName["planner"]?.controlApplied).toBe(true);
+    expect(waitingSnapshot!["gate"]).toMatchObject({
+      afterTask: "planner",
+      message: "Review the plan before continuing",
+      artifacts: ["tasks/planner/output.json"],
+      requestedAt: expect.any(String),
+    });
+
+    await access(workDir);
+    await expect(access(join(completeDir, jobId))).rejects.toThrow();
+    await expect(access(join(completeDir, "runs.jsonl"))).rejects.toThrow();
+
+    const events = (await readFile(join(workDir, "events.jsonl"), "utf-8"))
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line) as { type?: string; afterTask?: string; message?: string; at?: string });
+    expect(events).toEqual([
+      {
+        type: "gate_created",
+        afterTask: "planner",
+        message: "Review the plan before continuing",
+        at: expect.any(String),
+      },
+    ]);
+    expect(mockRunPipeline).toHaveBeenCalledTimes(1);
+  });
+
+  test("pause directive takes precedence over a declarative gate and creates one gate", async () => {
+    const currentDir = join(tmpDir, "current");
+    const jobId = "job-control-pause-precedence";
+    const tasks: PipelineTaskEntry[] = [
+      {
+        name: "review",
+        gate: {
+          message: "Entry gate message",
+          artifacts: ["tasks/review/entry.json"],
+        },
+      },
+      { name: "tail" },
+    ];
+    await setupJob(currentDir, jobId, tasks);
+    const workDir = join(currentDir, jobId);
+
+    process.env["PO_CURRENT_DIR"] = currentDir;
+    process.env["PO_COMPLETE_DIR"] = join(tmpDir, "complete");
+    process.env["PO_PIPELINE_SLUG"] = "test-pipeline";
+
+    mockRunPipeline.mockImplementation(async (_modulePath: string, ctx: unknown) => {
+      await writeFile(join((ctx as { taskDir: string }).taskDir, "control.json"), JSON.stringify({
+        pause: {
+          message: "Directive gate message",
+          artifacts: ["tasks/review/directive.json"],
+        },
+      }));
+      return {
+        ok: true as const,
+        logs: [] as Array<{ stage: string; ok: true; ms: number }>,
+        context: {} as Record<string, unknown>,
+        llmMetrics: [],
+      };
+    });
+
+    await runPipelineJob(jobId);
+
+    const status = JSON.parse(await readFile(join(workDir, "tasks-status.json"), "utf-8")) as {
+      gate?: { afterTask?: string; message?: string; artifacts?: string[]; requestedAt?: string };
+    };
+    expect(status.gate).toMatchObject({
+      afterTask: "review",
+      message: "Directive gate message",
+      artifacts: ["tasks/review/directive.json"],
+      requestedAt: expect.any(String),
+    });
+
+    const gateEvents = (await readFile(join(workDir, "events.jsonl"), "utf-8"))
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line) as { type?: string; message?: string })
+      .filter((event) => event.type === "gate_created");
+    expect(gateEvents).toHaveLength(1);
+    expect(gateEvents[0]?.message).toBe("Directive gate message");
+  });
+
+  test("declarative gate object creates a gate without a control file", async () => {
+    const currentDir = join(tmpDir, "current");
+    const jobId = "job-declarative-gate-object";
+    const tasks: PipelineTaskEntry[] = [
+      {
+        name: "review",
+        gate: {
+          message: "Review generated artifacts",
+          artifacts: ["tasks/review/output.json"],
+        },
+      },
+      { name: "tail" },
+    ];
+    await setupJob(currentDir, jobId, tasks);
+    const workDir = join(currentDir, jobId);
+
+    process.env["PO_CURRENT_DIR"] = currentDir;
+    process.env["PO_COMPLETE_DIR"] = join(tmpDir, "complete");
+    process.env["PO_PIPELINE_SLUG"] = "test-pipeline";
+
+    await runPipelineJob(jobId);
+
+    await expect(access(join(workDir, "tasks", "review", "control.json"))).rejects.toThrow();
+    const status = JSON.parse(await readFile(join(workDir, "tasks-status.json"), "utf-8")) as {
+      state?: string;
+      current?: string | null;
+      gate?: { afterTask?: string; message?: string; artifacts?: string[]; requestedAt?: string };
+      tasks: Record<string, { state?: string; controlApplied?: boolean }>;
+    };
+    expect(status.state).toBe("waiting");
+    expect(status.current).toBeNull();
+    expect(status.tasks["review"]?.state).toBe("done");
+    expect(status.tasks["review"]?.controlApplied).toBeUndefined();
+    expect(status.gate).toMatchObject({
+      afterTask: "review",
+      message: "Review generated artifacts",
+      artifacts: ["tasks/review/output.json"],
+      requestedAt: expect.any(String),
+    });
+
+    const events = (await readFile(join(workDir, "events.jsonl"), "utf-8"))
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line) as { type?: string; afterTask?: string; message?: string; at?: string });
+    expect(events).toEqual([
+      {
+        type: "gate_created",
+        afterTask: "review",
+        message: "Review generated artifacts",
+        at: expect.any(String),
+      },
+    ]);
+    expect(mockRunPipeline).toHaveBeenCalledTimes(1);
+  });
+
+  test("declarative gate true uses the default gate message without a control file", async () => {
+    const currentDir = join(tmpDir, "current");
+    const jobId = "job-declarative-gate-true";
+    const tasks: PipelineTaskEntry[] = [{ name: "review", gate: true }, { name: "tail" }];
+    await setupJob(currentDir, jobId, tasks);
+    const workDir = join(currentDir, jobId);
+
+    process.env["PO_CURRENT_DIR"] = currentDir;
+    process.env["PO_COMPLETE_DIR"] = join(tmpDir, "complete");
+    process.env["PO_PIPELINE_SLUG"] = "test-pipeline";
+
+    await runPipelineJob(jobId);
+
+    const status = JSON.parse(await readFile(join(workDir, "tasks-status.json"), "utf-8")) as {
+      state?: string;
+      gate?: { message?: string };
+    };
+    expect(status.state).toBe("waiting");
+    expect(status.gate?.message).toBe("Review task 'review' before continuing.");
+
+    const events = (await readFile(join(workDir, "events.jsonl"), "utf-8"))
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line) as { type?: string; afterTask?: string; message?: string; at?: string });
+    expect(events).toEqual([
+      {
+        type: "gate_created",
+        afterTask: "review",
+        message: "Review task 'review' before continuing.",
+        at: expect.any(String),
+      },
+    ]);
+  });
+
   // ─── Step 9: top-level error handling ────────────────────────────────────
 
   test("unexpected error: console.error is called and process.exit(1) is invoked", async () => {
