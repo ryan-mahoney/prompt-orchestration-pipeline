@@ -1599,6 +1599,97 @@ describe("runPipelineJob", () => {
     ]);
   });
 
+  test("pre-applied patch with running emitter re-runs and completes without duplicate entries", async () => {
+    const currentDir = join(tmpDir, "current");
+    const completeDir = join(tmpDir, "complete");
+    const jobId = "job-control-replay-running-patched";
+    const tasks = ["planner", "inserted", "tail"];
+    await setupJob(currentDir, jobId, tasks, { planner: "running" });
+    const workDir = join(currentDir, jobId);
+    const plannerDir = join(workDir, "tasks", "planner");
+    await mkdir(plannerDir, { recursive: true });
+    await writeFile(join(plannerDir, "control.json"), JSON.stringify({
+      patch: {
+        add: [{ name: "inserted" }],
+      },
+    }));
+
+    process.env["PO_CURRENT_DIR"] = currentDir;
+    process.env["PO_COMPLETE_DIR"] = completeDir;
+    process.env["PO_PIPELINE_SLUG"] = "test-pipeline";
+
+    const runOrder: string[] = [];
+    mockRunPipeline.mockImplementation(async (_modulePath: string, ctx: unknown) => {
+      runOrder.push((ctx as { taskName: string }).taskName);
+      return {
+        ok: true as const,
+        logs: [] as Array<{ stage: string; ok: true; ms: number }>,
+        context: {} as Record<string, unknown>,
+        llmMetrics: [],
+      };
+    });
+
+    await runPipelineJob(jobId);
+
+    expect(runOrder).toEqual(["planner", "inserted", "tail"]);
+
+    const completedPipeline = JSON.parse(await readFile(join(completeDir, jobId, "pipeline.json"), "utf-8")) as {
+      tasks: Array<string | PipelineTaskEntry>;
+    };
+    const completedTaskNames = completedPipeline.tasks.map(getTaskName);
+    expect(completedTaskNames).toEqual(["planner", "inserted", "tail"]);
+    expect(completedTaskNames.filter((name) => name === "inserted")).toHaveLength(1);
+
+    const completedStatus = JSON.parse(await readFile(join(completeDir, jobId, "tasks-status.json"), "utf-8")) as {
+      tasks: Record<string, { state?: string; controlApplied?: boolean }>;
+    };
+    expect(completedStatus.tasks["planner"]).toMatchObject({ state: "done", controlApplied: true });
+    expect(completedStatus.tasks["inserted"]?.state).toBe("done");
+    expect(completedStatus.tasks["tail"]?.state).toBe("done");
+  });
+
+  test("done task with controlApplied true does not reprocess present control file", async () => {
+    const currentDir = join(tmpDir, "current");
+    const completeDir = join(tmpDir, "complete");
+    const jobId = "job-control-applied-no-reprocess";
+    const tasks = ["planner", "tail"];
+    await setupJob(currentDir, jobId, tasks, { planner: "done" });
+    const workDir = join(currentDir, jobId);
+    const statusPath = join(workDir, "tasks-status.json");
+    const status = JSON.parse(await readFile(statusPath, "utf-8")) as {
+      tasks: Record<string, { state?: string; controlApplied?: boolean }>;
+    };
+    status.tasks["planner"] = { ...status.tasks["planner"], controlApplied: true };
+    await writeFile(statusPath, JSON.stringify(status));
+    const plannerDir = join(workDir, "tasks", "planner");
+    await mkdir(plannerDir, { recursive: true });
+    await writeFile(join(plannerDir, "control.json"), "{ this would fail if read");
+
+    process.env["PO_CURRENT_DIR"] = currentDir;
+    process.env["PO_COMPLETE_DIR"] = completeDir;
+    process.env["PO_PIPELINE_SLUG"] = "test-pipeline";
+
+    const runOrder: string[] = [];
+    mockRunPipeline.mockImplementation(async (_modulePath: string, ctx: unknown) => {
+      runOrder.push((ctx as { taskName: string }).taskName);
+      return {
+        ok: true as const,
+        logs: [] as Array<{ stage: string; ok: true; ms: number }>,
+        context: {} as Record<string, unknown>,
+        llmMetrics: [],
+      };
+    });
+
+    await runPipelineJob(jobId);
+
+    expect(runOrder).toEqual(["tail"]);
+    const completedStatus = JSON.parse(await readFile(join(completeDir, jobId, "tasks-status.json"), "utf-8")) as {
+      tasks: Record<string, { state?: string; controlApplied?: boolean }>;
+    };
+    expect(completedStatus.tasks["planner"]).toMatchObject({ state: "done", controlApplied: true });
+    expect(completedStatus.tasks["tail"]?.state).toBe("done");
+  });
+
   test("valid skip marks pending target skipped and downstream still executes", async () => {
     const currentDir = join(tmpDir, "current");
     const completeDir = join(tmpDir, "complete");
@@ -1874,6 +1965,58 @@ describe("runPipelineJob", () => {
         at: expect.any(String),
       },
     ]);
+  });
+
+  test("single-task pause applies directives and leaves the gate set", async () => {
+    const currentDir = join(tmpDir, "current");
+    const completeDir = join(tmpDir, "complete");
+    const jobId = "job-single-task-control-pause";
+    const tasks = ["planner", "tail"];
+    await setupJob(currentDir, jobId, tasks);
+    const workDir = join(currentDir, jobId);
+
+    process.env["PO_CURRENT_DIR"] = currentDir;
+    process.env["PO_COMPLETE_DIR"] = completeDir;
+    process.env["PO_PIPELINE_SLUG"] = "test-pipeline";
+    process.env["PO_START_FROM_TASK"] = "planner";
+    process.env["PO_RUN_SINGLE_TASK"] = "true";
+
+    mockRunPipeline.mockImplementation(async (_modulePath: string, ctx: unknown) => {
+      const taskCtx = ctx as { taskDir: string };
+      await writeFile(join(taskCtx.taskDir, "control.json"), JSON.stringify({
+        pause: {
+          message: "Review the single task",
+          artifacts: ["tasks/planner/output.json"],
+        },
+      }));
+      return {
+        ok: true as const,
+        logs: [] as Array<{ stage: string; ok: true; ms: number }>,
+        context: {} as Record<string, unknown>,
+        llmMetrics: [],
+      };
+    });
+
+    await runPipelineJob(jobId);
+
+    const status = JSON.parse(await readFile(join(workDir, "tasks-status.json"), "utf-8")) as {
+      state?: string;
+      current?: string | null;
+      gate?: { afterTask?: string; message?: string; artifacts?: string[]; requestedAt?: string };
+      tasks: Record<string, { state?: string; controlApplied?: boolean }>;
+    };
+    expect(status.state).toBe("waiting");
+    expect(status.current).toBeNull();
+    expect(status.tasks["planner"]).toMatchObject({ state: "done", controlApplied: true });
+    expect(status.gate).toMatchObject({
+      afterTask: "planner",
+      message: "Review the single task",
+      artifacts: ["tasks/planner/output.json"],
+      requestedAt: expect.any(String),
+    });
+    await access(workDir);
+    await expect(access(join(completeDir, jobId))).rejects.toThrow();
+    expect(mockRunPipeline).toHaveBeenCalledTimes(1);
   });
 
   // ─── Step 9: top-level error handling ────────────────────────────────────

@@ -301,10 +301,11 @@ async function applyControlStatus(args: {
   taskName: string;
   executionTimeMs: number;
   refinementAttempts: number;
+  endedAt?: string;
   directives: ControlDirectives | null;
   gate: GateInfo | null;
 }): Promise<void> {
-  const endedAt = new Date().toISOString();
+  const endedAt = args.endedAt ?? new Date().toISOString();
   await writeJobStatus(args.workDir, (snapshot) => {
     const existingTasks = snapshot.tasks as Record<string, TaskStatus>;
     snapshot.tasks = buildTaskRecordFromPipeline(args.pipeline, existingTasks) as typeof snapshot.tasks;
@@ -339,6 +340,110 @@ async function applyControlStatus(args: {
       snapshot.gate = args.gate;
     }
   });
+}
+
+async function applyControlFileIfPresent(args: {
+  config: ResolvedJobConfig;
+  taskRegistry: TaskRegistry;
+  taskName: string;
+  selectedEntry: PipelineTaskEntry;
+  executionTimeMs: number;
+  refinementAttempts: number;
+  endedAt?: string;
+}): Promise<{ gate: GateInfo | null } | null> {
+  const taskDir = join(args.config.workDir, "tasks", args.taskName);
+  const directives = await readControlDirectives(taskDir);
+  if (directives === null) return null;
+
+  const controlPipeline = await loadPipeline(args.config.pipelineJsonPath);
+  const controlPipelineTasks = normalizePipelineTasks(controlPipeline);
+  const controlStatusText = await Bun.file(args.config.statusPath).text();
+  const controlStatus = JSON.parse(controlStatusText) as { tasks: Record<string, { state?: string }> };
+  validateControlDirectivesForCurrentRun(directives, {
+    pipelineTasks: controlPipelineTasks,
+    taskStates: getTaskStateMap(controlStatus.tasks, controlPipelineTasks),
+    registryKeys: Object.keys(args.taskRegistry),
+    emittingTask: args.taskName,
+  });
+
+  const patchResult = await applyPipelinePatch(args.config.pipelineJsonPath, directives, args.taskName);
+  const gate = buildGateInfo(args.taskName, directives, args.selectedEntry);
+  await applyControlStatus({
+    workDir: args.config.workDir,
+    pipeline: patchResult.pipeline,
+    taskName: args.taskName,
+    executionTimeMs: args.executionTimeMs,
+    refinementAttempts: args.refinementAttempts,
+    endedAt: args.endedAt,
+    directives,
+    gate,
+  });
+
+  if (directives.patch) {
+    await appendRunEvent(args.config.workDir, {
+      type: "patch_applied",
+      task: args.taskName,
+      added: patchResult.added.map((entry) => entry.name),
+      insertAfter: patchResult.insertAfter ?? args.taskName,
+      at: new Date().toISOString(),
+    });
+  }
+
+  if (directives.skip && directives.skip.length > 0) {
+    await appendRunEvent(args.config.workDir, {
+      type: "skip_applied",
+      task: args.taskName,
+      skipped: directives.skip.map((skip) => ({ task: skip.task, reason: skip.reason })),
+      at: new Date().toISOString(),
+    });
+  }
+
+  if (gate !== null) {
+    await appendRunEvent(args.config.workDir, {
+      type: "gate_created",
+      afterTask: gate.afterTask,
+      message: gate.message,
+      at: new Date().toISOString(),
+    });
+  }
+
+  return { gate };
+}
+
+async function failControlValidation(args: {
+  workDir: string;
+  dataDir: string;
+  jobId: string;
+  taskName: string;
+  error: ControlValidationError;
+}): Promise<never> {
+  const normalized = normalizeError(args.error);
+  await appendRunEvent(args.workDir, {
+    type: "control_invalid",
+    task: args.taskName,
+    message: normalized.message,
+    at: new Date().toISOString(),
+  });
+
+  await writeJobStatus(args.workDir, (snapshot) => {
+    snapshot.state = "failed";
+    snapshot.current = args.taskName;
+    snapshot.currentStage = null;
+    const raw = (snapshot.tasks[args.taskName] ?? {}) as Record<string, unknown>;
+    raw["state"] = TaskState.FAILED;
+    raw["endedAt"] = new Date().toISOString();
+    raw["error"] = { name: normalized.name, message: normalized.message, stack: normalized.stack };
+    raw["failedStage"] = "control";
+    delete raw["stageLogPath"];
+    delete raw["errorContext"];
+    delete raw["retrying"];
+    delete raw["nextRetryAt"];
+    delete raw["lastRetryError"];
+    snapshot.tasks[args.taskName] = raw as typeof snapshot.tasks[string];
+  });
+
+  await releaseJobSlotBestEffort(args.dataDir, args.jobId);
+  process.exit(1);
 }
 
 function buildGateInfo(
@@ -581,10 +686,12 @@ export async function runPipelineJob(jobId: string): Promise<void> {
     let selectedEntry: PipelineTaskEntry | null = null;
     let selectedTaskState: TaskStateValue = TaskState.PENDING;
     let reachedStartFrom = !startFromTask;
+    let replayedControl = false;
 
     for (const entry of pipelineTasks) {
       const taskName = entry.name;
-      const taskState = normalizeTaskState(status.tasks[taskName]?.state ?? TaskState.PENDING);
+      const taskStatus = status.tasks[taskName] as TaskStatus | undefined;
+      const taskState = normalizeTaskState(taskStatus?.state ?? TaskState.PENDING);
 
       if (!reachedStartFrom) {
         if (taskName === startFromTask) {
@@ -598,6 +705,38 @@ export async function runPipelineJob(jobId: string): Promise<void> {
       }
 
       if (taskState === TaskState.DONE) {
+        if (taskStatus?.controlApplied !== true) {
+          try {
+            const appliedControl = await applyControlFileIfPresent({
+              config,
+              taskRegistry,
+              taskName,
+              selectedEntry: entry,
+              executionTimeMs: typeof taskStatus?.executionTimeMs === "number" ? taskStatus.executionTimeMs : 0,
+              refinementAttempts: typeof taskStatus?.refinementAttempts === "number" ? taskStatus.refinementAttempts : 0,
+              endedAt: typeof taskStatus?.endedAt === "string" ? taskStatus.endedAt : undefined,
+            });
+            if (appliedControl !== null) {
+              if (appliedControl.gate !== null) {
+                activeTaskName = null;
+                await releaseJobSlotBestEffort(dataDir, jobId);
+                return;
+              }
+              replayedControl = true;
+              break;
+            }
+          } catch (error) {
+            if (!(error instanceof ControlValidationError)) throw error;
+            activeTaskName = null;
+            await failControlValidation({
+              workDir: config.workDir,
+              dataDir,
+              jobId,
+              taskName,
+              error,
+            });
+          }
+        }
         await loadDoneArtifact(config.workDir, taskName, pipelineArtifacts);
         continue;
       }
@@ -609,6 +748,10 @@ export async function runPipelineJob(jobId: string): Promise<void> {
       selectedEntry = entry;
       selectedTaskState = taskState;
       break;
+    }
+
+    if (replayedControl) {
+      continue;
     }
 
     if (selectedEntry === null) {
@@ -770,102 +913,55 @@ export async function runPipelineJob(jobId: string): Promise<void> {
       const logsLogName = generateLogName(taskName, "pipeline", LogEvent.EXECUTION_LOGS, LogFileExtension.JSON);
       await fileIO.writeLog(logsLogName, JSON.stringify(result.logs, null, 2));
 
-      let directives: ControlDirectives | null = null;
-      let patchedPipeline: PipelineDefinition = pipeline;
-      let addedTasks: PipelineTaskEntry[] = [];
-      let patchInsertAfter: string | null = null;
-
-      try {
-        directives = await readControlDirectives(taskDir);
-        if (directives !== null) {
-          const controlPipeline = await loadPipeline(config.pipelineJsonPath);
-          const controlPipelineTasks = normalizePipelineTasks(controlPipeline);
-          const controlStatusText = await Bun.file(config.statusPath).text();
-          const controlStatus = JSON.parse(controlStatusText) as { tasks: Record<string, { state?: string }> };
-          validateControlDirectivesForCurrentRun(directives, {
-            pipelineTasks: controlPipelineTasks,
-            taskStates: getTaskStateMap(controlStatus.tasks, controlPipelineTasks),
-            registryKeys: Object.keys(taskRegistry),
-            emittingTask: taskName,
-          });
-
-          const patchResult = await applyPipelinePatch(config.pipelineJsonPath, directives, taskName);
-          patchedPipeline = patchResult.pipeline;
-          addedTasks = patchResult.added;
-          patchInsertAfter = patchResult.insertAfter;
-        }
-      } catch (error) {
-        if (!(error instanceof ControlValidationError)) throw error;
-
-        const normalized = normalizeError(error);
-        await appendRunEvent(config.workDir, {
-          type: "control_invalid",
-          task: taskName,
-          message: normalized.message,
-          at: new Date().toISOString(),
-        });
-
-        await writeJobStatus(config.workDir, (snapshot) => {
-          snapshot.state = "failed";
-          snapshot.current = taskName;
-          snapshot.currentStage = null;
-          const raw = (snapshot.tasks[taskName] ?? {}) as Record<string, unknown>;
-          raw["state"] = TaskState.FAILED;
-          raw["endedAt"] = new Date().toISOString();
-          raw["error"] = { name: normalized.name, message: normalized.message, stack: normalized.stack };
-          raw["failedStage"] = "control";
-          delete raw["stageLogPath"];
-          delete raw["errorContext"];
-          delete raw["retrying"];
-          delete raw["nextRetryAt"];
-          delete raw["lastRetryError"];
-          snapshot.tasks[taskName] = raw as typeof snapshot.tasks[string];
-        });
-        activeTaskName = null;
-
-        await releaseJobSlotBestEffort(dataDir, jobId);
-        process.exit(1);
-      }
-
       const refinementAttempts =
         (((result.context as unknown) as Record<string, unknown>)["refinementAttempts"] as number | undefined) ?? 0;
-      const gate = buildGateInfo(taskName, directives, selectedEntry);
-      await applyControlStatus({
-        workDir: config.workDir,
-        pipeline: patchedPipeline,
-        taskName,
-        executionTimeMs,
-        refinementAttempts,
-        directives,
-        gate,
-      });
+      let appliedControl: { gate: GateInfo | null } | null = null;
 
-      if (directives?.patch) {
-        await appendRunEvent(config.workDir, {
-          type: "patch_applied",
-          task: taskName,
-          added: addedTasks.map((entry) => entry.name),
-          insertAfter: patchInsertAfter ?? taskName,
-          at: new Date().toISOString(),
+      try {
+        appliedControl = await applyControlFileIfPresent({
+          config,
+          taskRegistry,
+          taskName,
+          selectedEntry,
+          executionTimeMs,
+          refinementAttempts,
+        });
+      } catch (error) {
+        if (!(error instanceof ControlValidationError)) throw error;
+        activeTaskName = null;
+        await failControlValidation({
+          workDir: config.workDir,
+          dataDir,
+          jobId,
+          taskName,
+          error,
         });
       }
 
-      if (directives?.skip && directives.skip.length > 0) {
-        await appendRunEvent(config.workDir, {
-          type: "skip_applied",
-          task: taskName,
-          skipped: directives.skip.map((skip) => ({ task: skip.task, reason: skip.reason })),
-          at: new Date().toISOString(),
+      if (appliedControl === null) {
+        const gate = buildGateInfo(taskName, null, selectedEntry);
+        await applyControlStatus({
+          workDir: config.workDir,
+          pipeline,
+          taskName,
+          executionTimeMs,
+          refinementAttempts,
+          directives: null,
+          gate,
         });
-      }
 
-      if (gate !== null) {
-        await appendRunEvent(config.workDir, {
-          type: "gate_created",
-          afterTask: gate.afterTask,
-          message: gate.message,
-          at: new Date().toISOString(),
-        });
+        if (gate !== null) {
+          await appendRunEvent(config.workDir, {
+            type: "gate_created",
+            afterTask: gate.afterTask,
+            message: gate.message,
+            at: new Date().toISOString(),
+          });
+          activeTaskName = null;
+          await releaseJobSlotBestEffort(dataDir, jobId);
+          return;
+        }
+      } else if (appliedControl.gate !== null) {
         activeTaskName = null;
         await releaseJobSlotBestEffort(dataDir, jobId);
         return;
