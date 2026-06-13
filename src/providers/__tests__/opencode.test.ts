@@ -1195,6 +1195,89 @@ describe("opencodeChat", () => {
 
       spawnSpy.mockRestore();
     });
+
+    it("returns correct AdapterResponse shape in CLI mode", async () => {
+      const mockExit = Promise.resolve(0);
+      const mockStdout = new ReadableStream({
+        start(controller) {
+          controller.enqueue(
+            new TextEncoder().encode(
+              '{"type":"text","part":{"text":"Hello "}}\n',
+            ),
+          );
+          controller.enqueue(
+            new TextEncoder().encode(
+              '{"type":"text","part":{"text":"world"}}\n',
+            ),
+          );
+          controller.enqueue(
+            new TextEncoder().encode('{"type":"start"}\n'),
+          );
+          controller.close();
+        },
+      });
+      const mockStderr = new ReadableStream({
+        start(controller) {
+          controller.close();
+        },
+      });
+
+      vi.spyOn(Bun, "spawn").mockReturnValue({
+        stdout: mockStdout,
+        stderr: mockStderr,
+        exited: mockExit,
+        exitCode: 0,
+        kill: vi.fn(),
+      } as unknown as ReturnType<typeof Bun.spawn>);
+
+      const result = await opencodeChat({
+        messages: baseMessages,
+        responseFormat: "text",
+      });
+
+      expect(result.content).toBe("Hello world");
+      expect(result.text).toBe("Hello world");
+      expect(result.raw).toEqual({
+        events: [
+          { type: "text", part: { text: "Hello " } },
+          { type: "text", part: { text: "world" } },
+          { type: "start" },
+        ],
+      });
+
+      vi.restoreAllMocks();
+    });
+
+    it("throws with stderr detail on non-zero exit", async () => {
+      const mockExit = Promise.resolve(2);
+      const mockStdout = new ReadableStream({
+        start(controller) {
+          controller.close();
+        },
+      });
+      const mockStderr = new ReadableStream({
+        start(controller) {
+          controller.enqueue(
+            new TextEncoder().encode("access denied"),
+          );
+          controller.close();
+        },
+      });
+
+      vi.spyOn(Bun, "spawn").mockReturnValue({
+        stdout: mockStdout,
+        stderr: mockStderr,
+        exited: mockExit,
+        exitCode: 2,
+        kill: vi.fn(),
+      } as unknown as ReturnType<typeof Bun.spawn>);
+
+      await expect(
+        opencodeChat({ messages: baseMessages, maxRetries: 0 }),
+      ).rejects.toThrow(/exited with code 2.*access denied/);
+
+      vi.restoreAllMocks();
+    });
   });
 });
 

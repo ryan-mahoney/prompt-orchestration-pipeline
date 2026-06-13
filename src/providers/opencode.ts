@@ -10,6 +10,7 @@ import {
   stripMarkdownFences,
   tryParseJSON,
 } from "./base.ts";
+import { runJsonlSubprocess } from "../harness/subprocess.ts";
 import { ProviderJsonParseError } from "./types.ts";
 import type {
   AdapterResponse,
@@ -317,72 +318,40 @@ async function runOpenCodeCli(
   env: Record<string, string>,
   timeoutMs: number,
 ): Promise<{ text: string; events: unknown[] }> {
-  const proc = Bun.spawn(args, {
-    stdout: "pipe",
-    stderr: "pipe",
-    env: { ...process.env, ...env },
-  });
+  const result = await runJsonlSubprocess({ argv: args, env, timeoutMs });
 
-  let timedOut = false;
-  const timer = setTimeout(() => {
-    timedOut = true;
-    proc.kill();
-  }, timeoutMs);
-
-  try {
-    const stdout = await new Response(proc.stdout).text();
-    await proc.exited;
-    clearTimeout(timer);
-
-    const events: unknown[] = [];
-    const textParts: string[] = [];
-
-    for (const line of stdout.split("\n")) {
-      const trimmed = line.trim();
-      if (trimmed.length === 0) continue;
-
-      let event: unknown;
-      try {
-        event = JSON.parse(trimmed);
-      } catch {
-        continue;
-      }
-
-      events.push(event);
-
-      if (
-        event != null &&
-        typeof event === "object" &&
-        (event as Record<string, unknown>).type === "text"
-      ) {
-        const evt = event as Record<string, unknown>;
-        const part = evt.part as Record<string, unknown> | undefined;
-        if (part != null && typeof part.text === "string") {
-          textParts.push(part.text);
-        }
+  const textParts: string[] = [];
+  for (const event of result.events) {
+    if (
+      event != null &&
+      typeof event === "object" &&
+      (event as Record<string, unknown>).type === "text"
+    ) {
+      const evt = event as Record<string, unknown>;
+      const part = evt.part as Record<string, unknown> | undefined;
+      if (part != null && typeof part.text === "string") {
+        textParts.push(part.text);
       }
     }
-
-    if (proc.exitCode !== 0) {
-      const stderr = await new Response(proc.stderr).text();
-      if (timedOut) {
-        const timeoutError = new Error(
-          `OpenCode CLI timed out after ${timeoutMs}ms with exit code ${proc.exitCode}: ${stderr || textParts.join("")}`,
-        );
-        timeoutError.name = "TimeoutError";
-        throw timeoutError;
-      }
-      throw new Error(
-        `OpenCode CLI exited with code ${proc.exitCode}: ${stderr || textParts.join("")}`,
-      );
-    }
-
-    return { text: textParts.join(""), events };
-  } catch (err) {
-    clearTimeout(timer);
-    proc.kill();
-    throw err;
   }
+
+  const text = textParts.join("");
+
+  if (result.timedOut) {
+    const timeoutError = new Error(
+      `OpenCode CLI timed out after ${timeoutMs}ms with exit code ${result.exitCode}: ${result.stderr || text}`,
+    );
+    timeoutError.name = "TimeoutError";
+    throw timeoutError;
+  }
+
+  if (result.exitCode !== 0) {
+    throw new Error(
+      `OpenCode CLI exited with code ${result.exitCode}: ${result.stderr || text}`,
+    );
+  }
+
+  return { text, events: result.events };
 }
 
 export async function opencodeChat(
