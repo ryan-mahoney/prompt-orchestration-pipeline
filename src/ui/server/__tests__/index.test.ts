@@ -68,11 +68,17 @@ describe("server index", () => {
   it("binds to 127.0.0.1 and resolves url to localhost (AC-17)", async () => {
     const root = await makeTempRoot();
     process.env["PO_ROOT"] = root;
+    const serveSpy = vi.spyOn(Bun, "serve");
     const handle = await startServer({ dataDir: root, port: 4112 });
-    expect(handle.url).toBe("http://localhost:4112");
-    const response = await fetch(`${handle.url}/api/meta`);
-    expect(response.status).toBe(200);
-    await handle.close();
+    try {
+      expect(serveSpy).toHaveBeenCalledWith(expect.objectContaining({ hostname: "127.0.0.1" }));
+      expect(handle.url).toBe("http://localhost:4112");
+      const response = await fetch(`${handle.url}/api/meta`);
+      expect(response.status).toBe(200);
+    } finally {
+      serveSpy.mockRestore();
+      await handle.close();
+    }
   });
 });
 

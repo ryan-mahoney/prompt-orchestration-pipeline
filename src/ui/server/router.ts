@@ -128,6 +128,7 @@ export function createRouter(options: RouterOptions): {
         const headers: Record<string, string> = {
           "Access-Control-Allow-Methods": PREFLIGHT_ALLOW_METHODS,
           "Access-Control-Allow-Headers": PREFLIGHT_ALLOW_HEADERS,
+          "Vary": "Origin",
         };
         const corsHeaders = corsHeadersFor(origin, host, cors);
         if (corsHeaders) {
@@ -154,7 +155,9 @@ export function createRouter(options: RouterOptions): {
         const extraHeaders = corsHeadersFor(origin, host, cors);
         return extraHeaders ? decorateHeaders(asset, extraHeaders) : asset;
       }
-      return sendJson(404, { ok: false, code: "NOT_FOUND", message: "route not found" });
+      const notFound = sendJson(404, { ok: false, code: "NOT_FOUND", message: "route not found" });
+      const extraHeaders = corsHeadersFor(origin, host, cors);
+      return extraHeaders ? decorateHeaders(notFound, extraHeaders) : notFound;
     },
   };
 }

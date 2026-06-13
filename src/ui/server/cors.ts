@@ -31,7 +31,8 @@ export function isLoopbackHost(hostHeader: string | null): boolean {
   } else {
     hostname = hostHeader;
   }
-  return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
+  const normalized = hostname.toLowerCase();
+  return normalized === "localhost" || normalized === "127.0.0.1" || normalized === "::1";
 }
 
 export function isSameOrigin(origin: string, hostHeader: string | null): boolean {

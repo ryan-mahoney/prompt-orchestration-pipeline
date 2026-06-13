@@ -26,6 +26,7 @@ describe("parseCorsConfig", () => {
 describe("isLoopbackHost", () => {
   it("accepts bare loopback names", () => {
     expect(isLoopbackHost("localhost")).toBe(true);
+    expect(isLoopbackHost("Localhost")).toBe(true);
     expect(isLoopbackHost("127.0.0.1")).toBe(true);
     expect(isLoopbackHost("::1")).toBe(true);
   });

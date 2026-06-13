@@ -7,6 +7,7 @@ const ROOT = path.resolve(import.meta.dir, "../../../..");
 const ROUTER_PATH = path.join(ROOT, "src/ui/server/router.ts");
 const DOCS_PATH = path.join(ROOT, "docs/http-api.md");
 const PACKAGE_PATH = path.join(ROOT, "package.json");
+const EXPECTED_ROUTE_COUNT = 24;
 
 function extractRoutes(source: string): Array<{ method: string; path: string }> {
   const pattern = /addRoute\(\s*"([A-Z]+)"\s*,\s*"([^"]+)"/g;
@@ -26,7 +27,7 @@ describe("http-api.md coverage", () => {
     ]);
 
     const routes = extractRoutes(routerSource);
-    expect(routes.length).toBeGreaterThan(0);
+    expect(routes).toHaveLength(EXPECTED_ROUTE_COUNT);
 
     const missing: string[] = [];
     for (const route of routes) {

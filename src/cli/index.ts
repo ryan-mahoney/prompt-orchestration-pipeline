@@ -427,7 +427,7 @@ async function handleRunJob(jobId: string): Promise<void> {
 
 // ─── Commander program ────────────────────────────────────────────────────────
 
-const program = new Command();
+export const program = new Command();
 
 program
   .name("pipeline-orchestrator")

@@ -123,6 +123,25 @@ describe("router CORS and hardening", () => {
     expect(response.status).toBe(204);
     expect(response.headers.get("Access-Control-Allow-Methods")).toBe("GET, POST, OPTIONS");
     expect(response.headers.get("Access-Control-Allow-Origin")).toBeNull();
+    expect(response.headers.get("Vary")).toBe("Origin");
+  });
+
+  it("decorates allowed-origin 404 responses with CORS headers", async () => {
+    const root = await makeTempRoot();
+    process.env["PO_ROOT"] = root;
+    initPATHS(root);
+    const router = createRouter({
+      dataDir: root,
+      distDir: path.join(root, "dist"),
+      cors: { origins: ["https://app.example"], allowNullOrigin: false },
+    });
+
+    const response = await router.handle(new Request("http://localhost/api/missing", {
+      headers: { Host: "localhost", Origin: "https://app.example" },
+    }));
+    expect(response.status).toBe(404);
+    expect(response.headers.get("Access-Control-Allow-Origin")).toBe("https://app.example");
+    expect(response.headers.get("Vary")).toBe("Origin");
   });
 
   it("decorates SSE response with CORS headers and preserves ReadableStream body (AC-6)", async () => {

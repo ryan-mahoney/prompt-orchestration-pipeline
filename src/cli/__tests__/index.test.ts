@@ -12,6 +12,7 @@ import {
   parseTaskIndex,
   serializeTaskIndex,
   buildUiCorsEnv,
+  program,
 } from "../index.ts";
 import pkg from "../../../package.json";
 
@@ -443,10 +444,7 @@ describe("buildUiCorsEnv", () => {
 // ─── version ────────────────────────────────────────────────────────────────
 
 describe("CLI version", () => {
-  it("equals package.json version (AC-15)", async () => {
-    const { Command } = await import("commander");
-    const program = new Command();
-    program.name("test").version(pkg.version);
+  it("uses the real CLI program version from package.json (AC-15)", () => {
     expect(program.version()).toBe(pkg.version);
   });
 });
