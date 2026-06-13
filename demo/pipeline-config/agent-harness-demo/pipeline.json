@@ -1,0 +1,28 @@
+{
+  "name": "agent-harness-demo",
+  "version": "1.0.0",
+  "description": "Three-stage demo of the CLI agent harness: opencode drafts, claude reviews, codex finalizes",
+  "tasks": [
+    {
+      "name": "opencode-draft",
+      "agent": {
+        "harness": "opencode",
+        "prompt": "Write a short, structured outline (5-7 bullet points) for a blog post titled 'What an Agent Harness Is'. When the outline is ready, save it as a POP artifact named 'draft.md' by calling the write_artifact tool with name='draft.md' and the outline as content. Reply with a one-line confirmation."
+      }
+    },
+    {
+      "name": "claude-review",
+      "agent": {
+        "harness": "claude",
+        "prompt": "Read the artifact named 'draft.md' using the read_artifact tool. Tighten the wording, fix any gaps, and expand each bullet into one clear sentence. Save the result as a POP artifact named 'reviewed.md' by calling write_artifact with name='reviewed.md'. Reply with a one-line summary of what you changed."
+      }
+    },
+    {
+      "name": "codex-finalize",
+      "agent": {
+        "harness": "codex",
+        "prompt": "Read the artifact named 'reviewed.md' using the read_artifact tool. Format it as a finished Markdown document with a title and section headers. Save it as a POP artifact named 'final.md' by calling write_artifact with name='final.md'. Reply with a one-line confirmation."
+      }
+    }
+  ]
+}

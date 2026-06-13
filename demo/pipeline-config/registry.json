@@ -5,6 +5,12 @@
       "description": "Generates and processes content using LLM tasks",
       "pipelinePath": "pipeline-config/content-generation/pipeline.json",
       "taskRegistryPath": "pipeline-config/content-generation/tasks/index.js"
+    },
+    "agent-harness-demo": {
+      "name": "Agent Harness Demo Pipeline",
+      "description": "Three CLI agent steps: opencode drafts, claude reviews, codex finalizes",
+      "pipelinePath": "pipeline-config/agent-harness-demo/pipeline.json",
+      "taskRegistryPath": "pipeline-config/agent-harness-demo/tasks/index.js"
     }
   }
 }
