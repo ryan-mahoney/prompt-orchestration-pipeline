@@ -1,11 +1,13 @@
 import { dirname } from "node:path";
 import { mkdir } from "node:fs/promises";
+import type { AgentEntryConfig } from "../harness/types";
 
 export interface PipelineTaskEntry {
   name: string;
   task?: string;
   config?: Record<string, unknown>;
   gate?: boolean | { message?: string; artifacts?: string[] };
+  agent?: AgentEntryConfig;
 }
 
 export interface PipelineDefinition {
