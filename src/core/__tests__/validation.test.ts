@@ -147,3 +147,109 @@ describe("formatPipelineValidationErrors", () => {
     expect(result).toContain("name");
   });
 });
+
+describe("agent entry validation", () => {
+  test("accepts valid agent entry with prompt", () => {
+    const result = validatePipeline({
+      name: "test",
+      tasks: [{ name: "agent-step", agent: { harness: "claude", prompt: "do something" } }],
+    });
+    expect(result.valid).toBe(true);
+  });
+
+  test("accepts valid agent entry with promptFrom", () => {
+    const result = validatePipeline({
+      name: "test",
+      tasks: [{ name: "agent-step", agent: { harness: "opencode", promptFrom: "my-artifact" } }],
+    });
+    expect(result.valid).toBe(true);
+  });
+
+  test("rejects missing harness", () => {
+    const result = validatePipeline({
+      name: "test",
+      tasks: [{ name: "agent-step", agent: { prompt: "do something" } }],
+    });
+    expect(result.valid).toBe(false);
+    if (!result.valid) {
+      expect(formatPipelineValidationErrors(result.errors)).toContain("harness");
+    }
+  });
+
+  test("rejects unknown harness value", () => {
+    const result = validatePipeline({
+      name: "test",
+      tasks: [{ name: "agent-step", agent: { harness: "unknown", prompt: "do something" } }],
+    });
+    expect(result.valid).toBe(false);
+    if (!result.valid) {
+      expect(formatPipelineValidationErrors(result.errors)).toContain("harness");
+    }
+  });
+
+  test("rejects agent with neither prompt nor promptFrom", () => {
+    const result = validatePipeline({
+      name: "test",
+      tasks: [{ name: "agent-step", agent: { harness: "claude" } }],
+    });
+    expect(result.valid).toBe(false);
+    if (!result.valid) {
+      expect(formatPipelineValidationErrors(result.errors)).toContain("prompt");
+    }
+  });
+
+  test("rejects agent with both prompt and promptFrom", () => {
+    const result = validatePipeline({
+      name: "test",
+      tasks: [{
+        name: "agent-step",
+        agent: { harness: "claude", prompt: "a", promptFrom: "b" },
+      }],
+    });
+    expect(result.valid).toBe(false);
+    if (!result.valid) {
+      expect(formatPipelineValidationErrors(result.errors)).toContain("prompt");
+    }
+  });
+
+  test("rejects entry with both gate and agent", () => {
+    const result = validatePipeline({
+      name: "test",
+      tasks: [{
+        name: "step",
+        gate: true,
+        agent: { harness: "claude", prompt: "do it" },
+      }],
+    });
+    expect(result.valid).toBe(false);
+    if (!result.valid) {
+      expect(formatPipelineValidationErrors(result.errors)).toContain("gate");
+    }
+  });
+
+  test("rejects entry with both task and agent", () => {
+    const result = validatePipeline({
+      name: "test",
+      tasks: [{
+        name: "step",
+        task: "some-task",
+        agent: { harness: "claude", prompt: "do it" },
+      }],
+    });
+    expect(result.valid).toBe(false);
+    if (!result.valid) {
+      expect(formatPipelineValidationErrors(result.errors)).toContain("task");
+    }
+  });
+
+  test("rejects agent that is not a plain object", () => {
+    const result = validatePipeline({
+      name: "test",
+      tasks: [{ name: "agent-step", agent: "not-an-object" }],
+    });
+    expect(result.valid).toBe(false);
+    if (!result.valid) {
+      expect(formatPipelineValidationErrors(result.errors)).toContain("agent");
+    }
+  });
+});

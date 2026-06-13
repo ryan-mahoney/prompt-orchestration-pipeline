@@ -2,6 +2,7 @@ import Ajv from "ajv";
 import addFormats from "ajv-formats";
 import { getConfig } from "./config";
 import { isNonEmptyString, isPlainObject } from "./object-utils";
+import type { HarnessName } from "../harness/types";
 
 export interface ValidationError {
   message: string;
@@ -151,7 +152,7 @@ function validatePipelineTaskEntry(
   path: string,
   errors: ValidationError[],
 ): void {
-  const allowedKeys = new Set(["name", "task", "config", "gate"]);
+  const allowedKeys = new Set(["name", "task", "config", "gate", "agent"]);
   for (const key of Object.keys(task)) {
     if (!allowedKeys.has(key)) {
       errors.push({
@@ -189,6 +190,26 @@ function validatePipelineTaskEntry(
 
   if ("gate" in task) {
     validatePipelineTaskGate(task["gate"], `${path}/gate`, errors);
+  }
+
+  if ("agent" in task && "gate" in task) {
+    errors.push({
+      message: "entry must not set both 'agent' and 'gate'",
+      path,
+      keyword: "mutualExclusion",
+    });
+  }
+
+  if ("agent" in task && "task" in task) {
+    errors.push({
+      message: "entry must not set both 'agent' and 'task'",
+      path,
+      keyword: "mutualExclusion",
+    });
+  }
+
+  if ("agent" in task) {
+    validatePipelineTaskAgent(task["agent"], path, errors);
   }
 }
 
@@ -245,6 +266,57 @@ function validatePipelineTaskGate(
           keyword: "type",
         });
       }
+    });
+  }
+}
+
+const VALID_HARNESS_NAMES: HarnessName[] = ["claude", "codex", "opencode"];
+
+function validatePipelineTaskAgent(
+  agent: unknown,
+  path: string,
+  errors: ValidationError[],
+): void {
+  if (!isPlainObject(agent)) {
+    errors.push({
+      message: "agent must be a plain object",
+      path: `${path}/agent`,
+      keyword: "type",
+    });
+    return;
+  }
+
+  const harnessPath = `${path}/agent/harness`;
+  if (!isNonEmptyString(agent["harness"])) {
+    errors.push({
+      message: "harness must be a non-empty string",
+      path: harnessPath,
+      keyword: "type",
+    });
+  } else if (!VALID_HARNESS_NAMES.includes(agent["harness"] as HarnessName)) {
+    errors.push({
+      message: `harness must be one of: ${VALID_HARNESS_NAMES.join(", ")}`,
+      path: harnessPath,
+      keyword: "enum",
+    });
+  }
+
+  const hasPrompt = isNonEmptyString(agent["prompt"]);
+  const hasPromptFrom = isNonEmptyString(agent["promptFrom"]);
+
+  if (!hasPrompt && !hasPromptFrom) {
+    errors.push({
+      message: "must set exactly one of 'prompt' or 'promptFrom'",
+      path: `${path}/agent`,
+      keyword: "oneOf",
+    });
+  }
+
+  if (hasPrompt && hasPromptFrom) {
+    errors.push({
+      message: "must not set both 'prompt' and 'promptFrom'",
+      path: `${path}/agent`,
+      keyword: "oneOf",
     });
   }
 }

@@ -86,6 +86,18 @@ mock.module("../logger", () => ({
   createTaskLogger: mock(() => quietLogger),
 }));
 
+const mockRunAgentStep = mock(async (_args: unknown) => ({
+  ok: true as const,
+  finalMessage: "agent done",
+  artifactsWritten: ["agent-result.md"],
+  usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
+  costUsd: 0.01,
+}));
+
+mock.module("../agent-step", () => ({
+  runAgentStep: mockRunAgentStep,
+}));
+
 // ─── Import the module under test (after all mock.module calls) ───────────────
 
 import { runPipelineJob } from "../pipeline-runner";
@@ -974,5 +986,207 @@ describe("runPipelineJob — releases job slot", () => {
     }
 
     await releaseJobSlot(fixture.tmpDir, fixture.jobId);
+  });
+});
+
+describe("runPipelineJob — agent entry wiring", () => {
+  const savedEnv: Record<string, string | undefined> = {};
+  const cleanupDirs: string[] = [];
+
+  beforeEach(() => {
+    for (const key of Object.keys(savedEnv)) delete savedEnv[key];
+    for (const key of PO_ENV_KEYS) {
+      savedEnv[key] = process.env[key];
+      delete process.env[key];
+    }
+
+    mockRunAgentStep.mockClear();
+    mockRunAgentStep.mockImplementation(async (_args: unknown) => ({
+      ok: true as const,
+      finalMessage: "agent done",
+      artifactsWritten: ["agent-result.md"],
+      usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
+      costUsd: 0.01,
+    }));
+    mockRunPipeline.mockClear();
+    mockEnsureTaskSymlinkBridge.mockClear();
+    mockValidateTaskSymlinks.mockClear();
+    mockRepairTaskSymlinks.mockClear();
+    mockCleanupTaskSymlinks.mockClear();
+    mockLoadFreshModule.mockClear();
+  });
+
+  afterEach(async () => {
+    for (const key of PO_ENV_KEYS) {
+      if (savedEnv[key] === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = savedEnv[key];
+      }
+    }
+    process.exitCode = 0;
+
+    await Promise.all(cleanupDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
+  });
+
+  async function setupAgentFixture(agentConfig: Record<string, unknown>): Promise<MultiTaskFixture> {
+    const tmpDir = await mkdtemp(join(tmpdir(), "pipeline-runner-agent-"));
+    const jobId = "job-agent";
+    const currentDir = join(tmpDir, "current");
+    const completeDir = join(tmpDir, "complete");
+    const jobDir = join(currentDir, jobId);
+    const pipelineDir = join(tmpDir, "pipeline");
+
+    await mkdir(jobDir, { recursive: true });
+    await mkdir(completeDir, { recursive: true });
+    await mkdir(join(pipelineDir, "tasks"), { recursive: true });
+
+    await writeFile(join(jobDir, "seed.json"), JSON.stringify({ pipeline: "test-pipeline" }));
+
+    const taskName = "agent-task";
+    await writeFile(
+      join(jobDir, "tasks-status.json"),
+      JSON.stringify({
+        id: jobId,
+        state: "pending",
+        current: null,
+        currentStage: null,
+        lastUpdated: new Date().toISOString(),
+        tasks: { [taskName]: { state: "pending" } },
+        files: { artifacts: [], logs: [], tmp: [] },
+      }),
+    );
+
+    await writeFile(
+      join(pipelineDir, "pipeline.json"),
+      JSON.stringify({ tasks: [{ name: taskName, agent: agentConfig }] }),
+    );
+
+    // Task registry is not used for agent entries, but the config requires a path
+    await writeFile(join(pipelineDir, "tasks", "index.js"), "export default {};");
+
+    process.env["PO_ROOT"] = tmpDir;
+    process.env["PO_DATA_DIR"] = ".";
+    process.env["PO_CURRENT_DIR"] = currentDir;
+    process.env["PO_COMPLETE_DIR"] = completeDir;
+    process.env["PO_PIPELINE_PATH"] = join(pipelineDir, "pipeline.json");
+    process.env["PO_TASK_REGISTRY"] = join(pipelineDir, "tasks", "index.js");
+
+    return { tmpDir, jobId, jobDir, completeDir, statusPath: join(completeDir, jobId, "tasks-status.json") };
+  }
+
+  test("agent entry drives pending→running→done in tasks-status.json", async () => {
+    const fixture = await setupAgentFixture({ harness: "claude", prompt: "do something" });
+    cleanupDirs.push(fixture.tmpDir);
+
+    const exitSpy = spyOn(process, "exit").mockImplementation(((code?: number) => {
+      throw new Error(`process.exit called with ${String(code)}`);
+    }) as typeof process.exit);
+
+    try {
+      await runPipelineJob(fixture.jobId);
+    } finally {
+      exitSpy.mockRestore();
+    }
+
+    const statusText = await readFile(fixture.statusPath, "utf-8");
+    const status = JSON.parse(statusText) as {
+      tasks: Record<string, { state?: string; endedAt?: string; executionTimeMs?: number }>;
+    };
+    expect(status.tasks["agent-task"]?.state).toBe("done");
+    expect(typeof status.tasks["agent-task"]?.endedAt).toBe("string");
+    expect(typeof status.tasks["agent-task"]?.executionTimeMs).toBe("number");
+  });
+
+  test("failing agent step marks the entry failed and sets exitCode", async () => {
+    mockRunAgentStep.mockImplementation(async () => ({
+      ok: false as const,
+      finalMessage: "",
+      artifactsWritten: [],
+      error: "harness exploded",
+    }) as never);
+
+    const fixture = await setupAgentFixture({ harness: "codex", prompt: "fail task" });
+    cleanupDirs.push(fixture.tmpDir);
+
+    const exitSpy = spyOn(process, "exit").mockImplementation(((code?: number) => {
+      throw new Error(`process.exit called with ${String(code)}`);
+    }) as typeof process.exit);
+
+    try {
+      await runPipelineJob(fixture.jobId);
+    } finally {
+      exitSpy.mockRestore();
+    }
+
+    expect(process.exitCode).toBe(1);
+
+    const statusText = await readFile(join(fixture.jobDir, "tasks-status.json"), "utf-8");
+    const status = JSON.parse(statusText) as {
+      tasks: Record<string, { state?: string; error?: string }>;
+    };
+    expect(status.tasks["agent-task"]?.state).toBe("failed");
+    expect(status.tasks["agent-task"]?.error).toBe("harness exploded");
+  });
+
+  test("token usage tuple is keyed ${harness}:${model} with zeros when usage is absent", async () => {
+    mockRunAgentStep.mockImplementation(async () => ({
+      ok: true as const,
+      finalMessage: "done",
+      artifactsWritten: ["agent-result.md"],
+      // no usage or costUsd
+    }) as never);
+
+    const fixture = await setupAgentFixture({ harness: "opencode", model: "gpt-4o", prompt: "work" });
+    cleanupDirs.push(fixture.tmpDir);
+
+    const exitSpy = spyOn(process, "exit").mockImplementation(((code?: number) => {
+      throw new Error(`process.exit called with ${String(code)}`);
+    }) as typeof process.exit);
+
+    try {
+      await runPipelineJob(fixture.jobId);
+    } finally {
+      exitSpy.mockRestore();
+    }
+
+    const statusText = await readFile(fixture.statusPath, "utf-8");
+    const status = JSON.parse(statusText) as {
+      tasks: Record<string, { state?: string; tokenUsage?: unknown[] }>;
+    };
+    const tokenUsage = status.tasks["agent-task"]?.tokenUsage;
+    expect(Array.isArray(tokenUsage)).toBe(true);
+    expect(tokenUsage).toHaveLength(1);
+    expect(tokenUsage![0]).toEqual(["opencode:gpt-4o", 0, 0, 0]);
+  });
+
+  test("token usage tuple records actual values when usage is present", async () => {
+    mockRunAgentStep.mockImplementation(async () => ({
+      ok: true as const,
+      finalMessage: "done",
+      artifactsWritten: ["agent-result.md"],
+      usage: { inputTokens: 200, outputTokens: 100, totalTokens: 300 },
+      costUsd: 0.05,
+    }));
+
+    const fixture = await setupAgentFixture({ harness: "claude", prompt: "work" });
+    cleanupDirs.push(fixture.tmpDir);
+
+    const exitSpy = spyOn(process, "exit").mockImplementation(((code?: number) => {
+      throw new Error(`process.exit called with ${String(code)}`);
+    }) as typeof process.exit);
+
+    try {
+      await runPipelineJob(fixture.jobId);
+    } finally {
+      exitSpy.mockRestore();
+    }
+
+    const statusText = await readFile(fixture.statusPath, "utf-8");
+    const status = JSON.parse(statusText) as {
+      tasks: Record<string, { state?: string; tokenUsage?: unknown[] }>;
+    };
+    const tokenUsage = status.tasks["agent-task"]?.tokenUsage;
+    expect(tokenUsage![0]).toEqual(["claude:default", 200, 100, 0.05]);
   });
 });
