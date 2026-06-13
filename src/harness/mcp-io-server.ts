@@ -63,6 +63,16 @@ export async function startMcpIoServer(
       return { content: [{ type: "text" as const, text: `Wrote log: ${name}` }] };
     }) as any);
 
+    srv.registerTool("read_log", {
+      description: "Read content from a named log file",
+      inputSchema: {
+        name: z.string().describe("Log filename"),
+      },
+    } as any, (async ({ name }: { name: string }) => {
+      const content = await io.readLog(name);
+      return { content: [{ type: "text" as const, text: content }] };
+    }) as any);
+
     srv.registerTool("write_tmp", {
       description: "Write content to a named temporary file",
       inputSchema: {

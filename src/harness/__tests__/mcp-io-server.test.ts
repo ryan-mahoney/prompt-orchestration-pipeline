@@ -106,6 +106,27 @@ describe("startMcpIoServer", () => {
     }
   });
 
+  it("read_log with correct token invokes io.readLog and returns content", async () => {
+    const io = createFakeIO();
+    const handle = await startMcpIoServer(io);
+    try {
+      await initializeSession(handle.connection.url, handle.connection.token);
+
+      const resp = await postMcp(
+        handle.connection.url,
+        mcpJsonRpc("read_log", { name: "agent-debug.log" }),
+        { Authorization: `Bearer ${handle.connection.token}` },
+      );
+      const body = await resp.text();
+
+      expect(resp.status).toBe(200);
+      expect(io.calls).toContain("readLog:agent-debug.log");
+      expect(body).toContain("log-content:agent-debug.log");
+    } finally {
+      await handle.close();
+    }
+  });
+
   it("missing token returns 401 and does not touch io", async () => {
     const io = createFakeIO();
     const handle = await startMcpIoServer(io);
