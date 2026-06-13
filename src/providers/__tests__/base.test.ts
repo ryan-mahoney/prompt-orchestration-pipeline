@@ -162,6 +162,12 @@ describe("isRetryableError", () => {
     expect(err.name).toBe("TimeoutError");
     expect(isRetryableError(err)).toBe(true);
   });
+
+  it("returns true for AbortError from manual AbortController timeouts", () => {
+    const err = new DOMException("operation aborted", "AbortError");
+    expect(err.name).toBe("AbortError");
+    expect(isRetryableError(err)).toBe(true);
+  });
 });
 
 describe("DEFAULT_REQUEST_TIMEOUT_MS", () => {

@@ -80,6 +80,7 @@ The system provides a unified interface for interacting with various Large Langu
     *   **Moonshot**: Kimi models.
     *   **Zhipu**: GLM models.
     *   **Claude Code**: Integration with the `claude-code` CLI.
+    *   **OpenCode**: Optional prompt runner via SDK client or CLI fallback. Runs POP prompt requests through OpenCode while POP retains orchestration ownership. See `.specs/299-opencode-backend-layer/spec.md`.
 *   **Features**:
     *   **Cost & Usage Tracking**: Automatically calculates costs and normalizes token usage metrics across providers.
     *   **Metrics Events**: Emits `llm:request:complete` and `llm:request:error` events for observability.

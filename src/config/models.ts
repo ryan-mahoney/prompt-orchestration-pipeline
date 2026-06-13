@@ -6,7 +6,8 @@ export type ProviderName =
   | "moonshot"
   | "claude-code"
   | "zai"
-  | "alibaba";
+  | "alibaba"
+  | "opencode";
 
 export interface ModelConfigEntry {
   readonly provider: ProviderName;
@@ -99,6 +100,8 @@ export const ModelAlias = Object.freeze({
   ALIBABA_QWQ_PLUS: "alibaba:qwq-plus",
   ALIBABA_QWEN3_CODER_PLUS: "alibaba:qwen3-coder-plus",
   ALIBABA_QWEN3_CODER_FLASH: "alibaba:qwen3-coder-flash",
+  // OpenCode
+  OPENCODE_DEFAULT: "opencode:default",
 } as const);
 
 export type ModelAliasKey = (typeof ModelAlias)[keyof typeof ModelAlias];
@@ -414,6 +417,13 @@ const MODEL_CONFIG_RAW: Record<ModelAliasKey, ModelConfigEntry> = {
     tokenCostInPerMillion: 0.3,
     tokenCostOutPerMillion: 1.5,
   },
+  // OpenCode — zero static cost
+  "opencode:default": {
+    provider: "opencode",
+    model: "default",
+    tokenCostInPerMillion: 0,
+    tokenCostOutPerMillion: 0,
+  },
 };
 
 export const MODEL_CONFIG: Readonly<Record<ModelAliasKey, ModelConfigEntry>> =
@@ -486,6 +496,7 @@ export const DEFAULT_MODEL_BY_PROVIDER: Readonly<
   "claude-code": "claude-code:sonnet",
   zai: "zai:glm-5-1",
   alibaba: "alibaba:qwen3-max",
+  opencode: "opencode:default",
 } as const);
 
 // ─── Function Name Derived Index ─────────────────────────────────────────────

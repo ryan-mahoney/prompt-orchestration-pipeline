@@ -15,8 +15,8 @@ import {
 } from "../models";
 import type { ModelConfigEntry } from "../models";
 
-const MODEL_COUNT = 50;
-const PROVIDER_COUNT = 8;
+const MODEL_COUNT = 51;
+const PROVIDER_COUNT = 9;
 
 describe("ModelAlias", () => {
   it(`has exactly ${MODEL_COUNT} entries`, () => {
@@ -52,6 +52,20 @@ describe("MODEL_CONFIG", () => {
         expect(entry.tokenCostOutPerMillion).toBe(0);
       }
     }
+  });
+
+  it("opencode:default has zero pricing", () => {
+    const config = getModelConfig("opencode:default");
+    expect(config).not.toBeNull();
+    expect(config!.tokenCostInPerMillion).toBe(0);
+    expect(config!.tokenCostOutPerMillion).toBe(0);
+  });
+
+  it("contains exactly one key with the opencode: prefix", () => {
+    const opencodeKeys = Object.keys(MODEL_CONFIG).filter((k) =>
+      k.startsWith("opencode:"),
+    );
+    expect(opencodeKeys).toEqual(["opencode:default"]);
   });
 
   it("all entries have non-negative costs", () => {
@@ -91,7 +105,7 @@ describe("VALID_MODEL_ALIASES", () => {
 
 describe("DEFAULT_MODEL_BY_PROVIDER", () => {
   it(`has entries for all ${PROVIDER_COUNT} providers`, () => {
-    const providers = ["openai", "anthropic", "gemini", "deepseek", "moonshot", "claude-code", "zai", "alibaba"];
+    const providers = ["openai", "anthropic", "gemini", "deepseek", "moonshot", "claude-code", "zai", "alibaba", "opencode"];
     expect(Object.keys(DEFAULT_MODEL_BY_PROVIDER).length).toBe(PROVIDER_COUNT);
     for (const provider of providers) {
       expect(provider in DEFAULT_MODEL_BY_PROVIDER).toBe(true);
@@ -245,7 +259,7 @@ describe("FUNCTION_NAME_BY_ALIAS", () => {
 
 describe("PROVIDER_FUNCTIONS", () => {
   it(`has entries for all ${PROVIDER_COUNT} providers`, () => {
-    const providers = ["openai", "anthropic", "gemini", "deepseek", "moonshot", "claude-code", "zai", "alibaba"];
+    const providers = ["openai", "anthropic", "gemini", "deepseek", "moonshot", "claude-code", "zai", "alibaba", "opencode"];
     for (const provider of providers) {
       expect(provider in PROVIDER_FUNCTIONS).toBe(true);
     }

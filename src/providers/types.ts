@@ -71,6 +71,7 @@ export type ProviderName =
   | "claudecode"
   | "moonshot"
   | "alibaba"
+  | "opencode"
   | "mock";
 
 /** Options for the chat() gateway function. */
@@ -79,6 +80,7 @@ export interface ChatOptions extends ProviderOptions {
   metadata?: Record<string, unknown>;
   frequencyPenalty?: number;
   presencePenalty?: number;
+  opencode?: OpenCodeRequestConfig;
 }
 // NOTE: `stream` is intentionally absent from ChatOptions.
 // Streaming is adapter-only (DeepSeekOptions.stream) and is never
@@ -137,6 +139,60 @@ export interface ClaudeCodeOptions {
   requestTimeoutMs?: number;
 }
 
+export type OpenCodePermissionAction = "allow" | "ask" | "deny";
+
+export type OpenCodePermissionKey =
+  | "read"
+  | "edit"
+  | "glob"
+  | "grep"
+  | "list"
+  | "bash"
+  | "task"
+  | "external_directory"
+  | "todowrite"
+  | "webfetch"
+  | "websearch"
+  | "lsp"
+  | "skill"
+  | "question"
+  | "doom_loop";
+
+export type OpenCodePermissionName =
+  | OpenCodePermissionKey
+  | "*"
+  | (string & {});
+
+export interface OpenCodePermissionRule {
+  permission: OpenCodePermissionName;
+  pattern: string;
+  action: OpenCodePermissionAction;
+}
+
+export type OpenCodePermissionConfig =
+  | OpenCodePermissionAction
+  | Partial<
+      Record<
+        OpenCodePermissionName,
+        OpenCodePermissionAction | Record<string, OpenCodePermissionAction>
+      >
+    >
+  | OpenCodePermissionRule[];
+
+export interface OpenCodeRequestConfig {
+  mode?: "sdk" | "cli";
+  baseUrl?: string;
+  sessionId?: string;
+  agent?: string;
+  directory?: string;
+  permission?: OpenCodePermissionConfig;
+  structuredOutputRetryCount?: number;
+}
+
+export interface OpenCodeOptions extends ProviderOptions {
+  opencode?: OpenCodeRequestConfig;
+}
+
 /** Telemetry event: request start. */
 export interface LLMRequestStartEvent {
   id: string;
@@ -172,6 +228,7 @@ export interface ProviderAvailability {
   claudecode: boolean;
   moonshot: boolean;
   alibaba: boolean;
+  opencode: boolean;
   mock: boolean;
 }
 

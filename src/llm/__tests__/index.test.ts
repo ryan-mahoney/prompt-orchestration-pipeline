@@ -1,5 +1,15 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { EventEmitter } from "node:events";
+
+const mockSdkPrompt = vi.fn();
+const mockSdkCreate = vi.fn();
+const mockSdkDelete = vi.fn();
+const mockCreateClient = vi.fn();
+
+vi.mock("@opencode-ai/sdk/v2", () => ({
+  createOpencodeClient: mockCreateClient,
+}));
+
 import {
   chat,
   complete,
@@ -45,6 +55,37 @@ const baseMessages = [
   { role: "user" as const, content: "Hello" },
 ];
 
+function createOpenCodeProc(
+  lines: string[],
+  exitCode = 0,
+  stderr = "",
+) {
+  const stdout = new ReadableStream({
+    start(controller) {
+      for (const line of lines) {
+        controller.enqueue(new TextEncoder().encode(line));
+      }
+      controller.close();
+    },
+  });
+  const stderrStream = new ReadableStream({
+    start(controller) {
+      if (stderr.length > 0) {
+        controller.enqueue(new TextEncoder().encode(stderr));
+      }
+      controller.close();
+    },
+  });
+
+  return {
+    stdout,
+    stderr: stderrStream,
+    exited: Promise.resolve(exitCode),
+    exitCode,
+    kill: vi.fn(),
+  } as unknown as ReturnType<typeof Bun.spawn>;
+}
+
 // ─── Tests ───────────────────────────────────────────────────────────────────
 
 describe("LLM Gateway", () => {
@@ -70,6 +111,7 @@ describe("LLM Gateway", () => {
     }
     // Remove all event listeners to prevent leaks
     getLLMEvents().removeAllListeners();
+    vi.restoreAllMocks();
   });
 
   // ── chat() ──────────────────────────────────────────────────────────────
@@ -651,6 +693,166 @@ describe("LLM Gateway", () => {
       // Should have provider groups from config
       expect(llm["openai"]).toBeDefined();
       expect(llm["anthropic"]).toBeDefined();
+    });
+  });
+
+  // ── OpenCode provider integration ───────────────────────────────────────
+
+  describe("OpenCode provider integration", () => {
+    beforeEach(() => {
+      delete process.env["PO_OPENCODE_BASE_URL"];
+      delete process.env["OPENCODE_BASE_URL"];
+      mockCreateClient.mockReturnValue({
+        session: {
+          create: mockSdkCreate,
+          prompt: mockSdkPrompt,
+          delete: mockSdkDelete,
+        },
+      });
+    });
+
+    afterEach(() => {
+      delete process.env["PO_OPENCODE_BASE_URL"];
+      delete process.env["OPENCODE_BASE_URL"];
+      mockCreateClient.mockClear();
+      mockSdkCreate.mockClear();
+      mockSdkPrompt.mockClear();
+      mockSdkDelete.mockClear();
+    });
+
+    it("dispatches to opencodeChat and returns ChatResponse with estimated usage", async () => {
+      vi.spyOn(Bun, "spawn").mockReturnValue(
+        createOpenCodeProc([
+          '{"type":"text","part":{"text":"hello from opencode"}}\n',
+        ]),
+      );
+      const completeEvents: LLMRequestCompleteEvent[] = [];
+      getLLMEvents().on("llm:request:complete", (e) =>
+        completeEvents.push(e),
+      );
+
+      const result = await chat({
+        provider: "opencode",
+        model: "anthropic/claude-sonnet-4-5",
+        messages: baseMessages,
+        responseFormat: "text",
+      });
+
+      expect(result.content).toBe("hello from opencode");
+      expect(result.usage).toEqual({
+        promptTokens: estimateTokens("Hello"),
+        completionTokens: estimateTokens("hello from opencode"),
+        totalTokens:
+          estimateTokens("Hello") + estimateTokens("hello from opencode"),
+      });
+      expect(completeEvents).toHaveLength(1);
+      expect(completeEvents[0]!.provider).toBe("opencode");
+      expect(completeEvents[0]!.model).toBe("anthropic/claude-sonnet-4-5");
+      expect(completeEvents[0]!.cost).toBe(0);
+    });
+
+    it("createLLMWithOverride routes through OpenCode without unknown-provider error", async () => {
+      vi.spyOn(Bun, "spawn").mockReturnValue(
+        createOpenCodeProc([
+          '{"type":"text","part":{"text":"override ok"}}\n',
+        ]),
+      );
+      const llm = createLLMWithOverride({ provider: "opencode", model: "anthropic/claude-sonnet-4-5" });
+
+      const result = await llm.chat({
+        provider: "openai",
+        messages: baseMessages,
+        responseFormat: "text",
+      });
+
+      expect(result.content).toBe("override ok");
+    });
+
+    it("getAvailableProviders reflects OpenCode availability via env vars", () => {
+      const spawnSpy = vi.spyOn(Bun, "spawnSync").mockReturnValue({
+        exitCode: 1,
+        stdout: Buffer.from(""),
+        stderr: Buffer.from("not found"),
+      } as unknown as ReturnType<typeof Bun.spawnSync>);
+
+      expect(getAvailableProviders().opencode).toBe(false);
+
+      process.env["PO_OPENCODE_BASE_URL"] = "http://localhost:3000";
+      expect(getAvailableProviders().opencode).toBe(true);
+    });
+
+    it("emits llm:request:error with provider opencode on adapter failure", async () => {
+      vi.spyOn(Bun, "spawn").mockReturnValue(
+        createOpenCodeProc([], 1, "permission denied"),
+      );
+      const errorEvents: unknown[] = [];
+      getLLMEvents().on("llm:request:error", (e) => errorEvents.push(e));
+
+      await expect(
+        chat({ provider: "opencode", messages: baseMessages }),
+      ).rejects.toThrow();
+
+      expect(errorEvents).toHaveLength(1);
+      expect((errorEvents[0] as { provider: string }).provider).toBe("opencode");
+      expect((errorEvents[0] as { error: string }).error).toBe(
+        "OpenCode CLI exited with code 1: permission denied",
+      );
+    });
+
+    it("emits llm:request:complete with measured token counts from SDK usage", async () => {
+      process.env["PO_OPENCODE_BASE_URL"] = "http://localhost:3000";
+
+      mockSdkCreate.mockResolvedValue({
+        data: { id: "sess-sdk-1" },
+        error: undefined,
+      });
+      mockSdkPrompt.mockResolvedValue({
+        data: {
+          info: {
+            id: "msg-sdk-1",
+            sessionID: "sess-sdk-1",
+            role: "assistant" as const,
+            modelID: "claude-sonnet-4-5",
+            providerID: "anthropic",
+            agent: "build",
+            cost: 0.05,
+            tokens: {
+              input: 150,
+              output: 80,
+              total: 230,
+              reasoning: 0,
+              cache: { read: 0, write: 0 },
+            },
+          },
+          parts: [{ type: "text" as const, text: "sdk measured response" }],
+        },
+        error: undefined,
+      });
+      mockSdkDelete.mockResolvedValue({ data: undefined, error: undefined });
+
+      const completeEvents: LLMRequestCompleteEvent[] = [];
+      getLLMEvents().on("llm:request:complete", (e) =>
+        completeEvents.push(e),
+      );
+
+      const result = await chat({
+        provider: "opencode",
+        model: "anthropic/claude-sonnet-4-5",
+        messages: baseMessages,
+        responseFormat: "text",
+      });
+
+      expect(result.content).toBe("sdk measured response");
+      expect(result.usage).toEqual({
+        promptTokens: 150,
+        completionTokens: 80,
+        totalTokens: 230,
+      });
+      expect(completeEvents).toHaveLength(1);
+      expect(completeEvents[0]!.promptTokens).toBe(150);
+      expect(completeEvents[0]!.completionTokens).toBe(80);
+      expect(completeEvents[0]!.totalTokens).toBe(230);
+      expect(completeEvents[0]!.provider).toBe("opencode");
     });
   });
 });

@@ -159,6 +159,7 @@ const PROVIDER_DISPLAY_NAMES: Record<ProviderName, string> = {
   "claude-code": "Claude Code",
   zai: "Zhipu",
   alibaba: "Alibaba Cloud",
+  opencode: "OpenCode",
 };
 
 const PROVIDER_ORDER: readonly ProviderName[] = [
@@ -170,6 +171,7 @@ const PROVIDER_ORDER: readonly ProviderName[] = [
   "alibaba",
   "zai",
   "claude-code",
+  "opencode",
 ];
 
 function formatPrice(cost: number): string {

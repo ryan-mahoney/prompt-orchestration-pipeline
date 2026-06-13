@@ -70,7 +70,7 @@ export function isRetryableError(err: unknown): boolean {
   if (err.name === "ProviderJsonParseError") return false;
 
   // Fetch/AbortSignal timeout errors are always retryable
-  if (err.name === "TimeoutError") return true;
+  if (err.name === "TimeoutError" || err.name === "AbortError") return true;
 
   // Check HTTP status codes
   const status = (err as { status?: number }).status;
