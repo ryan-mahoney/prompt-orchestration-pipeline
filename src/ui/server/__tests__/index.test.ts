@@ -5,7 +5,7 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { resetConfig } from "../../../core/config";
-import { initializeWatcher, startServer } from "../index";
+import { createServer, initializeWatcher, startServer } from "../index";
 import { sseRegistry } from "../sse-registry";
 
 const tempRoots: string[] = [];
@@ -49,6 +49,28 @@ describe("server index", () => {
     const handle = await startServer({ dataDir: root, port: 4111 });
     expect(handle.url).toBe("http://localhost:4111");
     const response = await fetch(`${handle.url}/api/jobs/job-1`);
+    expect(response.status).toBe(200);
+    await handle.close();
+  });
+
+  it("wires PO_CORS_ORIGINS env to router CORS config", async () => {
+    const root = await makeTempRoot();
+    process.env["PO_ROOT"] = root;
+    process.env["PO_CORS_ORIGINS"] = "https://app.example";
+    const server = createServer(root);
+    const response = await server.fetch(new Request("http://localhost/api/state", {
+      headers: { Host: "localhost", Origin: "https://app.example" },
+    }));
+    expect(response.headers.get("Access-Control-Allow-Origin")).toBe("https://app.example");
+    delete process.env["PO_CORS_ORIGINS"];
+  });
+
+  it("binds to 127.0.0.1 and resolves url to localhost (AC-17)", async () => {
+    const root = await makeTempRoot();
+    process.env["PO_ROOT"] = root;
+    const handle = await startServer({ dataDir: root, port: 4112 });
+    expect(handle.url).toBe("http://localhost:4112");
+    const response = await fetch(`${handle.url}/api/meta`);
     expect(response.status).toBe(200);
     await handle.close();
   });
