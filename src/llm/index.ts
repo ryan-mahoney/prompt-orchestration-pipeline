@@ -12,6 +12,7 @@ import { alibabaChat } from "../providers/alibaba.ts";
 import { moonshotChat } from "../providers/moonshot.ts";
 import { zaiChat } from "../providers/zhipu.ts";
 import { claudeCodeChat, isClaudeCodeAvailable } from "../providers/claude-code.ts";
+import { opencodeChat, isOpenCodeAvailable } from "../providers/opencode.ts";
 import { ensureMessagesPresent } from "../providers/base.ts";
 import {
   MODEL_CONFIG,
@@ -129,6 +130,11 @@ async function callAdapter(
       return zaiChat({ messages, model, temperature, maxTokens, responseFormat, topP, stop, maxRetries, requestTimeoutMs });
     case "claudecode":
       return claudeCodeChat({ messages, model, maxTokens, responseFormat, maxRetries, requestTimeoutMs });
+    case "opencode":
+      return opencodeChat({
+        messages, model, responseFormat, maxRetries, requestTimeoutMs,
+        opencode: options.opencode,
+      });
     case "mock": {
       if (!mockProvider) {
         throw new Error("No mock provider registered. Call registerMockProvider() first.");
@@ -457,7 +463,7 @@ export function getAvailableProviders(): ProviderAvailability {
     moonshot: !!process.env["MOONSHOT_API_KEY"],
     claudecode: isClaudeCodeAvailable(),
     mock: mockProvider !== null,
-    opencode: false,
+    opencode: isOpenCodeAvailable(),
   };
 }
 

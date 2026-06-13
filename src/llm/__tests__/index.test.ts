@@ -24,6 +24,16 @@ import type {
   LLMRequestCompleteEvent,
 } from "../../providers/types.ts";
 
+let opencodeAvailable = false;
+
+vi.mock("../../providers/opencode.ts", () => ({
+  opencodeChat: vi.fn().mockResolvedValue({
+    content: { opencode: true },
+    usage: { prompt_tokens: 10, completion_tokens: 20, total_tokens: 30 },
+  }),
+  isOpenCodeAvailable: vi.fn(() => opencodeAvailable),
+}));
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function makeMockProvider(
@@ -651,6 +661,94 @@ describe("LLM Gateway", () => {
       // Should have provider groups from config
       expect(llm["openai"]).toBeDefined();
       expect(llm["anthropic"]).toBeDefined();
+    });
+  });
+
+  // ── OpenCode provider integration ───────────────────────────────────────
+
+  describe("OpenCode provider integration", () => {
+    it("dispatches to opencodeChat and returns standard ChatResponse", async () => {
+      const result = await chat({
+        provider: "opencode",
+        messages: baseMessages,
+      });
+
+      expect(result.content).toEqual({ opencode: true });
+      expect(result.usage.promptTokens).toBe(10);
+      expect(result.usage.completionTokens).toBe(20);
+      expect(result.usage.totalTokens).toBe(30);
+    });
+
+    it("createLLMWithOverride routes provider/model through OpenCode", async () => {
+      const llm = createLLMWithOverride({ provider: "opencode", model: "anthropic/claude-sonnet-4-5" });
+
+      const result = await llm.chat({
+        provider: "openai",
+        messages: baseMessages,
+      });
+
+      expect(result.content).toEqual({ opencode: true });
+    });
+
+    it("getAvailableProviders reflects OpenCode availability", () => {
+      opencodeAvailable = true;
+      expect(getAvailableProviders().opencode).toBe(true);
+
+      opencodeAvailable = false;
+      expect(getAvailableProviders().opencode).toBe(false);
+    });
+
+    it("emits llm:request:complete with provider opencode and cost 0 for dynamic models", async () => {
+      const completeEvents: LLMRequestCompleteEvent[] = [];
+      getLLMEvents().on("llm:request:complete", (e) => completeEvents.push(e));
+
+      await chat({
+        provider: "opencode",
+        messages: baseMessages,
+        model: "anthropic/claude-sonnet-4-5",
+      });
+
+      expect(completeEvents).toHaveLength(1);
+      expect(completeEvents[0]!.provider).toBe("opencode");
+      expect(completeEvents[0]!.model).toBe("anthropic/claude-sonnet-4-5");
+      expect(completeEvents[0]!.promptTokens).toBeTypeOf("number");
+      expect(completeEvents[0]!.completionTokens).toBeTypeOf("number");
+      expect(completeEvents[0]!.cost).toBe(0);
+    });
+
+    it("emits llm:request:error with provider opencode on adapter failure", async () => {
+      const { opencodeChat } = await import("../../providers/opencode.ts");
+      (opencodeChat as any).mockRejectedValueOnce(new Error("opencode boom"));
+
+      const errorEvents: unknown[] = [];
+      getLLMEvents().on("llm:request:error", (e) => errorEvents.push(e));
+
+      await expect(
+        chat({ provider: "opencode", messages: baseMessages }),
+      ).rejects.toThrow("opencode boom");
+
+      expect(errorEvents).toHaveLength(1);
+      expect((errorEvents[0] as { provider: string }).provider).toBe("opencode");
+      expect((errorEvents[0] as { error: string }).error).toBe("opencode boom");
+    });
+
+    it("falls back to estimated token counts when adapter usage is absent", async () => {
+      const { opencodeChat } = await import("../../providers/opencode.ts");
+      (opencodeChat as any).mockResolvedValueOnce({
+        content: { fallback: true },
+        usage: undefined,
+      });
+
+      const result = await chat({
+        provider: "opencode",
+        messages: baseMessages,
+      });
+
+      expect(result.usage.promptTokens).toBeTypeOf("number");
+      expect(result.usage.completionTokens).toBeTypeOf("number");
+      expect(result.usage.totalTokens).toBeTypeOf("number");
+      expect(result.usage.promptTokens).toBeGreaterThan(0);
+      expect(result.usage.completionTokens).toBeGreaterThan(0);
     });
   });
 });
