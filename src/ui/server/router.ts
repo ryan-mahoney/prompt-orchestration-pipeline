@@ -23,6 +23,9 @@ import { handleTaskPlan } from "./endpoints/task-creation-endpoint";
 import { handleTaskSave } from "./endpoints/task-save-endpoint";
 import { handleSeedUpload } from "./endpoints/upload-endpoints";
 import { handleSseEvents } from "./endpoints/sse-endpoints";
+import { handleMeta } from "./endpoints/meta-endpoint";
+import type { CorsConfig } from "./cors";
+import { isLoopbackHost, shouldRejectMutation, corsHeadersFor, PREFLIGHT_ALLOW_METHODS, PREFLIGHT_ALLOW_HEADERS } from "./cors";
 import { sendJson } from "./utils/http-utils";
 import { getMimeType } from "./utils/mime-types";
 
@@ -37,6 +40,7 @@ interface Route {
 interface RouterOptions {
   dataDir: string;
   distDir?: string;
+  cors?: CorsConfig;
 }
 
 function normalizeParams(groups: Record<string, string | undefined>): Record<string, string> {
@@ -51,6 +55,7 @@ export function createRouter(options: RouterOptions): {
 } {
   const routes: Route[] = [];
   const distDir = options.distDir ?? path.join(process.cwd(), "dist");
+  const cors: CorsConfig = options.cors ?? { origins: [], allowNullOrigin: false };
 
   const addRoute = (method: string, routePath: string, handler: RouteHandler): void => {
     routes.push({ method, pattern: new URLPattern({ pathname: routePath }), handler });
@@ -94,25 +99,61 @@ export function createRouter(options: RouterOptions): {
   addRoute("POST", "/api/ai/task-plan", (req) => handleTaskPlan(req));
   addRoute("POST", "/api/tasks/create", (req) => handleTaskSave(req));
   addRoute("GET", "/api/state", () => handleApiState());
+  addRoute("GET", "/api/meta", () => handleMeta());
   addRoute("GET", "/api/concurrency", () => handleConcurrencyStatus(options.dataDir));
   addRoute("GET", "/api/events", (req) => handleSseEvents(req));
   addRoute("GET", "/api/sse", (req) => handleSseEvents(req));
   addRoute("POST", "/api/upload/seed", (req) => handleSeedUpload(req, options.dataDir));
 
+  function decorateHeaders(response: Response, headers: Record<string, string>): Response {
+    const merged = new Headers(response.headers);
+    for (const [key, value] of Object.entries(headers)) {
+      merged.set(key, value);
+    }
+    return new Response(response.body, { status: response.status, statusText: response.statusText, headers: merged });
+  }
+
   return {
     addRoute,
     async handle(req) {
       const url = new URL(req.url);
+      const host = req.headers.get("host");
+      const origin = req.headers.get("origin");
+
+      if (!isLoopbackHost(host)) {
+        return sendJson(403, { ok: false, code: "forbidden_host", message: "Host header must be loopback" });
+      }
+
+      if (req.method === "OPTIONS" && url.pathname.startsWith("/api/")) {
+        const headers: Record<string, string> = {
+          "Access-Control-Allow-Methods": PREFLIGHT_ALLOW_METHODS,
+          "Access-Control-Allow-Headers": PREFLIGHT_ALLOW_HEADERS,
+        };
+        const corsHeaders = corsHeadersFor(origin, host, cors);
+        if (corsHeaders) {
+          Object.assign(headers, corsHeaders);
+        }
+        return new Response(null, { status: 204, headers });
+      }
+
+      if (shouldRejectMutation(req.method, url.pathname, origin, host, cors)) {
+        return sendJson(403, { ok: false, code: "forbidden_origin", message: "Cross-origin request not allowed" });
+      }
 
       for (const route of routes) {
         if (route.method !== req.method) continue;
         const match = route.pattern.exec(url);
         if (!match) continue;
-        return route.handler(req, normalizeParams(match.pathname.groups));
+        const response = await route.handler(req, normalizeParams(match.pathname.groups));
+        const extraHeaders = corsHeadersFor(origin, host, cors);
+        return extraHeaders ? decorateHeaders(response, extraHeaders) : response;
       }
 
       const asset = await serveAsset(url.pathname);
-      if (asset) return asset;
+      if (asset) {
+        const extraHeaders = corsHeadersFor(origin, host, cors);
+        return extraHeaders ? decorateHeaders(asset, extraHeaders) : asset;
+      }
       return sendJson(404, { ok: false, code: "NOT_FOUND", message: "route not found" });
     },
   };
