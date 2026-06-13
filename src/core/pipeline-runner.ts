@@ -13,6 +13,7 @@ import type { TaskStateValue } from "../config/statuses";
 import { ensureTaskSymlinkBridge } from "./symlink-bridge";
 import { validateTaskSymlinks, repairTaskSymlinks, cleanupTaskSymlinks } from "./symlink-utils";
 import { createTaskFileIO, generateLogName } from "./file-io";
+import { runAgentStep } from "./agent-step";
 import { LogEvent, LogFileExtension } from "../config/log-events";
 import { TaskState, normalizeTaskState } from "../config/statuses";
 import { releaseJobSlot } from "./job-concurrency";
@@ -666,6 +667,7 @@ export async function runPipelineJob(jobId: string): Promise<void> {
   // ─── Task execution loop ─────────────────────────────────────────────────
 
   const pipelineArtifacts: Record<string, unknown> = {};
+  let agentFailed = false;
 
   while (true) {
     const pipeline = await loadPipeline(config.pipelineJsonPath);
@@ -797,6 +799,79 @@ export async function runPipelineJob(jobId: string): Promise<void> {
       delete taskEntry.lastRetryError;
       snapshot.tasks[taskName] = taskEntry;
     });
+
+    // ─── Agent entry handling ─────────────────────────────────────────────
+
+    if (selectedEntry.agent) {
+      const agentEntry = selectedEntry.agent;
+      const agentStartTime = Date.now();
+      try {
+        const agentResult = await runAgentStep({
+          entry: { ...agentEntry, name: taskName },
+          workDir: config.workDir,
+          statusPath: config.statusPath,
+          jobId,
+          getStage: () => "",
+        });
+
+        const agentExecutionTimeMs = Date.now() - agentStartTime;
+
+        if (agentResult.ok) {
+          const usageKey = `${agentEntry.harness}:${agentEntry.model ?? "default"}`;
+          const inputTokens = agentResult.usage?.inputTokens ?? 0;
+          const outputTokens = agentResult.usage?.outputTokens ?? 0;
+          const costUsd = agentResult.costUsd ?? 0;
+          const usageTuple = [usageKey, inputTokens, outputTokens, costUsd];
+
+          await writeJobStatus(config.workDir, (snapshot) => {
+            snapshot.state = "done";
+            snapshot.current = null;
+            snapshot.currentStage = null;
+            const taskEntry = snapshot.tasks[taskName] ?? {};
+            taskEntry.state = "done";
+            taskEntry.endedAt = new Date().toISOString();
+            taskEntry.executionTimeMs = agentExecutionTimeMs;
+            const usage = (taskEntry.tokenUsage ?? []) as unknown[];
+            usage.push(usageTuple);
+            taskEntry.tokenUsage = usage;
+            snapshot.tasks[taskName] = taskEntry;
+          });
+        } else {
+          await writeJobStatus(config.workDir, (snapshot) => {
+            snapshot.state = "failed";
+            snapshot.current = taskName;
+            const taskEntry = snapshot.tasks[taskName] ?? {};
+            taskEntry.state = "failed";
+            taskEntry.endedAt = new Date().toISOString();
+            taskEntry.error = agentResult.error ?? "Agent step failed";
+            snapshot.tasks[taskName] = taskEntry;
+          });
+          activeTaskName = null;
+          await releaseJobSlotBestEffort(dataDir, jobId);
+          agentFailed = true;
+          process.exitCode = 1;
+          break;
+        }
+      } catch (err) {
+        await writeJobStatus(config.workDir, (snapshot) => {
+          snapshot.state = "failed";
+          snapshot.current = taskName;
+          const taskEntry = snapshot.tasks[taskName] ?? {};
+          taskEntry.state = "failed";
+          taskEntry.endedAt = new Date().toISOString();
+          taskEntry.error = err instanceof Error ? err.message : String(err);
+          snapshot.tasks[taskName] = taskEntry;
+        });
+        activeTaskName = null;
+        await releaseJobSlotBestEffort(dataDir, jobId);
+        agentFailed = true;
+        process.exitCode = 1;
+        break;
+      }
+      activeTaskName = null;
+      if (runSingleTask) break;
+      continue;
+    }
 
     // ─── Task execution ───────────────────────────────────────────────────
 
@@ -1005,7 +1080,7 @@ export async function runPipelineJob(jobId: string): Promise<void> {
   }
 
   // On full pipeline completion (not single-task mode), finalize the job
-  if (!runSingleTask) {
+  if (!runSingleTask && !agentFailed) {
     await writeJobStatus(config.workDir, (snapshot) => {
       snapshot.state = "done";
       snapshot.current = null;
