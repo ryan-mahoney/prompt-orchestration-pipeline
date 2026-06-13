@@ -10,6 +10,7 @@
   "files": [
     "src",
     "docs/pop-task-guide.md",
+    "docs/http-api.md",
     "README.md",
     "LICENSE"
   ],

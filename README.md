@@ -178,3 +178,33 @@ Drop a JSON file into `pipelines/pipeline-data/pending/`:
 ```
 
 The Orchestrator will pick it up, move it to `current/`, and start processing.
+
+---
+
+## Building a Custom Frontend
+
+The orchestrator exposes a documented HTTP/SSE API at `http://localhost:<port>/api/*` that any frontend can consume. See **[HTTP/SSE Protocol Reference](docs/http-api.md)** for the full contract.
+
+Custom frontends should run against a configured fixed port, usually the default `4000` or an explicit `--port` value. Treat bind failures or port conflicts as startup failures; the protocol does not provide dynamic port discovery.
+
+### Integration Modes
+
+**Subprocess mode** (recommended): Run the orchestrator as a child process via `pipeline-orchestrator start`. The orchestrator runs in its own process — if it crashes, your application stays alive. This is the default and recommended approach.
+
+**Programmatic mode**: Import `startServer` or `startOrchestrator` directly to embed the server in your process. This is simpler but forfeits process isolation — a crash in the orchestrator will take down your host process.
+
+### Cross-Origin Access
+
+By default, the server only accepts same-origin requests. To allow a custom frontend on a different origin:
+
+```bash
+pipeline-orchestrator start --cors-origins "https://my-app.example,views://mainview"
+```
+
+For desktop webviews that report `Origin: null`, add `--cors-allow-null-origin`. Prefer allowlisting the concrete origin (e.g. `views://mainview`) when possible.
+
+### Protocol Versioning
+
+The API follows a client-robustness contract: clients must ignore unknown JSON fields and unknown SSE event types. This means additive changes (new routes, new event types, new fields) are backward-compatible. Breaking changes (removing or renaming fields, changing types) require a `protocolVersion` bump and are documented in `docs/http-api.md`.
+
+Capability negotiation is not built. Custom frontends should use the documented protocol and `GET /api/meta` instead of expecting negotiated feature flags or per-client capability exchange.

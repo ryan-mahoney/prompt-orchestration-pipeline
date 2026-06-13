@@ -11,6 +11,7 @@ import { startWatcher } from "../state/watcher";
 import { getState } from "../state/change-tracker";
 import { broadcastStateUpdate } from "./sse-broadcast";
 import { initPATHS, resolvePipelinePaths } from "./config-bridge-node";
+import { parseCorsConfig } from "./cors";
 import { createRouter } from "./router";
 import { sseEnhancer } from "./sse-enhancer";
 import { sseRegistry } from "./sse-registry";
@@ -63,7 +64,10 @@ export async function initializeWatcher(dataDir: string): Promise<void> {
 
 export function createServer(dataDir?: string): { fetch: (req: Request) => Promise<Response> } {
   const resolvedDataDir = dataDir ?? process.env["PO_ROOT"] ?? process.cwd();
-  const router = createRouter({ dataDir: resolvedDataDir, distDir: path.join(import.meta.dir, "../dist") });
+  const rawOrigins = process.env["PO_CORS_ORIGINS"];
+  const allowNull = process.env["PO_CORS_ALLOW_NULL_ORIGIN"];
+  const cors = parseCorsConfig(rawOrigins, allowNull === "1" || allowNull === "true");
+  const router = createRouter({ dataDir: resolvedDataDir, distDir: path.join(import.meta.dir, "../dist"), cors });
   return { fetch: (req: Request) => router.handle(req) };
 }
 
@@ -85,6 +89,7 @@ export async function startServer(options: ServerOptions): Promise<ServerHandle>
   let server: Bun.Server<undefined> | null = null;
   try {
     server = Bun.serve({
+      hostname: "127.0.0.1",
       port,
       idleTimeout: 255, // max value – prevents Bun from closing long-lived SSE streams
       fetch: app.fetch,
