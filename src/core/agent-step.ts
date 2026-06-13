@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+import { existsSync } from "node:fs";
 import { createTaskFileIO, generateLogName } from "./file-io.ts";
 import { LogEvent, LogFileExtension } from "../config/log-events.ts";
 import { runHarnessTask } from "../harness/executor.ts";
@@ -8,6 +10,59 @@ import type {
   AgentStepResult,
   HarnessEvent,
 } from "../harness/types.ts";
+import type { TaskFileIO } from "./file-io.ts";
+
+function gitSync(args: string[], cwd: string): { exitCode: number; stdout: string; stderr: string } {
+  const result = Bun.spawnSync(["git", ...args], {
+    cwd,
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  return {
+    exitCode: result.exitCode,
+    stdout: result.stdout.toString().trim(),
+    stderr: result.stderr.toString().trim(),
+  };
+}
+
+async function captureDiff(io: TaskFileIO, cwd: string): Promise<boolean> {
+  const repoCheck = gitSync(["rev-parse", "--is-inside-work-tree"], cwd);
+  if (repoCheck.exitCode !== 0) return false;
+
+  const indexPath = `/tmp/pop-index-${randomUUID()}`;
+  try {
+    const headCheck = gitSync(["rev-parse", "--verify", "HEAD"], cwd);
+    const hasHead = headCheck.exitCode === 0;
+
+    const env = { ...process.env, GIT_INDEX_FILE: indexPath };
+    const indexOpts = { cwd, env, stdout: "pipe" as const, stderr: "pipe" as const };
+
+    if (hasHead) {
+      const rt = Bun.spawnSync(["git", "read-tree", "HEAD"], indexOpts);
+      if (rt.exitCode !== 0) return false;
+    } else {
+      const rt = Bun.spawnSync(["git", "read-tree", "--empty"], indexOpts);
+      if (rt.exitCode !== 0) return false;
+    }
+
+    const addResult = Bun.spawnSync(["git", "add", "-A"], indexOpts);
+    if (addResult.exitCode !== 0) return false;
+
+    const diffResult = Bun.spawnSync(["git", "diff", "--cached", "--binary"], indexOpts);
+    if (diffResult.exitCode !== 0) return false;
+
+    const diff = diffResult.stdout.toString();
+    if (diff.length > 0) {
+      await io.writeArtifact("agent.patch", diff);
+      return true;
+    }
+    return false;
+  } finally {
+    if (existsSync(indexPath)) {
+      Bun.spawnSync(["rm", "-f", indexPath]);
+    }
+  }
+}
 
 export async function runAgentStep(
   args: {
@@ -76,9 +131,14 @@ export async function runAgentStep(
 
     await io.writeArtifact("agent-result.md", result.finalMessage);
 
+    let patchWritten = false;
+    if (args.entry.captureDiff) {
+      patchWritten = await captureDiff(io, cwd);
+    }
+
     const mcpArtifacts = mcpHandle?.artifactsWritten() ?? [];
     const allArtifacts = [
-      ...new Set([...mcpArtifacts, "agent-result.md"]),
+      ...new Set([...mcpArtifacts, "agent-result.md", ...(patchWritten ? ["agent.patch"] : [])]),
     ];
 
     return {
