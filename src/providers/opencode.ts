@@ -1,9 +1,19 @@
 // ── src/providers/opencode.ts ──
-// Pure helper functions for the OpenCode provider adapter.
+// OpenCode provider adapter: pure helpers, SDK/CLI execution, availability checks.
 
+import { createOpencodeClient } from "@opencode-ai/sdk/v2";
+import type { OpencodeClient } from "@opencode-ai/sdk/v2";
+import {
+  DEFAULT_REQUEST_TIMEOUT_MS,
+  stripMarkdownFences,
+  tryParseJSON,
+} from "./base.ts";
+import { ProviderJsonParseError } from "./types.ts";
 import type {
+  AdapterResponse,
   AdapterUsage,
   ChatMessage,
+  OpenCodeOptions,
   OpenCodePermissionAction,
   OpenCodePermissionConfig,
   OpenCodePermissionRule,
@@ -161,6 +171,21 @@ export function extractOpenCodeText(raw: unknown): string {
     }
   }
 
+  // SDK prompt response shape: parts array with text parts
+  const responseParts = response.parts;
+  if (Array.isArray(responseParts)) {
+    for (const part of responseParts) {
+      if (
+        part != null &&
+        typeof part === "object" &&
+        (part as Record<string, unknown>).type === "text" &&
+        typeof (part as Record<string, unknown>).text === "string"
+      ) {
+        parts.push((part as Record<string, unknown>).text as string);
+      }
+    }
+  }
+
   // CLI shape: events array with text events
   const events = response.events;
   if (Array.isArray(events)) {
@@ -212,4 +237,278 @@ export function normalizeOpenCodeUsage(
     completion_tokens: completionTokens,
     total_tokens: totalTokens,
   };
+}
+
+function resolveOpenCodeBaseUrl(
+  opencode: OpenCodeOptions["opencode"],
+): string | undefined {
+  return (
+    opencode?.baseUrl ||
+    process.env.PO_OPENCODE_BASE_URL ||
+    process.env.OPENCODE_BASE_URL ||
+    undefined
+  );
+}
+
+function extractOpenCodeContent(
+  raw: unknown,
+  responseFormat: string | ResponseFormatObject | undefined,
+  model: string,
+): Record<string, unknown> | string {
+  const structured = extractOpenCodeStructuredOutput(raw);
+  if (structured != null) return structured;
+
+  const text = extractOpenCodeText(raw);
+  const jsonMode = isJsonMode(responseFormat);
+
+  if (jsonMode && text.length > 0) {
+    const cleaned = stripMarkdownFences(text);
+    const parsed = tryParseJSON(cleaned);
+
+    if (typeof parsed === "object" && parsed !== null) {
+      return parsed as Record<string, unknown>;
+    }
+
+    throw new ProviderJsonParseError(
+      "opencode",
+      model || "default",
+      cleaned.slice(0, 200),
+    );
+  }
+
+  return stripMarkdownFences(text);
+}
+
+async function runOpenCodeCli(
+  args: string[],
+  env: Record<string, string>,
+  timeoutMs: number,
+): Promise<{ text: string; events: unknown[] }> {
+  const proc = Bun.spawn(args, {
+    stdout: "pipe",
+    stderr: "pipe",
+    env: { ...process.env, ...env },
+  });
+
+  const timer = setTimeout(() => proc.kill(), timeoutMs);
+
+  try {
+    const stdout = await new Response(proc.stdout).text();
+    await proc.exited;
+    clearTimeout(timer);
+
+    const events: unknown[] = [];
+    const textParts: string[] = [];
+
+    for (const line of stdout.split("\n")) {
+      const trimmed = line.trim();
+      if (trimmed.length === 0) continue;
+
+      let event: unknown;
+      try {
+        event = JSON.parse(trimmed);
+      } catch {
+        continue;
+      }
+
+      events.push(event);
+
+      if (
+        event != null &&
+        typeof event === "object" &&
+        (event as Record<string, unknown>).type === "text"
+      ) {
+        const evt = event as Record<string, unknown>;
+        const part = evt.part as Record<string, unknown> | undefined;
+        if (part != null && typeof part.text === "string") {
+          textParts.push(part.text);
+        }
+      }
+    }
+
+    if (proc.exitCode !== 0) {
+      const stderr = await new Response(proc.stderr).text();
+      throw new Error(
+        `OpenCode CLI exited with code ${proc.exitCode}: ${stderr || textParts.join("")}`,
+      );
+    }
+
+    return { text: textParts.join(""), events };
+  } catch (err) {
+    clearTimeout(timer);
+    proc.kill();
+    throw err;
+  }
+}
+
+export async function opencodeChat(
+  options: OpenCodeOptions,
+): Promise<AdapterResponse> {
+  const {
+    messages,
+    model,
+    responseFormat,
+    requestTimeoutMs = DEFAULT_REQUEST_TIMEOUT_MS,
+  } = options;
+
+  const opencode = options.opencode ?? {};
+  const promptText = buildOpenCodePromptText(messages);
+  const parsedModel = parseOpenCodeModel(model);
+  const jsonMode = isJsonMode(responseFormat);
+  const schema = jsonSchemaFromResponseFormat(responseFormat);
+  const baseUrl = resolveOpenCodeBaseUrl(opencode);
+  const mode = opencode.mode ?? (baseUrl != null ? "sdk" : "cli");
+  const modelString = model || "default";
+
+  if (mode === "sdk") {
+    if (baseUrl == null) {
+      throw new Error(
+        "OpenCode SDK mode requires a base URL: set opencode.baseUrl, PO_OPENCODE_BASE_URL, or OPENCODE_BASE_URL",
+      );
+    }
+
+    const client: OpencodeClient = createOpencodeClient({ baseUrl });
+
+    let sessionID: string;
+
+    if (opencode.sessionId) {
+      sessionID = opencode.sessionId;
+    } else {
+      const permission = normalizeOpenCodePermission(
+        opencode.permission ?? defaultOpenCodePermission(),
+      );
+
+      const createParams: Record<string, unknown> = {
+        directory: opencode.directory,
+        permission,
+      };
+
+      if (parsedModel != null) {
+        createParams.model = {
+          id: parsedModel.modelID,
+          providerID: parsedModel.providerID,
+        };
+      }
+
+      if (opencode.agent != null) {
+        createParams.agent = opencode.agent;
+      }
+
+      const createResult = await client.session.create(
+        createParams as Parameters<typeof client.session.create>[0],
+      );
+
+      if (createResult.error) {
+        throw new Error(
+          `OpenCode session creation failed: ${JSON.stringify(createResult.error)}`,
+        );
+      }
+
+      sessionID = createResult.data.id;
+    }
+
+    const promptParams: Record<string, unknown> = {
+      sessionID,
+      parts: [{ type: "text", text: promptText }],
+      directory: opencode.directory,
+    };
+
+    if (parsedModel != null) {
+      promptParams.model = {
+        providerID: parsedModel.providerID,
+        modelID: parsedModel.modelID,
+      };
+    }
+
+    if (opencode.agent != null) {
+      promptParams.agent = opencode.agent;
+    }
+
+    if (schema != null) {
+      const format: Record<string, unknown> = {
+        type: "json_schema",
+        schema,
+      };
+      if (opencode.structuredOutputRetryCount != null) {
+        format.retryCount = opencode.structuredOutputRetryCount;
+      }
+      promptParams.format = format;
+    }
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), requestTimeoutMs);
+
+    try {
+      const result = await client.session.prompt(
+        promptParams as Parameters<typeof client.session.prompt>[0],
+      );
+
+      clearTimeout(timer);
+
+      if (result.error) {
+        throw new Error(
+          `OpenCode prompt failed: ${JSON.stringify(result.error)}`,
+        );
+      }
+
+      const raw = result.data;
+      const content = extractOpenCodeContent(raw, responseFormat, modelString);
+      const text = extractOpenCodeText(raw);
+      const usage = normalizeOpenCodeUsage(raw);
+
+      return { content, text, usage, raw };
+    } catch (err) {
+      clearTimeout(timer);
+      throw err;
+    }
+  }
+
+  // CLI mode
+  const args = ["opencode", "run", "--format", "json"];
+
+  if (parsedModel != null) {
+    args.push("--model", `${parsedModel.providerID}/${parsedModel.modelID}`);
+  }
+
+  if (opencode.agent != null) {
+    args.push("--agent", opencode.agent);
+  }
+
+  if (opencode.directory != null) {
+    args.push("--dir", opencode.directory);
+  }
+
+  if (opencode.sessionId != null) {
+    args.push("--session", opencode.sessionId);
+  }
+
+  const permission = normalizeOpenCodePermission(
+    opencode.permission ?? defaultOpenCodePermission(),
+  );
+
+  const env: Record<string, string> = {
+    OPENCODE_PERMISSION: JSON.stringify(permission),
+  };
+
+  const cliResult = await runOpenCodeCli(args, env, requestTimeoutMs);
+  const raw = { events: cliResult.events };
+  const content = extractOpenCodeContent(raw, responseFormat, modelString);
+  const text = extractOpenCodeText(raw);
+
+  return { content, text, raw };
+}
+
+export function isOpenCodeAvailable(): boolean {
+  if (process.env.PO_OPENCODE_BASE_URL || process.env.OPENCODE_BASE_URL) {
+    return true;
+  }
+
+  try {
+    const result = Bun.spawnSync(["opencode", "--version"], {
+      timeout: 5000,
+    });
+    return result.exitCode === 0;
+  } catch {
+    return false;
+  }
 }
