@@ -234,29 +234,22 @@ export function normalizeOpenCodeUsage(
 ): AdapterUsage | undefined {
   if (raw == null || typeof raw !== "object") return undefined;
 
-  const response = raw as Record<string, unknown>;
-  const info = response.info as Record<string, unknown> | undefined;
-
+  const info = (raw as Record<string, unknown>).info;
   if (info == null || typeof info !== "object") return undefined;
 
-  const promptTokens = info.prompt_tokens ?? info.input_tokens;
-  const completionTokens = info.completion_tokens ?? info.output_tokens;
+  const tokens = (info as Record<string, unknown>).tokens;
+  if (tokens == null || typeof tokens !== "object") return undefined;
 
-  if (
-    typeof promptTokens !== "number" ||
-    typeof completionTokens !== "number"
-  ) {
-    return undefined;
-  }
+  const input = (tokens as Record<string, unknown>).input;
+  const output = (tokens as Record<string, unknown>).output;
+  if (typeof input !== "number" || typeof output !== "number") return undefined;
 
-  const totalTokens =
-    typeof info.total_tokens === "number"
-      ? info.total_tokens
-      : promptTokens + completionTokens;
+  const total = (tokens as Record<string, unknown>).total;
+  const totalTokens = typeof total === "number" ? total : input + output;
 
   return {
-    prompt_tokens: promptTokens,
-    completion_tokens: completionTokens,
+    prompt_tokens: input,
+    completion_tokens: output,
     total_tokens: totalTokens,
   };
 }

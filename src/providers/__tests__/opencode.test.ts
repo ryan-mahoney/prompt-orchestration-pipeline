@@ -236,14 +236,8 @@ describe("extractOpenCodeText", () => {
 });
 
 describe("normalizeOpenCodeUsage", () => {
-  it("normalizes from SDK metadata", () => {
-    const raw = {
-      info: {
-        prompt_tokens: 100,
-        completion_tokens: 50,
-        total_tokens: 150,
-      },
-    };
+  it("maps nested tokens to AdapterUsage", () => {
+    const raw = { info: { tokens: { input: 100, output: 50 } } };
     expect(normalizeOpenCodeUsage(raw)).toEqual({
       prompt_tokens: 100,
       completion_tokens: 50,
@@ -251,12 +245,42 @@ describe("normalizeOpenCodeUsage", () => {
     });
   });
 
-  it("returns undefined when metadata absent", () => {
+  it("uses tokens.total when present", () => {
+    const raw = { info: { tokens: { input: 100, output: 50, total: 200 } } };
+    expect(normalizeOpenCodeUsage(raw)).toEqual({
+      prompt_tokens: 100,
+      completion_tokens: 50,
+      total_tokens: 200,
+    });
+  });
+
+  it("returns undefined for null input", () => {
     expect(normalizeOpenCodeUsage(null)).toBeUndefined();
+  });
+
+  it("returns undefined for missing info", () => {
     expect(normalizeOpenCodeUsage({})).toBeUndefined();
+  });
+
+  it("returns undefined for missing tokens", () => {
     expect(normalizeOpenCodeUsage({ info: {} })).toBeUndefined();
+  });
+
+  it("returns undefined for missing input and output", () => {
+    expect(normalizeOpenCodeUsage({ info: { tokens: {} } })).toBeUndefined();
+  });
+
+  it("returns undefined for missing output", () => {
     expect(
-      normalizeOpenCodeUsage({ info: { prompt_tokens: 100 } }),
+      normalizeOpenCodeUsage({ info: { tokens: { input: 100 } } }),
+    ).toBeUndefined();
+  });
+
+  it("returns undefined for non-numeric input", () => {
+    expect(
+      normalizeOpenCodeUsage({
+        info: { tokens: { input: "not-a-number", output: 50 } },
+      }),
     ).toBeUndefined();
   });
 });
@@ -285,8 +309,10 @@ const defaultPromptData = {
 
 const defaultCreateData = { id: MOCK_SESSION_ID };
 
-const mockCreate = vi.fn();
-const mockPrompt = vi.fn();
+const { mockCreate, mockPrompt } = vi.hoisted(() => ({
+  mockCreate: vi.fn(),
+  mockPrompt: vi.fn(),
+}));
 
 vi.mock("@opencode-ai/sdk/v2", () => ({
   createOpencodeClient: vi.fn().mockReturnValue({
