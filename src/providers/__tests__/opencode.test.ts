@@ -148,6 +148,7 @@ describe("normalizeOpenCodePermission", () => {
       pattern: "*",
       action: "deny",
     });
+    expect(rules).toHaveLength(2);
   });
 
   it("explicit rule array passes through unchanged", () => {
@@ -164,6 +165,20 @@ describe("normalizeOpenCodePermission", () => {
       expect(rule.action).not.toBe("ask");
       expect(rule.action).not.toBe("allow");
     }
+  });
+
+  it("throws when runtime config contains an invalid action", () => {
+    expect(() =>
+      normalizeOpenCodePermission({
+        read: null,
+      } as unknown as Parameters<typeof normalizeOpenCodePermission>[0]),
+    ).toThrow(/Invalid OpenCode permission config/);
+
+    expect(() =>
+      normalizeOpenCodePermission({
+        bash: { "*": "maybe" },
+      } as unknown as Parameters<typeof normalizeOpenCodePermission>[0]),
+    ).toThrow(/Invalid OpenCode permission action/);
   });
 });
 
@@ -428,6 +443,19 @@ describe("opencodeChat", () => {
       expect(mockCreate).toHaveBeenCalledTimes(1);
       expect(mockPrompt).toHaveBeenCalledTimes(1);
     });
+
+    it("passes abort signal to session.prompt", async () => {
+      await opencodeChat({
+        messages: baseMessages,
+        opencode: { baseUrl: "http://localhost:3000" },
+      });
+
+      expect(mockPrompt).toHaveBeenCalledWith(
+        expect.objectContaining({
+          signal: expect.any(AbortSignal),
+        }),
+      );
+    });
   });
 
   describe("SDK JSON-schema request mapping", () => {
@@ -612,6 +640,50 @@ describe("opencodeChat", () => {
         expect(e.provider).toBe("opencode");
         expect(e.model).toBe("anthropic/claude-sonnet-4-5");
       }
+    });
+
+    it("throws ProviderJsonParseError for empty text in json mode", async () => {
+      mockPrompt.mockResolvedValueOnce({
+        data: {
+          info: defaultPromptData.info,
+          parts: [],
+        },
+        error: undefined,
+      });
+
+      await expect(
+        opencodeChat({
+          messages: baseMessages,
+          responseFormat: "json",
+          opencode: { baseUrl: "http://localhost:3000" },
+        }),
+      ).rejects.toBeInstanceOf(ProviderJsonParseError);
+    });
+  });
+
+  describe("retry behavior", () => {
+    it("retries SDK prompt abort failures", async () => {
+      const timeoutError = new DOMException("operation aborted", "AbortError");
+      mockPrompt
+        .mockRejectedValueOnce(timeoutError)
+        .mockResolvedValueOnce({
+          data: {
+            info: defaultPromptData.info,
+            parts: [{ type: "text", text: "ok" }],
+          },
+          error: undefined,
+        });
+
+      await expect(
+        opencodeChat({
+          messages: baseMessages,
+          maxRetries: 1,
+          responseFormat: "text",
+          opencode: { baseUrl: "http://localhost:3000" },
+        }),
+      ).resolves.toMatchObject({ content: "ok" });
+      expect(mockCreate).toHaveBeenCalledTimes(1);
+      expect(mockPrompt).toHaveBeenCalledTimes(2);
     });
   });
 
@@ -894,10 +966,18 @@ describe("opencodeChat", () => {
 
       const chatPromise = opencodeChat({
         messages: baseMessages,
+        maxRetries: 0,
         requestTimeoutMs: 50,
       });
 
-      await expect(chatPromise).rejects.toThrow();
+      try {
+        await chatPromise;
+        throw new Error("Expected OpenCode CLI timeout");
+      } catch (err) {
+        expect(err).toBeInstanceOf(Error);
+        expect((err as Error).name).toBe("TimeoutError");
+        expect((err as Error).message).toMatch(/timed out/i);
+      }
       expect(killFn).toHaveBeenCalled();
 
       vi.restoreAllMocks();

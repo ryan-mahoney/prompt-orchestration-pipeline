@@ -171,6 +171,7 @@ const PROVIDER_ORDER: readonly ProviderName[] = [
   "alibaba",
   "zai",
   "claude-code",
+  "opencode",
 ];
 
 function formatPrice(cost: number): string {
