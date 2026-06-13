@@ -14,6 +14,7 @@ import {
 } from "../opencode.ts";
 import type { ChatMessage, OpenCodeOptions } from "../types.ts";
 import { ProviderJsonParseError } from "../types.ts";
+import type { AssistantMessage, TextPart } from "@opencode-ai/sdk/v2";
 
 describe("parseOpenCodeModel", () => {
   it("returns null for undefined", () => {
@@ -287,14 +288,17 @@ describe("normalizeOpenCodeUsage", () => {
 
 const MOCK_SESSION_ID = "sess-123";
 
-const defaultPromptData = {
+const defaultPromptData: { info: AssistantMessage; parts: [TextPart] } = {
   info: {
     id: "msg-1",
     sessionID: MOCK_SESSION_ID,
-    role: "assistant" as const,
+    role: "assistant",
+    parentID: "user-msg-1",
     modelID: "claude-sonnet-4-5",
     providerID: "anthropic",
+    mode: "build",
     agent: "build",
+    path: { cwd: "/tmp", root: "/tmp" },
     cost: 0,
     tokens: {
       input: 10,
@@ -303,8 +307,17 @@ const defaultPromptData = {
       reasoning: 0,
       cache: { read: 0, write: 0 },
     },
+    time: { created: Date.now() },
   },
-  parts: [{ type: "text" as const, text: "Hello world" }],
+  parts: [
+    {
+      id: "part-1",
+      sessionID: MOCK_SESSION_ID,
+      messageID: "msg-1",
+      type: "text",
+      text: "Hello world",
+    },
+  ],
 };
 
 const defaultCreateData = { id: MOCK_SESSION_ID };
