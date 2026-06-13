@@ -155,3 +155,6 @@ tmp-payload.json
 .tmp-task-modules/
 debug-*.js
 .tmp-task-modules/
+
+# Spec-driven workflow artifacts
+.specs/
