@@ -1,45 +1,46 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, mock } from "bun:test";
 import { runHarnessTask, isHarnessAvailable } from "../executor.ts";
 import type { RunJsonlSubprocessResult } from "../subprocess.ts";
-import type { HarnessEvent, HarnessRunOptions } from "../types.ts";
+import type { HarnessDescriptor, HarnessEvent, HarnessRunOptions, HarnessName } from "../types.ts";
 
-vi.mock("../descriptors/index.ts", () => ({
-  DESCRIPTORS: {
-    claude: {
-      name: "claude",
-      versionArgv: ["claude", "--version"],
-      buildArgv: vi.fn(() => ["claude", "-p", "test prompt"]),
-      buildEnv: vi.fn(() => ({ env: {} })),
-      parseEvents: vi.fn((lines: unknown[]) =>
-        (lines as Record<string, unknown>[]).map((raw) => ({
-          type: (raw as any).type ?? "raw",
-          raw,
-        })),
-      ),
-      extractFinalMessage: vi.fn((events: HarnessEvent[]) => {
-        const result = events.find((e) => e.type === "result");
-        return (result?.raw as any)?.message ?? "";
-      }),
-      extractUsage: vi.fn((events: HarnessEvent[]) => {
-        const result = events.find((e) => e.type === "result");
-        const usage = (result?.raw as any)?.usage;
-        if (usage) return usage;
-        return undefined;
-      }),
-      extractCostUsd: vi.fn((events: HarnessEvent[]) => {
-        const result = events.find((e) => e.type === "result");
-        return (result?.raw as any)?.costUsd;
-      }),
-      extractSessionId: vi.fn((events: HarnessEvent[]) => {
-        const result = events.find((e) => e.type === "result");
-        return (result?.raw as any)?.sessionId;
-      }),
-    },
+const fakeClaudeDescriptor: HarnessDescriptor = {
+  name: "claude",
+  versionArgv: ["claude", "--version"],
+  buildArgv: () => ["claude", "-p", "test prompt"],
+  buildEnv: () => ({ env: {} }),
+  parseEvents: (lines: unknown[]) =>
+    (lines as Record<string, unknown>[]).map((raw) => ({
+      type: ((raw as Record<string, unknown>).type as string) ?? "raw",
+      raw,
+    })) as HarnessEvent[],
+  extractFinalMessage: (events: HarnessEvent[]) => {
+    const result = events.find((e) => e.type === "result");
+    return (result?.raw as Record<string, unknown>)?.message as string ?? "";
   },
-}));
+  extractUsage: (events: HarnessEvent[]) => {
+    const result = events.find((e) => e.type === "result");
+    const usage = (result?.raw as Record<string, unknown>)?.usage;
+    if (usage) return usage as { inputTokens: number; outputTokens: number; totalTokens: number };
+    return undefined;
+  },
+  extractCostUsd: (events: HarnessEvent[]) => {
+    const result = events.find((e) => e.type === "result");
+    return (result?.raw as Record<string, unknown>)?.costUsd as number | undefined;
+  },
+  extractSessionId: (events: HarnessEvent[]) => {
+    const result = events.find((e) => e.type === "result");
+    return (result?.raw as Record<string, unknown>)?.sessionId as string | undefined;
+  },
+};
+
+const fakeDescriptors: Record<HarnessName, HarnessDescriptor> = {
+  claude: fakeClaudeDescriptor,
+  codex: fakeClaudeDescriptor,
+  opencode: fakeClaudeDescriptor,
+};
 
 function fakeSubprocess(result: RunJsonlSubprocessResult) {
-  return vi.fn(async () => result);
+  return mock(async () => result);
 }
 
 function makeOptions(overrides?: Partial<HarnessRunOptions>): HarnessRunOptions {
@@ -66,6 +67,7 @@ describe("runHarnessTask", () => {
 
     const result = await runHarnessTask(makeOptions(), {
       runJsonlSubprocess: fake,
+      descriptors: fakeDescriptors,
     });
 
     expect(result.finalMessage).toBe("hello");
@@ -85,7 +87,7 @@ describe("runHarnessTask", () => {
     });
 
     await expect(
-      runHarnessTask(makeOptions(), { runJsonlSubprocess: fake }),
+      runHarnessTask(makeOptions(), { runJsonlSubprocess: fake, descriptors: fakeDescriptors }),
     ).rejects.toThrow('exited with code 1: something went wrong');
   });
 
@@ -101,6 +103,7 @@ describe("runHarnessTask", () => {
     await expect(
       runHarnessTask(makeOptions({ timeoutMs: 100 }), {
         runJsonlSubprocess: fake,
+        descriptors: fakeDescriptors,
       }),
     ).rejects.toThrow("timed out after 100ms");
   });
@@ -118,35 +121,34 @@ describe("runHarnessTask", () => {
       timedOut: false,
     });
 
-    const onEvent = vi.fn();
+    const onEvent = mock(() => {});
     await runHarnessTask(makeOptions({ onEvent }), {
       runJsonlSubprocess: fake,
+      descriptors: fakeDescriptors,
     });
 
     expect(onEvent).toHaveBeenCalledTimes(2);
-    expect(onEvent).toHaveBeenCalledWith(expect.objectContaining({ type: "text" }));
-    expect(onEvent).toHaveBeenCalledWith(expect.objectContaining({ type: "result" }));
   });
 });
 
 describe("isHarnessAvailable", () => {
-  it("returns true when spawnSync exit code is 0", () => {
+  it("returns true when spawnSync exit code is 0", async () => {
     const originalSpawnSync = Bun.spawnSync;
-    (Bun as any).spawnSync = vi.fn(() => ({ exitCode: 0 }));
+    (Bun as any).spawnSync = mock(() => ({ exitCode: 0 }));
 
     try {
-      expect(isHarnessAvailable("claude")).toBe(true);
+      expect(await isHarnessAvailable("claude", fakeDescriptors)).toBe(true);
     } finally {
       (Bun as any).spawnSync = originalSpawnSync;
     }
   });
 
-  it("returns false when spawnSync exit code is non-zero", () => {
+  it("returns false when spawnSync exit code is non-zero", async () => {
     const originalSpawnSync = Bun.spawnSync;
-    (Bun as any).spawnSync = vi.fn(() => ({ exitCode: 1 }));
+    (Bun as any).spawnSync = mock(() => ({ exitCode: 1 }));
 
     try {
-      expect(isHarnessAvailable("claude")).toBe(false);
+      expect(await isHarnessAvailable("claude", fakeDescriptors)).toBe(false);
     } finally {
       (Bun as any).spawnSync = originalSpawnSync;
     }

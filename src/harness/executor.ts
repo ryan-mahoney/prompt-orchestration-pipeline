@@ -1,4 +1,4 @@
-import { DESCRIPTORS } from "./descriptors/index.ts";
+import type { HarnessDescriptor } from "./types.ts";
 import { runJsonlSubprocess } from "./subprocess.ts";
 import type {
   HarnessEvent,
@@ -9,11 +9,14 @@ import type {
 
 const DEFAULT_TIMEOUT = 300_000;
 
+export type DescriptorMap = Record<HarnessName, HarnessDescriptor>;
+
 export async function runHarnessTask(
   options: HarnessRunOptions,
-  deps?: { runJsonlSubprocess?: typeof runJsonlSubprocess },
+  deps?: { runJsonlSubprocess?: typeof runJsonlSubprocess; descriptors?: DescriptorMap },
 ): Promise<HarnessRunResult> {
-  const descriptor = DESCRIPTORS[options.harness];
+  const descriptors = deps?.descriptors ?? (await import("./descriptors/index.ts")).DESCRIPTORS;
+  const descriptor = descriptors[options.harness];
   const argv = descriptor.buildArgv(options);
   const { env, tmpFiles } = descriptor.buildEnv(options);
 
@@ -75,8 +78,9 @@ export async function runHarnessTask(
   }
 }
 
-export function isHarnessAvailable(harness: HarnessName): boolean {
-  const descriptor = DESCRIPTORS[harness];
+export async function isHarnessAvailable(harness: HarnessName, descriptors?: DescriptorMap): Promise<boolean> {
+  const desc = descriptors ?? (await import("./descriptors/index.ts")).DESCRIPTORS;
+  const descriptor = desc[harness];
   const result = Bun.spawnSync([...descriptor.versionArgv], {
     timeout: 5000,
     stdout: "ignore",
