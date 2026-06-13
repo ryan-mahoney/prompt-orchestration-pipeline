@@ -7,6 +7,18 @@ const OPENCODE_PERMISSION = JSON.stringify([
 export const opencodeDescriptor: HarnessDescriptor = {
   name: "opencode",
   versionArgv: ["opencode", "--version"],
+  binName: "opencode",
+  binDirs: ["~/.opencode/bin", "~/.local/bin"],
+  authStatusArgv: ["auth", "list"],
+
+  // `opencode auth list` prints "N credentials" for configured providers.
+  interpretAuthStatus({ exitCode, stdout }) {
+    if (exitCode !== 0) return null;
+    const text = stdout.replace(/\x1b\[[0-9;]*m/g, "");
+    const match = text.match(/(\d+)\s+credentials?/i);
+    if (match) return Number(match[1]) > 0;
+    return /credential/i.test(text) ? true : null;
+  },
 
   buildArgv(o) {
     return [

@@ -112,6 +112,7 @@ import { buildReexecArgs } from "../cli/self-reexec";
 import { writeJobStatus } from "./status-writer";
 import { initializeStatusFromArtifacts } from "./status-initializer";
 import { materializeNormalizedPipelineDefinition } from "./pipeline-definition";
+import { applyHarnessDiscovery, discoverHarnesses } from "../harness/resolve";
 import {
   listQueuedSeeds,
   releaseJobSlot,
@@ -649,6 +650,24 @@ export async function drainPendingQueue(
   return { promoted, remaining: (await listQueuedSeeds(dataDir)).length };
 }
 
+/**
+ * Discover the agent-harness CLIs (opencode/claude/codex) once at startup: heal PATH,
+ * cache resolved absolute paths into the process env so spawned jobs inherit them, and
+ * log availability + (advisory) auth status. Warns on anything missing but never blocks
+ * startup — a missing harness only fails the specific agent step that needs it.
+ */
+async function harnessPreflight(logger: ReturnType<typeof createLogger>): Promise<void> {
+  try {
+    const probes = await discoverHarnesses();
+    for (const { level, message } of applyHarnessDiscovery(probes, process.env)) {
+      if (level === "warn") logger.warn(message);
+      else logger.log(message);
+    }
+  } catch (err) {
+    logger.warn(`harness preflight failed; continuing: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
 export function startOrchestrator(opts: OrchestratorOptions): Promise<OrchestratorHandle> {
   if (!opts.dataDir) throw new Error("dataDir is required");
 
@@ -664,6 +683,7 @@ export function startOrchestrator(opts: OrchestratorOptions): Promise<Orchestrat
     .then(() => mkdir(dirs.complete, { recursive: true }))
     .then(() => mkdir(dirs.rejected, { recursive: true }))
     .then(() => mkdir(dirs.staging, { recursive: true }))
+    .then(() => harnessPreflight(logger))
     .then(() => new Promise<OrchestratorHandle>((resolve, reject) => {
       const running = new Map<string, ChildHandle>();
       const spawnFn = opts.spawn ?? createDefaultSpawn();

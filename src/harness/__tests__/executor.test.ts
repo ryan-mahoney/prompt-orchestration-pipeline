@@ -154,3 +154,40 @@ describe("isHarnessAvailable", () => {
     }
   });
 });
+
+describe("runHarnessTask binary resolution", () => {
+  it("spawns the resolved absolute binary with a healed PATH", async () => {
+    let captured: { argv: string[]; env: Record<string, string> } | undefined;
+    const fake = mock(async (args: { argv: string[]; env: Record<string, string> }) => {
+      captured = args;
+      return { events: [], stdout: "", stderr: "", exitCode: 0, timedOut: false };
+    });
+
+    await runHarnessTask(makeOptions(), {
+      runJsonlSubprocess: fake,
+      descriptors: fakeDescriptors,
+      resolveBinary: () => "/abs/bin/claude",
+    });
+
+    expect(captured?.argv[0]).toBe("/abs/bin/claude");
+    expect(captured?.argv.slice(1)).toEqual(["-p", "test prompt"]);
+    expect(typeof captured?.env.PATH).toBe("string");
+    expect((captured?.env.PATH ?? "").length).toBeGreaterThan(0);
+  });
+
+  it("throws a clear not-found error when the CLI is missing", async () => {
+    const enoent = mock(async () => {
+      const err = new Error("ENOENT: no such file or directory, posix_spawn 'claude'") as Error & { code?: string };
+      err.code = "ENOENT";
+      throw err;
+    });
+
+    await expect(
+      runHarnessTask(makeOptions(), {
+        runJsonlSubprocess: enoent,
+        descriptors: fakeDescriptors,
+        resolveBinary: () => null,
+      }),
+    ).rejects.toThrow(/CLI "claude" not found[\s\S]*POP_CLAUDE_BIN/);
+  });
+});

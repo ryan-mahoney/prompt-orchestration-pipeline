@@ -3,6 +3,17 @@ import type { HarnessDescriptor } from "../types.ts";
 export const codexDescriptor: HarnessDescriptor = {
   name: "codex",
   versionArgv: ["codex", "--version"],
+  binName: "codex",
+  binDirs: ["/opt/homebrew/bin", "~/.local/bin"],
+  authStatusArgv: ["login", "status"],
+
+  // `codex login status` prints "Logged in using …" (exit 0) or "Not logged in".
+  interpretAuthStatus({ exitCode, stdout, stderr }) {
+    const text = `${stdout}\n${stderr}`;
+    if (/not\s+logged\s+in/i.test(text)) return false;
+    if (exitCode === 0 && /logged\s+in/i.test(text)) return true;
+    return null;
+  },
 
   buildArgv(o) {
     return [

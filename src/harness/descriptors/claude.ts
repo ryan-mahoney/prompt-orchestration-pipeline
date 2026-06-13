@@ -3,6 +3,22 @@ import type { HarnessDescriptor } from "../types.ts";
 export const claudeDescriptor: HarnessDescriptor = {
   name: "claude",
   versionArgv: ["claude", "--version"],
+  binName: "claude",
+  binDirs: ["~/.local/bin"],
+  authStatusArgv: ["auth", "status"],
+
+  // `claude auth status` returns JSON, e.g. {"loggedIn": true, ...}.
+  interpretAuthStatus({ stdout }) {
+    try {
+      const parsed = JSON.parse(stdout) as { loggedIn?: unknown };
+      if (typeof parsed.loggedIn === "boolean") return parsed.loggedIn;
+    } catch {
+      // fall through to a text heuristic
+    }
+    if (/not\s+logged\s+in|not\s+authenticated/i.test(stdout)) return false;
+    if (/logged\s+in|authenticated/i.test(stdout)) return true;
+    return null;
+  },
 
   buildArgv(o) {
     return [
