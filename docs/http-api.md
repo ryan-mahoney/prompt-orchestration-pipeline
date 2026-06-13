@@ -6,6 +6,7 @@ This document is the authoritative reference for the Prompt Orchestration Pipeli
 
 - **Protocol**: HTTP/1.1 + Server-Sent Events (SSE). The API does not use WebSocket.
 - **Default port**: `4000` (configurable via `--port`).
+- **Port contract**: Custom frontends should connect to a configured fixed port. Bind failures or port conflicts are startup failures; the protocol does not provide dynamic port discovery.
 - **Bind address**: `127.0.0.1` (loopback only). The server does not listen on non-loopback interfaces.
 - **Trust model**: localhost. The `Host` header must resolve to a loopback address (`localhost`, `127.0.0.1`, or `[::1]`). Requests with a non-loopback `Host` are rejected with `403 forbidden_host`.
 - **CORS**: Opt-in via `--cors-origins <comma-separated-origins>` and `--cors-allow-null-origin`. When no origins are configured, no `Access-Control-*` headers are emitted. Cross-origin mutating requests (`POST`, `PUT`, `PATCH`, `DELETE`) to `/api/*` are rejected before dispatch when the origin is not allowed.
@@ -221,6 +222,8 @@ data: {"ok":true}
 
 1. **Ignore unknown JSON fields.** When parsing a JSON response, ignore any fields not documented here. New fields may be added in minor versions.
 2. **Ignore unknown SSE event types.** When processing the SSE stream, ignore any event type not documented here. New event types may be added in minor versions.
+
+Capability negotiation is not built into this protocol. Clients discover compatibility through the documented contract and `GET /api/meta`, not through negotiated feature flags or per-client capability exchange.
 
 ## SSE Event Evolution
 

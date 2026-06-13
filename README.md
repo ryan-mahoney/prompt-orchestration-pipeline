@@ -185,6 +185,8 @@ The Orchestrator will pick it up, move it to `current/`, and start processing.
 
 The orchestrator exposes a documented HTTP/SSE API at `http://localhost:<port>/api/*` that any frontend can consume. See **[HTTP/SSE Protocol Reference](docs/http-api.md)** for the full contract.
 
+Custom frontends should run against a configured fixed port, usually the default `4000` or an explicit `--port` value. Treat bind failures or port conflicts as startup failures; the protocol does not provide dynamic port discovery.
+
 ### Integration Modes
 
 **Subprocess mode** (recommended): Run the orchestrator as a child process via `pipeline-orchestrator start`. The orchestrator runs in its own process — if it crashes, your application stays alive. This is the default and recommended approach.
@@ -204,3 +206,5 @@ For desktop webviews that report `Origin: null`, add `--cors-allow-null-origin`.
 ### Protocol Versioning
 
 The API follows a client-robustness contract: clients must ignore unknown JSON fields and unknown SSE event types. This means additive changes (new routes, new event types, new fields) are backward-compatible. Breaking changes (removing or renaming fields, changing types) require a `protocolVersion` bump and are documented in `docs/http-api.md`.
+
+Capability negotiation is not built. Custom frontends should use the documented protocol and `GET /api/meta` instead of expecting negotiated feature flags or per-client capability exchange.
