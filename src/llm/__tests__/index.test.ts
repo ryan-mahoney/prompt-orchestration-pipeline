@@ -1,5 +1,18 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { EventEmitter } from "node:events";
+
+const { mockSdkPrompt, mockSdkCreate, mockSdkDelete, mockCreateClient } =
+  vi.hoisted(() => ({
+    mockSdkPrompt: vi.fn(),
+    mockSdkCreate: vi.fn(),
+    mockSdkDelete: vi.fn(),
+    mockCreateClient: vi.fn(),
+  }));
+
+vi.mock("@opencode-ai/sdk/v2", () => ({
+  createOpencodeClient: mockCreateClient,
+}));
+
 import {
   chat,
   complete,
@@ -692,11 +705,22 @@ describe("LLM Gateway", () => {
     beforeEach(() => {
       delete process.env["PO_OPENCODE_BASE_URL"];
       delete process.env["OPENCODE_BASE_URL"];
+      mockCreateClient.mockReturnValue({
+        session: {
+          create: mockSdkCreate,
+          prompt: mockSdkPrompt,
+          delete: mockSdkDelete,
+        },
+      });
     });
 
     afterEach(() => {
       delete process.env["PO_OPENCODE_BASE_URL"];
       delete process.env["OPENCODE_BASE_URL"];
+      mockCreateClient.mockClear();
+      mockSdkCreate.mockClear();
+      mockSdkPrompt.mockClear();
+      mockSdkDelete.mockClear();
     });
 
     it("dispatches to opencodeChat and returns ChatResponse with estimated usage", async () => {
@@ -776,6 +800,62 @@ describe("LLM Gateway", () => {
       expect((errorEvents[0] as { error: string }).error).toBe(
         "OpenCode CLI exited with code 1: permission denied",
       );
+    });
+
+    it("emits llm:request:complete with measured token counts from SDK usage", async () => {
+      process.env["PO_OPENCODE_BASE_URL"] = "http://localhost:3000";
+
+      mockSdkCreate.mockResolvedValue({
+        data: { id: "sess-sdk-1" },
+        error: undefined,
+      });
+      mockSdkPrompt.mockResolvedValue({
+        data: {
+          info: {
+            id: "msg-sdk-1",
+            sessionID: "sess-sdk-1",
+            role: "assistant" as const,
+            modelID: "claude-sonnet-4-5",
+            providerID: "anthropic",
+            agent: "build",
+            cost: 0.05,
+            tokens: {
+              input: 150,
+              output: 80,
+              total: 230,
+              reasoning: 0,
+              cache: { read: 0, write: 0 },
+            },
+          },
+          parts: [{ type: "text" as const, text: "sdk measured response" }],
+        },
+        error: undefined,
+      });
+      mockSdkDelete.mockResolvedValue({ data: undefined, error: undefined });
+
+      const completeEvents: LLMRequestCompleteEvent[] = [];
+      getLLMEvents().on("llm:request:complete", (e) =>
+        completeEvents.push(e),
+      );
+
+      const result = await chat({
+        provider: "opencode",
+        model: "anthropic/claude-sonnet-4-5",
+        messages: baseMessages,
+        responseFormat: "text",
+      });
+
+      expect(result.content).toBe("sdk measured response");
+      expect(result.usage).toEqual({
+        promptTokens: 150,
+        completionTokens: 80,
+        totalTokens: 230,
+      });
+      expect(completeEvents).toHaveLength(1);
+      expect(completeEvents[0]!.promptTokens).toBe(150);
+      expect(completeEvents[0]!.completionTokens).toBe(80);
+      expect(completeEvents[0]!.totalTokens).toBe(230);
+      expect(completeEvents[0]!.provider).toBe("opencode");
     });
   });
 });

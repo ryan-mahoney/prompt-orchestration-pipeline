@@ -404,117 +404,137 @@ export async function opencodeChat(
   const mode = opencode.mode ?? (baseUrl != null ? "sdk" : "cli");
   const modelString = model || "default";
 
-  let lastError: unknown;
-  let sdkSessionID = opencode.sessionId;
+  if (mode === "sdk") {
+    if (baseUrl == null) {
+      throw new Error(
+        "OpenCode SDK mode requires a base URL: set opencode.baseUrl, PO_OPENCODE_BASE_URL, or OPENCODE_BASE_URL",
+      );
+    }
 
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const client = createOpencodeClient({ baseUrl });
+    const callerSessionId = opencode.sessionId;
+    let sdkSessionID = callerSessionId;
+    let createdSessionId: string | undefined;
+    let lastError: unknown;
+
     try {
-      if (mode === "sdk") {
-        if (baseUrl == null) {
-          throw new Error(
-            "OpenCode SDK mode requires a base URL: set opencode.baseUrl, PO_OPENCODE_BASE_URL, or OPENCODE_BASE_URL",
-          );
-        }
+      for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        try {
+          if (!sdkSessionID) {
+            const permission = normalizeOpenCodePermission(
+              opencode.permission ?? defaultOpenCodePermission(),
+            );
 
-        const client: OpencodeClient = createOpencodeClient({ baseUrl });
+            const createParams: Record<string, unknown> = {
+              directory: opencode.directory,
+              permission,
+            };
 
-        let sessionID: string;
+            if (parsedModel != null) {
+              createParams.model = {
+                id: parsedModel.modelID,
+                providerID: parsedModel.providerID,
+              };
+            }
 
-        if (sdkSessionID) {
-          sessionID = sdkSessionID;
-        } else {
-          const permission = normalizeOpenCodePermission(
-            opencode.permission ?? defaultOpenCodePermission(),
-          );
+            if (opencode.agent != null) {
+              createParams.agent = opencode.agent;
+            }
 
-          const createParams: Record<string, unknown> = {
+            const createResult = await client.session.create(
+              createParams as Parameters<typeof client.session.create>[0],
+            );
+
+            if (createResult.error) {
+              throw new Error(
+                `OpenCode session creation failed: ${JSON.stringify(createResult.error)}`,
+              );
+            }
+
+            sdkSessionID = createResult.data.id;
+            createdSessionId = sdkSessionID;
+          }
+
+          const promptParams: Parameters<typeof client.session.prompt>[0] = {
+            sessionID: sdkSessionID,
+            parts: [{ type: "text", text: promptText }],
             directory: opencode.directory,
-            permission,
           };
 
           if (parsedModel != null) {
-            createParams.model = {
-              id: parsedModel.modelID,
+            promptParams.model = {
               providerID: parsedModel.providerID,
+              modelID: parsedModel.modelID,
             };
           }
 
           if (opencode.agent != null) {
-            createParams.agent = opencode.agent;
+            promptParams.agent = opencode.agent;
           }
 
-          const createResult = await client.session.create(
-            createParams as Parameters<typeof client.session.create>[0],
-          );
+          if (schema != null) {
+            const format: Record<string, unknown> = {
+              type: "json_schema",
+              schema,
+            };
+            if (opencode.structuredOutputRetryCount != null) {
+              format.retryCount = opencode.structuredOutputRetryCount;
+            }
+            promptParams.format =
+              format as Parameters<typeof client.session.prompt>[0]["format"];
+          }
 
-          if (createResult.error) {
-            throw new Error(
-              `OpenCode session creation failed: ${JSON.stringify(createResult.error)}`,
+          const controller = new AbortController();
+          const timer = setTimeout(() => controller.abort(), requestTimeoutMs);
+
+          try {
+            const result = await client.session.prompt(promptParams, {
+              signal: controller.signal,
+            });
+
+            clearTimeout(timer);
+
+            if (result.error) {
+              throw new Error(
+                `OpenCode prompt failed: ${JSON.stringify(result.error)}`,
+              );
+            }
+
+            const raw = result.data;
+            const content = extractOpenCodeContent(
+              raw,
+              responseFormat,
+              modelString,
             );
+            const text = extractOpenCodeText(raw);
+            const usage = normalizeOpenCodeUsage(raw);
+
+            return { content, text, usage, raw };
+          } catch (err) {
+            clearTimeout(timer);
+            throw err;
           }
-
-          sdkSessionID = createResult.data.id;
-          sessionID = sdkSessionID;
-        }
-
-        const promptParams: Record<string, unknown> = {
-          sessionID,
-          parts: [{ type: "text", text: promptText }],
-          directory: opencode.directory,
-        };
-
-        if (parsedModel != null) {
-          promptParams.model = {
-            providerID: parsedModel.providerID,
-            modelID: parsedModel.modelID,
-          };
-        }
-
-        if (opencode.agent != null) {
-          promptParams.agent = opencode.agent;
-        }
-
-        if (schema != null) {
-          const format: Record<string, unknown> = {
-            type: "json_schema",
-            schema,
-          };
-          if (opencode.structuredOutputRetryCount != null) {
-            format.retryCount = opencode.structuredOutputRetryCount;
-          }
-          promptParams.format = format;
-        }
-
-        const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), requestTimeoutMs);
-
-        try {
-          const promptOptions = {
-            ...promptParams,
-            signal: controller.signal,
-          } as unknown as Parameters<typeof client.session.prompt>[0];
-          const result = await client.session.prompt(promptOptions);
-
-          clearTimeout(timer);
-
-          if (result.error) {
-            throw new Error(
-              `OpenCode prompt failed: ${JSON.stringify(result.error)}`,
-            );
-          }
-
-          const raw = result.data;
-          const content = extractOpenCodeContent(raw, responseFormat, modelString);
-          const text = extractOpenCodeText(raw);
-          const usage = normalizeOpenCodeUsage(raw);
-
-          return { content, text, usage, raw };
         } catch (err) {
-          clearTimeout(timer);
-          throw err;
+          lastError = err;
+          if (!isRetryableError(err) || attempt >= maxRetries) {
+            throw err;
+          }
+          await sleep(Math.pow(2, attempt) * 1000);
         }
       }
 
+      throw lastError;
+    } finally {
+      if (createdSessionId != null) {
+        await deleteOpenCodeSession(client, createdSessionId);
+      }
+    }
+  }
+
+  let lastError: unknown;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
       const args = ["opencode", "run", "--format", "json"];
 
       if (parsedModel != null) {

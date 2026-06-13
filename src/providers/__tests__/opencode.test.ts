@@ -375,7 +375,8 @@ describe("opencodeChat", () => {
       });
 
       expect(mockCreate).not.toHaveBeenCalled();
-      expect(mockPrompt).toHaveBeenCalledWith(
+      const [params] = mockPrompt.mock.calls[0]!;
+      expect(params).toEqual(
         expect.objectContaining({ sessionID: "existing-id" }),
       );
     });
@@ -405,7 +406,8 @@ describe("opencodeChat", () => {
           model: { id: "claude-sonnet-4-5", providerID: "anthropic" },
         }),
       );
-      expect(mockPrompt).toHaveBeenCalledWith(
+      const [params] = mockPrompt.mock.calls[0]!;
+      expect(params).toEqual(
         expect.objectContaining({
           model: { providerID: "anthropic", modelID: "claude-sonnet-4-5" },
         }),
@@ -428,7 +430,8 @@ describe("opencodeChat", () => {
           directory: "/tmp/project",
         }),
       );
-      expect(mockPrompt).toHaveBeenCalledWith(
+      const [params] = mockPrompt.mock.calls[0]!;
+      expect(params).toEqual(
         expect.objectContaining({
           agent: "explore",
           directory: "/tmp/project",
@@ -473,17 +476,35 @@ describe("opencodeChat", () => {
       expect(mockPrompt).toHaveBeenCalledTimes(1);
     });
 
-    it("passes abort signal to session.prompt", async () => {
+    it("passes abort signal in prompt options argument, not in parameters", async () => {
       await opencodeChat({
         messages: baseMessages,
         opencode: { baseUrl: "http://localhost:3000" },
       });
 
-      expect(mockPrompt).toHaveBeenCalledWith(
-        expect.objectContaining({
-          signal: expect.any(AbortSignal),
-        }),
+      const [params, options] = mockPrompt.mock.calls[0]!;
+      expect(params).not.toHaveProperty("signal");
+      expect(options).toEqual({ signal: expect.any(AbortSignal) });
+    });
+
+    it("rejects after requestTimeoutMs when prompt never settles", async () => {
+      mockPrompt.mockImplementation(
+        (_params: unknown, options?: { signal?: AbortSignal }) =>
+          new Promise((_resolve, reject) => {
+            options?.signal?.addEventListener("abort", () => {
+              reject(options.signal!.reason);
+            });
+          }),
       );
+
+      await expect(
+        opencodeChat({
+          messages: baseMessages,
+          requestTimeoutMs: 50,
+          maxRetries: 0,
+          opencode: { baseUrl: "http://localhost:3000" },
+        }),
+      ).rejects.toThrow();
     });
   });
 
@@ -512,6 +533,7 @@ describe("opencodeChat", () => {
         expect.objectContaining({
           format: { type: "json_schema", schema },
         }),
+        { signal: expect.any(AbortSignal) },
       );
     });
 
@@ -539,6 +561,7 @@ describe("opencodeChat", () => {
         expect.objectContaining({
           format: { type: "json_schema", schema, retryCount: 3 },
         }),
+        { signal: expect.any(AbortSignal) },
       );
     });
 
@@ -726,6 +749,69 @@ describe("opencodeChat", () => {
           opencode: { baseUrl: "http://localhost:3000" },
         }),
       ).resolves.toMatchObject({ content: "Hello world" });
+    });
+
+    it("deletes created session after successful prompt", async () => {
+      await opencodeChat({
+        messages: baseMessages,
+        opencode: { baseUrl: "http://localhost:3000" },
+      });
+
+      expect(mockDelete).toHaveBeenCalledTimes(1);
+      expect(mockDelete).toHaveBeenCalledWith(
+        { sessionID: MOCK_SESSION_ID },
+        { signal: expect.any(AbortSignal) },
+      );
+    });
+
+    it("deletes created session after non-retryable prompt error", async () => {
+      mockPrompt.mockRejectedValueOnce(new Error("non-retryable"));
+
+      await expect(
+        opencodeChat({
+          messages: baseMessages,
+          maxRetries: 0,
+          opencode: { baseUrl: "http://localhost:3000" },
+        }),
+      ).rejects.toThrow("non-retryable");
+
+      expect(mockDelete).toHaveBeenCalledTimes(1);
+    });
+
+    it("does not delete caller-supplied sessionId", async () => {
+      await opencodeChat({
+        messages: baseMessages,
+        opencode: {
+          baseUrl: "http://localhost:3000",
+          sessionId: "existing-id",
+        },
+      });
+
+      expect(mockDelete).not.toHaveBeenCalled();
+    });
+
+    it("one retryable failure then success yields exactly one create and one delete", async () => {
+      const retryableError = new DOMException("aborted", "AbortError");
+      mockPrompt
+        .mockRejectedValueOnce(retryableError)
+        .mockResolvedValueOnce({
+          data: {
+            info: defaultPromptData.info,
+            parts: [{ type: "text", text: "ok" }],
+          },
+          error: undefined,
+        });
+
+      await expect(
+        opencodeChat({
+          messages: baseMessages,
+          maxRetries: 1,
+          opencode: { baseUrl: "http://localhost:3000" },
+        }),
+      ).resolves.toMatchObject({ content: "ok" });
+
+      expect(mockCreate).toHaveBeenCalledTimes(1);
+      expect(mockDelete).toHaveBeenCalledTimes(1);
     });
   });
 
