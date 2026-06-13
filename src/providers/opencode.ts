@@ -254,6 +254,24 @@ export function normalizeOpenCodeUsage(
   };
 }
 
+const SESSION_DELETE_TIMEOUT_MS = 5000;
+
+async function deleteOpenCodeSession(
+  client: OpencodeClient,
+  sessionID: string,
+  timeoutMs: number = SESSION_DELETE_TIMEOUT_MS,
+): Promise<void> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    await client.session.delete({ sessionID }, { signal: controller.signal });
+  } catch {
+    // Cleanup failures must never mask the primary result/error.
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 function resolveOpenCodeBaseUrl(
   opencode: OpenCodeOptions["opencode"],
 ): string | undefined {

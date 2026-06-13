@@ -309,9 +309,10 @@ const defaultPromptData = {
 
 const defaultCreateData = { id: MOCK_SESSION_ID };
 
-const { mockCreate, mockPrompt } = vi.hoisted(() => ({
+const { mockCreate, mockPrompt, mockDelete } = vi.hoisted(() => ({
   mockCreate: vi.fn(),
   mockPrompt: vi.fn(),
+  mockDelete: vi.fn(),
 }));
 
 vi.mock("@opencode-ai/sdk/v2", () => ({
@@ -319,6 +320,7 @@ vi.mock("@opencode-ai/sdk/v2", () => ({
     session: {
       create: mockCreate,
       prompt: mockPrompt,
+      delete: mockDelete,
     },
   }),
 }));
@@ -334,6 +336,7 @@ describe("opencodeChat", () => {
     process.env = { ...originalEnv };
     mockCreate.mockResolvedValue({ data: defaultCreateData, error: undefined });
     mockPrompt.mockResolvedValue({ data: defaultPromptData, error: undefined });
+    mockDelete.mockResolvedValue({ data: undefined, error: undefined });
   });
 
   afterEach(() => {
@@ -710,6 +713,19 @@ describe("opencodeChat", () => {
       ).resolves.toMatchObject({ content: "ok" });
       expect(mockCreate).toHaveBeenCalledTimes(1);
       expect(mockPrompt).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe("session cleanup", () => {
+    it("a rejecting session.delete does not cause opencodeChat to reject", async () => {
+      mockDelete.mockRejectedValue(new Error("delete failed"));
+
+      await expect(
+        opencodeChat({
+          messages: baseMessages,
+          opencode: { baseUrl: "http://localhost:3000" },
+        }),
+      ).resolves.toMatchObject({ content: "Hello world" });
     });
   });
 
