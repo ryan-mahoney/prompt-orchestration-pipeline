@@ -183,3 +183,12 @@ export async function providerChat({
 ```
 
 These requirements ensure consistency across all providers, proper error handling, JSON mode enforcement, and a unified interface for the broader LLM system.
+
+## OpenCode Provider Constraints
+
+OpenCode is an optional prompt runner under POP's LLM provider layer, not a replacement for POP orchestration. See `.specs/299-opencode-backend-layer/spec.md` for the full architectural decision.
+
+- **SDK client or CLI fallback**: Primary mode uses `@opencode-ai/sdk` to connect to an existing OpenCode server. CLI fallback uses `opencode run --format json` when no server is available.
+- **Safe-by-default permissions**: Default permission config is `{ "*": "deny" }` unless the caller explicitly provides an override via `opencode.permission`.
+- **Dynamic model strings**: Accepts `provider/model` strings (e.g., `anthropic/claude-sonnet-4-5`) without adding them to POP's static model registry. Only `opencode:default` exists as a static alias.
+- **POP retains orchestration ownership**: OpenCode runs a single prompt; POP still owns task stages, artifacts, status files, gates, retries, and SSE.
