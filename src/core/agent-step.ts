@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
+import { mkdir } from "node:fs/promises";
 import { createTaskFileIO, generateLogName } from "./file-io.ts";
 import { LogEvent, LogFileExtension } from "../config/log-events.ts";
 import { runHarnessTask } from "../harness/executor.ts";
@@ -90,6 +91,9 @@ export async function runAgentStep(
   });
 
   const cwd = args.entry.cwd ?? io.getTaskDir();
+  // The harness spawns with this cwd before any artifact is written, so the task
+  // dir may not exist yet — posix_spawn ENOENTs on a missing working directory.
+  await mkdir(cwd, { recursive: true });
 
   let prompt: string;
   if (args.entry.prompt !== undefined) {

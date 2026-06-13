@@ -36,7 +36,7 @@ function createFakeIO(): TaskFileIO & { calls: string[] } {
       return "";
     },
     getTaskDir() {
-      return "/fake/task/dir";
+      return join(tmpdir(), "pop-fake-task-dir");
     },
     writeLogSync() {},
     getCurrentStage() {
