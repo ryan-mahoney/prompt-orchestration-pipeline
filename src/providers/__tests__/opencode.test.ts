@@ -322,11 +322,9 @@ const defaultPromptData: { info: AssistantMessage; parts: [TextPart] } = {
 
 const defaultCreateData = { id: MOCK_SESSION_ID };
 
-const { mockCreate, mockPrompt, mockDelete } = vi.hoisted(() => ({
-  mockCreate: vi.fn(),
-  mockPrompt: vi.fn(),
-  mockDelete: vi.fn(),
-}));
+const mockCreate = vi.fn();
+const mockPrompt = vi.fn();
+const mockDelete = vi.fn();
 
 vi.mock("@opencode-ai/sdk/v2", () => ({
   createOpencodeClient: vi.fn().mockReturnValue({

@@ -1,13 +1,10 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { EventEmitter } from "node:events";
 
-const { mockSdkPrompt, mockSdkCreate, mockSdkDelete, mockCreateClient } =
-  vi.hoisted(() => ({
-    mockSdkPrompt: vi.fn(),
-    mockSdkCreate: vi.fn(),
-    mockSdkDelete: vi.fn(),
-    mockCreateClient: vi.fn(),
-  }));
+const mockSdkPrompt = vi.fn();
+const mockSdkCreate = vi.fn();
+const mockSdkDelete = vi.fn();
+const mockCreateClient = vi.fn();
 
 vi.mock("@opencode-ai/sdk/v2", () => ({
   createOpencodeClient: mockCreateClient,

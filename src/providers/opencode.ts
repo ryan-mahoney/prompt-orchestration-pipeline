@@ -412,8 +412,7 @@ export async function opencodeChat(
     }
 
     const client = createOpencodeClient({ baseUrl });
-    const callerSessionId = opencode.sessionId;
-    let sdkSessionID = callerSessionId;
+    let sdkSessionID = opencode.sessionId;
     let createdSessionId: string | undefined;
     let lastError: unknown;
 
