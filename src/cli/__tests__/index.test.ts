@@ -11,7 +11,9 @@ import {
   handleSubmit,
   parseTaskIndex,
   serializeTaskIndex,
+  buildUiCorsEnv,
 } from "../index.ts";
+import pkg from "../../../package.json";
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -416,5 +418,35 @@ describe("serializeTaskIndex", () => {
   it("ends with trailing newline", () => {
     const map = new Map([["a", "./a.ts"]]);
     expect(serializeTaskIndex(map).endsWith("\n")).toBe(true);
+  });
+});
+
+// ─── buildUiCorsEnv ─────────────────────────────────────────────────────────
+
+describe("buildUiCorsEnv", () => {
+  it("maps corsOrigins and corsAllowNullOrigin to env vars", () => {
+    const result = buildUiCorsEnv({ port: "4000", corsOrigins: "a,b", corsAllowNullOrigin: true });
+    expect(result).toEqual({ PO_CORS_ORIGINS: "a,b", PO_CORS_ALLOW_NULL_ORIGIN: "1" });
+  });
+
+  it("returns empty object when no CORS options provided", () => {
+    const result = buildUiCorsEnv({ port: "4000" });
+    expect(result).toEqual({});
+  });
+
+  it("maps only corsOrigins when corsAllowNullOrigin is false", () => {
+    const result = buildUiCorsEnv({ port: "4000", corsOrigins: "https://app.example" });
+    expect(result).toEqual({ PO_CORS_ORIGINS: "https://app.example" });
+  });
+});
+
+// ─── version ────────────────────────────────────────────────────────────────
+
+describe("CLI version", () => {
+  it("equals package.json version (AC-15)", async () => {
+    const { Command } = await import("commander");
+    const program = new Command();
+    program.name("test").version(pkg.version);
+    expect(program.version()).toBe(pkg.version);
   });
 });

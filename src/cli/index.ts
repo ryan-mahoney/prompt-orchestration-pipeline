@@ -9,6 +9,7 @@ import { updatePipelineJson } from "./update-pipeline-json.ts";
 import { analyzeTaskFile } from "./analyze-task.ts";
 import { submitJobWithValidation, PipelineOrchestrator } from "../api/index.ts";
 import type { Registry } from "./types.ts";
+import pkg from "../../package.json";
 
 // ─── init ─────────────────────────────────────────────────────────────────────
 
@@ -28,9 +29,24 @@ export async function handleInit(root: string): Promise<void> {
 
 // ─── start ────────────────────────────────────────────────────────────────────
 
+export interface StartOptions {
+  root?: string;
+  port: string;
+  corsOrigins?: string;
+  corsAllowNullOrigin?: boolean;
+}
+
+export function buildUiCorsEnv(opts: StartOptions): Record<string, string> {
+  const env: Record<string, string> = {};
+  if (opts.corsOrigins) env["PO_CORS_ORIGINS"] = opts.corsOrigins;
+  if (opts.corsAllowNullOrigin) env["PO_CORS_ALLOW_NULL_ORIGIN"] = "1";
+  return env;
+}
+
 export async function handleStart(
   root: string | undefined,
-  port: string
+  port: string,
+  opts?: StartOptions,
 ): Promise<void> {
   const rawRoot = root ?? process.env["PO_ROOT"];
   if (!rawRoot) {
@@ -59,6 +75,9 @@ export async function handleStart(
     )
   );
   delete uiEnv["PO_UI_PORT"];
+
+  const corsEnv = opts ? buildUiCorsEnv(opts) : {};
+  Object.assign(uiEnv, corsEnv);
 
   const orchEnv: Record<string, string> = Object.fromEntries(
     Object.entries({ ...process.env, NODE_ENV: "production", PO_ROOT: absoluteRoot }).filter(
@@ -413,7 +432,7 @@ const program = new Command();
 program
   .name("pipeline-orchestrator")
   .description("Prompt Orchestration Pipeline CLI")
-  .version("0.17.5");
+  .version(pkg.version);
 
 program
   .command("init")
@@ -428,8 +447,10 @@ program
   .description("Start the UI server and orchestrator")
   .option("--root <path>", "Root directory")
   .option("--port <port>", "UI server port", "4000")
-  .action(async (opts: { root?: string; port: string }) => {
-    await handleStart(opts.root, opts.port);
+  .option("--cors-origins <origins>", "Comma-separated list of allowed CORS origins")
+  .option("--cors-allow-null-origin", "Allow requests with Origin: null")
+  .action(async (opts: StartOptions) => {
+    await handleStart(opts.root, opts.port, opts);
   });
 
 program
