@@ -457,6 +457,7 @@ export function getAvailableProviders(): ProviderAvailability {
     moonshot: !!process.env["MOONSHOT_API_KEY"],
     claudecode: isClaudeCodeAvailable(),
     mock: mockProvider !== null,
+    opencode: false,
   };
 }
 

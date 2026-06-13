@@ -1,5 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { ProviderJsonModeError, ProviderJsonParseError } from "../types.ts";
+import {
+  ProviderJsonModeError,
+  ProviderJsonParseError,
+  type ChatOptions,
+  type OpenCodeOptions,
+  type OpenCodePermissionAction,
+  type OpenCodePermissionConfig,
+  type OpenCodePermissionKey,
+  type OpenCodePermissionName,
+  type OpenCodePermissionRule,
+  type OpenCodeRequestConfig,
+} from "../types.ts";
 
 describe("ProviderJsonModeError", () => {
   it("is an instance of Error", () => {
@@ -89,5 +100,72 @@ describe("ProviderJsonParseError", () => {
     // But the full sample is preserved on the property
     expect(err.sample).toBe(longSample);
     expect(err.sample.length).toBe(500);
+  });
+});
+
+describe("OpenCode types", () => {
+  it("constructs ChatOptions with provider opencode and nested config", () => {
+    const options: ChatOptions = {
+      provider: "opencode",
+      messages: [{ role: "user", content: "hello" }],
+      opencode: {
+        mode: "sdk",
+        baseUrl: "http://localhost:3000",
+        permission: { "*": "deny" },
+      },
+    };
+    expect(options.provider).toBe("opencode");
+    expect(options.opencode?.mode).toBe("sdk");
+    expect(options.opencode?.baseUrl).toBe("http://localhost:3000");
+    expect(options.opencode?.permission).toEqual({ "*": "deny" });
+  });
+
+  it("constructs OpenCodeOptions extending ProviderOptions", () => {
+    const options: OpenCodeOptions = {
+      messages: [{ role: "user", content: "test" }],
+      model: "default",
+      opencode: {
+        mode: "cli",
+        permission: "deny",
+        structuredOutputRetryCount: 3,
+      },
+    };
+    expect(options.opencode?.mode).toBe("cli");
+    expect(options.opencode?.permission).toBe("deny");
+    expect(options.opencode?.structuredOutputRetryCount).toBe(3);
+  });
+
+  it("accepts permission rule arrays", () => {
+    const rules: OpenCodePermissionConfig = [
+      { permission: "bash", pattern: "*", action: "deny" },
+      { permission: "read", pattern: "/tmp/*", action: "allow" },
+    ];
+    expect(rules).toHaveLength(2);
+  });
+
+  it("accepts all OpenCodePermissionAction values", () => {
+    const actions: OpenCodePermissionAction[] = ["allow", "ask", "deny"];
+    expect(actions).toEqual(["allow", "ask", "deny"]);
+  });
+
+  it("accepts all OpenCodePermissionKey values", () => {
+    const keys: OpenCodePermissionKey[] = [
+      "read",
+      "edit",
+      "glob",
+      "grep",
+      "list",
+      "bash",
+      "task",
+      "external_directory",
+      "todowrite",
+      "webfetch",
+      "websearch",
+      "lsp",
+      "skill",
+      "question",
+      "doom_loop",
+    ];
+    expect(keys).toHaveLength(15);
   });
 });
