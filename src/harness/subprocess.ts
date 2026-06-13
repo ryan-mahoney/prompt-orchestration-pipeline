@@ -75,16 +75,9 @@ export async function runJsonlSubprocess(
       exitCode: proc.exitCode ?? -1,
       timedOut,
     };
-  } catch {
+  } catch (err) {
     clearTimeout(timer);
     proc.kill();
-
-    return {
-      events: [],
-      stdout: "",
-      stderr: "",
-      exitCode: proc.exitCode ?? -1,
-      timedOut,
-    };
+    throw err;
   }
 }
